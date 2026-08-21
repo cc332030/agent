@@ -10,6 +10,8 @@
   ** `specs/general/` — 通用层：通用编码、文档、git、code review、agent 协作、验证
   ** `specs/stack/` — 技术栈层：java、spring、maven、java 语法糖、测试（按项目类型加载）
   ** `specs/platform/` — 平台层：cnb
+* `script/` — 配套脚本目录：
+  ** `clean-tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
 
 == 引用方式
 
