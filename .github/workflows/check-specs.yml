@@ -1,0 +1,152 @@
+name: check-specs
+
+on:
+  push:
+    paths:
+      - 'specs/**'
+      - 'AGENTS.adoc'
+      - 'README.adoc'
+      - 'script/check-specs.py'
+      - '.github/workflows/check-specs.yml'
+  pull_request:
+    paths:
+      - 'specs/**'
+      - 'AGENTS.adoc'
+      - 'README.adoc'
+      - 'script/check-specs.py'
+      - '.github/workflows/check-specs.yml'
+
+jobs:
+  # 1) 确定性规范检查（引用完整性、栈登记一致、私有约定误导入）
+  #    发现问题即返回非 0 退出码，使 action 失败。
+  lint-specs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Run deterministic spec checks
+        run: python3 script/check-specs.py
+
+  # 2) AsciiDoc 语法编译验证（官方 action，免费）
+  #    任一个文件编译失败即使 action 失败。
+  asciidoctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: AsciiDoc syntax check (compile each .adoc)
+        uses: asciidoctor/asciidoctor-action@v4
+        with:
+          program: |
+            bash -c 'fail=0; for f in AGENTS.adoc $(find specs -name "*.adoc" -type f); do
+              echo "== checking $f";
+              if ! asciidoctor -o /dev/null --failure-level=ERROR --warnings "$f"; then fail=1; fi;
+            done; if [ $fail -ne 0 ]; then echo "AsciiDoc 语法检查未通过"; exit 1; fi'
+
+  # 3) AI 语义审查（GitHub Models 免费额度）
+  #    仅负责生成审查结果，不在此判定失败（判定交给 fail-on-issues，创建 PR 交给 auto-fix-pr）。
+  ai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read
+    continue-on-error: true
+    outputs:
+      findings: ${{ steps.assess.outputs.findings }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Concatenate specs into a single file
+        run: |
+          { echo '===== FILE: AGENTS.adoc ====='; cat AGENTS.adoc; } > /tmp/specs-context.txt
+          for f in $(find specs -name '*.adoc' -type f | sort); do
+            { echo ""; echo "===== FILE: $f ====="; cat "$f"; } >> /tmp/specs-context.txt
+          done
+          wc -l /tmp/specs-context.txt
+      - name: AI spec consistency review
+        id: review
+        uses: actions/ai-inference@v1
+        with:
+          model: 'openai/gpt-4.1'
+          system-prompt: |
+            你是一名严谨的技术规范审查专家。只审查 agent 执行规范集合的一致性。
+            输出要求：若发现问题，逐条列出"文件、问题描述、具体建议的修改"，并在
+            最后一行输出标记 ISSUES_FOUND；若未发现问题，只输出一行 NO_ISSUES_FOUND。
+            重点检查：1) 规范之间是否自相矛盾或重复；2) 是否存在歧义、不严谨、
+            会误导 agent 的表述；3) 是否含私有项目专属约定（应中性化）。
+          prompt-file: /tmp/specs-context.txt
+      - name: Assess findings & write artifact
+        id: assess
+        shell: bash
+        run: |
+          echo "${{ steps.review.outputs.response }}" > /tmp/ai-findings.txt
+          echo "===== AI 审查结果 ====="
+          cat /tmp/ai-findings.txt
+          if grep -q "NO_ISSUES_FOUND" /tmp/ai-findings.txt; then
+            echo "findings=false" >> "$GITHUB_OUTPUT"
+            echo "AI 审查未发现问题。"
+          else
+            echo "findings=true" >> "$GITHUB_OUTPUT"
+            echo "AI 审查发现问题。"
+          fi
+      - name: Upload findings artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-findings
+          path: /tmp/ai-findings.txt
+          if-no-files-found: ignore
+
+  # 4) AI 发现问题时使 action 失败（"怎么知道有问题"）
+  fail-on-issues:
+    runs-on: ubuntu-latest
+    needs: ai-review
+    if: needs.ai-review.outputs.findings == 'true'
+    steps:
+      - name: Fail because AI found spec issues
+        shell: bash
+        run: |
+          echo "AI 审查在规范中发现一致性问题，action 判定为失败。"
+          echo "问题清单见 'ai-findings' artifact，或查看已自动创建的纠正 PR。"
+          exit 1
+
+  # 5) 自动创建纠正 PR（"创建 pull 纠正失败的内容"）
+  auto-fix-pr:
+    runs-on: ubuntu-latest
+    needs: ai-review
+    if: needs.ai-review.outputs.findings == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download findings
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-findings
+          path: /tmp/
+      - name: Compose PR body from findings
+        id: compose
+        shell: bash
+        run: |
+          findings=$(cat /tmp/ai-findings.txt)
+          echo "PR_TITLE=[auto] 规范检查发现问题，请修正" >> "$GITHUB_ENV"
+          {
+            echo "## AI 规范审查发现的问题及建议"
+            echo ""
+            echo '```'
+            echo "$findings"
+            echo '```'
+            echo ""
+            echo "请根据上述清单修正规范后合并。"
+          } > /tmp/pr-body.md
+          # 避免重复：若已存在同名开放 PR 则跳过
+          existing=$(gh pr list --search '"[auto] 规范检查发现问题，请修正" in:title' --state open --json number --jq 'length' 2>/dev/null || echo 0)
+          echo "EXISTING=$existing" >> "$GITHUB_ENV"
+      - name: Open pull request
+        if: env.EXISTING == '0'
+        shell: bash
+        run: |
+          gh pr create \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr-body.md
