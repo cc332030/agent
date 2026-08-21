@@ -4,7 +4,9 @@
 
 检查项：
   1. AsciiDoc 基础语法（块级结构、反引号路径）通过 asciidoctor 验证（若已安装）。
-  2. AGENTS.adoc 中登记的所有 `specs/...` 引用文件必须真实存在。
+  2. 所有 spec 文件（含 AGENTS.adoc）中的每个 `specs/...` 引用文件必须真实存在
+     （既校验 AGENTS.adoc 加载调度器登记/引用的文件，也校验各 spec 文件之间互相
+     引用的文件，避免 spec 间交叉引用悬空）。
   3. AGENTS.adoc 技术栈层登记的栈文件，必须与 specs/stack/ 实际文件双向一致
      （既不能登记不存在的栈，也不能漏登记已存在的栈）。
   4. 禁止误导入私有强约束约定（如 ctool4j 的 C/IC 前缀、@Bean c 前缀等被当作
@@ -80,28 +82,41 @@ def check_asciidoctor_syntax():
 def extract_specs_refs(text: str):
     """提取文中 `specs/...` 形式的相对引用，仅保留指向具体文件的路径。
 
-    过滤两类非文件项：
-      * 占位符（如 `specs/...`，以 `...` 结尾）；
+    过滤三类非文件项：
+      * 占位符（如 `specs/...`，以 `...` 结尾；如 `specs/stack/<语言>-testing.adoc`，
+        含 `<`/`>` 角括号，非真实文件名）；
       * 目录本身（如 `specs/stack/`，以 `/` 结尾）。
     """
     refs = re.findall(r"`(specs/[^`\s]+)`", text)
-    return [r for r in refs if not r.endswith("/") and not r.endswith("...")]
+    return [r for r in refs
+            if not r.endswith("/")
+            and not r.endswith("...")
+            and "<" not in r and ">" not in r]
 
 
 def check_refs_exist():
-    with open(AGENTS_FILE, encoding="utf-8") as fh:
-        text = fh.read()
-    refs = extract_specs_refs(text)
-    for ref in refs:
-        target = os.path.join(REPO_ROOT, ref)
-        if not os.path.isfile(target):
-            err(f"AGENTS.adoc 引用了不存在的文件: {ref}", "AGENTS.adoc")
-        else:
-            # 检查被引用文件是否真的存在且可读
-            try:
-                open(target, encoding="utf-8").close()
-            except Exception as e:  # noqa
-                err(f"文件无法读取: {ref} ({e})", "AGENTS.adoc")
+    """校验所有 spec 文件（含 AGENTS.adoc）中的 `specs/...` 引用真实存在。
+
+    覆盖两类引用：
+      * AGENTS.adoc 加载调度器登记/引用的文件；
+      * 各 spec 文件之间互相引用的文件（此前只查 AGENTS.adoc，
+        会漏掉 spec 间交叉引用悬空，如 java-testing.adoc 引用已不存在的
+        specs/stack/testing.adoc）。
+    """
+    for f in collect_adoc_files():
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+        refs = extract_specs_refs(text)
+        for ref in refs:
+            target = os.path.join(REPO_ROOT, ref)
+            if not os.path.isfile(target):
+                err(f"引用了不存在的文件: {ref}", os.path.relpath(f, REPO_ROOT))
+            else:
+                # 检查被引用文件是否真的存在且可读
+                try:
+                    open(target, encoding="utf-8").close()
+                except Exception as e:  # noqa
+                    err(f"文件无法读取: {ref} ({e})", os.path.relpath(f, REPO_ROOT))
 
 
 def check_stack_consistency():

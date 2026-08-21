@@ -1,7 +1,5 @@
 = Java 测试规范（技术栈层，JUnit）
 
-来源：由原 `specs/stack/testing.adoc` 拆分而来（一拆多），本文件收录其中 Java/JUnit 专属部分；公共测试设计原则随主体迁至 `specs/general/testing.adoc`（继承原文件 git 历史）。
-
 以下规范适用于 **Java 项目**的测试（JUnit 5）。公共测试设计原则见 `specs/general/testing.adoc`；本文件只收录 Java/JUnit 专属规则。加载触发特征：项目存在 `.java` 源文件、测试依赖（JUnit 等）。Java 项目跑测试/补测试前须加载本文件及公共测试规范（见 AGENTS.adoc 加载调度规则）。
 
 == 框架与目录
