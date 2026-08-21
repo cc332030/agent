@@ -7,23 +7,26 @@ clean-tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格�
   在目标项目的根目录下运行即可清理该项目自身的 tmp。
 
 用法（在目标项目根目录执行）:
-  python clean-tmp.py                清空 tmp 下全部内容
+  python clean-tmp.py                仅显示 tmp 内容，不删除（安全模式，见下）
+  python clean-tmp.py --all          清空 tmp 下全部内容（显式确认）
   python clean-tmp.py a.log          删除 tmp/a.log
   python clean-tmp.py sub b.log      删除多个
 
   # 远程加载（Linux/macOS，本仓库脚本的 https 地址替换 <script-url>）：
-  curl -s <script-url> | python3 - [相对tmp的路径...]
+  curl -s <script-url> | python3 - --all            # 清空
+  curl -s <script-url> | python3 - a.log sub/b.log # 删除指定
 
   # Windows PowerShell（先下载到本地再执行）：
   Invoke-WebRequest <script-url> -OutFile clean-tmp.py
-  python clean-tmp.py [相对tmp的路径...]
+  python clean-tmp.py [参数...]
 
-说明:
-  - 传入参数视为相对 tmp 根目录的路径（如 a.log、sub/b.log）
-  - 无参数时清空 tmp 下全部内容
-  - 每个目标路径都会拼接到 tmp 根下，经 os.path.realpath 规范化后校验，
-    必须位于 tmp 目录内；任何路径穿越（../、/、绝对路径指向 tmp 外、符号链接指向 tmp 外）
-    都会被规范化后识别并拒绝，防止误删 tmp 之外的文件
+安全保证（远程执行同样生效）：
+  - 只操作「CWD 下的 tmp/」，绝不创建 tmp，tmp 不存在即退出；
+  - 边界基准用 os.path.abspath（不跟随符号链接），即使 tmp/ 本身是指向外部的符号链接，
+    也会被识别为越界而拒绝，防止清空链接指向的外部目录；
+  - 每个目标路径经 os.path.realpath 规范化后校验，必须位于 tmp 内；
+    任何路径穿越（../、/、绝对路径、符号链接指向 tmp 外）都会被拒绝；
+  - 全量清空 tmp 必须显式传入 --all，防止远程执行时无差别误删。
 """
 import argparse
 import os
@@ -32,21 +35,29 @@ import sys
 
 
 def tmp_root() -> str:
-    """tmp 根目录：以当前工作目录(CWD)为项目根，tmp 在项目根下"""
+    """tmp 路径：以当前工作目录(CWD)为项目根，tmp 在项目根下（不做真实路径解析，防止跟随符号链接）"""
     return os.path.join(os.getcwd(), "tmp")
+
+
+def expected_root() -> str:
+    """
+    合法清理范围的边界基准：基于 os.path.abspath，不跟随 tmp/ 自身的符号链接。
+    即使 tmp/ 是指向外部的符号链接，abspath 仍保持为「CWD/tmp」，外部真实路径不会被认作合法范围。
+    """
+    return os.path.abspath(tmp_root())
 
 
 def resolve_safe(root: str, target: str) -> str:
     """
-    将相对 tmp 的路径规范化为绝对路径，并确保位于 tmp 内；越界则抛错。
+    将相对 tmp 的路径解析为真实绝对路径，并确保位于合法范围（abspath(tmp)）内；越界则抛错。
     os.path.realpath 会解析 ..、.、绝对路径、符号链接，
-    因此任何路径穿越（如 ../ 跳出 tmp、/ 指向根、盘符绝对路径）都会被规范化后识别出越界。
+    因此任何路径穿越（../ 跳出 tmp、/ 指向根、盘符绝对路径、符号链接指向 tmp 外）都会被识别出越界。
     """
     if not target:
         raise ValueError("空路径被拒绝")
     full = os.path.realpath(os.path.join(root, target))
-    real_root = os.path.realpath(root) + os.sep
-    if not full.startswith(real_root):
+    boundary = expected_root() + os.sep
+    if not full.startswith(boundary):
         raise ValueError(f"路径超出 tmp 范围: '{target}' -> '{full}'")
     return full
 
@@ -61,21 +72,29 @@ def remove_item(full: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Safe clean tmp (based on CWD)")
+    parser.add_argument("--all", action="store_true", help="clear all under tmp (explicit)")
     parser.add_argument("targets", nargs="*", help="relative paths under tmp")
     args = parser.parse_args()
 
     root = tmp_root()
 
+    # tmp 必须真实存在且非符号链接，否则拒绝操作（防清空符号链接指向的外部目录）
+    if os.path.islink(root):
+        print(f"REJECTED: tmp is a symbolic link, refuse to operate: {root}")
+        return 1
     if not os.path.isdir(root):
         print(f"tmp not exist, nothing to clean: {root}")
         return 0
 
-    if not args.targets:
-        # 无参数：清空 tmp 下全部内容（均为临时产物）
+    if args.all:
         print(f"Cleaning all under: {root}")
         for entry in os.listdir(root):
             remove_item(os.path.join(root, entry))
         print("tmp cleaned.")
+        return 0
+
+    if not args.targets:
+        print("No target specified. Use --all to clear entire tmp, or list relative paths to delete.")
         return 0
 
     for target in args.targets:
