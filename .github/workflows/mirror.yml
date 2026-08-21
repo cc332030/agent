@@ -1,10 +1,15 @@
 
 name: mirror
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+    types: [closed]
 
 jobs:
   mirror:
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
     uses: cc332030/git/.github/workflows/mirror.yml@master
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      CNB_SYNC_TOKEN: ${{ secrets.CNB_SYNC_TOKEN }}
