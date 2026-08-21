@@ -6,7 +6,7 @@
 
 === 目录结构与命名
 
-* 测试类与源类包路径保持相同：测试类的包路径与对应源类一致（如源类 `com.c332030.ctool4j.core.util.CEntityUtils`，其测试类 `CEntityUtilsTests` 应位于同包 `com.c332030.ctool4j.core.util`），不额外加 `test` 段等路径层
+* 测试类与源类包路径保持相同：测试类的包路径与对应源类一致（如源类 `com.example.core.util.StringUtils`，其测试类 `StringUtilsTests` 应位于同包 `com.example.core.util`），不额外加 `test` 段等路径层
 
 === 用例设计
 

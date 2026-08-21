@@ -2,10 +2,6 @@
 
 以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。
 
-== 配置
-
-* @Bean 的方法名以 'c' 作为固定前缀（项目专属约定，各项目按自身约定调整）
-
 == 注入
 
 * 依赖注入默认使用构造器注入；无注入字段时添加 @AllArgsConstructor 属正常写法，不作问题提醒
