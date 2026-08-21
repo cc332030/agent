@@ -1,2 +1,45 @@
+= AGENT 执行规范
 
-= 规范
+本规范用于约束 agent 的编码与协作行为，供**任何语言、任何项目**遵循。
+
+== 访问与解析（引用方须知）
+
+* 引用方式：引用方项目通过 https 公网静态路径或本地相对/绝对路径引用本文件，不限方式。本文件与 `specs/` 目录**始终在同一目录下**（目录结构不变），这是所有相对引用的固定前提。
+* 路径解析规则：文中出现的 `specs/...` 均为**相对本文件所在目录**的路径。无论本文件以何种 URL/路径被打开，解析方式都是：
+  ** https 访问：`specs/core/execution.adoc` = `本文件所在目录URL/specs/core/execution.adoc`；
+  ** 本地相对/绝对路径：`specs/core/execution.adoc` = `本文件所在目录/specs/core/execution.adoc`。
+* agent 执行要求：读取本文件后，须将本文件所在目录视为基准，把文中的 `specs/...` 解析为 `<基准目录>/specs/...` 后加载对应文件；禁止仅凭本文件内容猜测规范，凡工作涉及对应主题或项目具备对应技术特征，必须加载对应规范（见下「加载调度器」）。
+
+严格使用本规范。规范以本文件当前内容为准；与本规范冲突时，以本规范定义为准。
+
+== 分类与懒加载（加载调度器）
+
+规范按"必加载层 / 通用层 / 技术栈层 / 平台层"分层分类存储于 `specs/` 下，**按需懒加载**（避免常驻加载不需要的规范、节省上下文）。懒加载是手段，**"强制不漏"是底线**——凡工作涉及对应主题或项目具备对应技术特征，必须加载对应规范，不得因"规范文件不在常驻上下文"而凭记忆或仅凭本入口文件猜测执行。
+
+加载规则：
+
+* 必加载层（每次工作都须加载）：
+  ** 执行原则：`specs/core/execution.adoc`
+  ** 规范管理：`specs/core/management.adoc`
+* 通用层（涉及对应活动时加载，不得跳过）：
+  ** 编写代码 → `specs/general/coding.adoc`（通用编码，跨语言）
+  ** 写文档/注释/设计文档 → `specs/general/doc.adoc`
+  ** git/版本控制操作 → `specs/general/git.adoc`
+  ** code review → `specs/general/review.adoc`
+  ** 多 agent 协作 → `specs/general/collab.adoc`
+  ** 编译/运行/分步验证 → `specs/general/verify.adoc`
+* 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
+  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/testing.adoc`
+  ** Spring 项目（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`
+  ** Maven 构建（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`
+  ** 其他语言/技术栈（nodejs、java、ubuntu 服务器配置等）按其对应栈文件加载，引用方项目逐栈补充
+* 平台层（按使用平台加载）：
+  ** CNB 平台 → `specs/platform/cnb.adoc`
+
+== 技术栈扩展约定
+
+本规范按"分类 + 懒加载"设计，天然支持多语言、多项目类型。新增技术栈规范时：
+
+* 在 `specs/stack/` 下新增对应栈文件（如 `nodejs.adoc`、`python.adoc`），只收录该栈专属规则；
+* 跨语言通用规则一律写入 `specs/general/coding.adoc`，避免重复；
+* 同步在本入口文件的"技术栈层"登记，明确检测特征，保证"按项目类型加载且不漏"。

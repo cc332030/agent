@@ -1,0 +1,43 @@
+= Java 语法糖规范（技术栈层）
+
+使用项目提供的 C 工具类替代原生重复写法，统一代码风格。以下均为 Java 项目专属规则，依赖本项目提供的 C 工具库。各 Java 项目按自身工具库调整。
+
+== 工具类定义
+
+* 工具库类默认使用 `@UtilityClass`（lombok）：方法、字段不再需要 `static` 关键词，也不再需要手写私有构造方法（lombok 默认生成私有构造器）
+
+== 集合（List / Set）
+
+* 创建集合：
+  ** 空集合用 `CList.of()` / `CSet.of()` / `CMap.of()`
+  ** 指定大小用 `CCollUtils.newList/newSet/newLinkedSet/newMap/newLinkedMap`
+  ** 可变参数创建用 `CList.of(...)` / `CSet.of(...)`（自动过滤 null，返回不可变集合）
+* 过滤：`collection.stream().filter(predicate).collect(...)` 换成 `CCollUtils.filter(collection, predicate)`
+  ** 过滤 null → `CCollUtils.filterNull(collection)`
+  ** 过滤非空字符串 → `CCollUtils.filterString(collection)`
+  ** 按转换后的 key 过滤 → `CCollUtils.filterKey(collection, convert)`
+* 转换（map）：`stream().map(f).filter(p).collect(toList()/toSet())` 换成 `CCollUtils.convert(...)` / `convertSet(...)`（默认过滤 null）
+* List 转 Map：`stream().collect(Collectors.toMap(...))` 换成 `CCollUtils.toMap(coll, toKey[, toValue][, mergeFunction])`
+* 分组：`Collectors.groupingBy(...)` 换成 `CCollUtils.groupingBy(coll, keyFn)`
+* 拼接：`stream().collect(...)` 合并元素换成 `CCollUtils.concat/concatOne`，逐个判空 add 换成 `addIgnoreNull/addIgnoreEmpty/addIgnoreBlank`、`addAllIgnoreNull`
+* 判空保护：`CCollUtils.defaultEmpty`、`first`、`last`、`get`、`size`、`contains`
+* 按 key 去重：`CStreamUtils.distinctByKey(keyFn)`（作 filter 参数）
+
+== Map
+
+* 键/值转换：`entrySet().stream().collect(...)` 换成
+  ** 只转键 → `CMapUtils.mapKey(map, keyMapper)`
+  ** 只转值 → `CMapUtils.mapValue(map, valueMapper)`
+  ** 键值都转 → `CMapUtils.map(map, keyMapper, valueMapper)`
+* 过滤：`entrySet().stream().filter(...).collect(...)` 换成 `CMapUtils.filter(filterKey/filterValue)(map, predicate)`
+* 合并多个 Map：`CMapUtils.merge(maps...)`（默认取 first）或 `CMapUtils.merge(mergeFunction, maps...)`
+* 判空写入：`CMapUtils.put(map, k, v)`、`computeIfAbsent(map, key, supplier/function)`
+
+== Optional
+
+* 空安全链式：`COpt.ofNullable(x).map(f).orElse(d)`
+* 集合/字符串判空：`COpt.ofEmptyAble(...)`；空白字符串判断：`COpt.ofBlankAble(...)`
+
+== 例外
+
+* 工具类自身内部实现（如 `CCollUtils`、`CMapUtils`、`CArrUtils`、`CStrUtils` 等）为构建 API 而直接使用原生 stream 属于合理实现，不受本规范强制约束
