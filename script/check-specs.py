@@ -15,6 +15,7 @@
 
 import os
 import re
+import shutil
 import sys
 import subprocess
 
@@ -59,10 +60,15 @@ def collect_adoc_files():
 
 
 def check_asciidoctor_syntax():
-    """若环境有 asciidoctor，做一次语法编译验证。"""
-    if subprocess.run(["where", "asciidoctor"], capture_output=True,
-                      shell=True).returncode != 0:
-        print("提示: 未检测到 asciidoctor，跳过语法编译验证（可使用官方 action 在 CI 中验证）。")
+    """若环境有 asciidoctor，做一次语法编译验证。
+
+    用 shutil.which 跨平台检测（Windows `where` / Linux `command -v` 通用），
+    避免因命令不存在而误判为"跳过"。CI 中应在运行本脚本前安装 asciidoctor，
+    使语法验证真正执行。
+    """
+    if shutil.which("asciidoctor") is None:
+        print("提示: 未检测到 asciidoctor，跳过语法编译验证"
+              "（CI 中请先在运行本脚本前安装，见 workflow）。")
         return
     for f in collect_adoc_files():
         r = subprocess.run(["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],

@@ -19,21 +19,9 @@ on:
       - '.github/workflows/check-specs.yml'
 
 jobs:
-  # 1) 确定性规范检查（引用完整性、栈登记一致、私有约定误导入）
-  #    发现问题即返回非 0 退出码，使 action 失败。
+  # 1) 确定性规范检查（引用完整性、栈登记一致、私有约定误导入 + AsciiDoc 语法编译）
+  #    安装 asciidoctor 使语法验证真正执行（不再跳过）；发现问题即返回非 0，action 失败。
   lint-specs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Run deterministic spec checks
-        run: python3 script/check-specs.py
-
-  # 2) AsciiDoc 语法编译验证（官方推荐方式：setup-ruby + gem install asciidoctor）
-  #    任一个文件编译失败即使 action 失败。
-  asciidoctor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,20 +30,10 @@ jobs:
           ruby-version: '3.2'
       - name: Install asciidoctor
         run: gem install asciidoctor --no-document
-      - name: AsciiDoc syntax check (compile each .adoc)
-        shell: bash
-        run: |
-          fail=0
-          for f in AGENTS.adoc $(find specs -name '*.adoc' -type f | sort); do
-            echo "== checking $f"
-            if ! asciidoctor -o /dev/null --failure-level=ERROR --warnings "$f"; then fail=1; fi
-          done
-          if [ $fail -ne 0 ]; then
-            echo "AsciiDoc 语法检查未通过"
-            exit 1
-          fi
+      - name: Run deterministic spec checks (incl. asciidoctor syntax)
+        run: python3 script/check-specs.py
 
-  # 3) AI 语义审查（可选）
+  # 2) AI 语义审查（可选）
   #    说明：GitHub Models 已于 2026-07-30 全面退役，原 actions/ai-inference 不再可用。
   #    因此这里改用 curl 直接调用 OpenAI 兼容 API（可由任意支持 OpenAI 协议的
   #    服务提供：OpenAI、DeepSeek、Taotoken 聚合、本地 vLLM 等）。
@@ -107,7 +85,7 @@ jobs:
           path: /tmp/ai-findings.txt
           if-no-files-found: ignore
 
-  # 4) AI 发现问题时使 action 失败（"怎么知道有问题"）
+  # 3) AI 发现问题时使 action 失败（"怎么知道有问题"）
   fail-on-issues:
     runs-on: ubuntu-latest
     needs: ai-review
@@ -120,7 +98,7 @@ jobs:
           echo "问题清单见 'ai-findings' artifact，或查看已自动创建的纠正 PR。"
           exit 1
 
-  # 5) 自动创建纠正 PR（"创建 pull 纠正失败的内容"）
+  # 4) 自动创建纠正 PR（"创建 pull 纠正失败的内容"）
   auto-fix-pr:
     runs-on: ubuntu-latest
     needs: ai-review
