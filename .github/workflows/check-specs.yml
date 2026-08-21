@@ -7,6 +7,7 @@ on:
       - 'AGENTS.adoc'
       - 'README.adoc'
       - 'script/check-specs.py'
+      - 'script/ai-review.sh'
       - '.github/workflows/check-specs.yml'
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - 'AGENTS.adoc'
       - 'README.adoc'
       - 'script/check-specs.py'
+      - 'script/ai-review.sh'
       - '.github/workflows/check-specs.yml'
 
 jobs:
@@ -29,59 +31,57 @@ jobs:
       - name: Run deterministic spec checks
         run: python3 script/check-specs.py
 
-  # 2) AsciiDoc 语法编译验证（官方 action，免费）
+  # 2) AsciiDoc 语法编译验证（官方推荐方式：setup-ruby + gem install asciidoctor）
   #    任一个文件编译失败即使 action 失败。
   asciidoctor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: AsciiDoc syntax check (compile each .adoc)
-        uses: asciidoctor/asciidoctor-action@v4
+      - uses: ruby/setup-ruby@v1
         with:
-          program: |
-            bash -c 'fail=0; for f in AGENTS.adoc $(find specs -name "*.adoc" -type f); do
-              echo "== checking $f";
-              if ! asciidoctor -o /dev/null --failure-level=ERROR --warnings "$f"; then fail=1; fi;
-            done; if [ $fail -ne 0 ]; then echo "AsciiDoc 语法检查未通过"; exit 1; fi'
+          ruby-version: '3.2'
+      - name: Install asciidoctor
+        run: gem install asciidoctor --no-document
+      - name: AsciiDoc syntax check (compile each .adoc)
+        shell: bash
+        run: |
+          fail=0
+          for f in AGENTS.adoc $(find specs -name '*.adoc' -type f | sort); do
+            echo "== checking $f"
+            if ! asciidoctor -o /dev/null --failure-level=ERROR --warnings "$f"; then fail=1; fi
+          done
+          if [ $fail -ne 0 ]; then
+            echo "AsciiDoc 语法检查未通过"
+            exit 1
+          fi
 
-  # 3) AI 语义审查（GitHub Models 免费额度）
-  #    仅负责生成审查结果，不在此判定失败（判定交给 fail-on-issues，创建 PR 交给 auto-fix-pr）。
+  # 3) AI 语义审查（可选）
+  #    说明：GitHub Models 已于 2026-07-30 全面退役，原 actions/ai-inference 不再可用。
+  #    因此这里改用 curl 直接调用 OpenAI 兼容 API（可由任意支持 OpenAI 协议的
+  #    服务提供：OpenAI、DeepSeek、Taotoken 聚合、本地 vLLM 等）。
+  #    需在仓库 Settings → Secrets 配置 AI_API_KEY 才启用；未配置时跳过（不报错）。
+  #    输出格式约定：发现问题时最后一行必须为 ISSUES_FOUND，未发现为 NO_ISSUES_FOUND。
   ai-review:
     runs-on: ubuntu-latest
+    if: secrets.AI_API_KEY != ''
     permissions:
       contents: read
-      models: read
-    continue-on-error: true
     outputs:
       findings: ${{ steps.assess.outputs.findings }}
     steps:
       - uses: actions/checkout@v4
-      - name: Concatenate specs into a single file
-        run: |
-          { echo '===== FILE: AGENTS.adoc ====='; cat AGENTS.adoc; } > /tmp/specs-context.txt
-          for f in $(find specs -name '*.adoc' -type f | sort); do
-            { echo ""; echo "===== FILE: $f ====="; cat "$f"; } >> /tmp/specs-context.txt
-          done
-          wc -l /tmp/specs-context.txt
-      - name: AI spec consistency review
+      - name: Call AI for spec consistency review
         id: review
-        uses: actions/ai-inference@v1
-        with:
-          model: 'openai/gpt-4.1'
-          system-prompt: |
-            你是一名严谨的技术规范审查专家。只审查 agent 执行规范集合的一致性。
-            输出要求：若发现问题，逐条列出"文件、问题描述、具体建议的修改"，并在
-            最后一行输出标记 ISSUES_FOUND；若未发现问题，只输出一行 NO_ISSUES_FOUND。
-            重点检查：1) 规范之间是否自相矛盾或重复；2) 是否存在歧义、不严谨、
-            会误导 agent 的表述；3) 是否含私有项目专属约定（应中性化）。
-          prompt-file: /tmp/specs-context.txt
+        shell: bash
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_BASE: ${{ secrets.AI_API_BASE }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+        run: bash script/ai-review.sh AGENTS.adoc specs
       - name: Assess findings & write artifact
         id: assess
         shell: bash
         run: |
-          echo "${{ steps.review.outputs.response }}" > /tmp/ai-findings.txt
-          echo "===== AI 审查结果 ====="
-          cat /tmp/ai-findings.txt
           if grep -q "NO_ISSUES_FOUND" /tmp/ai-findings.txt; then
             echo "findings=false" >> "$GITHUB_OUTPUT"
             echo "AI 审查未发现问题。"
