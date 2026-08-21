@@ -27,12 +27,13 @@
   ** git/版本控制操作 → `specs/general/git.adoc`
   ** code review → `specs/general/review.adoc`
   ** 多 agent 协作 → `specs/general/collab.adoc`
+  ** 跑测试/补测试 → `specs/general/testing.adoc`（公共测试规范，跨语言）
   ** 编译/运行/分步验证 → `specs/general/verify.adoc`
 * 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
-  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/testing.adoc`
+  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/java-testing.adoc`
   ** Spring 项目（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`
-  ** 其他语言/技术栈（nodejs、java、ubuntu 服务器配置等）按其对应栈文件加载，引用方项目逐栈补充
+  ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 平台层（按使用平台加载）：
   ** CNB 平台 → `specs/platform/cnb.adoc`
 

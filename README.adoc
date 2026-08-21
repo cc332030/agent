@@ -7,8 +7,8 @@
 * `AGENTS.adoc` — 规范入口与加载调度器（必加载）：定义规范的分类、懒加载与"按项目类型加载且不漏"的规则，并登记全部规范文件。
 * `specs/` — 规范分类目录，按"必加载层 / 通用层 / 技术栈层 / 平台层"分层存储：
   ** `specs/core/` — 必加载层：执行原则、规范管理
-  ** `specs/general/` — 通用层：通用编码、文档、git、code review、agent 协作、验证
-  ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、测试（按项目类型加载）
+  ** `specs/general/` — 通用层：通用编码、文档、git、code review、agent 协作、测试、验证
+  ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试（按项目类型加载）
   ** `specs/platform/` — 平台层：cnb
 * `script/` — 配套脚本目录：
   ** `clean-tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）

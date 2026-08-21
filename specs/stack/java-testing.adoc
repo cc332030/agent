@@ -1,0 +1,26 @@
+= Java 测试规范（技术栈层，JUnit）
+
+来源：由原 `specs/stack/testing.adoc` 拆分而来（一拆多），本文件收录其中 Java/JUnit 专属部分；公共测试设计原则随主体迁至 `specs/general/testing.adoc`（继承原文件 git 历史）。
+
+以下规范适用于 **Java 项目**的测试（JUnit 5）。公共测试设计原则见 `specs/general/testing.adoc`；本文件只收录 Java/JUnit 专属规则。加载触发特征：项目存在 `.java` 源文件、测试依赖（JUnit 等）。Java 项目跑测试/补测试前须加载本文件及公共测试规范（见 AGENTS.adoc 加载调度规则）。
+
+== 框架与目录
+
+* 测试框架：单元测试使用 JUnit 5
+* 目录结构与命名：测试类与源类包路径保持相同——测试类（`src/test/java`）的包路径与对应源类（`src/main/java`）一致（如源类 `com.example.core.util.StringUtils`，其测试类 `StringUtilsTests` 应位于同包 `com.example.core.util`），不额外加 `test` 段等路径层
+
+== 断言
+
+* 异常断言用 `assertThrowsExactly` 精确匹配异常类型，不用 `assertThrows`（避免父类异常掩盖子类语义）
+
+== 用例编写
+
+* 测试代码与主代码同等遵守全部 Java 规范（specs/stack/java.adoc）：lombok 使用、构造器/字段修饰符、对象创建、命名与注释、工具类等一律按主代码标准执行；语言层面按项目目标版本约束，禁用项目目标版本不支持的新语法糖
+* 按公共测试规范"异常输入用例按实际情况取舍"跳过某参数的异常输入用例时，该参数必须标注 `@NonNull` 注解写明约定，防止后续误判为可空、再次生成异常输入用例（通用取舍规则见 specs/general/testing.adoc）
+* 涉及 lombok 等语法糖时注意实际展开结果（如 `val` 的类型推断），避免用例预期与实际不符
+* 含 null 元素的集合字面量需显式泛型（如 `Arrays.<Integer>asList`），避免类型推断歧义
+* 依赖反射/序列化（Jackson、hutool 等）的测试注意资源释放（如 generator 需 close）与构造器可见性（反射默认只取 public 构造器）
+
+== 执行与验证
+
+* 验证以 Maven 结果为准（surefire 的 Tests run/Failures/Errors/Skipped 统计），具体见 specs/stack/maven.adoc

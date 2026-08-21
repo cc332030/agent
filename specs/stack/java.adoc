@@ -1,6 +1,6 @@
 = Java 规范（技术栈层）
 
-以下规范适用于 **Java 项目**。加载触发特征：项目存在 `.java` 源文件、`pom.xml`/`build.gradle`、lombok 配置等。Java 项目写代码必须加载本文件及 `java-syntax.adoc`、`testing.adoc`（见 AGENTS.adoc 加载调度规则）。
+以下规范适用于 **Java 项目**。加载触发特征：项目存在 `.java` 源文件、`pom.xml`/`build.gradle`、lombok 配置等。Java 项目写代码必须加载本文件及 `java-syntax.adoc`、`java-testing.adoc`（见 AGENTS.adoc 加载调度规则）。
 
 跨语言通用编码规则见 `specs/general/coding.adoc`（含命名通用规则）；本文件只收录 Java 专属规则。
 
@@ -16,6 +16,7 @@
 * 局部变量强制使用 lombok val、var（硬性要求）：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃 val/var；val/var 仅适用于局部变量，字段不得使用；唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断等）等确需显式类型提示的场景可写显式类型，此类例外须克制使用
 * lombok.config 实时读取：lombok.config 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行，不得在规范或代码注释中固化其具体配置内容
 * 对象创建统一用 builder、构造器统一用 lombok：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 @SuperBuilder 而非 @Builder，支持继承场景）；无参、必参、全参构造方法一律用 lombok 注解生成，禁止手写任何构造器；实体类用 @Data、@NoArgsConstructor、@AllArgsConstructor；@AllArgsConstructor 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器
+* 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 specs/general/coding.adoc「类设计」）
 * 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行
 * JSON 处理全局统一使用 Jackson，禁止引入其他 JSON 库（如 Gson、fastjson）
 * 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
@@ -45,3 +46,4 @@
 * 字段注释须说明含义、默认值及配置方式
 * 构建器 setter 方法注释须标注 `@param`、`@return this`
 * 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "doc/design/<模块>/<Xxx>.adoc"` 指向设计文档（如有对应测试文档一并 `@see`），类级 javadoc 指向 `Xxx.adoc`、方法级 javadoc 指向其所属功能文档；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
+* javadoc、注释、README 等纯文档性缺陷，发现后直接修复，无需问询
