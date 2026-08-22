@@ -12,14 +12,30 @@
   ** `specs/platform/` — 平台层：cnb
 * `script/` — 配套脚本目录：
   ** `clean-tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
+* `index.html` — 网站首页，通过 CDN 链接（jsDelivr）引入 Asciidoctor.js 并动态解析本文件（`README.adoc`）渲染为网页；外部资源一律用链接引用，不下载到本地
+
+== 网站首页
+
+本站通过 `index.html` + Asciidoctor.js 动态解析本文件（`README.adoc`）并渲染为网页：https://agent.c332030.com/
 
 == 引用方式
 
 规范适用于任何语言、任何项目。引用方式二选一：
-* https 公网静态路径（本仓库发布为公网静态站点后的 URL）
+
+* https 公网静态路径：https://agent.c332030.com/AGENTS.adoc
 * 本地相对路径或绝对路径
 
 规范文件之间以相对路径互相引用，保证本地与公网静态部署下均可正常跳转。
+
+== 使用方法
+
+将本规范接入任意项目（不限语言）即可约束 agent 行为：
+
+* 指定规范入口：将 `AGENTS.adoc` 作为 agent 的规范文件加载（https 路径或本地路径均可）。
+  ** https 路径：https://agent.c332030.com/AGENTS.adoc
+  ** 本地路径：直接使用本仓库内的 `AGENTS.adoc`。
+* agent 读取 `AGENTS.adoc` 后，会以该文件所在目录为基准，将文中的 `specs/...` 相对引用解析并加载对应规范，实现"分类懒加载、按项目类型加载且不漏"。
+* 校验规范完整性：修改规范后运行 `python3 script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
 
 == 使用要点
 

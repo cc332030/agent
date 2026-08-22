@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>agent 规范 · 文档站</title>
+  <!-- Asciidoctor.js（浏览器端动态解析 .adoc），通过 CDN 链接引用（不下载到本地）。
+       固定版本 2.2.1：该版本为 UMD，<script> 引入后会暴露全局 Asciidoctor。
+       注意：勿用 @asciidoctor/core 高版本——3.0.4 起 browser 构建不再暴露全局
+       Asciidoctor（ReferenceError），且勿用 @latest 浮动版本（可能解析到无
+       dist/browser 产物的 ESM 版而 404）。 -->
+  <script src="https://cdn.jsdelivr.net/npm/@asciidoctor/core@2.2.1/dist/browser/asciidoctor.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@asciidoctor/core@2.2.1/dist/css/asciidoctor.css">
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #ffffff;
+      --border: #e1e4e8;
+      --text: #24292f;
+      --muted: #57606a;
+      --accent: #0969da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", Helvetica, Arial, sans-serif;
+      line-height: 1.7;
+    }
+    .topbar {
+      background: var(--accent);
+      color: #fff;
+      padding: 14px 0;
+      border-bottom: 4px solid #0550ae;
+    }
+    .topbar-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .topbar h1 { margin: 0; font-size: 20px; font-weight: 600; }
+    .topbar .links { display: flex; gap: 16px; font-size: 14px; }
+    .topbar a { color: #fff; text-decoration: none; opacity: 0.95; }
+    .topbar a:hover { text-decoration: underline; opacity: 1; }
+    .container {
+      max-width: 900px;
+      margin: 24px auto;
+      padding: 0 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    /* Asciidoctor 默认样式的容器适配 */
+    .card code {
+      background: rgba(175,184,193,0.2);
+      border-radius: 4px;
+      padding: 0.15em 0.4em;
+      font-size: 0.92em;
+    }
+    .card pre { background: #f6f8fa; padding: 14px; border-radius: 6px; overflow-x: auto; }
+    .card h1, .card h2, .card h3 { border-bottom: none; }
+    .card h2 { padding-top: 0.4em; margin-top: 1.2em; }
+    .loading { color: var(--muted); text-align: center; padding: 40px 0; }
+    .error { color: #cf222e; }
+    footer {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <h1>agent 执行规范</h1>
+      <div class="links">
+        <a href="./README.adoc" target="_blank">README</a>
+        <a href="./AGENTS.adoc" target="_blank">AGENTS.adoc</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div id="output">
+        <div class="loading">正在加载并解析 README.adoc…</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>本页面由 Asciidoctor.js 动态解析仓库内的 README.adoc 生成。</span>
+  </footer>
+
+  <script>
+    // 浏览器端动态解析 README.adoc 并渲染为 HTML
+    (function () {
+      var output = document.getElementById('output');
+      var asciidoctor;
+
+      // 检查 asciidoctor 是否加载成功（CDN 引入的 UMD 应暴露全局 Asciidoctor）
+      if (typeof Asciidoctor !== 'function') {
+        output.innerHTML =
+          '<p class="error">Asciidoctor.js 未加载（CDN 脚本未暴露全局 Asciidoctor）。请检查网络或 CDN 可达性。</p>';
+        return;
+      }
+
+      try {
+        asciidoctor = Asciidoctor();
+      } catch (e) {
+        console.error('Asciidoctor 初始化失败:', e);
+        output.innerHTML = '<p class="error">Asciidoctor.js 初始化失败，详见控制台。</p>';
+        return;
+      }
+
+      fetch('./README.adoc')
+        .then(function (resp) {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.text();
+        })
+        .then(function (content) {
+          output.innerHTML = asciidoctor.convert(content, {
+            standalone: false,
+            safe: 'safe',
+            attributes: { 'showtitle': '', 'icons': 'font' }
+          });
+        })
+        .catch(function (err) {
+          console.error('解析 README.adoc 失败:', err);
+          output.innerHTML =
+            '<p class="error">解析 README.adoc 失败：' + err.message +
+            '。<br>可 <a href="./README.adoc" target="_blank">直接打开原始文件</a> 查看。</p>';
+        });
+    })();
+  </script>
+</body>
+</html>
