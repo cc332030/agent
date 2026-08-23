@@ -20,6 +20,7 @@ import re
 import shutil
 import sys
 import subprocess
+import time
 
 # 兼容 Windows GBK 等非 UTF-8 终端，统一按 UTF-8 输出
 try:
@@ -42,6 +43,25 @@ FORBIDDEN_PATTERNS = [
 ]
 
 errors = []
+_phase_start = 0.0
+
+
+def log(msg: str) -> None:
+    """带时间戳的进度日志，立即 flush 避免被缓冲吞掉。"""
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def phase(name: str) -> None:
+    """标记一个检查阶段的开始。"""
+    global _phase_start
+    _phase_start = time.time()
+    log(f"▶ {name}...")
+
+
+def phase_done() -> None:
+    """标记当前阶段结束，打印耗时。"""
+    elapsed = time.time() - _phase_start
+    log(f"  ✓ 完成 ({elapsed:.1f}s)")
 
 
 def err(msg: str, path: str = "", line: int = 0) -> None:
@@ -68,15 +88,24 @@ def check_asciidoctor_syntax():
     避免因命令不存在而误判为"跳过"。CI 中应在运行本脚本前安装 asciidoctor，
     使语法验证真正执行。
     """
+    phase("AsciiDoc 语法编译验证")
     if shutil.which("asciidoctor") is None:
-        print("提示: 未检测到 asciidoctor，跳过语法编译验证"
-              "（CI 中请先在运行本脚本前安装，见 workflow）。")
+        log("  提示: 未检测到 asciidoctor，跳过语法编译验证"
+            "（CI 中请先在运行本脚本前安装，见 workflow）。")
         return
-    for f in collect_adoc_files():
-        r = subprocess.run(["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],
-                           capture_output=True, text=True)
-        if r.returncode != 0:
-            err(f"asciidoctor 语法错误: {r.stderr.strip()}", f)
+    files = collect_adoc_files()
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        log(f"  [{i}/{len(files)}] 检查 {rel}")
+        try:
+            r = subprocess.run(
+                ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],
+                capture_output=True, text=True, timeout=30)
+            if r.returncode != 0:
+                err(f"asciidoctor 语法错误: {r.stderr.strip()}", f)
+        except subprocess.TimeoutExpired:
+            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {os.path.relpath(f, REPO_ROOT)}")
+    phase_done()
 
 
 def extract_specs_refs(text: str):
@@ -103,24 +132,30 @@ def check_refs_exist():
         会漏掉 spec 间交叉引用悬空，如 java-testing.adoc 引用已不存在的
         specs/stack/testing.adoc）。
     """
-    for f in collect_adoc_files():
+    phase("引用文件存在性检查")
+    files = collect_adoc_files()
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        log(f"  [{i}/{len(files)}] 扫描 {rel}")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
         refs = extract_specs_refs(text)
         for ref in refs:
             target = os.path.join(REPO_ROOT, ref)
             if not os.path.isfile(target):
-                err(f"引用了不存在的文件: {ref}", os.path.relpath(f, REPO_ROOT))
+                err(f"引用了不存在的文件: {ref}", rel)
             else:
                 # 检查被引用文件是否真的存在且可读
                 try:
                     open(target, encoding="utf-8").close()
                 except Exception as e:  # noqa
-                    err(f"文件无法读取: {ref} ({e})", os.path.relpath(f, REPO_ROOT))
+                    err(f"文件无法读取: {ref} ({e})", rel)
+    phase_done()
 
 
 def check_stack_consistency():
     """AGENTS.adoc 技术栈层登记 vs specs/stack/ 实际文件，双向一致。"""
+    phase("技术栈一致性检查")
     with open(AGENTS_FILE, encoding="utf-8") as fh:
         text = fh.read()
     # 提取登记的技术栈文件：specs/stack/xxx.adoc
@@ -134,38 +169,57 @@ def check_stack_consistency():
             if f.endswith(".adoc"):
                 actual.add(f"specs/stack/{f}")
 
+    log(f"  已登记: {len(registered_stack)} 个, 实际存在: {len(actual)} 个")
+
     # 登记了但不存在（已被上一项覆盖，这里再明确提示栈语义）
     for r in registered_stack - actual:
         err(f"技术栈层登记了不存在的栈文件: {r}", "AGENTS.adoc")
     # 实际存在但未登记（防止漏加载）
     for a in actual - registered_stack:
         err(f"specs/stack/ 存在但未在技术栈层登记（可能漏加载）: {a}", "AGENTS.adoc")
+    phase_done()
 
 
 def check_forbidden_patterns():
-    for f in collect_adoc_files():
+    """检查是否误导入私有强约束约定。"""
+    phase("私有约定误导入检查")
+    files = collect_adoc_files()
+    checked = 0
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
         # AGENTS.adoc 作为加载器允许出现中性示例路径，跳过其私有约定命中
         with open(f, encoding="utf-8") as fh:
             lines = fh.readlines()
-        for i, line in enumerate(lines, 1):
+        found_in_file = False
+        for j, line in enumerate(lines, 1):
             for pat, desc in FORBIDDEN_PATTERNS:
                 if re.search(pat, line):
-                    err(f"{desc}", f, i)
+                    if not found_in_file:
+                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        found_in_file = True
+                    err(f"{desc}", rel, j)
+        checked += 1
+    log(f"  扫描 {checked} 个文件, 共 {sum(len(open(f, encoding='utf-8').readlines()) for f in files)} 行")
+    phase_done()
 
 
 def main():
-    print(f"检查根目录: {REPO_ROOT}")
+    log(f"检查根目录: {REPO_ROOT}")
+    log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
+    print()
+
     check_refs_exist()
     check_stack_consistency()
     check_forbidden_patterns()
     check_asciidoctor_syntax()
 
+    print()
     if errors:
-        print("\n发现以下规范性问题：")
+        log(f"发现 {len(errors)} 个规范性问题：")
         for e in errors:
             print("  - " + e)
         sys.exit(1)
-    print("OK 规范检查全部通过。")
+    log("OK 规范检查全部通过。")
     sys.exit(0)
 
 
