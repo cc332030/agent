@@ -227,12 +227,41 @@ class TestIntegration(CheckSpecsTestCase):
                    "见 link:../general/doc-design.adoc[]；link:../stack/java.adoc[]")
         self.write("specs/general/doc-design.adoc", "= 设计文档")
         self.write("specs/stack/java.adoc", "= Java")
+        self.write("specs/core/management.adoc",
+                   "规范调整：调整后必须开启干净子 agent 验证完整性；不得只定义不执行")
 
         cm.check_refs_exist()
         cm.check_link_refs()
         cm.check_stack_consistency()
         cm.check_forbidden_patterns()
+        cm.check_principle_guard()
         self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_principle_guard（规范要点防线：防『定义验证却不执行/被误删』）
+# --------------------------------------------------------------------------- #
+class TestCheckPrincipleGuard(CheckSpecsTestCase):
+    def test_principle_present_passes(self):
+        self.write("AGENTS.adoc", "= t")
+        self.write("specs/core/management.adoc",
+                   "规范调整：调整后必须开启干净子 agent 验证完整性；不得只定义不执行")
+        cm.check_principle_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_validation_keyword_removed_reports(self):
+        # 反例：删掉了「完整性校验/子 agent 复核」约定（只定义校验、不要求执行）
+        self.write("AGENTS.adoc", "= t")
+        self.write("specs/core/management.adoc", "规范调整：写成文档即可，无需后续动作")
+        cm.check_principle_guard()
+        self.assertIn("要点防线被破坏", self.error_texts())
+        self.assertIn("子 agent", self.error_texts())
+        self.assertIn("完整性", self.error_texts())
+
+    def test_missing_management_file_reports(self):
+        self.write("AGENTS.adoc", "= t")  # 未创建 management.adoc
+        cm.check_principle_guard()
+        self.assertIn("缺少规范管理文件", self.error_texts())
 
 
 if __name__ == "__main__":

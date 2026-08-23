@@ -274,6 +274,30 @@ def check_link_refs():
     phase_done()
 
 
+def check_principle_guard():
+    """校验规范"要点防线"仍在（防『定义完整性校验却不执行/被意外误删』）。
+
+    作为逐层防线：一旦 management.adoc「规范调整」里"调整后须做完整性校验、且含干净
+    子 agent 复核、不得只定义不执行"这条底线被删除或改写，check-specs.py 即可通过
+    低耗机械校验发现，从而用测试用例钉住这类"难在定稿时发现"的坑。
+
+    判定：management.adoc 必须同时含有『子 agent』与『完整性』两个关键词，否则视为
+    完整性校验机制被破坏。
+    """
+    phase("规范要点防线检查")
+    path = os.path.join(REPO_ROOT, "specs", "core", "management.adoc")
+    rel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(path):
+        err("缺少规范管理文件 management.adoc，无法核验『调整后须做完整性校验』要点防线是否存在", rel)
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    for key in ("子 agent", "完整性"):
+        if key not in text:
+            err(f"规范要点防线被破坏：{rel} 缺失『{key}』——『调整规范后必须真正执行完整性校验』这条底线可能被删除/改写", rel)
+    phase_done()
+
+
 def main():
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
@@ -283,6 +307,7 @@ def main():
     check_link_refs()
     check_stack_consistency()
     check_forbidden_patterns()
+    check_principle_guard()
     check_asciidoctor_syntax()
 
     print()
