@@ -23,6 +23,7 @@
   ** 规范管理：link:specs/core/management.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言）
+  ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件） → link:specs/general/script.adoc[]（通用脚本规范，跨语言）
   ** 写注释/文档/格式 → link:specs/general/doc.adoc[]
   ** 设计文档/测试设计文档（核心功能新增、重构、行为变更、方案选型） → link:specs/general/doc-design.adoc[]
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
@@ -35,6 +36,8 @@
   ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]
   ** Spring 项目（存在 Spring 依赖/注解）→ link:specs/stack/spring.adoc[]
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
+  ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
+  ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
   ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 平台层（按使用平台加载）：
   ** CNB 平台 → link:specs/platform/cnb.adoc[]
