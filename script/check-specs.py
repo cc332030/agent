@@ -115,8 +115,13 @@ def extract_specs_refs(text: str):
       * 占位符（如 `specs/...`，以 `...` 结尾；如 `specs/stack/<语言>-testing.adoc`，
         含 `<`/`>` 角括号，非真实文件名）；
       * 目录本身（如 `specs/stack/`，以 `/` 结尾）。
+
+    兼容两种写法：
+      * 反引号包裹：`specs/general/coding.adoc`
+      * AsciiDoc 超链接：link:specs/general/coding.adoc[可见文本]（便于人工预览点击）
     """
     refs = re.findall(r"`(specs/[^`\s]+)`", text)
+    refs += re.findall(r"\blink:(specs/[^\[]+)\[", text)
     return [r for r in refs
             if not r.endswith("/")
             and not r.endswith("...")
