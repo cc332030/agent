@@ -1,6 +1,6 @@
 = 文档规范（通用层）
 
-以下规范适用于文档、注释的通用编写原则，以及文档格式与编码。设计文档与测试设计文档的编写规范见 link:../general/doc-design.adoc[]；业务系统（从立项到上线的完整项目）的全生命周期文档组织见 link:../general/doc-lifecycle.adoc[]。某语言/技术栈的注释细节（如 Java 的 javadoc 规范）见 `specs/stack/` 对应文件。
+以下规范适用于文档、注释的通用编写原则，以及文档格式与编码。设计文档与测试设计文档的编写规范见 link:../general/doc-design.adoc[]；业务系统（从立项到上线的完整项目）的全生命周期文档组织见 link:../general/doc-lifecycle.adoc[]；**多模块项目**下模块内部文档的组织与归属见 link:../general/doc-module.adoc[]（全局/规划性文档放根 `doc/`，模块具体细节文档放各模块 `doc/`）。某语言/技术栈的注释细节（如 Java 的 javadoc 规范）见 `specs/stack/` 对应文件。
 
 == 注释与文档
 
