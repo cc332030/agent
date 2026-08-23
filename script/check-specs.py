@@ -16,6 +16,7 @@
 """
 
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -108,24 +109,54 @@ def check_asciidoctor_syntax():
     phase_done()
 
 
-def extract_specs_refs(text: str):
-    """提取文中 `specs/...` 形式的相对引用，仅保留指向具体文件的路径。
+def _is_placeholder_ref(ref: str) -> bool:
+    """判断一个引用是否指向目录 / 占位符 / 尚不存在的示例（非真实具体文件）。"""
+    return (ref.endswith("/")
+            or ref.endswith("...")
+            or "<" in ref or ">" in ref)
 
-    过滤三类非文件项：
-      * 占位符（如 `specs/...`，以 `...` 结尾；如 `specs/stack/<语言>-testing.adoc`，
-        含 `<`/`>` 角括号，非真实文件名）；
-      * 目录本身（如 `specs/stack/`，以 `/` 结尾）。
 
-    兼容两种写法：
-      * 反引号包裹：`specs/general/coding.adoc`
-      * AsciiDoc 超链接：link:specs/general/coding.adoc[可见文本]（便于人工预览点击）
+def extract_specs_refs(text: str, base_dir: str = ""):
+    """提取文中所有指向仓库内具体文件的引用，归一化为从仓库根开始的相对路径。
+
+    `base_dir` 为当前文件所在目录（相对仓库根，POSIX 分隔，根文件为空串），用于
+    解析 link: 的相对目标。兼容两类写法：
+
+      * 反引号包裹：`` `specs/general/coding.adoc` ``——按**从仓库根开始**的相对
+        路径解析（AGENTS.adoc 加载调度 / 正文里惯例用这种写法）。
+      * AsciiDoc 超链接：`link:xxx[]`——按**相对当前文件所在目录**解析（IDE 与
+        浏览器相对语义一致），目标可能是 `../general/x.adoc` 等含 `../` 的形式。
+
+    排除：目录、占位符、外部 scheme 链接、页内锚点、根绝对路径及越出仓库根的相对路径。
     """
-    refs = re.findall(r"`(specs/[^`\s]+)`", text)
-    refs += re.findall(r"\blink:(specs/[^\[]+)\[", text)
-    return [r for r in refs
-            if not r.endswith("/")
-            and not r.endswith("...")
-            and "<" not in r and ">" not in r]
+    refs = []
+    # 反引号：根目录相对
+    for r in re.findall(r"`(specs/[^`\s]+)`", text):
+        if _is_placeholder_ref(r):
+            continue
+        refs.append(r)
+    # link:：相对当前文件目录
+    for raw in re.findall(r"\blink:([^\[]+)\[", text):
+        t = raw.strip()
+        if not t or t.startswith("#"):
+            continue
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):  # 外部 scheme 链接
+            continue
+        if t.startswith("/"):  # 根绝对路径，格式检查单独报告，此处不参与存在性
+            continue
+        resolved = posixpath.normpath(posixpath.join(base_dir, t))
+        if resolved == ".." or resolved.startswith("../"):
+            continue  # 越出仓库根，格式检查单独报告
+        if _is_placeholder_ref(resolved):
+            continue
+        refs.append(resolved)
+    # 去重并保持顺序
+    seen, out = set(), []
+    for r in refs:
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
 
 
 def check_refs_exist():
@@ -141,12 +172,13 @@ def check_refs_exist():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
+        base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
         log(f"  [{i}/{len(files)}] 扫描 {rel}")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
-        refs = extract_specs_refs(text)
+        refs = extract_specs_refs(text, base)
         for ref in refs:
-            target = os.path.join(REPO_ROOT, ref)
+            target = os.path.join(REPO_ROOT, *ref.split("/"))
             if not os.path.isfile(target):
                 err(f"引用了不存在的文件: {ref}", rel)
             else:
@@ -163,8 +195,8 @@ def check_stack_consistency():
     phase("技术栈一致性检查")
     with open(AGENTS_FILE, encoding="utf-8") as fh:
         text = fh.read()
-    # 提取登记的技术栈文件：specs/stack/xxx.adoc
-    registered = set(extract_specs_refs(text))
+    # 提取登记的技术栈文件：specs/stack/xxx.adoc（AGENTS.adoc 位于仓库根，base_dir=""）
+    registered = set(extract_specs_refs(text, ""))
     registered_stack = {r for r in registered if r.startswith("specs/stack/")}
 
     actual = set()
@@ -208,12 +240,47 @@ def check_forbidden_patterns():
     phase_done()
 
 
+def check_link_refs():
+    """校验内部文档链接 link: 的格式：须用相对路径，禁止根绝对、禁止越出仓库根。
+
+    背景：AsciiDoc 的 link: 目标既在 IDE 里解析、也在浏览器/站点里解析。若写成
+    根绝对路径 `link:/specs/...`，站点按仓库根解析看似正确，但 IDE 会把 `/` 当
+    文件系统盘符根解析，导致 IDE 无法跳转；只有写相对当前文件所在目录的相对路径
+    （如 `link:../general/x.adoc`）才能让 IDE 与浏览器按同一相对语义一致跳转。
+    """
+    phase("文档链接格式检查")
+    files = collect_adoc_files()
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        found_in_file = False
+        with open(f, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                for m in re.finditer(r"\blink:([^\[]+)\[", line):
+                    target = m.group(1).strip()
+                    # 外部链接（带 scheme）与页内锚点（#...）除外
+                    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("#"):
+                        continue
+                    if not found_in_file:
+                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        found_in_file = True
+                    if target.startswith("/"):
+                        err("内部链接禁止用根绝对路径（link:/specs/... 在 IDE 中会按文件系统根解析、无法跳转），"
+                            f"应改为相对路径（如 link:../specs/...[]），实际为 link:{target}[", rel, j)
+                        continue
+                    resolved = posixpath.normpath(posixpath.join(base, target))
+                    if resolved == ".." or resolved.startswith("../") or os.path.isabs(resolved):
+                        err(f"链接目标越出仓库根: link:{target}[", rel, j)
+    phase_done()
+
+
 def main():
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
     print()
 
     check_refs_exist()
+    check_link_refs()
     check_stack_consistency()
     check_forbidden_patterns()
     check_asciidoctor_syntax()
