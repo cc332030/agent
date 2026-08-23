@@ -35,7 +35,7 @@
   ** https 路径：https://agent.c332030.com/AGENTS.adoc
   ** 本地路径：直接使用本仓库内的 `AGENTS.adoc`。
 * agent 读取 `AGENTS.adoc` 后，会以该文件所在目录为基准，将文中的 `specs/...` 相对引用解析并加载对应规范，实现"分类懒加载、按项目类型加载且不漏"。
-* 校验规范完整性：修改规范后运行 `python script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
+* 校验规范完整性：修改规范后运行 `python3 script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
 
 == 使用要点
 
