@@ -23,7 +23,9 @@
   ** 规范管理：`specs/core/management.adoc`
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → `specs/general/coding.adoc`（通用编码，跨语言）
-  ** 写文档/注释/设计文档 → `specs/general/doc.adoc`
+  ** 写注释/文档/格式 → `specs/general/doc.adoc`
+  ** 设计文档/测试设计文档（核心功能新增、重构、行为变更、方案选型） → `specs/general/doc-design.adoc`
+  ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → `specs/general/doc-lifecycle.adoc`
   ** git/版本控制操作 → `specs/general/git.adoc`
   ** code review → `specs/general/review.adoc`
   ** 多 agent 协作 → `specs/general/collab.adoc`
