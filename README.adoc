@@ -2,6 +2,30 @@
 
 本仓库用于存储 agent 相关信息。目前确定的内容是 **agent 执行规范**。
 
+== 一键安装（复制给 AI）
+
+最简单的方式：将下面这段提示词原样复制粘贴给任意 AI/agent 对话，即可让它在当前项目中加载并遵守本规范（通用任意平台，无需安装软件）：
+
+[listing]
+----
+请将 https://agent.c332030.com/AGENTS.adoc 这份 agent 执行规范应用到当前项目，并按以下要求执行：
+
+1. 先读取该文件，再读取其中引用的各级规范文件（specs/core、specs/general、specs/stack、specs/platform 等）。所有 specs/... 相对引用均以该文件所在目录为基准解析，例如 specs/core/execution.adoc 即 https://agent.c332030.com/specs/core/execution.adoc。
+2. 规范按分类懒加载，但不得遗漏：凡当前工作涉及对应主题，或项目具备对应技术栈特征（如 Java/Spring/Maven），必须加载对应规范，不得因未常驻而凭记忆或猜测执行。
+3. 从今往后的所有编码与协作行为均严格遵循上述规范；若与本项目自身已有规范冲突，以本项目规范为准，否则以上述规范为准。
+----
+
+提示词内容与下方「引用方式」「使用要点」一致；熟悉后可自行写精简版。
+
+== 引用方式
+
+规范适用于任何语言、任何项目，将 `AGENTS.adoc` 作为规范入口交给 agent 即可。入口引用方式二选一：
+
+* https 公网静态路径：https://agent.c332030.com/AGENTS.adoc
+* 本地相对路径或绝对路径：直接使用本仓库内的 `AGENTS.adoc`
+
+`AGENTS.adoc` 与其 `specs/` 目录始终位于同一目录，文中 `specs/...` 均相对入口所在目录解析，故两种引用方式下规范都能正常解析加载。
+
 == 目录结构
 
 * `AGENTS.adoc` — 规范入口与加载调度器（必加载）：定义规范的分类、懒加载与"按项目类型加载且不漏"的规则，并登记全部规范文件。
@@ -12,32 +36,14 @@
   ** `specs/platform/` — 平台层：cnb
 * `script/` — 配套脚本目录：
   ** `clean-tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
-* `index.html` — 网站首页，通过 CDN 链接（jsDelivr）引入 Asciidoctor.js 并动态解析本文件（`README.adoc`）渲染为网页；外部资源一律用链接引用，不下载到本地
-
-== 网站首页
-
-本站通过 `index.html` + Asciidoctor.js 动态解析本文件（`README.adoc`）并渲染为网页：https://agent.c332030.com/
-
-== 引用方式
-
-规范适用于任何语言、任何项目。引用方式二选一：
-
-* https 公网静态路径：https://agent.c332030.com/AGENTS.adoc
-* 本地相对路径或绝对路径
-
-规范文件之间以相对路径互相引用，保证本地与公网静态部署下均可正常跳转。
-
-== 使用方法
-
-将本规范接入任意项目（不限语言）即可约束 agent 行为：
-
-* 指定规范入口：将 `AGENTS.adoc` 作为 agent 的规范文件加载（https 路径或本地路径均可）。
-  ** https 路径：https://agent.c332030.com/AGENTS.adoc
-  ** 本地路径：直接使用本仓库内的 `AGENTS.adoc`。
-* agent 读取 `AGENTS.adoc` 后，会以该文件所在目录为基准，将文中的 `specs/...` 相对引用解析并加载对应规范，实现"分类懒加载、按项目类型加载且不漏"。
-* 校验规范完整性：修改规范后运行 `python3 script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
+* `index.html` — 网站首页，渲染方式见「网站首页」一节
 
 == 使用要点
 
 * 规范按分类懒加载，但"按项目类型加载且不漏"是底线——如 Java 项目写代码必须加载 Java 编码规范。
 * 通用规则与某技术栈专属规则分层存放，通用规则不重复收录进各栈。
+* 校验规范完整性：修改规范后运行 `python3 script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
+
+== 网站首页
+
+本站通过 `index.html` + Asciidoctor.js 动态解析本文件（`README.adoc`）并渲染为网页：https://agent.c332030.com/
