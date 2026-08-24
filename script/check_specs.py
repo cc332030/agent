@@ -35,6 +35,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
 GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
+# 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
+INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
 
 # 误导入的私有约定特征（中性化后应消除）。
 # 注意：只针对"被当作强制规范"的强约束表述，中性示例（如 `CList.of(...)` 作为
@@ -98,6 +100,9 @@ def collect_adoc_files():
     project = os.path.join(REPO_ROOT, "AGENTS.adoc")
     if os.path.isfile(project):
         result.append(project)
+    # 安装文档（其内代码块模板逐字保留，纳入机械校验，避免模板被折叠/丢失换行）
+    if os.path.isfile(INSTALL_FILE):
+        result.append(INSTALL_FILE)
     return result
 
 
@@ -292,6 +297,64 @@ def check_historical_notes():
     phase_done()
 
 
+def check_install_codeblock():
+    """校验 INSTALL.adoc 中 AGENTS.adoc 入口模板代码块逐字保留（机械抓手）。
+
+    背景：AI 读取 INSTALL.adoc 在目标项目创建 AGENTS.adoc 时，若模板代码块内的
+    换行/空行被折叠、行被合并，会导致生成文档样式改变。为让『逐字原样保留』成为
+    可执行约束而非靠自觉，本检查扫描 INSTALL.adoc 的模板代码块，逐一确认每段必备
+    行都各自独立成行（未被合并/折叠），且必备行之间的空行分隔完好。
+    """
+    phase("INSTALL 入口模板代码块检查")
+    if not os.path.isfile(INSTALL_FILE):
+        log("  未找到 INSTALL.adoc，跳过")
+        phase_done()
+        return
+    with open(INSTALL_FILE, encoding="utf-8") as fh:
+        lines = fh.readlines()
+
+    # 定位模板代码块定界（首个 ``----`` 为开，其后下一个 ``----`` 为闭）
+    delim = [i for i, l in enumerate(lines) if l.strip() == "----"]
+    if len(delim) < 2:
+        err("INSTALL.adoc 未找到完整的模板代码块定界符 `----`（需一对）",
+            os.path.relpath(INSTALL_FILE, REPO_ROOT))
+        phase_done()
+        return
+    open_i, close_i = delim[0], delim[1]
+    body = lines[open_i + 1:close_i]
+
+    # 必备内容：每行必须各自独立成行（不得与其它行合并/折叠）。
+    REQUIRED_LINES = [
+        "= Agent 规范入口",
+        "本项目的 agent 执行规范入口为：",
+        "https://agent.c332030.com/AGENTS_COMMON.adoc",
+        "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
+    ]
+    found = {s: False for s in REQUIRED_LINES}
+    for raw in body:
+        line = raw.rstrip("\n").rstrip("\r")
+        if line in found:
+            found[line] = True
+    for s, ok in found.items():
+        if not ok:
+            err(f"INSTALL.adoc 模板代码块缺失或行被合并/改写：未找到独立成行的『{s}』"
+                "（模板须逐字原样保留，不得折叠换行）",
+                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+
+    # 必备行之间须有恰当的空行分隔，确保样式不变（防止空行被吞掉导致段落粘连）
+    indices = [i for i, raw in enumerate(body) if raw.rstrip("\n\r") in found]
+    for a, b in zip(indices, indices[1:]):
+        gap = b - a
+        # 『入口为：』与 URL 之间、URL 与『读取…』之间需空行，其余相邻段落之间同样应留空行
+        if gap < 2:
+            prev = body[a].rstrip("\n\r")
+            nxt = body[b].rstrip("\n\r")
+            err(f"INSTALL.adoc 模板代码块中『{prev}』与『{nxt}』之间缺少空行"
+                "（空行被吞会导致样式变化，须逐字保留）",
+                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+    phase_done()
+
+
 def check_link_refs():
     """校验内部文档链接 link: 的格式：须用相对路径，禁止根绝对、禁止越出仓库根。
 
@@ -364,6 +427,7 @@ def main():
     check_stack_consistency()
     check_forbidden_patterns()
     check_historical_notes()
+    check_install_codeblock()
     check_principle_guard()
     check_asciidoctor_syntax()
 

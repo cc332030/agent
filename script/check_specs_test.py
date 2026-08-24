@@ -43,15 +43,16 @@ def _mk_blackbox_base(root: str) -> str:
 class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
-        self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR)
+        self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.SPECS_DIR = os.path.join(self.root, "specs")
+        cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
 
     def tearDown(self) -> None:
         cm.errors.clear()
-        cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR = self._orig
+        cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
@@ -250,6 +251,69 @@ class TestCheckHistoricalNotes(CheckSpecsTestCase):
         self.write("specs/general/git.adoc", "文件移动/重命名必须使用 git mv，禁止 delete+create。")
         cm.check_historical_notes()
         self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_install_codeblock（INSTALL.adoc 模板代码块逐字保留）
+# --------------------------------------------------------------------------- #
+class TestCheckInstallCodeblock(CheckSpecsTestCase):
+    TEMPLATE = """= Agent 规范安装
+
+在目标项目根目录创建 `AGENTS.adoc`，内容为：
+
+[source,asciidoc]
+----
+= Agent 规范入口
+
+本项目的 agent 执行规范入口为：
+
+https://agent.c332030.com/AGENTS_COMMON.adoc
+
+读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。
+----
+"""
+
+    def test_wellformed_template_passes(self):
+        self.write("INSTALL.adoc", self.TEMPLATE)
+        cm.check_install_codeblock()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_install_file_skips(self):
+        # 不写 INSTALL.adoc：应跳过不报错
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_install_codeblock()
+        self.assertEqual(cm.errors, [])
+
+    def test_collapsed_blank_lines_reports(self):
+        # 反例：AI 折叠了代码块内的空行，导致段落粘连、样式改变
+        collapsed = self.TEMPLATE.replace(
+            "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+            "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
+            "= Agent 规范入口\n本项目的 agent 执行规范入口为：\n"
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+            "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。")
+        self.write("INSTALL.adoc", collapsed)
+        cm.check_install_codeblock()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("缺少空行", self.error_texts())
+
+    def test_merged_line_reports(self):
+        # 反例：两段内容被合并到同一行，找不到独立成行的必备行
+        merged = self.TEMPLATE.replace(
+            "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：",
+            "= Agent 规范入口 本项目的 agent 执行规范入口为：")
+        self.write("INSTALL.adoc", merged)
+        cm.check_install_codeblock()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("缺失或行被合并", self.error_texts())
+
+    def test_missing_delimiters_reports(self):
+        # 反例：代码块定界符不完整
+        bad = self.TEMPLATE.replace("----\n", "")
+        self.write("INSTALL.adoc", bad)
+        cm.check_install_codeblock()
+        self.assertIn("定界符", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #

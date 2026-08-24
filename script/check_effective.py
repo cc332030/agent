@@ -33,6 +33,7 @@ MECHANISMS = [
     ("技术栈登记与文件一致",                     "AGENTS_COMMON.adoc",        "script/check_specs.py",      "check_stack_consistency"),
     ("私有工程约定不入全局规范",                 "specs/general/*.adoc",            "script/check_specs.py",      "check_forbidden_patterns"),
     ("不保留无用的历史来源声明",                 "AGENTS.adoc",                 "script/check_specs.py",      "check_historical_notes"),
+    ("INSTALL 模板代码块逐字保留（换行/空行不丢失）", "INSTALL.adoc",            "script/check_specs.py",      "check_install_codeblock"),
     ("临时产物清理脚本可用",                     "specs/core/execution.adoc",       "script/clean_tmp.py",        "存在清理脚本"),
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py", "20+ 用例"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py", "本工具的自测"),
