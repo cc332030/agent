@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-effective.py 的单元测试（纯 stdlib unittest）。
+"""check_effective.py 的单元测试（纯 stdlib unittest）。
 
 覆盖 evaluate() 的抓手判定（正例/反例）与机制清单的完整性。注入临时 root，
 不依赖真实仓库。
@@ -14,7 +14,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 _SPEC = importlib.util.spec_from_file_location(
-    "check_effective", os.path.join(HERE, "check-effective.py"))
+    "check_effective", os.path.join(HERE, "check_effective.py"))
 eff = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(eff)  # type: ignore[union-attr]
 
@@ -38,7 +38,7 @@ class TestEvaluate(unittest.TestCase):
         self.assertGreaterEqual(len(names), 5)
 
     def test_grip_file_present_is_has_grip(self):
-        self._mk("script/check-specs.py")
+        self._mk("script/check_specs.py")
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(statuses["内部链接须用相对路径、禁根绝对"], "has-grip")
 

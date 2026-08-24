@@ -4,41 +4,43 @@
 
 == 一键安装（复制给 AI）
 
-安装只需执行一次：为当前项目指定规范入口 `AGENTS.adoc`。规范的全部规则（路径解析、按项目类型加载且不漏、与项目自身规范冲突的处理等）已写在入口文件及其引用的各份 `specs/` 规范里，AI 每次读规范时都会重新遵守，因此**安装提示词只需要指定入口，不复述规范规则**。
+安装只需执行一次：为当前项目指定规范入口 `AGENTS_COMMON.adoc`。规范的全部规则（路径解析、按项目类型加载且不漏、与项目自身规范冲突的处理等）已写在入口文件及其引用的各份 `specs/` 规范里，AI 每次读规范时都会重新遵守，因此**安装提示词只需要指定入口，不复述规范规则**。
 
 将下方这一行提示词复制给任意 AI 即可完成接入（通用任意平台）。AI 直接阅读本 README 时，也可按该提示词自行接入：
 
 [listing]
 ----
-请将 https://agent.c332030.com/AGENTS.adoc 设为本项目 agent 执行规范的入口文件，读取该文件及其引用的各份 specs/ 规范，并持续遵守其全部要求。
+请将 https://agent.c332030.com/AGENTS_COMMON.adoc 设为本项目 agent 执行规范的入口文件，读取该文件及其引用的各份 specs/ 规范，并持续遵守其全部要求。
 ----
 
 == 引用方式
 
-规范适用于任何语言、任何项目，将 `AGENTS.adoc` 作为规范入口交给 agent 即可。入口引用方式二选一：
+规范适用于任何语言、任何项目，将 `AGENTS_COMMON.adoc` 作为规范入口交给 agent 即可。入口引用方式二选一：
 
-* https 公网静态路径：https://agent.c332030.com/AGENTS.adoc
-* 本地相对路径或绝对路径：直接使用本仓库内的 `AGENTS.adoc`
+* https 公网静态路径：https://agent.c332030.com/AGENTS_COMMON.adoc
+* 本地相对路径或绝对路径：直接使用本仓库内的 `AGENTS_COMMON.adoc`
 
-`AGENTS.adoc` 与其 `specs/` 目录始终位于同一目录，文中 `specs/...` 均相对入口所在目录解析，故两种引用方式下规范都能正常解析加载。
+`AGENTS_COMMON.adoc` 与其 `specs/` 目录始终位于同一目录，文中 `specs/...` 均相对入口所在目录解析，故两种引用方式下规范都能正常解析加载。
 
 == 目录结构
 
-* `AGENTS.adoc` — 规范入口与加载调度器（必加载）：定义规范的分类、懒加载与"按项目类型加载且不漏"的规则，并登记全部规范文件。
-* `specs/` — 规范分类目录，按"必加载层 / 通用层 / 技术栈层 / 平台层"分层存储：
-  ** `specs/core/` — 必加载层：执行原则、规范管理
+* `AGENTS_COMMON.adoc` — **通用规范**入口与加载调度器（必加载）：定义规范的分类、懒加载与"按项目类型加载且不漏"的规则，并登记全部规范文件。本文件及其 `specs/` 会被**引用方项目引入**。*与仓库根目录 `AGENTS.adoc`（本项目自身规范入口）区分——根目录 `AGENTS.adoc` 会被平台自动识别为"当前项目自身规范"，而通用规范入口 `AGENTS_COMMON.adoc`（同样位于仓库根目录，但以 `AGENTS_COMMON.adoc` 命名避开平台识别）供引用方项目引入*。
+* `AGENTS.adoc`（根目录） — **Agent 项目自身规范**（本仓库维护专用，不随通用规范分发）：声明本仓库通用规范与项目自身规范的隔离，并收录规范集合的维护规则（规范管理）与检查脚本/CI 等 Agent 项目自身工具。引用方项目无需也不应引入本文件。本文件采用 `AGENTS.adoc` 命名、位于仓库根目录，会被平台自动识别为本仓库的 agent 规范（"真正的 agents.md"）。
+* `specs/` — 通用规范分类目录，按"必加载层 / 通用层 / 技术栈层 / 平台层"分层存储：
+  ** `specs/core/` — 必加载层：执行原则
   ** `specs/general/` — 通用层：通用编码、文档、git、code review、agent 协作、测试、验证、脚本
   ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试、bash/python 脚本（按项目类型加载）
   ** `specs/platform/` — 平台层：cnb
-* `script/` — 配套脚本目录：
-  ** `clean-tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
+* `script/` — 配套脚本目录（多数为 Agent 项目自身工具，见根目录 `AGENTS.adoc`）：
+  ** `clean_tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
+  ** `ai-review.sh` — 用 OpenAI 兼容 API 对规范集合做语义审查，支持**整体解析**（全部规范拼接后一次性审查）与**单个解析**（`--per-file`：对每一个 `.adoc` 文档单独审查、逐份输出，再整体审查）；CI 中由 `.github/workflows/check-specs.yml` 的 `ai-review` job 调用（详见脚本头部用法）
 * `index.html` — 网站首页，渲染方式见「网站首页」一节
 
 == 使用要点
 
 * 规范按分类懒加载，但"按项目类型加载且不漏"是底线——如 Java 项目写代码必须加载 Java 编码规范。
 * 通用规则与某技术栈专属规则分层存放，通用规则不重复收录进各栈。
-* 校验规范完整性：修改规范后运行 `python3 script/check-specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）。
+* 校验规范完整性：修改规范后运行 `python3 script/check_specs.py`，可检查引用完整性、栈登记一致性与 AsciiDoc 语法（CI 中由 `.github/workflows/check-specs.yml` 自动执行）——该脚本及 CI 属 Agent 项目自身工具（见根目录 `AGENTS.adoc`），不随通用规范分发。
 
 == 网站首页
 
