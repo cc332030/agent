@@ -37,7 +37,7 @@ doc/
 * 立项阶段：项目背景、目标、范围、投入产出、可行性（技术/经济/风险）。示例文件名：`project-proposal.adoc`、`feasibility-report.adoc`
 * 需求阶段：功能需求、非功能需求、业务规则、用例、调研纪要、竞品分析。示例文件名：`requirements-spec.adoc`、`requirements-survey.adoc`
 * 设计阶段：系统架构、技术选型、模块划分、部署架构、数据库、接口。示例文件名：`system-architecture.adoc`、`database-design.adoc`、`api-design.adoc`
-  ** 模块级设计文档与测试设计文档的成对组织方式（`doc/<设计阶段>/<模块>/` 下 `<模块名>.adoc` 功能设计 + `<模块名>-tests.adoc` 测试设计），见 link:../general/doc-design.adoc[]
+  ** 模块级设计文档与测试设计文档的成对组织方式（`doc/<设计阶段>/<模块>/` 下文档名与源文件一致的功能设计 + 加 `test` 后缀的测试设计），见 link:../general/doc-design.adoc[]
 * 开发阶段：实现细节、关键算法、性能优化、兼容性处理、项目特有约定、本地开发环境。示例文件名：`technical-solution.adoc`、`development-notes.adoc`
 * 测试阶段：测试范围、策略、资源安排、环境要求、测试结果、缺陷统计、质量评估。示例文件名：`test-plan.adoc`、`test-report.adoc`
 * 部署阶段：环境要求、部署步骤、配置说明、依赖服务、初始运维手册。示例文件名：`deployment-plan.adoc`、`operations-manual.adoc`

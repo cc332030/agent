@@ -4,7 +4,7 @@
 
 == 访问与解析（引用方须知）
 
-* 引用方式：引用方项目通过 https 公网静态路径或本地相对/绝对路径引用本文件，不限方式。本文件与 `specs/` 目录**始终在同一目录下**（目录结构不变），这是所有相对引用的固定前提。
+* 引用方式：引用方项目通过 https 公网静态路径或本地相对/绝对路径引用本文件，不限方式。**引用方只需引入本文件（`AGENTS_COMMON.adoc`）**；本规范内容存放于本文件所在目录下的 `specs/` 子目录（目录结构不变），随本文件一并生效，这是所有相对引用的固定前提。
 * 路径解析规则：文中出现的 `specs/...` 均为**相对本文件所在目录**的路径。无论本文件以何种 URL/路径被打开，解析方式都是：
   ** https 访问：`specs/core/execution.adoc` = `本文件所在目录URL/specs/core/execution.adoc`；
   ** 本地相对/绝对路径：`specs/core/execution.adoc` = `本文件所在目录/specs/core/execution.adoc`。
@@ -20,7 +20,6 @@
 
 * 必加载层（每次工作都须加载）：
   ** 执行原则：link:specs/core/execution.adoc[]
-  ** 规范管理：link:specs/core/management.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言）
   ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件） → link:specs/general/script.adoc[]（通用脚本规范，跨语言）
@@ -38,7 +37,7 @@
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
   ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
   ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
-  ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
+  ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS_COMMON.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 平台层（按使用平台加载）：
   ** CNB 平台 → link:specs/platform/cnb.adoc[]
 

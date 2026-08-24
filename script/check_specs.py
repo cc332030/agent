@@ -4,10 +4,10 @@
 
 检查项：
   1. AsciiDoc 基础语法（块级结构、反引号路径）通过 asciidoctor 验证（若已安装）。
-  2. 所有 spec 文件（含 AGENTS.adoc）中的每个 `specs/...` 引用文件必须真实存在
-     （既校验 AGENTS.adoc 加载调度器登记/引用的文件，也校验各 spec 文件之间互相
+  2. 所有 spec 文件（含 AGENTS_COMMON.adoc）中的每个 `specs/...` 引用文件必须真实存在
+     （既校验 AGENTS_COMMON.adoc 加载调度器登记/引用的文件，也校验各 spec 文件之间互相
      引用的文件，避免 spec 间交叉引用悬空）。
-  3. AGENTS.adoc 技术栈层登记的栈文件，必须与 specs/stack/ 实际文件双向一致
+  3. AGENTS_COMMON.adoc 技术栈层登记的栈文件，必须与 specs/stack/ 实际文件双向一致
      （既不能登记不存在的栈，也不能漏登记已存在的栈）。
   4. 禁止误导入私有强约束约定（如 ctool4j 的 C/IC 前缀、@Bean c 前缀等被当作
      强制规范的表述；中性示例允许保留）。
@@ -31,7 +31,9 @@ except AttributeError:
     pass
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-AGENTS_FILE = os.path.join(REPO_ROOT, "AGENTS.adoc")
+# AGENTS_COMMON.adoc 是通用规范入口，位于仓库根目录（引用方以仓库根为基准解析
+# 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
+GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 
 # 误导入的私有约定特征（中性化后应消除）。
@@ -78,7 +80,11 @@ def collect_adoc_files():
         for f in files:
             if f.endswith(".adoc"):
                 result.append(os.path.join(root, f))
-    result.append(AGENTS_FILE)
+    result.append(GENERIC_FILE)
+    # Agent 项目自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围，一并校验）
+    project = os.path.join(REPO_ROOT, "AGENTS.adoc")
+    if os.path.isfile(project):
+        result.append(project)
     return result
 
 
@@ -123,7 +129,7 @@ def extract_specs_refs(text: str, base_dir: str = ""):
     解析 link: 的相对目标。兼容两类写法：
 
       * 反引号包裹：`` `specs/general/coding.adoc` ``——按**从仓库根开始**的相对
-        路径解析（AGENTS.adoc 加载调度 / 正文里惯例用这种写法）。
+        路径解析（AGENTS_COMMON.adoc 加载调度 / 正文里惯例用这种写法）。
       * AsciiDoc 超链接：`link:xxx[]`——按**相对当前文件所在目录**解析（IDE 与
         浏览器相对语义一致），目标可能是 `../general/x.adoc` 等含 `../` 的形式。
 
@@ -160,11 +166,11 @@ def extract_specs_refs(text: str, base_dir: str = ""):
 
 
 def check_refs_exist():
-    """校验所有 spec 文件（含 AGENTS.adoc）中的 `specs/...` 引用真实存在。
+    """校验所有 spec 文件（含 AGENTS_COMMON.adoc）中的 `specs/...` 引用真实存在。
 
     覆盖两类引用：
-      * AGENTS.adoc 加载调度器登记/引用的文件；
-      * 各 spec 文件之间互相引用的文件（此前只查 AGENTS.adoc，
+      * AGENTS_COMMON.adoc 加载调度器登记/引用的文件；
+      * 各 spec 文件之间互相引用的文件（此前只查 AGENTS_COMMON.adoc，
         会漏掉 spec 间交叉引用悬空，如 java-testing.adoc 引用已不存在的
         specs/stack/testing.adoc）。
     """
@@ -172,7 +178,11 @@ def check_refs_exist():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
+        if f == GENERIC_FILE:
+            base = ""
+        else:
+            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
         log(f"  [{i}/{len(files)}] 扫描 {rel}")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
@@ -191,11 +201,11 @@ def check_refs_exist():
 
 
 def check_stack_consistency():
-    """AGENTS.adoc 技术栈层登记 vs specs/stack/ 实际文件，双向一致。"""
+    """AGENTS_COMMON.adoc 技术栈层登记 vs specs/stack/ 实际文件，双向一致。"""
     phase("技术栈一致性检查")
-    with open(AGENTS_FILE, encoding="utf-8") as fh:
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
         text = fh.read()
-    # 提取登记的技术栈文件：specs/stack/xxx.adoc（AGENTS.adoc 位于仓库根，base_dir=""）
+    # 提取登记的技术栈文件：specs/stack/xxx.adoc（AGENTS_COMMON.adoc 内部 specs/... 从仓库根解析，base_dir=""）
     registered = set(extract_specs_refs(text, ""))
     registered_stack = {r for r in registered if r.startswith("specs/stack/")}
 
@@ -210,10 +220,10 @@ def check_stack_consistency():
 
     # 登记了但不存在（已被上一项覆盖，这里再明确提示栈语义）
     for r in registered_stack - actual:
-        err(f"技术栈层登记了不存在的栈文件: {r}", "AGENTS.adoc")
+        err(f"技术栈层登记了不存在的栈文件: {r}", "AGENTS_COMMON.adoc")
     # 实际存在但未登记（防止漏加载）
     for a in actual - registered_stack:
-        err(f"specs/stack/ 存在但未在技术栈层登记（可能漏加载）: {a}", "AGENTS.adoc")
+        err(f"specs/stack/ 存在但未在技术栈层登记（可能漏加载）: {a}", "AGENTS_COMMON.adoc")
     phase_done()
 
 
@@ -222,11 +232,13 @@ def check_forbidden_patterns():
     phase("私有约定误导入检查")
     files = collect_adoc_files()
     checked = 0
+    total_lines = 0
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        # AGENTS.adoc 作为加载器允许出现中性示例路径，跳过其私有约定命中
+        # AGENTS_COMMON.adoc 作为加载器允许出现中性示例路径，跳过其私有约定命中
         with open(f, encoding="utf-8") as fh:
             lines = fh.readlines()
+        total_lines += len(lines)
         found_in_file = False
         for j, line in enumerate(lines, 1):
             for pat, desc in FORBIDDEN_PATTERNS:
@@ -236,7 +248,7 @@ def check_forbidden_patterns():
                         found_in_file = True
                     err(f"{desc}", rel, j)
         checked += 1
-    log(f"  扫描 {checked} 个文件, 共 {sum(len(open(f, encoding='utf-8').readlines()) for f in files)} 行")
+    log(f"  扫描 {checked} 个文件, 共 {total_lines} 行")
     phase_done()
 
 
@@ -252,7 +264,11 @@ def check_link_refs():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
+        if f == GENERIC_FILE:
+            base = ""
+        else:
+            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
         found_in_file = False
         with open(f, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
@@ -277,18 +293,18 @@ def check_link_refs():
 def check_principle_guard():
     """校验规范"要点防线"仍在（防『定义完整性校验却不执行/被意外误删』）。
 
-    作为逐层防线：一旦 management.adoc「规范调整」里"调整后须做完整性校验、且含干净
-    子 agent 复核、不得只定义不执行"这条底线被删除或改写，check-specs.py 即可通过
+    作为逐层防线：一旦根目录 AGENTS.adoc「规范调整」里"调整后须做完整性校验、且含干净
+    子 agent 复核、不得只定义不执行"这条底线被删除或改写，check_specs.py 即可通过
     低耗机械校验发现，从而用测试用例钉住这类"难在定稿时发现"的坑。
 
-    判定：management.adoc 必须同时含有『子 agent』与『完整性』两个关键词，否则视为
+    判定：根目录 AGENTS.adoc 必须同时含有『子 agent』与『完整性』两个关键词，否则视为
     完整性校验机制被破坏。
     """
     phase("规范要点防线检查")
-    path = os.path.join(REPO_ROOT, "specs", "core", "management.adoc")
+    path = os.path.join(REPO_ROOT, "AGENTS.adoc")
     rel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(path):
-        err("缺少规范管理文件 management.adoc，无法核验『调整后须做完整性校验』要点防线是否存在", rel)
+        err("缺少 Agent 项目自身规范入口 AGENTS.adoc，无法核验『调整后须做完整性校验』要点防线是否存在", rel)
         return
     with open(path, encoding="utf-8") as fh:
         text = fh.read()

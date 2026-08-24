@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-clean-tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格限制不超出 tmp 范围。
+clean_tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格限制不超出 tmp 范围。
 
 定位：
   以「执行命令时的当前工作目录(CWD)」为项目根，清理 CWD 下的 tmp/ 目录。
@@ -7,18 +8,18 @@ clean-tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格�
   在目标项目的根目录下运行即可清理该项目自身的 tmp。
 
 用法（在目标项目根目录执行）:
-  python3 clean-tmp.py                仅显示 tmp 内容，不删除（安全模式，见下）
-  python3 clean-tmp.py --all          清空 tmp 下全部内容（显式确认）
-  python3 clean-tmp.py a.log          删除 tmp/a.log
-  python3 clean-tmp.py sub b.log      删除多个
+  python3 clean_tmp.py                仅显示 tmp 内容，不删除（安全模式，见下）
+  python3 clean_tmp.py --all          清空 tmp 下全部内容（显式确认）
+  python3 clean_tmp.py a.log          删除 tmp/a.log
+  python3 clean_tmp.py sub b.log      删除多个
 
   # 远程加载（Linux/macOS，本仓库脚本的 https 地址替换 <script-url>）：
   curl -s <script-url> | python3 - --all            # 清空
   curl -s <script-url> | python3 - a.log sub/b.log # 删除指定
 
   # Windows PowerShell（先下载到本地再执行）：
-  Invoke-WebRequest <script-url> -OutFile clean-tmp.py
-  python3 clean-tmp.py [参数...]
+  Invoke-WebRequest <script-url> -OutFile clean_tmp.py
+  python3 clean_tmp.py [参数...]
 
 安全保证（远程执行同样生效）：
   - 只操作「CWD 下的 tmp/」，绝不创建 tmp，tmp 不存在即退出；

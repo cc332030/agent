@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-specs.py 的单元测试（纯 stdlib unittest，零第三方依赖）。
+"""check_specs.py 的单元测试（纯 stdlib unittest，零第三方依赖）。
 
 针对每个检查函数覆盖正例与反例：
   * extract_specs_refs     —— 引用提取与归一化（根反引号 / link 相对 / 各类剔除）
@@ -14,7 +14,7 @@
   python -W ignore -m unittest script.check_specs_test   （需将 script 按包导入）
 
 注：文件命名为 `<被测文件>_test.py`（`_test` 后缀），使被测文件与其测试在目录
-排序中相邻（check-specs.py 紧邻 check_specs_test.py）。
+排序中相邻（check_specs.py 紧邻 check_specs_test.py）。
 """
 
 import importlib.util
@@ -26,7 +26,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 _SPEC = importlib.util.spec_from_file_location(
-    "check_specs", os.path.join(HERE, "check-specs.py"))
+    "check_specs", os.path.join(HERE, "check_specs.py"))
 cm = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(cm)  # type: ignore[union-attr]
 
@@ -43,15 +43,15 @@ def _mk_blackbox_base(root: str) -> str:
 class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
-        self._orig = (cm.REPO_ROOT, cm.AGENTS_FILE, cm.SPECS_DIR)
+        self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
-        cm.AGENTS_FILE = os.path.join(self.root, "AGENTS.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.SPECS_DIR = os.path.join(self.root, "specs")
 
     def tearDown(self) -> None:
         cm.errors.clear()
-        cm.REPO_ROOT, cm.AGENTS_FILE, cm.SPECS_DIR = self._orig
+        cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
@@ -111,19 +111,19 @@ class TestExtractSpecsRefs(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 class TestCheckRefsExist(CheckSpecsTestCase):
     def test_valid_reference_passes(self):
-        self.write("AGENTS.adoc", "加载 `specs/general/coding.adoc`")
+        self.write("AGENTS_COMMON.adoc", "加载 `specs/general/coding.adoc`")
         self.write("specs/general/coding.adoc", "= 编码")
         cm.check_refs_exist()
         self.assertEqual(cm.errors, [])
 
     def test_dangling_backtick_reference_reports(self):
-        self.write("AGENTS.adoc", "加载 `specs/general/gone.adoc`")
+        self.write("AGENTS_COMMON.adoc", "加载 `specs/general/gone.adoc`")
         cm.check_refs_exist()
         self.assertIn("不存在", self.error_texts())
         self.assertIn("specs/general/gone.adoc", self.error_texts())
 
     def test_dangling_link_between_specs_reports(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/core/execution.adoc",
                    "见 link:../general/nothing.adoc[]")
         cm.check_refs_exist()
@@ -131,7 +131,7 @@ class TestCheckRefsExist(CheckSpecsTestCase):
         self.assertIn("specs/general/nothing.adoc", self.error_texts())
 
     def test_link_pointing_to_existing_file_passes(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/core/execution.adoc",
                    "见 link:../general/doc-design.adoc[]")
         self.write("specs/general/doc-design.adoc", "= 设计")
@@ -144,14 +144,14 @@ class TestCheckRefsExist(CheckSpecsTestCase):
 # --------------------------------------------------------------------------- #
 class TestCheckLinkRefs(CheckSpecsTestCase):
     def test_relative_link_passes(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/core/execution.adoc",
                    "见 link:../general/doc-design.adoc[]")
         cm.check_link_refs()
         self.assertEqual(cm.errors, [])
 
     def test_root_absolute_link_reports(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/core/execution.adoc",
                    "见 link:/specs/general/doc-design.adoc[]")
         cm.check_link_refs()
@@ -159,13 +159,13 @@ class TestCheckLinkRefs(CheckSpecsTestCase):
         self.assertIn("link:/specs/general/doc-design.adoc", self.error_texts())
 
     def test_out_of_root_link_reports(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/core/execution.adoc", "见 link:../../../x.adoc[]")
         cm.check_link_refs()
         self.assertIn("越出仓库根", self.error_texts())
 
     def test_external_and_anchor_skipped(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/general/doc.adoc",
                    "link:https://example.com/a[] link:#sec-1[]")
         cm.check_link_refs()
@@ -177,19 +177,19 @@ class TestCheckLinkRefs(CheckSpecsTestCase):
 # --------------------------------------------------------------------------- #
 class TestCheckStackConsistency(CheckSpecsTestCase):
     def test_registered_and_exists_passes(self):
-        self.write("AGENTS.adoc", "技术栈层登记 `specs/stack/java.adoc`")
+        self.write("AGENTS_COMMON.adoc", "技术栈层登记 `specs/stack/java.adoc`")
         self.write("specs/stack/java.adoc", "= Java")
         cm.check_stack_consistency()
         self.assertEqual(cm.errors, [])
 
     def test_existing_but_not_registered_reports(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/stack/python.adoc", "= Python")
         cm.check_stack_consistency()
         self.assertIn("存在但未在技术栈层登记", self.error_texts())
 
     def test_registered_but_not_exists_reports(self):
-        self.write("AGENTS.adoc", "登记 `specs/stack/nodejs.adoc`")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/stack/nodejs.adoc`")
         cm.check_stack_consistency()
         self.assertIn("不存在", self.error_texts())
         self.assertIn("specs/stack/nodejs.adoc", self.error_texts())
@@ -200,13 +200,13 @@ class TestCheckStackConsistency(CheckSpecsTestCase):
 # --------------------------------------------------------------------------- #
 class TestCheckForbiddenPatterns(CheckSpecsTestCase):
     def test_clean_file_passes(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/general/review.adoc", "代码走 code review，无私有约定。")
         cm.check_forbidden_patterns()
         self.assertEqual(cm.errors, [])
 
     def test_private_interface_pattern_reports(self):
-        self.write("AGENTS.adoc", "= t")
+        self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/general/review.adoc", "定义 ICFoo 接口。")
         cm.check_forbidden_patterns()
         self.assertNotEqual(cm.errors, [])
@@ -219,7 +219,7 @@ class TestCheckForbiddenPatterns(CheckSpecsTestCase):
 class TestIntegration(CheckSpecsTestCase):
     def test_fully_valid_tree_passes_all_checks(self):
         _mk_blackbox_base(self.root)
-        self.write("AGENTS.adoc",
+        self.write("AGENTS_COMMON.adoc",
                    "执行 link:specs/core/execution.adoc[]；"
                    "Java 登记 `specs/stack/java.adoc`；"
                    "通用层 `specs/general/doc-design.adoc`")
@@ -227,7 +227,7 @@ class TestIntegration(CheckSpecsTestCase):
                    "见 link:../general/doc-design.adoc[]；link:../stack/java.adoc[]")
         self.write("specs/general/doc-design.adoc", "= 设计文档")
         self.write("specs/stack/java.adoc", "= Java")
-        self.write("specs/core/management.adoc",
+        self.write("AGENTS.adoc",
                    "规范调整：调整后必须开启干净子 agent 验证完整性；不得只定义不执行")
 
         cm.check_refs_exist()
@@ -243,25 +243,25 @@ class TestIntegration(CheckSpecsTestCase):
 # --------------------------------------------------------------------------- #
 class TestCheckPrincipleGuard(CheckSpecsTestCase):
     def test_principle_present_passes(self):
-        self.write("AGENTS.adoc", "= t")
-        self.write("specs/core/management.adoc",
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc",
                    "规范调整：调整后必须开启干净子 agent 验证完整性；不得只定义不执行")
         cm.check_principle_guard()
         self.assertEqual(cm.errors, [])
 
     def test_validation_keyword_removed_reports(self):
         # 反例：删掉了「完整性校验/子 agent 复核」约定（只定义校验、不要求执行）
-        self.write("AGENTS.adoc", "= t")
-        self.write("specs/core/management.adoc", "规范调整：写成文档即可，无需后续动作")
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc", "规范调整：写成文档即可，无需后续动作")
         cm.check_principle_guard()
         self.assertIn("要点防线被破坏", self.error_texts())
         self.assertIn("子 agent", self.error_texts())
         self.assertIn("完整性", self.error_texts())
 
     def test_missing_management_file_reports(self):
-        self.write("AGENTS.adoc", "= t")  # 未创建 management.adoc
+        self.write("AGENTS_COMMON.adoc", "= t")  # 未创建根目录 AGENTS.adoc
         cm.check_principle_guard()
-        self.assertIn("缺少规范管理文件", self.error_texts())
+        self.assertIn("缺少 Agent 项目自身规范入口", self.error_texts())
 
 
 if __name__ == "__main__":
