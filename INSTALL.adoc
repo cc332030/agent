@@ -1,10 +1,10 @@
 = Agent 规范安装
 
-在目标项目根目录创建 `AGENTS.md`，内容为：
+在目标项目根目录创建 `AGENTS.adoc`，内容为：
 
-[source,markdown]
+[source,asciidoc]
 ----
-# Agent 规范入口
+= Agent 规范入口
 
 本项目的 agent 执行规范入口为：
 
@@ -15,9 +15,9 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
 
 == 已存在 AGENTS 文档
 
-先检查目标项目根目录是否已存在 agent 规范文档（如 `AGENTS.md`、`AGENTS.adoc`，或其他约定的 agent 规范文件）：
+先检查目标项目根目录是否已存在 agent 规范文档（`AGENTS.adoc`）：
 
-* 不存在：直接创建 `AGENTS.md` 入口占位。
+* 不存在：直接创建 `AGENTS.adoc` 入口占位。
 * 已存在：**不覆盖、不删除**。保留原文档全部内容，在开头添加上面的入口占位；若原文档已指向本入口（`AGENTS_COMMON.adoc` 或其 URL），则不重复追加。项目自身规范优先于通用规范。
 
 == 约束
