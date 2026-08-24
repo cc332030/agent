@@ -37,6 +37,7 @@ set -euo pipefail
 
 # ---- 参数解析 ---------------------------------------------------------------
 PER_FILE=false
+APPLY=false
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,12 +45,19 @@ while [[ $# -gt 0 ]]; do
       PER_FILE=true
       shift
       ;;
+    --apply)
+      # AI 校验并调整：审查发现问题后，还让 AI 直接产出修正后的完整文件内容并落盘
+      APPLY=true
+      shift
+      ;;
     --help|-h)
       cat <<'USAGE'
-用法: bash script/ai-review.sh [--per-file] <AGENTS_COMMON.adoc> <specs 目录>
+用法: bash script/ai-review.sh [--per-file] [--apply] <AGENTS_COMMON.adoc> <specs 目录>
 
 参数:
   --per-file   启用"单个解析"：对每个 .adoc 文档单独调用 AI 审查（推荐）
+  --apply      AI 校验并调整：审查完成后，让 AI 产出每个文件的修正版内容并直接落盘
+               （“只审查不调整”的增强版，见 workflow 中 auto-fix 用法）
   -h, --help   显示本帮助
   <AGENTS_COMMON.adoc>  规范入口文件（必填）
   <specs 目录>   规范分类目录（必填）
@@ -140,6 +148,52 @@ SYS
   echo "${RESP}" | jq -r '.choices[0].message.content' > "${out_file}"
 }
 
+# 让 AI 产出单个文件的修正版内容并落盘（AI 校验并调整）。
+# 参数：<文件> <整体审查发现>；修正版写入 <文件>.fixed，若与原文不同则替换原文。
+adjust_file() {
+  local f="$1" findings="$2"
+  local rel="${f#./}"
+  local sys content_json sys_json body resp fixed
+  sys=$(cat <<'SYS'
+你是一名严谨的技术规范审查专家。给定一个 agent 执行规范文件与整体审查发现的问题清单，
+请输出该文件的修正版**完整内容**，直接应用这些问题中与本文件相关的合理修改；
+无关的、不合理的、或含糊的发现不要改动。必须保持 AsciiDoc 格式与既有行结构，
+逐字保留代码块内所有换行与空行；若无需改动，原样输出整个文件内容。
+只输出修正后的完整文件内容，不要任何额外说明、前后缀或代码块包裹。
+SYS
+  )
+  {
+    echo "===== 修正要求 ======"
+    echo "以下为本文件当前内容，请输出修正后的完整内容："
+    cat "${f}"
+    echo ""
+    echo "===== 整体审查发现的问题（仅采纳与本文件相关的合理项） ====="
+    cat "${findings}"
+  } > "${f}.ctx"
+  content_json=$(jq -Rs . "${f}.ctx")
+  sys_json=$(jq -n --arg s "${sys}" '$s')
+  body=$(jq -n \
+    --arg model "${AI_MODEL}" \
+    --argjson system "${sys_json}" \
+    --argjson content "${content_json}" \
+    '{model:$model, messages:[{role:"system",content:$system},{role:"user",content:$content}]}')
+  echo "  [调整] ${rel} 调用 AI 产出修正版..."
+  fixed=$(curl -sS -f \
+    -H "Authorization: Bearer ${AI_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "${body}" \
+    "${AI_API_BASE}/chat/completions" \
+    | jq -r '.choices[0].message.content')
+  rm -f "${f}.ctx"
+  # 与原文比对：有差异才落盘，避免无意义改动
+  if ! printf '%s' "${fixed}" | diff -q - "${f}" >/dev/null 2>&1; then
+    printf '%s' "${fixed}" > "${f}"
+    echo "  [调整] ${rel} 已更新"
+  else
+    echo "  [调整] ${rel} 无需改动"
+  fi
+}
+
 # ---- 单个解析（--per-file）：逐个文件单独审查 ---------------------------------
 if [[ "$PER_FILE" == true ]]; then
   echo "===== 单个解析（逐文件审查） ====="
@@ -202,4 +256,18 @@ cat "${OUTPUT}"
 if [[ "$PER_FILE" == true ]] && grep -q "ISSUES_FOUND" "${OUTPUT}"; then
   echo ""
   echo "提示：整体解析发现问题，逐文件结果见 ${PER_FILE_DIR}。"
+fi
+
+# ---- AI 校验并调整（--apply）：让 AI 产出每个文件的修正版并落盘 -----------------
+if [[ "$APPLY" == true ]]; then
+  echo ""
+  echo "===== AI 校验并调整（逐文件产出修正版并落盘） ====="
+  if grep -q "ISSUES_FOUND" "${OUTPUT}"; then
+    while IFS= read -r f; do
+      adjust_file "$f" "${OUTPUT}"
+    done < <(collect_files)
+  else
+    echo "整体审查未发现问题，跳过调整。"
+  fi
+  echo "调整完成：工作区中已按 AI 意见修正相关文件（若无改动则未动）。"
 fi

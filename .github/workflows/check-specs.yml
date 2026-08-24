@@ -6,6 +6,7 @@ on:
       - 'specs/**'
       - 'AGENTS_COMMON.adoc'
       - 'AGENTS.adoc'
+      - 'INSTALL.adoc'
       - 'README.adoc'
       - 'script/check_specs.py'
       - 'script/ai-review.sh'
@@ -15,6 +16,7 @@ on:
       - 'specs/**'
       - 'AGENTS_COMMON.adoc'
       - 'AGENTS.adoc'
+      - 'INSTALL.adoc'
       - 'README.adoc'
       - 'script/check_specs.py'
       - 'script/ai-review.sh'
@@ -46,6 +48,8 @@ jobs:
   #    （如 gpt-4o-mini、deepseek-chat、qwen-max 或本地 vLLM 模型等），
   #    配合 AI_API_BASE 指定对应服务地址。
   #    输出格式约定：发现问题时最后一行必须为 ISSUES_FOUND，未发现为 NO_ISSUES_FOUND。
+  #    AI 校验并调整：加 --apply 后，发现问题时还会让 AI 直接产出每个文件的修正版内容
+  #    并落盘（见 ai-review.sh），auto-fix-pr 把修正内容提交到分支开 PR，而非仅报问题清单。
   ai-review:
     runs-on: ubuntu-latest
     permissions:
@@ -58,14 +62,15 @@ jobs:
       findings: ${{ steps.assess.outputs.findings }}
     steps:
       - uses: actions/checkout@v4
-      - name: Call AI for spec consistency review
+      - name: Call AI for spec review & adjust
         id: review
         if: env.AI_API_KEY != ''
         shell: bash
         continue-on-error: true
         # --per-file：先逐个解析每个 .adoc，再整体拼接解析；
+        # --apply：发现问题后让 AI 直接产出每个文件的修正版并落盘（AI 校验并调整）。
         # 逐文件结果写入 /tmp/ai-per-file，整体结果写入 /tmp/ai-findings.txt
-        run: bash script/ai-review.sh --per-file AGENTS_COMMON.adoc specs
+        run: bash script/ai-review.sh --per-file --apply AGENTS_COMMON.adoc specs
       # 未配置 AI_API_KEY 时生成占位输出，避免后续 step 报错
       - name: Ensure findings file exists
         if: always()
@@ -106,10 +111,12 @@ jobs:
         shell: bash
         run: |
           echo "AI 审查在规范中发现一致性问题，action 判定为失败。"
-          echo "问题清单见 'ai-findings' artifact，或查看已自动创建的纠正 PR。"
+          echo "问题清单见 'ai-findings' artifact，AI 已自动产出修正版并提交到纠正 PR。"
           exit 1
 
-  # 4) 自动创建纠正 PR（"创建 pull 纠正失败的内容"）
+  # 4) 提交 AI 修正并自动创建纠正 PR（"创建 pull 纠正失败的内容"）
+  #    与 3) 分离：AI 校验并调整后，把已落盘的修正内容提交到分支并开 PR，
+  #    PR 里包含实际改动（而非仅问题清单）。
   auto-fix-pr:
     runs-on: ubuntu-latest
     needs: ai-review
@@ -119,17 +126,42 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download findings
-        uses: actions/download-artifact@v4
-        with:
-          name: ai-findings
-          path: /tmp/
-      - name: Compose PR body from findings
-        id: compose
+      - name: Re-run AI adjust to materialize fixes in this job's workspace
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_BASE: ${{ secrets.AI_API_BASE }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+        if: env.AI_API_KEY != ''
+        shell: bash
+        continue-on-error: true
+        # 重新执行 AI 校验并调整，使工作区落到修正后的内容（ai-review job 的工作区不跨 job 保留）
+        run: bash script/ai-review.sh --per-file --apply AGENTS_COMMON.adoc specs
+      - name: Check for adjusted changes
+        id: diff
         shell: bash
         run: |
-          findings=$(cat /tmp/ai-findings.txt)
-          echo "PR_TITLE=[auto] 规范检查发现问题，请修正" >> "$GITHUB_ENV"
+          if git status --porcelain | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create fix branch and commit
+        if: steps.diff.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b auto/ai-spec-fix
+          git add -A
+          git commit -m "[auto] AI 校验并调整规范（修正 AI 审查发现的问题）" || true
+      - name: Push & open PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          git push origin auto/ai-spec-fix
+          findings=$(cat /tmp/ai-findings.txt 2>/dev/null || echo "AI 审查发现问题，已自动修正。")
           {
             echo "## AI 规范审查发现的问题及建议"
             echo ""
@@ -137,15 +169,13 @@ jobs:
             echo "$findings"
             echo '```'
             echo ""
-            echo "请根据上述清单修正规范后合并。"
+            echo "本 PR 已由 AI 校验并调整：根据上述清单直接产出修正版内容并落盘提交，请人工复核后合并。"
           } > /tmp/pr-body.md
           # 避免重复：若已存在同名开放 PR 则跳过
-          existing=$(gh pr list --search '"[auto] 规范检查发现问题，请修正" in:title' --state open --json number --jq 'length' 2>/dev/null || echo 0)
-          echo "EXISTING=$existing" >> "$GITHUB_ENV"
-      - name: Open pull request
-        if: env.EXISTING == '0'
-        shell: bash
-        run: |
-          gh pr create \
-            --title "$PR_TITLE" \
-            --body-file /tmp/pr-body.md
+          existing=$(gh pr list --search '"[auto] AI 校验并调整规范" in:title' --state open --json number --jq 'length' 2>/dev/null || echo 0)
+          if [ "$existing" = "0" ]; then
+            gh pr create \
+              --title "[auto] AI 校验并调整规范" \
+              --body-file /tmp/pr-body.md \
+              --base main --head auto/ai-spec-fix
+          fi
