@@ -214,6 +214,45 @@ class TestCheckForbiddenPatterns(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_historical_notes（『不保留无用的历史来源声明』机械抓手）
+# --------------------------------------------------------------------------- #
+class TestCheckHistoricalNotes(CheckSpecsTestCase):
+    def test_clean_file_passes(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/git.adoc", "文件重命名必须使用 git mv。")
+        cm.check_historical_notes()
+        self.assertEqual(cm.errors, [])
+
+    def test_early_version_note_reports(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "早期版本直接把 URL 交给 AI。")
+        cm.check_historical_notes()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("历史来源声明", self.error_texts())
+
+    def test_migration_note_reports(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc", "原位于通用规范必加载层，迁移至此并从通用规范中移除。")
+        cm.check_historical_notes()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("历史来源声明", self.error_texts())
+
+    def test_old_naming_note_reports(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc", "本文件是真正的 agents.md。")
+        cm.check_historical_notes()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("历史来源声明", self.error_texts())
+
+    def test_git_mv_neutral_use_not_reported(self):
+        # 中性合理表述（git 规范中"重命名"）不得误报
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/git.adoc", "文件移动/重命名必须使用 git mv，禁止 delete+create。")
+        cm.check_historical_notes()
+        self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
 # integration：完整合法样例全通过
 # --------------------------------------------------------------------------- #
 class TestIntegration(CheckSpecsTestCase):
@@ -234,6 +273,7 @@ class TestIntegration(CheckSpecsTestCase):
         cm.check_link_refs()
         cm.check_stack_consistency()
         cm.check_forbidden_patterns()
+        cm.check_historical_notes()
         cm.check_principle_guard()
         self.assertEqual(cm.errors, [])
 

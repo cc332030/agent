@@ -45,6 +45,19 @@ FORBIDDEN_PATTERNS = [
     (r"@Bean\s+\w*c\w*", "疑似 @Bean c 前缀私有约定误导入"),
 ]
 
+# 『不保留无用的历史来源声明』的机械抓手：拦截文档里描述"之前是什么、后来改成什么"
+# 的变更来源/历史来源陈述（如"早期版本…""原位于…迁移至此…""真正的 agents.md"等）。
+# 这类陈述指向旧命名/旧位置，会让引用悬空、且属无用的历史包袱，故一律不得保留。
+# 注意：只针对明确的"来源/变更"陈述句式，不得用单个通用词（如"重命名""早期"）
+# 以免误伤 git 规范中"重命名必须用 git mv"等中性合理表述。
+HISTORICAL_NOTE_PATTERNS = [
+    (r"真正的 agents\.md", "指向旧 agents.md 命名的历史来源注记"),
+    (r"早期版本", "疑似'早期版本…'历史来源声明"),
+    (r"原位于[^，。]*迁移至此", "疑似'原位于…迁移至此'变更来源声明"),
+    (r"从通用规范中移除", "疑似规范迁移来源声明"),
+    (r"原通用规范内的引用", "疑似旧规范引用迁移来源声明"),
+]
+
 errors = []
 _phase_start = 0.0
 
@@ -252,6 +265,33 @@ def check_forbidden_patterns():
     phase_done()
 
 
+def check_historical_notes():
+    """检查『不保留无用的历史来源声明』是否被遵守（机械抓手）。
+
+    规范要求：不得添加指向旧文件/旧命名/旧位置的历史来源注记（旧文件可能已无法
+    追溯、会让引用悬空），引用一律直接指向当前有效的地址。本检查扫描所有规范文件，
+    拦截描述"之前是什么、后来改成什么"的变更来源/历史来源陈述（早期版本、原位于…
+    迁移至此、真正的 agents.md 等），使该条规范真正有可执行抓手、而非仅靠自觉。
+    """
+    phase("历史来源声明检查")
+    files = collect_adoc_files()
+    checked = 0
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        found_in_file = False
+        with open(f, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                for pat, desc in HISTORICAL_NOTE_PATTERNS:
+                    if re.search(pat, line):
+                        if not found_in_file:
+                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            found_in_file = True
+                        err(f"{desc}（『不保留无用的历史来源声明』），应删除或改为直接指向当前有效表述", rel, j)
+        checked += 1
+    log(f"  扫描 {checked} 个文件")
+    phase_done()
+
+
 def check_link_refs():
     """校验内部文档链接 link: 的格式：须用相对路径，禁止根绝对、禁止越出仓库根。
 
@@ -323,6 +363,7 @@ def main():
     check_link_refs()
     check_stack_consistency()
     check_forbidden_patterns()
+    check_historical_notes()
     check_principle_guard()
     check_asciidoctor_syntax()
 
