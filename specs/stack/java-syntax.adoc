@@ -21,6 +21,7 @@
 
 * 统一入口：同类操作优先用统一工具类（如集合用 `CollUtil`/`CList`、字符串用 `StrUtil`/`CStrUtils`），不散落手写
 * 判空处理：优先用工具类判空（如 `CollUtil.isEmpty`、`StrUtil.isBlank`、`ObjectUtil.isNull`），避免手写重复判空
+* 判空兜底用默认值工具方法：对"空则取默认值"的兜底（如 `x != null ? x : default`、`!CollectionUtil.isEmpty(x) ? x : default` 等三段式），**强制用工具类默认值方法代替**，不手写三段式——如 `ObjectUtil.defaultIfNull(x, default)`（x 为 null 时取默认）、`CollUtil.defaultIfEmpty(x, default)`（集合空时取默认）、`StrUtil.emptyToDefault(x, default)`（字符串空时取默认）等；hutool 已提供、项目已引入 hutool 时直接用，不重复手写
 * 工具类自身实现：工具库内部为构建 API 而直接使用原生写法（如 stream、原生集合）属合理实现，不受本规范约束
 
 == 工具类定义（项目自研工具库）
