@@ -9,5 +9,5 @@
 
 == 构建与验证
 
-* 同一 Maven 模块禁止并行构建；多 agent 协作时同一模块分阶段执行（先写测试文件，再串行执行验证），避免构建冲突
+* 同一 Maven 模块禁止并行构建（通用规则见 link:../general/testing.adoc[]「执行与验证」）；多 agent 协作时同一模块分阶段执行（先写测试文件，再串行执行验证），避免构建冲突
 * 验证以 Maven 结果为准：Windows cmd 下编译失败 exit code 可能为 0，不得仅凭 exit code 判断，必须依据 surefire 的 Tests run/Failures/Errors/Skipped 统计判断是否通过；输出重定向到文件见验证规范（specs/general/verify.adoc）「编译/运行验证」条目，"获取统计一步到位"等通用验证规则见 specs/general/verify.adoc

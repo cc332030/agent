@@ -46,4 +46,4 @@
 * 字段注释须说明含义、默认值及配置方式
 * 构建器 setter 方法注释须标注 `@param`、`@return this`
 * 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向设计文档（如有对应测试文档一并 `@see`），类级 javadoc 指向与该类同名的设计文档（类 `Foo` → 设计文档 `Foo.adoc`）、方法级 javadoc 指向其所属功能文档；测试类的 javadoc 指向对应的测试设计文档（设计文档名后加 `test` 后缀，如 `FooTest.adoc`），文档命名与源文件/类一致、风格跟随（驼峰即驼峰）；路径基准与落点：业务系统置于设计阶段目录下写 `doc/<设计阶段>/<模块>/Foo.adoc`（见 link:../general/doc-design.adoc[] 与 link:../general/doc-lifecycle.adoc[]），单模块根 `doc/` 组织下写 `doc/<模块>/Foo.adoc`，多模块项目下模块细节文档在各模块 `doc/`（见 link:../general/doc-module.adoc[]），从上到下为相对当前文件的相对路径；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
-* javadoc、注释、README 等纯文档性缺陷，发现后直接修复，无需问询
+* javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文档问题」）

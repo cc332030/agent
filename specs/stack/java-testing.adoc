@@ -22,3 +22,8 @@
 == 执行与验证
 
 * 验证以 Maven 结果为准（surefire 的 Tests run/Failures/Errors/Skipped 统计），具体见 specs/stack/maven.adoc
+
+== 覆盖与变异测试
+
+* 覆盖率统计用 JaCoCo（`jacoco-maven-plugin`），排除 lombok 生成、getter/setter、POJO/DTO/VO 样板等自动生成的代码（`excludes` 配置），只统计手写业务逻辑；公共测试规范「覆盖率与充分性」中分支覆盖率 ≥ 80% 的要求，Java 中对应 JaCoCo 的 branch coverage 指标
+* 变异测试用 PIT（`pitest-maven-plugin`），对关键/高风险代码（核心业务逻辑、安全敏感、数据转换等）执行变异测试，评估突变得分；PIT 的存活变异体须按公共测试规范「测试有效性」逐个分析处理
