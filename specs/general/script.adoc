@@ -4,9 +4,9 @@
 
 == 文件格式与编码
 
-* 编码与换行：脚本文件一律 UTF-8 编码（通用编码要求见 link:../general/doc.adoc[]「文件格式与编码」）；保持统一的换行符风格，不混用 LF/CRLF
+* 编码与换行：脚本文件一律 UTF-8 编码（通用编码要求见 link:../general/doc.adoc[]「文件格式与编码」）
 * 可执行标识：Unix/Linux 下的脚本文件须在首行写明 shebang（如 `#!/usr/bin/env bash`、`#!/usr/bin/env python3`），明确解释器；须设置可执行权限（git 中 `chmod +x`），确保可直接以 `./脚本名` 方式运行
-* 行尾与缩进：统一行尾符（不混用 CRLF/LF）；缩进风格随脚本语言惯例统一，同一文件内保持一致
+* 行尾与缩进：统一行尾符，不混用 LF/CRLF；缩进风格随脚本语言惯例统一，同一文件内保持一致
 
 == 文件命名
 
@@ -53,4 +53,4 @@
 
 == 与编码规范的关系
 
-* 脚本中的具体编码规则（命名、注释、代码结构、禁止控制台打印等）遵守 link:../general/coding.adoc[]，不在此重复；某语言脚本的专属写法见 `specs/stack/` 对应文件（如 link:../stack/bash.adoc[]、link:../stack/python.adoc[]）
+* 脚本中的具体编码规则（命名、注释、代码结构、禁止控制台打印等）遵守 link:../general/coding.adoc[]，不在此重复；某语言脚本的专属写法见 `specs/stack/` 对应文件（如 link:../stack/bash.adoc[]、link:../stack/python.adoc[]、link:../stack/powershell.adoc[]）

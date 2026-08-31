@@ -37,6 +37,7 @@
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
   ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
   ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
+  ** PowerShell 脚本（存在 `.ps1` 文件）→ link:specs/stack/powershell.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
   ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS_COMMON.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 项目类型层（**按项目在其自身规范中的主动声明加载，声明才加载、未声明不加载**——仅适用于特定项目类型、对普通项目不生效的规范归入此层，由项目主动声明所属类型触发加载，不靠特征自动检测）：
   ** 通用工具/库类项目（以可复用组件/库/工具为主、要求每个类在设计时保证绝对正确与绝对可维护性的项目）→ link:specs/general/doc-tool.adoc[]（文件/类粒度文档约定）。**触发方式**：项目在其**自身规范**（引用方项目自己编写的项目规范，如项目根目录 `AGENTS.adoc`）中**主动声明**本项目为通用工具/库类项目（含"本项目为通用工具类项目"或其等价表述，描述意思一致即可，如"本项目为通用工具/库类项目，类须保证绝对正确与可维护性"），agent 检测到该声明即加载本规范；未声明则视为普通项目，不加载。

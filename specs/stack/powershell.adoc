@@ -1,0 +1,22 @@
+= PowerShell 脚本规范（技术栈层）
+
+以下规范适用于 PowerShell（`.ps1`）脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，PowerShell 脚本中的编码规则遵守 link:../general/coding.adoc[]。本文件只收录 PowerShell 脚本专属规则。
+
+== 启动脚本（同名 .bat）
+
+* **`.ps1` 脚本须配一个同名 `.bat` 启动脚本**（如 `foo.ps1` 配 `foo.bat`）：`.ps1` 无法直接双击运行，且受 PowerShell 执行策略（Execution Policy）限制、命令行运行（需显式 `powershell -File ...`）也很麻烦，故须提供一个 `.bat` 文件作为启动入口，便于直接双击或命令行运行。
+* `.bat` 启动脚本内容约定：调用 `powershell`（或 `pwsh`）执行同名 `.ps1`，并把命令行参数透传过去。参考：
+  ```
+  @echo off
+  powershell -ExecutionPolicy Bypass -File "%~dp0foo.ps1" %*
+  ```
+  ** 用 `-ExecutionPolicy Bypass` 避免执行策略拦截 `.ps1`；
+  ** 用 `"%~dp0foo.ps1"` 定位 `.bat` 所在目录下的同名 `.ps1`（`%~dp0` 为当前 `.bat` 所在目录，含结尾 `\`），保证从任意目录/双击启动都能定位到脚本；
+  ** 用 `%*` 把 `.bat` 收到的所有命令行参数透传给 `.ps1`；
+  ** `.bat` 与 `.ps1` 保持**同名**，便于识别对应关系。
+* `.bat` 与 `.ps1` 同步维护：`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，二者成对存在、保持一致，避免启动入口失效。
+
+== 编码与执行
+
+* 编码：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM，避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
+* 执行策略：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略。
