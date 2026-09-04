@@ -270,6 +270,8 @@ class TestCheckInstallCodeblock(CheckSpecsTestCase):
 https://agent.c332030.com/AGENTS_COMMON.adoc
 
 读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。
+
+规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。
 ----
 """
 
