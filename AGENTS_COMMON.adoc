@@ -31,6 +31,7 @@
   ** 多 agent 协作 → link:specs/general/collab.adoc[]
   ** 跑测试/补测试 → link:specs/general/testing.adoc[]（公共测试规范，跨语言）
   ** 编译/运行/分步验证 → link:specs/general/verify.adoc[]
+  ** 配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、CI 平台流水线配置等，或涉及流水线运行时/步骤调优） → link:specs/general/ci-cd.adoc[]
 * 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
   ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]
   ** Spring 项目（存在 Spring 依赖/注解）→ link:specs/stack/spring.adoc[]
