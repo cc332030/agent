@@ -9,7 +9,10 @@
 == 命名
 
 * 类重名：除非类全名（全限定类名）冲突不可避免，否则不使用类重名；发现类重名的需调整优化
-* 工具类命名**优先用复数 `Utils` 结尾**：工具类（承载静态工具方法、无业务状态）类名**优先**以 `Utils` 结尾（如 `XxxUtils`，复数更为主流，参考 Apache Commons/Spring 的 `StringUtils`/`ObjectUtils`），单数 `Util`（如 hutool `StrUtil`/`CollUtil` 风格）仅在既有一致约定等情况下采用，不混用；**被 `@UtilityClass` 修饰的类强制遵循**——其本质即工具类（见 link:../stack/java-syntax.adoc[]「工具类定义」），类名必须以 `Utils`/`Util` 结尾，不得用其他命名
+* 工具类命名**优先用复数 `Utils` 结尾**：**仅限工具类**（承载通用静态工具方法、提供项目自有功能的类，如字符串/集合处理 `CStrUtils`），类名优先以 `Utils` 结尾（参考 Apache Commons/Spring `StringUtils`/`ObjectUtils`），单数 `Util` 仅在既有一致约定等情况下采用，不混用。**非工具类不受此约束**——即使静态使用或加 `@UtilityClass`，下列不算工具类，命名由自身语义决定（跟随所替代/扩展的对象），不得套用 `Utils`/`Util` 结尾：
+  ** 常量类（只放常量）；
+  ** **低版本 JDK 替代/补齐类**：复刻 JDK 静态能力为低版本补齐（如 JDK8 无 `List.of`，提供 `CList.of(...)`）；
+  ** **JDK 现有类的扩展类**：JDK 现有静态类亦为静态使用，其扩展/对应类非工具类（如对应/扩展 `Collectors` 的 `CCollectors`）
 
 == 编码
 
