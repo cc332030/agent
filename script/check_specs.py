@@ -11,6 +11,9 @@
      （既不能登记不存在的栈，也不能漏登记已存在的栈）。
   4. 禁止误导入私有强约束约定（如 ctool4j 的 C/IC 前缀、@Bean c 前缀等被当作
      强制规范的表述；中性示例允许保留）。
+  5. 调度器登记完整性：凡被其他规范文件引用的 `specs/...` 规范文件，必须同时在
+     AGENTS_COMMON.adoc 加载调度器中登记（登记集合 ⊇ 被引用集合），避免"只建
+     文件不登记"导致该规范永远不会被加载、其中规则实际失效。
 
 退出码：0 通过，1 存在不规范项。
 """
@@ -245,6 +248,34 @@ def check_stack_consistency():
     phase_done()
 
 
+def check_dispatcher_registry():
+    """调度器登记完整性：被引用的规范文件必须都在调度器中登记。
+
+    背景：AGENTS_COMMON.adoc 的加载调度器是规范文件的**唯一登记处**。若某规范
+    文件被其他规范引用、却未在调度器登记，按调度器执行时它永远不会被加载，
+    其中规则实际失效（如 doc-module.adoc 曾被 doc.adoc / doc-design.adoc /
+    doc-lifecycle.adoc 引用但未登记）。本检查用机械方式钉住
+    「调度器登记集合 ⊇ 被引用集合」，使『写文件』与『登记调度器』成为同一动作。
+    """
+    phase("调度器登记完整性检查")
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        registered = set(extract_specs_refs(fh.read(), ""))
+    referenced = set()
+    for f in collect_adoc_files():
+        if f == GENERIC_FILE:
+            base = ""
+        else:
+            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        with open(f, encoding="utf-8") as fh:
+            referenced |= set(extract_specs_refs(fh.read(), base))
+    missing = sorted(referenced - registered)
+    log(f"  调度器登记 {len(registered)} 个, 被引用 {len(referenced)} 个")
+    for m in missing:
+        err(f"规范文件被引用但未在加载调度器登记（不会被加载、其中规则实际失效）: {m}",
+            "AGENTS_COMMON.adoc")
+    phase_done()
+
+
 def check_forbidden_patterns():
     """检查是否误导入私有强约束约定。"""
     phase("私有约定误导入检查")
@@ -426,6 +457,7 @@ def main():
     check_refs_exist()
     check_link_refs()
     check_stack_consistency()
+    check_dispatcher_registry()
     check_forbidden_patterns()
     check_historical_notes()
     check_install_codeblock()

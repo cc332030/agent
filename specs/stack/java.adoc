@@ -43,12 +43,15 @@
 
 * 多行注释永远写多行：`/**` 单独一行、注释内容逐行书写、`*/` 单独一行，禁止单行写法 `/** xxx */`
 * javadoc 使用完整多行块，包含 `@param`、`@return`、`@throws`、`@since`
+* 版本号用 `@version` 维护：类级 javadoc 用 `@version` 标注源文件版本，随行为/接口/默认值/已知缺陷等变更递增（初始 `1.0`）；**变更摘要统一写入项目根的统一 changelog（时间倒序）**，不在源码或设计文档中另行维护变更日志（机制见 link:../general/doc-design.adoc[]「版本与变更记录」）
 * `@param` 须与参数一一对应且名称一致；泛型参数使用 `@param <T> 泛型描述`
 * 非 void 方法必须标注 `@return`；抛出受检异常时标注 `@throws`
 * 特殊字符必须转义：`< > &` 使用 `&lt; &gt; &amp;`，或使用 `{@code ...}` 包裹
 * HTML 标签必须闭合：`<p>` 换行、`<ul><li>` 列表正确嵌套闭合
 * 字段注释须说明含义、默认值及配置方式
 * 构建器 setter 方法注释须标注 `@param`、`@return this`
-* 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向设计文档（如有对应测试文档一并 `@see`），类级 javadoc 指向与该类同名的设计文档（类 `Foo` → 设计文档 `Foo.adoc`）、方法级 javadoc 指向其所属功能文档；测试类的 javadoc 指向对应的测试设计文档（设计文档名后加 `test` 后缀，如 `FooTest.adoc`），文档命名与源文件/类一致、风格跟随（驼峰即驼峰）；路径基准与落点：业务系统置于设计阶段目录下写 `doc/<设计阶段>/<模块>/Foo.adoc`（见 link:../general/doc-design.adoc[] 与 link:../general/doc-lifecycle.adoc[]），单模块根 `doc/` 组织下写 `doc/<模块>/Foo.adoc`，多模块项目下模块细节文档在各模块 `doc/`（见 link:../general/doc-module.adoc[]），从上到下为相对当前文件的相对路径；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
+* 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向对应的设计文档（**文档承载该功能/模块的总结与规划，不要求逐类同名的设计文档**；类级描述本身写在类 javadoc：一句话定位 + 能力目录）、如有对应测试设计文档一并 `@see`（独立成篇的测试设计文档取测试类名，如 `FooTests` → `FooTests.adoc`）；**路径基准统一为"相对仓库根"的路径**（如 `@see "doc/design/core/xxx.adoc"`）——这是对通用文档规范「引用路径」（link: 用相对当前文件的相对路径）的**显式例外**：javadoc `@see` 由 IDE/javadoc 解析，仓库根相对更利于跨模块一致与跳转，同一仓库不得混用"相对当前文件"的 `../` 形式；落点：业务系统单模块写 `doc/<设计阶段>/<模块>/`、多模块项目写各模块 `doc/`（见 link:../general/doc-design.adoc[]、link:../general/doc-lifecycle.adoc[]、link:../general/doc-module.adoc[]）；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
+* 源类/测试类/性能测试类在 javadoc 中互相引用：源类 javadoc `@see` 其测试类与性能测试类（如有）；测试类 javadoc `@see` 源类、性能测试类（如有）；性能测试类 javadoc `@see` 源类与测试类——使"源类 ↔ 测试/性能测试"的关系由代码互引表达、可被 IDE 与工具遍历，不依赖文档目录索引（通用规则见 link:../general/doc-design.adoc[]「类间关系由代码文档注释互引承载」）
+* 测试类 javadoc 与主类对称：测试类类级 javadoc 同样"一句话定位 + 用例目录（覆盖场景清单）"，方法级 javadoc 写该用例细节（用例编号与文档对应见 link:../general/testing.adoc[]「测试文档」）
 * javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文档问题」）
 * 非文档注释（`//` 行注释、`/* */` 块注释）仅限方法体内使用，用于说明局部逻辑实现；类、字段、方法签名等结构说明一律用 javadoc（`/** */`），不得用普通注释（通用注释定位规则见 link:../general/coding.adoc[]「注释」）
