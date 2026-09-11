@@ -1,6 +1,6 @@
 = Spring 规范（技术栈层）
 
-以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。通用编码规则见 link:../general/coding.adoc[]；本文件只收录 Spring 专属规则。
+以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。（依据：Spring Framework 官方文档的依赖注入与声明式事务两节。）通用编码规则见 link:../general/coding.adoc[]；本文件只收录 Spring 专属规则。
 
 == 注入
 
