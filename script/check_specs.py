@@ -18,9 +18,11 @@
  10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
  11. 规范优先级防线：specs/core/priority.adoc 必须仍在，且 L1/L2/L3 分级与最高关注项
      （P1 git mv / P2 完整性校验 / P3 内容不减少）仍存在、仍标为 L1，防被删/降级。
- 12. 提示词主侧重与优先级防线：PROMPTS.adoc 登记表 + 各提示词代码块的 `primary` +
+ 12. 规范准入防线：specs/general/spec-lifecycle.adoc 必须仍在，且分类归属（公共/项目）、
+     分层判定、准入判定与提案校验要点仍存在，并在加载调度器登记、AGENTS.adoc 有落点。
+ 13. 提示词主侧重与优先级防线：PROMPTS.adoc 登记表 + 各提示词代码块的 `primary` +
      公共片段 `priority-rules` 的 L1/L2/L3 必须一致存在，防侧重/方向被删或降级。
- 13. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
+ 14. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为），
 **不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（`AGENTS_COMMON.adoc`
@@ -56,6 +58,11 @@ GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
 INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
+# 分类与准入规范（公共内容）：回答"一条规则属公共规范还是项目规范、属哪一层、
+# 该不该收、新增提案如何校验"——它是规范集合的准入口径，被删则后续新增失去判定
+# 依据，故与最高关注项、提示词方向一样加机械防线（见 check_spec_admission_guard）。
+ADMISSION_FILE = os.path.join(SPECS_DIR, "general", "spec-lifecycle.adoc")
+
 # 本仓库自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围）
 PROJECT_FILE = os.path.join(REPO_ROOT, "AGENTS.adoc")
 
@@ -756,6 +763,50 @@ def check_priority_guard():
     phase_done()
 
 
+def check_spec_admission_guard():
+    """『规范准入防线』：分类/准入规范、其调度器登记与提案校验要点不得被删或降级。
+
+    背景：规范集合的增删改须有准入口径（一条规则属公共规范还是项目规范、属哪一层、
+    该不该收、新增提案如何校验与升级）。该口径集中在 specs/general/spec-lifecycle.adoc，
+    一旦被"精简/去重"顺手删掉，后续新增规范就失去判定依据。故用机械方式钉住其
+    **存在性与关键要点**，并确认它真的在加载调度器登记（登记才可能被加载）、在
+    `AGENTS.adoc` 留下维护落点。
+
+    只钉"存在性与登记"，不改写内容——口径是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("规范准入防线检查")
+    rel_admission = os.path.relpath(ADMISSION_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(ADMISSION_FILE):
+        err(f"缺少规范分类与准入文件 {rel_admission}——"
+            "新增/调整规范条目将失去分类、分层与准入判定的依据", rel_admission)
+        phase_done()
+        return
+    with open(ADMISSION_FILE, encoding="utf-8") as fh:
+        text = fh.read()
+    # 要点须仍在：公共/项目归属判定、准入判定、提案校验（是否已有标准/已有条目/升级举一反三）
+    for key, desc in (
+            ("公共规范还是项目规范", "公共/项目归属判定"),
+            ("准入判定", "该不该收进规范集合的准入判定"),
+            ("已有标准", "提案校验之「检查是否已有标准」"),
+            ("已有本项目条目", "提案校验之「检查是否已有条目（不重复收）」"),
+            ("举一反三", "提案校验之「升级与举一反三」")):
+        if key not in text:
+            err(f"规范准入防线被破坏：{rel_admission} 缺失『{key}』（{desc}）——"
+                "准入与提案校验口径不得被删或降级", rel_admission)
+    # 调度器登记：未登记则永不被加载、其中规则实际失效
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        registered = set(extract_specs_refs(fh.read(), ""))
+    if rel_admission not in registered:
+        err(f"规范准入文件 {rel_admission} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+            "AGENTS_COMMON.adoc")
+    # 本仓库维护落点：AGENTS.adoc 须指向该文件（否则本仓库自己新增规范时不会按它执行）
+    with open(PROJECT_FILE, encoding="utf-8") as fh:
+        if rel_admission not in fh.read():
+            err(f"规范准入文件 {rel_admission} 未在 {os.path.relpath(PROJECT_FILE, REPO_ROOT)} "
+                "留下维护落点（本仓库新增规范时不会按准入口径执行）",
+                os.path.relpath(PROJECT_FILE, REPO_ROOT))
+    phase_done()
+
 # 提示词「主侧重（方向前提）」与「优先级规则」的机械防线口径：
 #   * 每个提示词的侧重点用一段**块级短语**承载，形如 `**主侧重（…）**：**检查修复问题**——…`；
 #     两侧分别锚定「主侧重」标签与「方向」标签，中间即侧重内容本身。
@@ -906,7 +957,7 @@ def main(argv=None) -> int:
     global VERBOSE
     parser = argparse.ArgumentParser(
         description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
-                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线 + AsciiDoc 语法）")
+                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -927,6 +978,7 @@ def main(argv=None) -> int:
     check_filler_docs()
     check_principle_guard()
     check_priority_guard()
+    check_spec_admission_guard()
     check_prompts_primary()
     check_asciidoctor_syntax()
 
