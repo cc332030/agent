@@ -18,7 +18,9 @@
  10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
  11. 规范优先级防线：specs/core/priority.adoc 必须仍在，且 L1/L2/L3 分级与最高关注项
      （P1 git mv / P2 完整性校验 / P3 内容不减少）仍存在、仍标为 L1，防被删/降级。
- 12. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
+ 12. 提示词主侧重与优先级防线：PROMPTS.adoc 登记表 + 各提示词代码块的 `primary` +
+     公共片段 `priority-rules` 的 L1/L2/L3 必须一致存在，防侧重/方向被删或降级。
+ 13. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为），
 **不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（`AGENTS_COMMON.adoc`
@@ -54,6 +56,13 @@ GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
 INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
+
+# 公共任务提示词（非规范本体，但属本仓库维护范围）：登记入口、正文目录与公共片段。
+# 提示词侧重点错即方向错（后续操作全做错），故对「主侧重 + 优先级」加机械防线，
+# 防止调整/去重时把方向性内容删掉或降级；语义是否被削弱仍由人/子 agent 复核承担。
+PROMPTS_FILE = os.path.join(REPO_ROOT, "PROMPTS.adoc")
+PROMPTS_DIR = os.path.join(REPO_ROOT, "prompts")
+COMMON_PROMPT_FILE = os.path.join(PROMPTS_DIR, "_common.txt")
 
 # 误导入的私有约定特征（中性化后应消除）。
 # 注意：只针对"被当作强制规范"的强约束表述，中性示例（如 `CList.of(...)` 作为
@@ -125,7 +134,8 @@ def collect_adoc_files():
     口径：`specs/` 下全部规范文件 + 通用规范入口 `AGENTS_COMMON.adoc` + 项目自身规范
     `AGENTS.adoc` + 安装文档 `INSTALL.adoc`——即"随规范集合维护的全部文档"，
     **不止 specs/ 一个目录**（下文各检查的 docstring 一律以本口径为准）。
-    README/PROMPTS 等面向使用者的说明文档不在本集合内（其维护检查见 CI 其余步骤）。
+    README/PROMPTS 等面向使用者的说明文档不在本集合内（其维护检查见 CI 其余步骤），
+    但提示词的**方向性内容**（主侧重/优先级）另由 check_prompts_primary 专门盯住。
     """
     result = []
     for root, _, files in os.walk(SPECS_DIR):
@@ -742,6 +752,148 @@ def check_priority_guard():
     phase_done()
 
 
+# 提示词「主侧重（方向前提）」与「优先级规则」的机械防线口径：
+#   * 每个提示词的侧重点用一段**块级短语**承载，形如 `**主侧重（…）**：**检查修复问题**——…`；
+#     两侧分别锚定「主侧重」标签与「方向」标签，中间即侧重内容本身。
+PRIMARY_LABEL = "主侧重"
+PRIMARY_LINE = re.compile(
+    r"\*\*主侧重[^*]*\*\*\s*[:：]\s*\*\*([^*]+)\*\*[^\n]*方向")
+# 登记表侧重列：`| **<侧重>** | 主侧重片段 \`primary\``；侧重内容两侧的引号/星号
+# 只为排版强调，比对时统一剥掉，避免"同一侧重、写法不同"被误判为未登记。
+PRIMARY_ADOC = re.compile(
+    r"\|\s*\*\*([^*|]+?)\*\*\s*\|\s*主侧重片段 `primary`")
+# 提示词正文的「主侧重（方向性前提，先读）」段：`**主侧重（…）**：**<侧重>**——…`。
+# 用更宽的行内锚点扫描，确保侧重值出现在正文说明段（而非仅在片段占位符里）。
+PRIMARY_ANY = re.compile(
+    r"\*\*主侧重[^*\n]*\*\*\s*[:：]\s*\*\*([^*|\n]+?)\*\*")
+
+
+def _normalize_primary(text: str) -> str:
+    """归一化侧重方向文本：去掉排版用的引号/星号/空白，便于登记表与正文比对。"""
+    return text.strip().strip('"\'“”*').strip()
+#   优先级规则归并用语（RFC 2119 / ISO shall-should-may 的对应关系），三级定义缺一即防线被破坏。
+PRIORITY_TERMS = {
+    "L1": ("必须", "严禁"),
+    "L2": ("应当",),
+    "L3": ("可以",),
+}
+
+
+def _iter_prompt_files():
+    """列出公共任务提示词文档（`prompts/` 下非 `_` 前缀的 .adoc）。"""
+    if not os.path.isdir(PROMPTS_DIR):
+        return []
+    return sorted(os.path.join(PROMPTS_DIR, f)
+                  for f in os.listdir(PROMPTS_DIR)
+                  if f.endswith(".adoc") and not f.startswith("_"))
+
+
+def check_prompts_primary():
+    """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
+
+    背景：提示词的**侧重点是最核心、方向性的内容**——后续所有操作与要求都依据它，
+    方向错了后面全做错。故提示词显式标注「主侧重（方向前提）」并按业界共识
+    （RFC 2119 / RFC 8174、ISO/IEC Directives Part 2）引入 L1/L2/L3 优先级，指明
+    哪里是重点。本检查机械钉住（调整/去重不得让它们消失或降级）：
+
+      * `PROMPTS.adoc` 登记表仍标注每个提示词的**主侧重**（`| **主侧重** | 主侧重片段 `primary` …`）；
+      * 每个提示词代码块内仍注入 `primary`（主侧重）与 `priority-rules`（优先级）片段；
+      * 公共片段 `priority-rules` 仍含 L1/L2/L3 三级关键字与 RFC 2119 / ISO 依据；
+      * 侧重点与登记表双向一致（防两个提示词的侧重被复制成同一个 = 方向混用）。
+
+    只钉"存在性与一致性"，不改写内容——语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("提示词主侧重与优先级防线检查")
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少提示词登记入口 {rel_prompts}——提示词的主侧重与优先级无处登记",
+            rel_prompts)
+        phase_done()
+        return
+    with open(PROMPTS_FILE, encoding="utf-8") as fh:
+        registry_text = fh.read()
+
+    # 登记表须用「主侧重片段 primary」明确标出侧重列（防登记表被改成无方向信息的清单）
+    if "主侧重片段 `primary`" not in registry_text:
+        err(f"提示词登记表未标注主侧重（缺少『主侧重片段 `primary`』）——"
+            "侧重点属方向性内容，登记时不得省略", rel_prompts)
+
+    registered = {}
+    for name in PRIMARY_ADOC.findall(registry_text):
+        registered[_normalize_primary(name)] = True
+
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）",
+            "prompts/")
+
+    primaries = []
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+        # 1) 侧重方向须显式声明（放在正文最前，含"方向"字样）
+        m = PRIMARY_LINE.search(text)
+        if not m:
+            err("提示词未显式声明『主侧重（方向前提）』——侧重点是最核心、方向性的内容，"
+                "不得省去（须形如 `**主侧重（…）**：**<侧重>**——…方向…`）", rel)
+            primary = None
+        else:
+            primary = m.group(1).strip()
+            primaries.append(_normalize_primary(primary))
+            # 正文说明段的侧重值须与方向性声明一致（防两处侧重写成两个＝方向自相矛盾）
+            for other in PRIMARY_ANY.findall(text):
+                if _normalize_primary(other) != _normalize_primary(primary) \
+                        and _normalize_primary(other) != "本任务唯一主侧重":
+                    err(f"提示词内主侧重写法不一致（『{primary}』与『{other.strip()}』）——"
+                        "侧重须独此一个方向、不得自相矛盾", rel)
+        # 2) 登记表须登记该提示词的侧重，且与正文一致（防同名/防侧重被复制混用）
+        if primary is not None and _normalize_primary(primary) not in registered:
+            err(f"提示词主侧重『{primary}』未在 {rel_prompts} 登记表中标注"
+                "（登记表与正文须一致）", rel_prompts)
+        # 3) 代码块内须注入 primary 与 priority-rules 两个公共片段
+        for tag in ("primary", "priority-rules"):
+            if f"include::_common.txt[tag={tag}]" not in text:
+                err(f"提示词代码块未注入公共片段 `{tag}`——"
+                    f"{'主侧重（方向）' if tag == 'primary' else '优先级规则'}缺失，"
+                    "AI 无法据此判断重点", rel)
+
+    # 4) 侧重方向不得雷同：两个提示词侧重不同（review=检查修复、refactor=重构），
+    #    复制成同一个即方向混用。判定用**实际读到的侧重集合**，而非登记表条目数
+    #    （登记表有两行、侧重却写成同一个时，条数相同但方向已混用）。
+    if len(set(primaries)) < len(primaries):
+        err(f"提示词主侧重出现重复：{sorted(set(primaries))}——"
+            "各提示词侧重不同、须独立声明，复制成同一个即方向混用", rel_prompts)
+
+    # 5) 公共片段 priority-rules 须仍在，且含三级分级与业界依据
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——优先级规则（L1/L2/L3）无处定义", rel_common)
+    else:
+        with open(COMMON_PROMPT_FILE, encoding="utf-8") as fh:
+            common = fh.read()
+        if "tag=priority-rules" not in common.replace("::", "=") and "tag::priority-rules" not in common:
+            err(f"公共片段 {rel_common} 缺少 `priority-rules` 片段——"
+                "提示词无法引入业界共识的优先级规则", rel_common)
+        else:
+            block = common.split("tag::priority-rules[]", 1)[-1].split("end::priority-rules[]", 1)[0]
+            for level in ("L1 强制", "L2 建议", "L3 允许"):
+                if level not in block:
+                    err(f"公共片段 `priority-rules` 缺失分级定义『{level}』——"
+                        "优先级被删/降级后 AI 无法判断哪里是重点", rel_common)
+            for level, terms in PRIORITY_TERMS.items():
+                if not any(t in block for t in terms):
+                    err(f"公共片段 `priority-rules` 缺失 {level} 的判定用语（{'/'.join(terms)}）", rel_common)
+            if "RFC 2119" not in block or "ISO" not in block:
+                err("公共片段 `priority-rules` 未给业界共识依据（RFC 2119 / ISO）——"
+                    "提示词要求按业界共识加载优先级规则，依据须保留", rel_common)
+            if "不可降级" not in block:
+                err("公共片段 `priority-rules` 缺失『不可降级』要求——"
+                    "L1 须不可协商、不得被降级", rel_common)
+    phase_done()
+
+
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
 
@@ -771,6 +923,7 @@ def main(argv=None) -> int:
     check_filler_docs()
     check_principle_guard()
     check_priority_guard()
+    check_prompts_primary()
     check_asciidoctor_syntax()
 
     print()

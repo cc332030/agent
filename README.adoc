@@ -50,8 +50,9 @@
 
 * 规范按分类懒加载，但"按项目类型加载且不漏"是底线——如 Java 项目写代码必须加载 Java 编码规范。
 * 规范条目分 **L1 强制 / L2 建议 / L3 允许** 三级，并有**最高关注项**（不可降级、重构首保）：分级定义、各级要求与最高关注项清单见 link:specs/core/priority.adoc[]；强调用「升级别 + 单一定义 + 引用」，不靠重复书写。
+* 提示词**侧重点不同、属方向性前提**：各提示词显式标注**主侧重**并按上述分级引入优先级（让 AI 按业界共识判断"哪里是重点"），并做观念隔离（不混用另一提示词的步骤）；登记表见 link:PROMPTS.adoc[]「优先级与隔离」。
 * 通用规则与某技术栈专属规则分层存放，通用规则不重复收录进各栈。
-* 校验规范完整性：修改规范后运行 `python3 script/check_specs.py`（检查引用存在、链接格式、节名引用、栈登记一致、调度器登记、私有约定、历史来源、INSTALL 模板、**文档注水**、**要点防线/优先级防线**与 AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查引用方项目**），并跑 `python3 -W ignore -m unittest discover -s script -p '*_test.py'`；CI（`.github/workflows/check-specs.yml`）自动执行二者及 `script/check_effective.py`（含配套测试）。该脚本及 CI 属 Agent 项目自身工具（见根目录 `AGENTS.adoc`），不随通用规范分发。
+* 校验规范完整性：修改规范后运行 `python3 script/check_specs.py`（检查引用存在、链接格式、节名引用、栈登记一致、调度器登记、私有约定、历史来源、INSTALL 模板、**文档注水**、**要点防线/优先级防线**与 AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查引用方项目**；含提示词主侧重/优先级防线），并跑 `python3 -W ignore -m unittest discover -s script -p '*_test.py'`；CI（`.github/workflows/check-specs.yml`）自动执行二者及 `script/check_effective.py`（含配套测试）。该脚本及 CI 属 Agent 项目自身工具（见根目录 `AGENTS.adoc`），不随通用规范分发。
 
 == 网站首页
 

@@ -607,3 +607,145 @@ class TestCheckPrincipleGuard(CheckSpecsTestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+# --------------------------------------------------------------------------- #
+# check_prompts_primary（提示词主侧重与优先级防线：方向不得被删/降级）
+# --------------------------------------------------------------------------- #
+class TestCheckPromptsPrimary(CheckSpecsTestCase):
+    """钉住提示词的「主侧重（方向前提）」与「优先级规则（L1/L2/L3）」。
+
+    侧重是方向性内容、错了后面全做错，故与最高关注项一样加机械防线：登记表、正文
+    侧重声明、公共片段注入、分级与业界依据缺一即报。
+    """
+
+    COMMON = (
+        "提示词公共片段\n"
+        "// tag::priority-rules[]\n"
+        "优先级规则：按 RFC 2119 与 ISO/IEC Directives Part 2 执行——"
+        "必须/严禁 = L1 强制、应当 = L2 建议、可以 = L3 允许；不可降级。\n"
+        "// end::priority-rules[]\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR,
+         cm.COMMON_PROMPT_FILE) = self._orig_prompts
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("prompts/_common.txt", self.COMMON)
+        self.write("PROMPTS.adoc",
+                   "| link:prompts/review.adoc[] | **检查修复问题** | 主侧重片段 `primary` |\n"
+                   "| link:prompts/refactor.adoc[] | **重构** | 主侧重片段 `primary` |\n")
+        self.write("prompts/review.adoc",
+                   "**主侧重（方向性前提）**：**检查修复问题**——方向错了后面全做错。\n"
+                   "include::_common.txt[tag=primary]\n"
+                   "include::_common.txt[tag=priority-rules]\n")
+        self.write("prompts/refactor.adoc",
+                   "**主侧重（方向性前提）**：**\"重构\"**——方向错了后面全做错。\n"
+                   "include::_common.txt[tag=primary]\n"
+                   "include::_common.txt[tag=priority-rules]\n")
+
+    def test_valid_prompts_pass(self):
+        self._write_valid()
+        cm.check_prompts_primary()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_registry_reports(self):
+        # 反例：登记入口整体被删（侧重无处登记）
+        self._write_valid()
+        os.remove(cm.PROMPTS_FILE)
+        cm.check_prompts_primary()
+        self.assertIn("缺少提示词登记入口", self.error_texts())
+
+    def test_registry_without_primary_column_reports(self):
+        # 反例：登记表丢了主侧重列（只登记用途，方向信息消失）
+        self._write_valid()
+        self.write("PROMPTS.adoc",
+                   "| link:prompts/review.adoc[] | 检查修复问题 |\n"
+                   "| link:prompts/refactor.adoc[] | 重构 |\n")
+        cm.check_prompts_primary()
+        self.assertIn("主侧重", self.error_texts())
+
+    def test_prompt_without_primary_direction_reports(self):
+        # 反例：提示词未声明主侧重（删掉方向性前提）→ 方向丢失
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "对本项目执行一次全量重构。\n"
+                   "include::_common.txt[tag=primary]\n")
+        cm.check_prompts_primary()
+        self.assertIn("未显式声明", self.error_texts())
+        self.assertIn("priority-rules", self.error_texts())
+
+    def test_primary_not_in_registry_reports(self):
+        # 反例：正文侧重与登记表不一致（侧重未登记 = 方向不明）
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "**主侧重（方向性前提）**：**重写架构**——方向错了后面全做错。\n"
+                   "include::_common.txt[tag=primary]\n"
+                   "include::_common.txt[tag=priority-rules]\n")
+        cm.check_prompts_primary()
+        self.assertIn("未在", self.error_texts())
+
+    def test_same_primary_for_both_prompts_reports(self):
+        # 反例：两个提示词侧重被复制成同一个（方向混用）
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "**主侧重（方向性前提）**：**检查修复问题**——方向错了后面全做错。\n"
+                   "include::_common.txt[tag=primary]\n"
+                   "include::_common.txt[tag=priority-rules]\n")
+        cm.check_prompts_primary()
+        self.assertIn("侧重出现重复", self.error_texts())
+
+    def test_priority_rules_missing_level_reports(self):
+        # 反例：优先级分级被删（只剩 L1）→ 无法判断哪里是重点
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::priority-rules[]\n必须 = L1 强制；按 RFC 2119 与 ISO 执行。\n"
+                   "// end::priority-rules[]\n")
+        cm.check_prompts_primary()
+        self.assertIn("L2 建议", self.error_texts())
+        self.assertIn("L3 允许", self.error_texts())
+
+    def test_priority_rules_missing_industry_basis_reports(self):
+        # 反例：去掉业界共识依据（要求"按业界共识加载优先级"就失去出处）
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::priority-rules[]\n"
+                   "必须 = L1 强制、应当 = L2 建议、可以 = L3 允许；不可降级。\n"
+                   "// end::priority-rules[]\n")
+        cm.check_prompts_primary()
+        self.assertIn("RFC 2119", self.error_texts())
+
+    def test_priority_rules_without_non_downgrade_reports(self):
+        # 反例：去掉"不可降级"= 允许 L1 被降为建议
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::priority-rules[]\n"
+                   "按 RFC 2119 与 ISO 执行：必须 = L1 强制、应当 = L2 建议、可以 = L3 允许。\n"
+                   "// end::priority-rules[]\n")
+        cm.check_prompts_primary()
+        self.assertIn("不可降级", self.error_texts())
+
+    def test_conflicting_primary_within_prompt_reports(self):
+        # 反例：同一提示词内两处侧重写法不一致（方向自相矛盾）
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "**主侧重（方向性前提）**：**重构**——方向错了后面全做错。\n"
+                   "**主侧重（方向性前提）**：**检查修复问题**——方向错了后面全做错。\n"
+                   "include::_common.txt[tag=primary]\n"
+                   "include::_common.txt[tag=priority-rules]\n")
+        cm.check_prompts_primary()
+        self.assertIn("写法不一致", self.error_texts())
+
+    def test_primary_fragment_injected(self):
+        # 正例：代码块内须注入 primary 片段本身（防只留说明段、片段被删）
+        self._write_valid()
+        cm.check_prompts_primary()
+        self.assertEqual(cm.errors, [])
