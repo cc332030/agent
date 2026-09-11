@@ -8,6 +8,10 @@
   * check_section_refs     —— 节名引用存在性（正：节存在；反：节已改名/删除）
   * check_stack_consistency—— 技术栈双向一致（正：登记且存在；反：漏登记 / 登记不存在）
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
+  * check_filler_docs      —— 文档注水兜底（正：简短条目/标题词+内容/纯格式行不误报；反：占位段/完全重复段）
+
+范围：只校验本仓库维护的规范/模板文本，**不检查 git 工作区状态、不检查引用方项目**
+（引用方项目内部的 delete+create 等操作对本仓库校验不可见，详见 check_specs.py 文件头）。
 
 运行方式：
   python -W ignore script/check_specs_test.py
@@ -320,6 +324,83 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
 
 
 # --------------------------------------------------------------------------- #
+# check_filler_docs（『禁止无意义/划水/凑字数文档』机械兜底）
+# --------------------------------------------------------------------------- #
+class TestCheckFillerDocs(CheckSpecsTestCase):
+    def test_substantive_content_passes(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write(
+            "specs/general/doc.adoc",
+            "= 文档规范\n\n"
+            "简短但有实质内容的一句话规则也必须保留（不因简短被判注水）。\n\n"
+            "* 条目一：必须写清边界与默认值\n"
+            "* 条目二：禁止写套话与复述结论\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_placeholder_paragraph_reports(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "= t\n\n此处待补充。\n")
+        cm.check_filler_docs()
+        self.assertIn("注水", self.error_texts())
+        self.assertIn("占位段", self.error_texts())
+
+    def test_repeated_paragraph_reports(self):
+        dup = ("* 必须保证条目承载可核对的事实与边界，不得堆砌同义反复的空话套话："
+               "凡无落点、无取值、无判定标准的说明一律不加，完全重复的段落一律合并去重不得保留。")
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", f"= t\n\n{dup}\n\n{dup}\n")
+        cm.check_filler_docs()
+        self.assertIn("完全重复", self.error_texts())
+
+    def test_plain_summary_sentence_passes(self):
+        # 无列表结构的普通小结句不得误报
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/cnb.adoc",
+                   "= cnb\n\n以下规范适用于 CNB 平台上的任务开发与合并请求管理。\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_heading_word_with_list_content_passes(self):
+        # 「示例/参考」类标题词后接列表内容属正常文档写法，不得误报（防误伤）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc",
+                   "= t\n\n参考：\n\n* 示例一：说清核心即可\n* 示例二：不得长篇大论\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_short_conclusion_sentence_passes(self):
+        # 简短但有核心的结论句不得因“篇幅短”被判注水（不得长篇大论 ≠ 不得写短句）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc",
+                   "= t\n\n文档是给人读的，说清核心即可，不得长篇大论也不得凑字数。\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_word_with_placeholder_char_not_reported(self):
+        # 『略』只作为『详略程度』等词的一部分时不得误报
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc",
+                   "= t\n\n判定依据：按内容范围区分，不按详略程度区分，范围大者进独立文档。\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_format_only_line_passes(self):
+        # 纯格式行（`：`、`——`、`**`）无实质内容但属版式，不判注水（防误报）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "= t\n\n：\n\n——\n\n**\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
+
+    def test_short_repeated_paragraph_reports(self):
+        # 短而完全逐字重复的段落同样应被拦（避免阈值过高导致抓手失效）
+        dup = "* 重复的短条目内容用以验证判定"
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", f"= t\n\n{dup}\n\n{dup}\n")
+        cm.check_filler_docs()
+        self.assertIn("完全重复", self.error_texts())
+
+
 # integration：完整合法样例全通过
 # --------------------------------------------------------------------------- #
 class TestIntegration(CheckSpecsTestCase):
@@ -343,6 +424,64 @@ class TestIntegration(CheckSpecsTestCase):
         cm.check_historical_notes()
         cm.check_principle_guard()
         self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_priority_guard（规范优先级防线：最高关注项不得被删/降级）
+# --------------------------------------------------------------------------- #
+class TestCheckPriorityGuard(CheckSpecsTestCase):
+    """钉住 L1/L2/L3 分级与最高关注项 P1/P2/P3 的存在性与级别。"""
+
+    def _write_valid(self):
+        self.write("specs/core/priority.adoc",
+                   "= 规范优先级\n\n"
+                   "**L1 强制**/**L2 建议**/**L3 允许**\n\n"
+                   "最高关注项**不可降级**：P1 git mv、P2 完整性、P3 内容不得减少\n")
+        self.write("specs/core/execution.adoc",
+                   "文件移动必须使用 `git mv`，禁止 delete+create\n")
+
+    def test_valid_priority_file_passes(self):
+        self._write_valid()
+        cm.check_priority_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_priority_file_reports(self):
+        # 反例：优先级文件整体被删
+        self.write("specs/core/execution.adoc", "git mv")
+        cm.check_priority_guard()
+        self.assertIn("缺少规范优先级文件", self.error_texts())
+
+    def test_missing_level_definition_reports(self):
+        # 反例：L2/L3 分级被删（只剩 L1）
+        self.write("specs/core/priority.adoc",
+                   "= t\n**L1 强制**\n不可降级 P1 git mv P2 完整性 P3 内容不得减少\n")
+        self.write("specs/core/execution.adoc", "git mv")
+        cm.check_priority_guard()
+        self.assertIn("L2 建议", self.error_texts())
+        self.assertIn("L3 允许", self.error_texts())
+
+    def test_dropped_top_priority_item_reports(self):
+        # 反例：最高关注项 P1 被删（重构/去重最危险的误删）
+        self.write("specs/core/priority.adoc",
+                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\n不可降级 P2 完整性 P3 内容不得减少\n")
+        self.write("specs/core/execution.adoc", "git mv")
+        cm.check_priority_guard()
+        self.assertIn("P1", self.error_texts())
+
+    def test_dropped_non_downgrade_declaration_reports(self):
+        # 反例：去掉"不可降级"声明 = 允许最高关注项被降级
+        self.write("specs/core/priority.adoc",
+                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\nP1 git mv P2 完整性 P3 内容不得减少\n")
+        self.write("specs/core/execution.adoc", "git mv")
+        cm.check_priority_guard()
+        self.assertIn("不可降级", self.error_texts())
+
+    def test_execution_missing_git_mv_reports(self):
+        # 反例：最高关注项 P1 的必加载层落点被改写
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "文件操作见相关规范\n")
+        cm.check_priority_guard()
+        self.assertIn("git mv", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #
@@ -407,6 +546,37 @@ class TestCheckSectionRefs(CheckSpecsTestCase):
         self.write("specs/general/doc.adoc", "见 link:../general/target.adoc[]「代码块内的行」")
         cm.check_section_refs()
         self.assertIn("不存在的节名", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
+# 校验范围（不得检查 git 工作区 / 引用方项目）
+# --------------------------------------------------------------------------- #
+class TestScopeStaysOnCommonContent(CheckSpecsTestCase):
+    """回归：机械校验只针对本仓库维护的规范/模板文本。
+
+    背景：本仓库的绝大多数内容是**给其他项目用**的公共规范（`AGENTS_COMMON.adoc` +
+    `specs/`）。面向"引用方项目工作区"的检查在本仓库既看不到对象、又对引用方无效
+    （引用方用规范入口全文引用，不可能引用本仓库的脚本），只会白白给本仓库 CI
+    加约束，故不得再引入：如曾短暂加入的 `check_git_mv_usage`（读取 git status /
+    diff --cached / show HEAD:path 判断 delete+create）。本用例钉住这一边界。
+    """
+
+    def test_no_git_state_checks(self):
+        # 判据是"是否读取 git 状态"，不是"是否出现 git 字样"——规范正文/注释里出现
+        # `git mv` 属正常（它本身就是通用规范的铁律），故只钉住对 git 的调用与取值。
+        src = open(os.path.join(HERE, "check_specs.py"), encoding="utf-8").read()
+        for bad in ('"git",', "'git'", "git diff", "git status", "HEAD:{", "diff --cached"):
+            self.assertNotIn(bad, src,
+                             f"check_specs.py 不得读取 git 工作区状态（发现 {bad!r}）："
+                             "本仓库内容主要给其他项目用，引用方工作区操作不可见")
+
+    def test_git_untracked_file_does_not_break_checks(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "= 文档\n\n简短但有实质内容的一句话规则。\n")
+        # 工作区存在未跟踪文件（模拟"delete+create 之类的工作区形态"）不得影响结论
+        self.write("品牌新文件.adoc", "= x\n\n与本规范集合无关的内容。\n")
+        cm.check_filler_docs()
+        self.assertEqual(cm.errors, [])
 
 
 # --------------------------------------------------------------------------- #

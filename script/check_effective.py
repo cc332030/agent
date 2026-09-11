@@ -16,6 +16,12 @@
 说明：本脚本判定"抓手"只看机制文件/测试是否存在。若某强制条款无机械抓手，仅代表
 它依赖 agent 遵守或人工 review，本身不一定是缺陷——脚本的作用是把这些风险点显式
 列出来，供人工决定是否补充机制。
+
+范围（重要）：本仓库的多数内容是给**其他项目**用的公共规范，故"有抓手"只认两类
+可在本仓库机械校验的对象——① 公共内容本身（`AGENTS_COMMON.adoc`、`specs/` 的文本
+与引用完整性）② 本仓库自身的维护工具与 CI。**引用方项目内部如何操作（含 delete+create
+等）不在本仓库的可见范围**，不得记作"有抓手"（该铁律对其余项目靠遵守 + 各项目按
+规范（`link:specs/general/git.adoc[]`）自行检查，本仓库只能把规范文本写清楚）。
 """
 
 import argparse
@@ -23,6 +29,9 @@ import sys
 from os import path
 
 HERE = path.dirname(path.abspath(__file__))
+
+# 输出列宽（中文按 2 字符宽对齐，避免手写空格导致清单错位）
+NAME_WIDTH = 46
 
 # 强制条款 → 可执行抓手映射。
 # (条款名, 来源规范文件, 抓手相对路径[None=暂无机械抓手], 备注)
@@ -33,13 +42,28 @@ MECHANISMS = [
     ("技术栈登记与文件一致",                     "AGENTS_COMMON.adoc",        "script/check_specs.py",      "check_stack_consistency"),
     ("私有工程约定不入全局规范",                 "specs/general/*.adoc",            "script/check_specs.py",      "check_forbidden_patterns"),
     ("不保留无用的历史来源声明",                 "AGENTS.adoc",                 "script/check_specs.py",      "check_historical_notes"),
+    ("禁止无意义/划水/凑字数的文档",            "specs/general/doc.adoc",           "script/check_specs.py",      "check_filler_docs（占位段/完全重复段）"),
+    ("文档须高质量（准确/完整/可执行/有价值/简洁/可验证）", "specs/general/doc.adoc",   "script/check_specs.py",      "可验证性由 check_refs_exist/check_link_refs/check_section_refs 兜底，其余交人 review"),
     ("INSTALL 模板代码块逐字保留（换行/空行不丢失）", "INSTALL.adoc",            "script/check_specs.py",      "check_install_codeblock"),
     ("临时产物清理脚本可用",                     "specs/core/execution.adoc",       "script/clean_tmp.py",        "存在清理脚本"),
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py", "20+ 用例"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py", "本工具的自测"),
-    ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       None,                         "无机械抓手：靠遵守 + 人工 git status review"),
+    ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       None,                         "无机械抓手：铁律作用于**引用方项目**的工作区，本仓库（校验入口）看不到其操作；靠遵守 + 各项目自行检查"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,                         "无机械抓手：靠遵守"),
+    ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py", "TestScopeStaysOnCommonContent 钉住 check_specs.py 不得读 git 工作区状态/HEAD"),
+    ("最高关注项（L1/不可降级）不得被删或降级", "specs/core/priority.adoc", "script/check_specs.py", "check_priority_guard 钉住 P1/P2/P3 与 L1/L2/L3 分级仍在"),
+    ("去重不得误删最高关注项的引用", "AGENTS.adoc", "script/check_specs.py", "check_priority_guard：最高关注项的存在性机械钉住（引用是否被删由该防线兜底发现）"),
 ]
+
+
+def display_width(text: str) -> int:
+    """按终端显示宽度计算字符串宽度（CJK 字符按 2 列计）。"""
+    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+
+
+def _pad(text: str, width: int = NAME_WIDTH) -> str:
+    """条款名右侧补空格到统一列宽，保证多行清单左对齐。"""
+    return text + " " * max(0, width - display_width(text))
 
 
 def evaluate(root: str = HERE) -> list:
@@ -79,14 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
     print("\n[有机械抓手]（存在脚本/测试可检测或拦住）")
     for r in by_status["has-grip"]:
-        print(f"  [+] {r['name']}  <-  {r['grip']} ({r['note']})")
+        print(f"  [+] {_pad(r['name'])} <-  {r['grip']} ({r['note']})")
     print("\n[无机械抓手]（定义未执行风险，仅靠遵守/人工）")
     for r in by_status["no-grip"]:
-        print(f"  ! {r['name']}  --  {r['source']} ({r['note']})")
+        print(f"  ! {_pad(r['name'])} --  {r['source']} ({r['note']})")
     if by_status["grip-missing"]:
         print("\n[抓手缺失]（声明了抓手但文件不存在）")
         for r in by_status["grip-missing"]:
-            print(f"  !! {r['name']}  <-  {r['grip']} 不存在！")
+            print(f"  !! {_pad(r['name'])} <-  {r['grip']} 不存在！")
 
     print("\n" + "=" * 70)
     print(f"共 {len(rows)} 条，有抓手 {len(by_status['has-grip'])}、"

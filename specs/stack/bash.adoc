@@ -1,6 +1,6 @@
 = Bash/Shell 脚本规范（技术栈层）
 
-以下规范适用于 bash/sh 等 POSIX shell 脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，shell 脚本中的编码规则遵守 link:../general/coding.adoc[]。本文件只收录 shell 脚本专属规则。
+以下规范适用于 bash/sh 等 POSIX shell 脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
 
 == 文件头与解释器
 
