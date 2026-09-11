@@ -425,6 +425,91 @@ def check_link_refs():
     phase_done()
 
 
+def _collect_section_names(path: str):
+    """收集一个 .adoc 文件的所有节标题文本（去掉 `=` 前缀）。
+
+    AsciiDoc 节标题形如 `== 设计文档`、`=== 信息归属（同一信息只写一处）`。
+    返回节标题正文集合，并收录别名以便引用方按习惯省略括号说明：
+      * 完整标题；
+      * 去掉括号后缀的简化名（`信息归属（同一信息只写一处）` → `信息归属`）；
+      * 括号内的文字（`分类与懒加载（加载调度器）` → `加载调度器`）。
+    `----` 代码块内的行不采集（如 INSTALL.adoc 模板首行 `= Agent 规范入口` 并非节）。
+    """
+    names = set()
+    in_block = False
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip() == "----":
+                in_block = not in_block
+                continue
+            if in_block:
+                continue
+            m = re.match(r"^(=+)\s+(.+?)\s*$", line)
+            if not m:
+                continue
+            title = m.group(2)
+            names.add(title)
+            simple = re.sub(r"[（(].*$", "", title).strip()
+            if simple:
+                names.add(simple)
+            for inner in re.findall(r"[（(]([^（）()]+)[）)]", title):
+                if inner.strip():
+                    names.add(inner.strip())
+    return names
+
+
+def check_section_refs():
+    """校验『{文件}「节名」』式引用指向的节真实存在（机械抓手）。
+
+    背景：规范间常以 `link:xxx.adoc[]「某节名」` 形式引用具体小节。文件存在性由
+    check_refs_exist 覆盖，但**节名是否真实存在不会被任何检查发现**——某节被改名
+    后，其余文件的引用会静默悬空（check_specs.py 原先的检查死角）。本检查按
+    `link:<目标>[]「<节名>」` 的写法，解析目标文件、核对节名真实存在，让『节名引用
+    不悬空』成为可执行约束，规范改名/重整时自动兜住。
+
+    同一 link 后并列多个「节名」（如 `link:x.adoc[]「A」「B」`）时**逐个校验**。
+    仅校验能在仓库内解析、且目标为 .adoc 的引用；占位符/目录/外部链接跳过。
+    """
+    phase("节名引用存在性检查")
+    files = collect_adoc_files()
+    checked = 0
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        if f == GENERIC_FILE:
+            base = ""
+        else:
+            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        found_in_file = False
+        with open(f, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                # 匹配 `link:目标[]` 及其后连续出现的「节名」（同一行内，可并列多个）
+                for m in re.finditer(r"\blink:([^\[]+)\[\]((?:\s*「[^」]+」)+)", line):
+                    target = m.group(1).strip()
+                    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith(("#", "/")):
+                        continue
+                    if not target.endswith(".adoc") or _is_placeholder_ref(target):
+                        continue
+                    resolved = posixpath.normpath(posixpath.join(base, target))
+                    if resolved == ".." or resolved.startswith("../"):
+                        continue
+                    path = os.path.join(REPO_ROOT, *resolved.split("/"))
+                    if not os.path.isfile(path):
+                        continue  # 文件不存在由 check_refs_exist 报告
+                    names = _collect_section_names(path)
+                    for sec in re.findall(r"「([^」]+)」", m.group(2)):
+                        section = sec.strip()
+                        if not found_in_file:
+                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            found_in_file = True
+                        checked += 1
+                        simple = re.sub(r"[（(].*$", "", section).strip()
+                        if section not in names and simple not in names:
+                            err(f"引用了不存在的节名: {resolved}「{section}」"
+                                f"（该节可能已改名/删除，须同步更新引用）", rel, j)
+    log(f"  校验 {checked} 处节名引用")
+    phase_done()
+
+
 def check_principle_guard():
     """校验规范"要点防线"仍在（防『定义完整性校验却不执行/被意外误删』）。
 
@@ -456,6 +541,7 @@ def main():
 
     check_refs_exist()
     check_link_refs()
+    check_section_refs()
     check_stack_consistency()
     check_dispatcher_registry()
     check_forbidden_patterns()

@@ -43,7 +43,7 @@
 
 以下工具属于 **Agent 项目自身**（维护本规范集合用），不属于通用规范、不随 `specs/` 分发：
 
-* `script/check_specs.py` — 规范完整性机械校验（引用存在、链接格式、技术栈一致、**调度器登记完整**、私有约定、要点防线 + AsciiDoc 语法）；配套测试 `script/check_specs_test.py`
+* `script/check_specs.py` — 规范完整性机械校验（引用存在、链接格式、**节名引用存在**、技术栈一致、**调度器登记完整**、私有约定、历史来源声明、INSTALL 模板、要点防线 + AsciiDoc 语法）；配套测试 `script/check_specs_test.py`
 * `script/check_effective.py` — "定义未执行"深度核验工具；配套测试 `script/check_effective_test.py`
 * `script/ai-review.sh` — 规范语义 AI 审查脚本
 * `.github/workflows/check-specs.yml` — 本仓库 CI：在 push/PR 上自动运行上述检查（含配套测试与 AI 审查）

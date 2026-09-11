@@ -20,7 +20,7 @@
 * 局部变量强制使用 lombok val、var（硬性要求）：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃 val/var；val/var 仅适用于局部变量，字段不得使用；唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断等）等确需显式类型提示的场景可写显式类型，此类例外须克制使用
 * lombok.config 实时读取：lombok.config 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行，不得在规范或代码注释中固化其具体配置内容
 * 对象创建统一用 builder、构造器统一用 lombok：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 @SuperBuilder 而非 @Builder，支持继承场景）；无参、必参、全参构造方法一律用 lombok 注解生成，禁止手写任何构造器；实体类用 @Data、@NoArgsConstructor、@AllArgsConstructor；@AllArgsConstructor 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器
-* 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 specs/general/coding.adoc「类设计」）
+* 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 link:../general/coding.adoc[]「类设计」）
 * 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行
 * JSON 处理全局统一使用 Jackson，禁止引入其他 JSON 库（如 Gson、fastjson）
 * 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
@@ -50,8 +50,8 @@
 * HTML 标签必须闭合：`<p>` 换行、`<ul><li>` 列表正确嵌套闭合
 * 字段注释须说明含义、默认值及配置方式
 * 构建器 setter 方法注释须标注 `@param`、`@return this`
-* 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向对应的设计文档（**文档承载该功能/模块的总结与规划，不要求逐类同名的设计文档**；类级描述本身写在类 javadoc：一句话定位 + 能力目录）、如有对应测试设计文档一并 `@see`（独立成篇的测试设计文档取测试类名，如 `FooTests` → `FooTests.adoc`）；**路径基准统一为"相对仓库根"的路径**（如 `@see "doc/design/core/xxx.adoc"`）——这是对通用文档规范「引用路径」（link: 用相对当前文件的相对路径）的**显式例外**：javadoc `@see` 由 IDE/javadoc 解析，仓库根相对更利于跨模块一致与跳转，同一仓库不得混用"相对当前文件"的 `../` 形式；落点：业务系统单模块写 `doc/<设计阶段>/<模块>/`、多模块项目写各模块 `doc/`（见 link:../general/doc-design.adoc[]、link:../general/doc-lifecycle.adoc[]、link:../general/doc-module.adoc[]）；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
-* 源类/测试类/性能测试类在 javadoc 中互相引用：源类 javadoc `@see` 其测试类与性能测试类（如有）；测试类 javadoc `@see` 源类、性能测试类（如有）；性能测试类 javadoc `@see` 源类与测试类——使"源类 ↔ 测试/性能测试"的关系由代码互引表达、可被 IDE 与工具遍历，不依赖文档目录索引（通用规则见 link:../general/doc-design.adoc[]「类间关系由代码文档注释互引承载」）
-* 测试类 javadoc 与主类对称：测试类类级 javadoc 同样"一句话定位 + 用例目录（覆盖场景清单）"，方法级 javadoc 写该用例细节（用例编号与文档对应见 link:../general/testing.adoc[]「测试文档」）
-* javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文档问题」）
+* 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向对应的设计文档（**文档承载该功能/模块的总结与规划，不要求逐类同名的设计文档**；类级描述本身写在类 javadoc：一句话定位 + 能力目录）、如有对应测试设计文档一并 `@see`（独立成篇的测试设计文档取测试类名，如 `FooTests` → `FooTests.adoc`）；**路径基准统一为"相对模块根"的路径**（即从该源文件所属模块的根目录起算，不受源文件所在包层级影响）——落点按文档规范（多模块项目为 `<模块>/doc/...`，业务系统单模块为 `doc/<设计阶段>/<模块>/...`，见下），**无论引用方源文件位于哪层包，路径都从模块根写起**（如模块根下 `doc/3-design/core/xxx.adoc`，则 `@see "doc/3-design/core/xxx.adoc"`）；**不写 `../` 形式的"相对当前文件"路径**（写 `../` 会随包层级变化而失效）。这是对通用文档规范「引用路径」（link: 用相对当前文件的相对路径）的**显式例外**：javadoc `@see` 由 IDE/javadoc 解析，模块根相对使路径不受文件所在包层级影响、模块内一致且利于 IDE 跳转，同一仓库不得混用"相对当前文件"的 `../` 形式；**路径以实际存在的文档为准**（文档缺失说明该功能尚未写设计文档，应先补文档再补 `@see`，不得写指向不存在文件的路径）；落点：业务系统单模块写 `doc/<设计阶段>/<模块>/`、多模块项目写各模块 `doc/`（见 link:../general/doc-design.adoc[]、link:../general/doc-lifecycle.adoc[]、link:../general/doc-module.adoc[]）；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
+* 源类/测试类/性能测试类在 javadoc 中互相引用：源类 javadoc `@see` 其测试类与性能测试类（如有）；测试类 javadoc `@see` 源类、性能测试类（如有）；性能测试类 javadoc `@see` 源类与测试类——使"源类 ↔ 测试/性能测试"的关系由代码互引表达、可被 IDE 与工具遍历，不依赖文档目录索引（通用规则见 link:../general/doc-design.adoc[]「类间关系与双向引用」）
+* 测试类 javadoc 与主类对称：测试类类级 javadoc 同样"一句话定位 + 用例目录（覆盖场景清单）+ 该测试的整体设计思路与覆盖取舍"，方法级 javadoc 写该用例细节——**测试意图、该用例的设计思路与依据、边界与断言取舍、测试数据选择理由**（用例编号与文档对应见 link:../general/testing.adoc[]「测试文档」）；这些内容**须完整进代码、不得因放入注释而省略**（原写在测试文档的类/方法级用例设计思路等也一并迁入，见 link:../general/testing.adoc[]「测试文档」）
+* javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文件格式与编码」）
 * 非文档注释（`//` 行注释、`/* */` 块注释）仅限方法体内使用，用于说明局部逻辑实现；类、字段、方法签名等结构说明一律用 javadoc（`/** */`），不得用普通注释（通用注释定位规则见 link:../general/coding.adoc[]「注释」）

@@ -1,7 +1,33 @@
 = Spring 规范（技术栈层）
 
-以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。
+以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。通用编码规则见 link:../general/coding.adoc[]；本文件只收录 Spring 专属规则。
 
 == 注入
 
-* 依赖注入默认使用构造器注入；无注入字段时添加 @AllArgsConstructor 属正常写法，不作问题提醒
+* 依赖注入默认使用构造器注入；无注入字段时添加 `@AllArgsConstructor` 属正常写法，不作问题提醒
+* 禁止字段注入（`@Autowired` 直接标注字段）、setter 注入：构造器注入保证依赖不为 null、便于测试与不可变，除非确有必要（循环依赖等）并说明原因
+* 注入的 Bean 优先用接口/抽象类型声明：面向接口注入便于替换实现与测试，除非确无多实现
+
+== Bean 定义
+
+* Bean 的获取：业务代码中不得直接 `ApplicationContext.getBean(...)`（绕开依赖注入、隐藏依赖关系），一律用构造器注入声明依赖
+* `@Bean` 方法仅在配置类中使用，业务类不定义 `@Bean`；`@Bean` 方法所在配置类须标注 `@Configuration`
+* 条件化装配用 `@ConditionalOnXxx` 系列注解，不手写 `if` 判断后返回 null
+
+== 配置
+
+* 配置项统一用 `@ConfigurationProperties` 绑定（类型安全），不在业务代码中散落 `@Value`；`@Value` 仅限少量简单配置
+* `@ConfigurationProperties` 类须提供校验（`@Validated` + JSR-303 注解），启动即校验配置合法性，避免运行期才发现配置错误
+* 配置项须有默认值或显式必填声明；必填项缺失时启动失败（fail-fast），不静默使用空值
+
+== 事务
+
+* 事务用 `@Transactional` 声明式管理，不在业务代码中手动 `begin/commit/rollback`
+* `@Transactional` 须显式指定 `rollbackFor`（默认只回滚 `RuntimeException`，受检异常不回滚，易埋坑）
+* 事务方法须为 public 且由 Spring 代理调用：同类内部方法直接调用（`this.xxx()`）不走代理、事务失效，需注意规避
+* 事务范围尽量小：不在事务内做远程调用、耗时 IO 等操作，避免长事务占用连接
+
+== 分层与职责
+
+* 分层职责清晰：Controller 只做参数校验与协议转换、Service 承载业务逻辑、Repository/Mapper 只做数据访问，不跨层调用、不在 Controller 写业务逻辑
+* Controller 统一用 `@RestController`，返回体统一封装；异常统一由全局异常处理器（`@RestControllerAdvice`）处理，不在业务代码中逐处 try-catch 后手工拼错误响应

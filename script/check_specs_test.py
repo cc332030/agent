@@ -5,6 +5,7 @@
   * extract_specs_refs     —— 引用提取与归一化（根反引号 / link 相对 / 各类剔除）
   * check_refs_exist       —— 引用存在性（正：存在；反：悬空引用）
   * check_link_refs        —— 链接格式（正：相对且合法；反：根绝对 / 越出仓库根）
+  * check_section_refs     —— 节名引用存在性（正：节存在；反：节已改名/删除）
   * check_stack_consistency—— 技术栈双向一致（正：登记且存在；反：漏登记 / 登记不存在）
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
 
@@ -342,6 +343,70 @@ class TestIntegration(CheckSpecsTestCase):
         cm.check_historical_notes()
         cm.check_principle_guard()
         self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_section_refs（节名引用存在性：防改名后引用悬空）
+# --------------------------------------------------------------------------- #
+class TestCheckSectionRefs(CheckSpecsTestCase):
+    def test_existing_section_ref_passes(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc-design.adoc", "= 设计文档规范\n\n== 信息归属\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "见 link:../general/doc-design.adoc[]「信息归属」")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
+    def test_renamed_section_reports(self):
+        # 反例：目标节已改名，引用仍指向旧节名
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc-design.adoc", "= 设计文档规范\n\n== 信息归属\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "见 link:../general/doc-design.adoc[]「判定依据」")
+        cm.check_section_refs()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("不存在的节名", self.error_texts())
+        self.assertIn("判定依据", self.error_texts())
+
+    def test_section_with_parenthetical_passes(self):
+        # 目标节名带括号说明，引用省略括号部分也应通过
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc-design.adoc", "= t\n\n=== 信息归属（同一信息只写一处）\n\n内容")
+        self.write("specs/general/doc.adoc", "见 link:../general/doc-design.adoc[]「信息归属」")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
+    def test_non_adoc_and_external_targets_skipped(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc",
+                   "link:https://example.com/x[]「任意」 link:#anch[]「任意」")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
+    def test_parallel_sections_second_reported(self):
+        # 同一 link 后并列多个节名时，第二个也须校验
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc-design.adoc", "= t\n\n=== 信息归属\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "见 link:../general/doc-design.adoc[]「信息归属」「不存在的节」")
+        cm.check_section_refs()
+        self.assertIn("不存在的节", self.error_texts())
+
+    def test_parenthetical_inner_alias_passes(self):
+        # 节名 `分类与懒加载（加载调度器）` 的括号内文字可作为别名引用
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/target.adoc", "= t\n\n== 分类与懒加载（加载调度器）\n\n内容")
+        self.write("specs/general/doc.adoc", "见 link:../general/target.adoc[]「加载调度器」")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
+    def test_codeblock_heading_not_collected(self):
+        # `----` 代码块内形如 `= xxx` 的行不得被当作节名（防漏报转误报）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/target.adoc", "= t\n\n----\n= 代码块内的行\n----\n\n== 真节\n")
+        self.write("specs/general/doc.adoc", "见 link:../general/target.adoc[]「代码块内的行」")
+        cm.check_section_refs()
+        self.assertIn("不存在的节名", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #
