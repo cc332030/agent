@@ -40,6 +40,7 @@
   ** `specs/general/` — 通用层：通用编码、文档、变更日志（changelog）、git、code review、agent 协作、测试、验证、脚本；项目类型层规范（如 doc-tool.adoc）也存放于本目录，按项目主动声明懒加载
   ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试、bash/python/powershell 脚本（按项目类型加载）
   ** `specs/platform/` — 平台层：cnb
+* `CHANGELOG.adoc`（根目录） — **统一变更日志**（时间倒序，最新在上）：集中记录本规范集合的对外变更（只记影响、不记过程，见 link:specs/general/changelog.adoc[]），是变更记录的唯一落点（机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」）。
 * `script/` — 配套脚本目录（多数为 Agent 项目自身工具，见根目录 `AGENTS.adoc`）：
   ** `clean_tmp.py` — 清理目标项目 `tmp/` 临时产物的安全脚本（以当前工作目录为项目根，内置路径穿越防护）；无需下载到目标项目，可远程加载执行（详见脚本头部用法）
 * `PROMPTS.adoc`（根目录） — **公共任务提示词入口**（非规范，不随 `specs/` 分发、不进规范加载链）：登记全部任务提示词及其用途，是提示词的统一入口（网站右上角"提示词"链接指向本文件）；具体提示词文档存放于 `prompts/` 目录
