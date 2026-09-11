@@ -24,8 +24,9 @@ on:
 
 jobs:
   # 1) 确定性规范检查（引用完整性、链接格式、节名引用、栈登记一致、调度器登记、
-  #    私有约定误导入、历史来源声明、INSTALL 模板、文档注水、要点防线、
-  #    提示词主侧重/优先级防线 + AsciiDoc 语法）
+  #    私有约定误导入、历史来源声明、INSTALL 模板、文档注水、要点防线，以及优先级/
+  #    准入/自检/来源/换行符/Java 测试类命名/提示词各防线 + AsciiDoc 语法；
+  #    完整检查项清单见 script/check_specs.py 文件头 docstring）
   #    安装 asciidoctor 使语法验证真正执行（不再跳过）；发现问题即返回非 0，action 失败。
   lint-specs:
     runs-on: ubuntu-latest

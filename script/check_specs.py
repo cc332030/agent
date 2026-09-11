@@ -16,13 +16,28 @@
   9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；
      "是否有价值、是否长篇大论"属语义判断，交人 review，不设字符数阈值以免误伤。
  10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
- 11. 规范优先级防线：specs/core/priority.adoc 必须仍在，且 L1/L2/L3 分级与最高关注项
-     （P1 git mv / P2 完整性校验 / P3 内容不减少）仍存在、仍标为 L1，防被删/降级。
+ 11. 规范优先级防线：specs/core/priority.adoc 必须仍在，且 L1/L2/L3 分级、最高关注项
+     （P1 git mv / P2 完整性校验 / P3 内容不减少 / P4 读取与上下文纪律 / P5 不可逆操作
+     先确认）仍存在，且各项各自保持级别与"不可降级"定性，防被删/静默降级。
  12. 规范准入防线：specs/general/spec-lifecycle.adoc 必须仍在，且分类归属（公共/项目）、
-     分层判定、准入判定与提案校验要点仍存在，并在加载调度器登记、AGENTS.adoc 有落点。
+     分层判定、准入判定、提案校验、**定级口径（四问 + 条款类型判定表 + 归属对象 +
+     归类举证 + 级别变更与复盘）、**读法形态（执行侧只给'怎么走'、依据归决策侧）与
+     重构后的有效性核对**仍存在，并在加载调度器登记、
+     AGENTS.adoc 有落点（定级口径与重构顺序被删，条目级别会重新混乱、规范会重新膨胀）。
  13. 提示词主侧重与优先级防线：PROMPTS.adoc 登记表 + 各提示词代码块的 `primary` +
      公共片段 `priority-rules` 的 L1/L2/L3 必须一致存在，防侧重/方向被删或降级。
- 14. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
+ 14. 自检防线：specs/general/self-check.adoc 必须仍在，且执行前自检清单、适用范围与
+     知识边界要点不得被删；specs/core/execution.adoc 须保留其必加载层落点。
+ 15. 来源防线：specs/general/source.adoc 必须仍在，且"引用指向当前真实存在的目标"
+     "外部标准只写名称/编号""不得编造""宁可不引"要点不得被删。
+ 16. Java 测试类命名防线：AGENTS_COMMON.adoc 的 Java 技术栈登记与 specs/stack/java-testing.adoc
+     必须同时含四类后缀判据（`Tests`/`BootTests`/`PerfTests`/`IT`），防四类命名契约的口径在
+     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）。
+ 17. 换行符防线：specs/general/encoding.adoc 必须仍按解释器分流行尾——`LF` 基准、`.bat`/`.cmd`
+     必须 `CRLF`，且保留检出归一（`core.autocrlf`）与 `.gitattributes` 落盘约定；脚本技术栈
+     文件（bash/python/powershell）也须各自写明行尾要求，防"Windows 批处理被写成 LF"这类
+     跨平台失效的规则被删或只剩一句"统一行尾符"。
+ 18. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为），
 **不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（`AGENTS_COMMON.adoc`
@@ -62,6 +77,31 @@ INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
 # 该不该收、新增提案如何校验"——它是规范集合的准入口径，被删则后续新增失去判定
 # 依据，故与最高关注项、提示词方向一样加机械防线（见 check_spec_admission_guard）。
 ADMISSION_FILE = os.path.join(SPECS_DIR, "general", "spec-lifecycle.adoc")
+# 执行前自检规范（公共内容）：把"动手前的自检"从自觉要求变成可核对动作（指令是否
+# 逐字落实、触发的规范是否已实际加载、规划是否落盘、读取是否最小必要、证据是否已核实）。
+# 它是"规范加载了却没被执行"这一风险的兜底关口，被删则加载防线失去自检环节。
+SELF_CHECK_FILE = os.path.join(SPECS_DIR, "general", "self-check.adoc")
+# 依据与来源真实性规范（公共内容）：内部引用须指向当前真实存在的目标、外部标准只写
+# 名称/编号且不得编造、数据须有来源。来源一旦不实会污染整条下游引用链，故加机械防线。
+SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
+# Java 测试规范（技术栈层）：其「测试类命名」是**全项目统一的命名契约**（后缀与构建工具的
+# 执行边界绑定：`PerfTests`/`IT` 不得混入常规 test 阶段）。该契约由两处共同承载——调度器的
+# Java 技术栈登记（检测到 Java 项目即加载）与规范正文；任一处漏掉某类后缀，引用方按另一处
+# 学习就会漏掉该类测试。故机械钉住两侧的四类后缀判据。
+JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
+# 四类测试后缀（全项目统一命名契约，不得自创变体）
+JAVA_TEST_SUFFIXES = ("Tests", "BootTests", "PerfTests", "IT")
+# 编码与语言无关规范（通用层）：其「换行符（行尾）」是**跨平台行尾的权威口径**——
+# 基准 LF、Windows 批处理（`.bat`/`.cmd`）必须 CRLF、CRLF 由 `.gitattributes` 声明而非
+# 人工手动调整。行尾错配属"跨平台直接执行失败"（LF-only 的批处理在 Windows 上不可用），
+# 且最易在"统一换行符"的精简中被压成一句空话，故机械钉住其判据与配套文件。
+ENCODING_FILE = os.path.join(SPECS_DIR, "general", "encoding.adoc")
+# 须各自写明行尾要求的脚本技术栈文件（引用方按各自栈文件学习，漏一处即学不全）
+LINE_ENDING_STACK_FILES = (
+    os.path.join(SPECS_DIR, "stack", "bash.adoc"),
+    os.path.join(SPECS_DIR, "stack", "python.adoc"),
+    os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
+)
 
 # 本仓库自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围）
 PROJECT_FILE = os.path.join(REPO_ROOT, "AGENTS.adoc")
@@ -714,7 +754,7 @@ def check_principle_guard():
 
 
 def check_priority_guard():
-    """『规范优先级防线』：最高关注项必须仍在、且仍为最高级（L1）。
+    """『规范优先级防线』：最高关注项、分级定义与常驻层落点必须仍在、且级别未被改动。
 
     背景：规范已按业界做法（RFC 2119 / ISO shall-should-may / 关键性分级）分为
     L1 强制 / L2 建议 / L3 允许三级，并单列"最高关注项"（不可降级）。最大的风险是
@@ -722,15 +762,20 @@ def check_priority_guard():
     关注项在多处出现被 AI 判为"重复"而合并）。本检查机械钉住：
 
       * specs/core/priority.adoc 存在（分级与最高关注项的落点）；
-      * 三级定义（L1 强制 / L2 建议 / L3 允许）仍存在；
-      * 三个最高关注项 P1/P2/P3 仍存在，且其关联的 L1 关键词仍出现；
-      * specs/core/execution.adoc 仍保留 `git mv` 铁律（最高关注项 P1 的必加载层落点）。
+      * 三级定义（L1 强制 / L2 建议 / L3 允许）与"不可降级"声明仍存在；
+      * 五个最高关注项 P1/P2/P3/P4/P5 仍存在，且各自保持原级别（P1/P2/P3/P5 条款本身为
+        L1、P4 条款本身为 L2 且同列最高关注项）；
+      * 常驻层不出现放错位置的元规范（`priority.adoc` 不得成为"定级方法论"的落点，
+        该内容归通用层 `spec-lifecycle.adoc`）；
+      * specs/core/execution.adoc 仍保留 `git mv` 铁律（P1 落点）、读取范围/长会话上下文
+        治理的引用（P4 落点）、「破坏性操作」与来源真实性引用（P5 落点）。
 
+    定级口径的**内容**检查见 check_spec_admission_guard（该口径已归位通用层）。
     只钉"存在性与级别"，不改写内容——语义是否被削弱仍由人/子 agent 复核承担。
     """
     phase("规范优先级防线检查")
     rel_priority = "specs/core/priority.adoc"
-    path = os.path.join(REPO_ROOT, rel_priority)
+    path = os.path.join(REPO_ROOT, *rel_priority.split("/"))
     if not os.path.isfile(path):
         err("缺少规范优先级文件 specs/core/priority.adoc——L1/L2/L3 分级与最高关注项无处定义",
             rel_priority)
@@ -741,16 +786,57 @@ def check_priority_guard():
     for key in ("L1 强制", "L2 建议", "L3 允许"):
         if key not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失分级定义『{key}』", rel_priority)
-    # 最高关注项 P1/P2/P3 必须仍在，且须各自保持"最高/L1"定性
-    for pid, name in (("P1", "git mv"), ("P2", "完整性"), ("P3", "内容不得减少")):
+    # 常驻层只放底线：定级方法论属"写规范时"才用的元规范，归通用层（用到才加载）；
+    # 若它又涨回常驻层，每次会话都要为它付出上下文，故机械拦住"放错层"的回流。
+    for bad in ("设级别", "与条款类型一一对应", "归档举证"):
+        if re.search(rf"^==+\s*{re.escape(bad)}", text, re.M):
+            err(f"规范优先级防线被破坏：{rel_priority} 又出现节『{bad}』——"
+                "定级方法论属通用层内容（写规范时才加载），须留在 "
+                "specs/general/spec-lifecycle.adoc，不得回到必加载层", rel_priority)
+    # 常驻层『执行侧形态』守卫（防"越精简越啰嗦"与"压掉依据"两种反向失效）：
+    # ① 只给"怎么走"的声明须仍在（否则常驻层又会把"为什么走这条路"铺回每个条目）；
+    # ② P1-P5 各自的『依据』行须仍在（依据允许压成标准名/编号，但不允许整段消失，
+    #    否则读者与后续维护无从追溯"为什么定这条"）。
+    if "怎么走" not in text:
+        err(f"规范优先级防线被破坏：{rel_priority} 缺失常驻层『怎么走』形态声明——"
+            "常驻层只给规则/判定标准/依据名，不铺开原因与取舍"
+            "（细则见 specs/general/spec-lifecycle.adoc「同一条规则有两种读法」）", rel_priority)
+    # 最高关注项 P1-P5 必须仍在，且须各自保持原级别（不得静默降级）
+    # 级别口径：P1/P2/P3/P5 的条款本身为 L1（不可逆损伤、资产、真相属无裁量余地的底线）；
+    # P4 条款本身为 L2（行程安排、可权衡成本），但与其余各项同列最高关注项（不可降级）。
+    # 据此分别核对，防"最高关注项=一律 L1"与"顺手降级/升级"两种误改。
+    for pid, name, level in (("P1", "git mv", "L1，最高"), ("P2", "完整性", "L1，最高"),
+                             ("P3", "内容不得减少", "L1，最高"),
+                             ("P4", "读取与上下文纪律", "L2 建议"),
+                             ("P5", "不可逆操作与来源真实性", "L1，最高")):
         if pid not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失最高关注项 {pid}（{name}）——"
                 "最高关注项不得被删除或降级", rel_priority)
-        elif "不可降级" not in text:
+        else:
+            # 定位到该项自身的段落（从「=== Pn. ...」小标题起、到下一项或下节止），
+            # 再核对其中标明的级别——不能用宽松的 `Pn.` 匹配：正文里可能出现
+            # 「P1.」之外的引用形式，匹配错位会让级别降级被漏检。
+            m = re.search(rf"^===\s*{pid}\.", text, re.M)
+            if m is None:
+                err(f"规范优先级防线被破坏：{rel_priority} 未找到最高关注项 {pid}"
+                    f"（{name}）的小标题『=== {pid}. 』——结构被改写会导致级别核对失效",
+                    rel_priority)
+                continue
+            seg = text[m.start():].split("\n===")[0]
+            if f"要求（{level}" not in seg:
+                err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
+                    f"须标明『要求（{level}』——级别不得被静默改动"
+                    "（P1/P2/P3/P5 为 L1 铁律，P4 条款本身为 L2 建议）", rel_priority)
+            if "**依据**" not in seg:
+                err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
+                    "缺失『**依据**』行——依据可压缩为标准名/编号，但不得整段删除"
+                    "（检索不到依据，就无从判断它是『拍脑袋』还是『有出处』）", rel_priority)
+        if "不可降级" not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失『不可降级』声明——"
                 "最高关注项须明确只能加强、不得削弱", rel_priority)
     # 最高关注项 P1 的必加载层落点仍须保留 git mv 铁律
-    exec_path = os.path.join(REPO_ROOT, "specs/core/execution.adoc")
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
     if not os.path.isfile(exec_path):
         err("缺少 specs/core/execution.adoc，最高关注项 P1（git mv）的必加载层落点丢失",
             "specs/core/execution.adoc")
@@ -760,17 +846,32 @@ def check_priority_guard():
         if "git mv" not in exec_text:
             err("规范优先级防线被破坏：specs/core/execution.adoc 缺失 `git mv` 铁律——"
                 "最高关注项 P1 的必加载层落点被删除/改写", "specs/core/execution.adoc")
+        # 最高关注项 P4 的必加载层落点：读取范围/长会话治理须仍从执行原则指向专项规范
+        if "context.adoc" not in exec_text:
+            err("规范优先级防线被破坏：specs/core/execution.adoc 缺失读取范围与长会话上下文"
+                "治理的引用（`context.adoc`）——最高关注项 P4 的必加载层落点被删除/改写", rel_exec)
+        # 最高关注项 P5 的必加载层落点：不可逆操作（破坏性操作）须仍在执行原则中定义
+        if "破坏性操作" not in exec_text:
+            err("规范优先级防线被破坏：specs/core/execution.adoc 缺失「破坏性操作」——"
+                "最高关注项 P5（不可逆操作先确认）的必加载层落点被删除/改写", rel_exec)
+        # 最高关注项 P5 的专项落点：来源真实性规范须指向
+        if "source.adoc" not in exec_text:
+            err("规范优先级防线被破坏：specs/core/execution.adoc 缺失来源真实性规范引用"
+                "（`source.adoc`）——最高关注项 P5（不得编造事实与来源）的必加载层落点被删除/改写", rel_exec)
+
     phase_done()
 
 
 def check_spec_admission_guard():
     """『规范准入防线』：分类/准入规范、其调度器登记与提案校验要点不得被删或降级。
 
-    背景：规范集合的增删改须有准入口径（一条规则属公共规范还是项目规范、属哪一层、
-    该不该收、新增提案如何校验与升级）。该口径集中在 specs/general/spec-lifecycle.adoc，
-    一旦被"精简/去重"顺手删掉，后续新增规范就失去判定依据。故用机械方式钉住其
-    **存在性与关键要点**，并确认它真的在加载调度器登记（登记才可能被加载）、在
-    `AGENTS.adoc` 留下维护落点。
+    背景：规范集合的增删改须有完整口径——一条规则属公共规范还是项目规范、属哪一层、
+    该不该收（准入判定）、**该定哪一级（定级四问与条款类型判定表）**、新增提案如何校验
+    与升级，以及**规范集合自身如何重构瘦身（先判归属 → 再判层级 → 再判重复 → 压缩表述）**。
+    该口径集中在 specs/general/spec-lifecycle.adoc（通用层，写规范时才加载），一旦被
+    "精简/去重"顺手删掉，后续新增规范就失去判定依据、级别重新混乱、集合重新膨胀。
+    故用机械方式钉住其**存在性与关键要点**，并确认它真的在加载调度器登记（登记才可能被
+    加载）、在 `AGENTS.adoc` 留下维护落点。
 
     只钉"存在性与登记"，不改写内容——口径是否被实质削弱仍由人/子 agent 复核承担。
     """
@@ -789,10 +890,29 @@ def check_spec_admission_guard():
             ("准入判定", "该不该收进规范集合的准入判定"),
             ("已有标准", "提案校验之「检查是否已有标准」"),
             ("已有本项目条目", "提案校验之「检查是否已有条目（不重复收）」"),
-            ("举一反三", "提案校验之「升级与举一反三」")):
+            ("举一反三", "提案校验之「升级与举一反三」"),
+            ("规范集合的自身重构", "规范自身的瘦身与归位（重构顺序与删/移/留速查）"),
+            ("同一条规则有两种读法", "执行侧只给『怎么走』、依据与取舍归思考/决策侧（读的形态判据）"),
+            ("重构后须核对规范有效性", "重构不丢内容之外还须保证有效性（两形态分离/可执行性不降级/可见性不丢）")):
         if key not in text:
             err(f"规范准入防线被破坏：{rel_admission} 缺失『{key}』（{desc}）——"
                 "准入与提案校验口径不得被删或降级", rel_admission)
+    # 定级口径须以**节标题**存在（条目"该定哪一级"的判定依据；被删或降为正文一句，
+    # 条目级别就再无判定依据、会重新回到"凭感觉/看关键词"，正是本仓库出现过的混乱来源）。
+    for sec, desc in (("如何给一条规范定级", "定级口径四问"),
+                      ("与条款类型一一对应", "条款类型与级别的判定表"),
+                      ("归属谁", "分级与强制对象的正交判定"),
+                      ("归类举证", "定级结论的对象/依据/类型/结论留痕"),
+                      ("级别变更与复盘", "级别变更须说明理由 + 定期复盘六查")):
+        if not re.search(rf"^==+\s*{re.escape(sec)}", text, re.M):
+            err(f"规范准入防线被破坏：{rel_admission} 缺失节『{sec}』（{desc}）——"
+                "定级口径被删后条目级别再无判定依据、级别会重新混乱", rel_admission)
+    # 重构顺序（先判归属 → 再判层级 → 再判重复）不得被删或颠倒：顺序颠倒会把
+    # "放错位置的内容"直接删掉（本该移走却被当冗余删除）。
+    for key in ("先判归属", "再判层级", "再判重复"):
+        if key not in text:
+            err(f"规范准入防线被破坏：{rel_admission} 缺失重构顺序要点『{key}』——"
+                "规范自身重构的判断顺序不得被删或改写", rel_admission)
     # 调度器登记：未登记则永不被加载、其中规则实际失效
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         registered = set(extract_specs_refs(fh.read(), ""))
@@ -807,7 +927,176 @@ def check_spec_admission_guard():
                 os.path.relpath(PROJECT_FILE, REPO_ROOT))
     phase_done()
 
+def check_self_check_guard():
+    """『自检防线』：执行前自检规范与其必加载层落点不得被删或降级。
+
+    背景：规范按"懒加载"设计，**加载是规则生效的前提**——"文件里写了某条必须"不等于
+    本次执行加载并遵守了它。self-check.adoc 把"动手前的自检"从一句无判定标准的自觉
+    要求，变成可逐项核对的动作（指令、规范加载、规划落盘、读取范围、证据、收尾），
+    是加载防线的兜底关口。"精简/去重"时它最容易被当成"软要求"删掉，故机械钉住其
+    **存在性与关键要点**，并确认 specs/core/execution.adoc（必加载层）留有落点。
+
+    只钉"存在性与关键词"，不改写内容——清单是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("自检防线检查")
+    rel = os.path.relpath(SELF_CHECK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SELF_CHECK_FILE):
+        err(f"缺少执行前自检规范文件 {rel}——"
+            "动手前的自检关口丢失（规范是否被实际加载与遵守将无兜底）", rel)
+    else:
+        with open(SELF_CHECK_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("执行前自检清单", "动手前逐项自检的清单"),
+                ("非平凡任务", "自检适用范围界定（防被'只对大任务'架空）"),
+                ("不得顺口编造", "知识边界（不知道就说不知道、去查证）"),
+                ("完成前自检", "交付前的对照核验")):
+            if key not in text:
+                err(f"自检防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "自检要点不得被删或降级", rel)
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, rel_exec)
+    if not os.path.isfile(exec_path):
+        err(f"缺少 {rel_exec}，自检规范的必加载层落点丢失", rel_exec)
+    else:
+        with open(exec_path, encoding="utf-8") as fh:
+            if "self-check.adoc" not in fh.read():
+                err(f"自检防线被破坏：{rel_exec} 缺失对 `self-check.adoc` 的引用——"
+                    "自检规范未挂到必加载层，实际不会被加载", rel_exec)
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"自检规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_line_ending_guard():
+    """『换行符防线』：跨平台行尾规则（LF 基准 + Windows 批处理 CRLF）不得被删或弱化。
+
+    背景：行尾错配是**跨平台直接失效**的一类问题——`.bat`/`.cmd` 被写成 LF 在 Windows 上
+    会直接执行失败（`goto`/标签、`if`/`for` 复合语句、行尾注释与续行都可能失效），而
+    "在 Unix 上编辑 Windows 批处理"又极常见，故这类规则最容易被"统一换行符、不用管平台"
+    式的精简删成一句空话。故机械钉住 encoding.adoc 中的**分流判据**（LF 基准、`.bat`/`.cmd`
+    必须 CRLF、`core.autocrlf`/`.gitattributes` 检出归一），并要求 bash/python/powershell
+    三个脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即学不全）。
+
+    只钉"判据存在"，不改写内容——行尾规则是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("换行符防线检查")
+    rel = os.path.relpath(ENCODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(ENCODING_FILE):
+        err(f"缺少编码与语言无关规范文件 {rel}——"
+            "跨平台换行符（LF 基准与 Windows 批处理 CRLF）失去集中落点", rel)
+    else:
+        with open(ENCODING_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("换行符", "行尾规则的权威小节"),
+                ("以 LF 为基准", "仓库基准行尾（防被改成 CRLF 基准）"),
+                (".bat", "Windows 批处理必须 CRLF 的对象"),
+                ("CRLF", "Windows 批处理的行尾要求"),
+                ("core.autocrlf", "检出归一化依据（不靠人工手动调整）"),
+                (".gitattributes", "行尾策略的权威落盘口")):
+            if key not in text:
+                err(f"换行符防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "跨平台行尾规则不得被删或弱化", rel)
+    # 脚本技术栈文件各自须写明行尾要求（引用方按各自栈文件加载）
+    for stack_file in LINE_ENDING_STACK_FILES:
+        srel = os.path.relpath(stack_file, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(stack_file):
+            err(f"缺少脚本技术栈文件 {srel}——其行尾要求无处承载", srel)
+            continue
+        with open(stack_file, encoding="utf-8") as fh:
+            stext = fh.read()
+        if "行尾" not in stext and "CRLF" not in stext:
+            err(f"换行符防线被破坏：{srel} 未写明行尾要求——"
+                "引用方按该栈文件学习时学不到行尾规则", srel)
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"编码与语言无关规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_java_test_naming():
+    """『Java 测试类命名防线』：四类测试后缀的判据不得在任一处被删或漂移。
+
+    背景：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的执行边界绑定**——
+    `Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行（`IT` 还须与 Maven
+    Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：调度器的 Java 技术栈登记
+    （检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc` 正文；任一处漏掉某类后缀，
+    引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/误跳过）。故机械钉住**两侧都
+    含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据），防"精简/去重"时口径漂移。
+
+    只钉"四类后缀判据在两侧都存在"，后缀的语义与取舍是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("Java 测试类命名防线检查")
+    rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_TEST_FILE):
+        err(f"缺少 Java 测试规范文件 {rel}——"
+            "测试类命名契约（Tests/BootTests/PerfTests/IT 四类后缀）失去落点", rel)
+    else:
+        with open(JAVA_TEST_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for suffix in JAVA_TEST_SUFFIXES:
+            if suffix not in text:
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失测试类型后缀『{suffix}』——"
+                    "四类命名契约不得被删或降级", rel)
+        for key, desc in (("测试类命名", "四类后缀的权威定义节"),
+                          ("被测类名", "『被测类名 + 测试类型后缀』的命名口径"),
+                          ("常规", "类别与执行阶段的绑定口径")):
+            if key not in text:
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失『{key}』（{desc}）", rel)
+    # 调度器的 Java 技术栈登记须与该契约一致（只说一半会让引用方学不全）
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        generic = fh.read()
+    java_line = next((ln for ln in generic.splitlines() if "stack/java-testing.adoc" in ln), "")
+    if not java_line:
+        err(f"Java 测试规范 {rel} 未在加载调度器登记（不会被加载、其中命名契约实际失效）",
+            "AGENTS_COMMON.adoc")
+    else:
+        missing = [s for s in JAVA_TEST_SUFFIXES if f"`{s}`" not in java_line]
+        if missing:
+            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
+                f"『{'/'.join(missing)}』后缀——调度器与该命名契约口径漂移"
+                "（引用方照调度器学习会漏掉该类测试）", "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_source_guard():
+    """『来源防线』：依据与来源真实性规范及其要点不得被删或降级。
+
+    背景：给出来源是为让读者"知其所以然"，但**来源一旦不实，危害大于不给**——一个
+    虚构的标准号或已删除的文件引用会污染整条下游引用链。source.adoc 把"引用与事实"
+    的要求集中成可核对条款，故机械钉住其**存在性与关键要点**，防"精简/去重"时被顺手删掉。
+
+    只钉"存在性与关键词"，不改写内容——条款是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("来源防线检查")
+    rel = os.path.relpath(SOURCE_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SOURCE_FILE):
+        err(f"缺少依据与来源真实性规范文件 {rel}——"
+            "引用真实性与『不得编造』失去集中落点", rel)
+    else:
+        with open(SOURCE_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("真实存在", "内部引用须指向当前真实存在的目标"),
+                ("不得编造", "标准编号/名称与事实不得凭印象生成"),
+                ("宁可不引", "无法确证时的正确做法（不给不错）"),
+                ("不附链接", "外部标准只写名称/编号、不附链接")):
+            if key not in text:
+                err(f"来源防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "来源真实性要点不得被删或降级", rel)
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"来源真实性规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    phase_done()
+
+
 # 提示词「主侧重（方向前提）」与「优先级规则」的机械防线口径：
+
 #   * 每个提示词的侧重点用一段**块级短语**承载，形如 `**主侧重（…）**：**检查修复问题**——…`；
 #     两侧分别锚定「主侧重」标签与「方向」标签，中间即侧重内容本身。
 PRIMARY_LABEL = "主侧重"
@@ -957,7 +1246,8 @@ def main(argv=None) -> int:
     global VERBOSE
     parser = argparse.ArgumentParser(
         description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
-                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入 + AsciiDoc 语法）")
+                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/"
+                    "换行符/Java 测试类命名 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -979,6 +1269,10 @@ def main(argv=None) -> int:
     check_principle_guard()
     check_priority_guard()
     check_spec_admission_guard()
+    check_self_check_guard()
+    check_source_guard()
+    check_line_ending_guard()
+    check_java_test_naming()
     check_prompts_primary()
     check_asciidoctor_syntax()
 

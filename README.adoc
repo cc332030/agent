@@ -36,9 +36,9 @@
 * `AGENTS_COMMON.adoc` — **通用规范**入口与加载调度器（必加载）：定义规范的分类、懒加载与"按项目类型加载且不漏"的规则，并登记全部规范文件。本文件及其 `specs/` 会被**引用方项目引入**。*与仓库根目录 `AGENTS.adoc`（本项目自身规范入口）区分——根目录 `AGENTS.adoc` 会被平台自动识别为"当前项目自身规范"，而通用规范入口 `AGENTS_COMMON.adoc`（同样位于仓库根目录，但以 `AGENTS_COMMON.adoc` 命名避开平台识别）供引用方项目引入*。
 * `AGENTS.adoc`（根目录） — **Agent 项目自身规范**（本仓库维护专用，不随通用规范分发）：声明本仓库通用规范与项目自身规范的隔离，并收录规范集合的维护规则（规范管理）与检查脚本/CI 等 Agent 项目自身工具。引用方项目无需也不应引入本文件。本文件采用 `AGENTS.adoc` 命名、位于仓库根目录，会被平台自动识别为本仓库的 agent 规范。
 * `specs/` — 通用规范分类目录，按"必加载层 / 通用层 / 技术栈层 / 项目类型层 / 平台层"分层存储：
-  ** `specs/core/` — 必加载层：执行原则、规范优先级与最高关注项（link:specs/core/priority.adoc[]，L1/L2/L3 分级与不可降级项）
-  ** `specs/general/` — 通用层：通用编码、文档、变更日志（changelog）、git、code review、agent 协作、测试、验证、脚本、规范分类与准入（判定一条规则属公共规范还是项目规范、属哪一层、该不该收进规范集合，以及新增规范提案的校验与升级）；项目类型层规范（如 doc-tool.adoc）也存放于本目录，按项目主动声明懒加载
-  ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试、bash/python/powershell 脚本（按项目类型加载）
+  ** `specs/core/` — 必加载层（每次会话都加载，**只放底线**）：执行原则、规范优先级与最高关注项（link:specs/core/priority.adoc[]，L1/L2/L3 分级与不可降级项）
+  ** `specs/general/` — 通用层：通用编码、文档、变更日志（changelog）、git、code review、agent 协作、执行前自检与知识边界（self-check）、依据与来源真实性（source）、读取范围与长会话上下文治理（context）、编码与语言无关（encoding，含**换行符权威判据**：仓库 LF 基准、`.bat`/`.cmd` 必须 CRLF、由 `.gitattributes` 固定）、代码安全（security）、依赖管理（dependency）、测试、验证、脚本、规范分类准入与定级（判定一条规则属公共规范还是项目规范、属哪一层、该不该收进规范集合、该定哪一级，以及新增规范提案的校验与**规范集合自身的重构瘦身**）；项目类型层规范（如 doc-tool.adoc）也存放于本目录，按项目主动声明懒加载
+  ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试（含测试类命名契约 `Tests`/`BootTests`/`PerfTests`/`IT`）、bash/python/powershell 脚本（按项目类型加载，各自写明行尾要求：bash/python 用 LF、powershell 含 `.bat` 启动脚本用 CRLF）
   ** `specs/platform/` — 平台层：cnb
 * `CHANGELOG.adoc`（根目录） — **统一变更日志**（时间倒序，最新在上）：集中记录本规范集合的对外变更（只记影响、不记过程，见 link:specs/general/changelog.adoc[]），是变更记录的唯一落点（机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」）。
 * `script/` — 配套脚本目录（多数为 Agent 项目自身工具，见根目录 `AGENTS.adoc`）：
@@ -50,10 +50,13 @@
 == 使用要点
 
 * 规范按分类懒加载，但"按项目类型加载且不漏"是底线——如 Java 项目写代码必须加载 Java 编码规范。
-* 规范条目分 **L1 强制 / L2 建议 / L3 允许** 三级，并有**最高关注项**（不可降级、重构首保）：分级定义、各级要求与最高关注项清单见 link:specs/core/priority.adoc[]；强调用「升级别 + 单一定义 + 引用」，不靠重复书写。
+* 规范条目分 **L1 强制 / L2 建议 / L3 允许** 三级，并有**最高关注项**（不可降级、重构首保）：分级定义、各级要求与最高关注项清单见 link:specs/core/priority.adoc[]（必加载层）；**一条规范该定哪一级（定级四问、条款类型判定表、归类举证与级别复盘）**与**规范集合自身如何重构与瘦身**见 link:specs/general/spec-lifecycle.adoc[]（通用层，写规范时才加载；依据 RFC 2119 / RFC 8174、ISO/IEC Directives Part 2）。强调用「升级别 + 单一定义 + 引用」，不靠重复书写。
+* **常驻层只放底线**：必加载层每次会话都无条件加载，故只放 L1 底线、最高关注项及其引用落点；**方法论、依据论证、示例与元规范一律放通用层**（用到才加载）——规范写得多不等于管得住，**放错层会直接挤占每次会话的上下文、反过来捆住执行者**。
+* **同一条规则有两种读法**：**执行**时只给"怎么走"（规则 + 判定标准 + 依据名），多出来的"为什么走这条路"是占注意力的噪音；**思考与决策**（新增/调整/定级/重构规范、有取舍或争议、复盘）时才需要依据与取舍。两形态同源、不复制两份，**依据只压缩为名称/编号、不得整段删除**；重构的验收除"内容不丢"外还须核对**有效性未被改坏**（判据未被压成口号、依据仍在、可见性仍在）——判据见 link:specs/general/spec-lifecycle.adoc[]。
 * 提示词**侧重点不同、属方向性前提**：各提示词显式标注**主侧重**并按上述分级引入优先级（让 AI 按业界共识判断"哪里是重点"），并做观念隔离（不混用另一提示词的步骤）；登记表见 link:PROMPTS.adoc[]「优先级与隔离」。
 * 通用规则与某技术栈专属规则分层存放，通用规则不重复收录进各栈。
-* 校验规范完整性：修改规范后运行 `python3 script/check_specs.py`（检查引用存在、链接格式、节名引用、栈登记一致、调度器登记、私有约定、历史来源、INSTALL 模板、**文档注水**、**要点防线/优先级防线**与 AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查引用方项目**；含提示词主侧重/优先级防线），并跑 `python3 -W ignore -m unittest discover -s script -p '*_test.py'`；CI（`.github/workflows/check-specs.yml`）自动执行二者及 `script/check_effective.py`（含配套测试）。该脚本及 CI 属 Agent 项目自身工具（见根目录 `AGENTS.adoc`），不随通用规范分发。
+* 换行符（行尾）按解释器分流、由仓库 `.gitattributes` 固定：内容以 **LF** 为基准，**Windows 批处理 `.bat`/`.cmd` 必须 CRLF**（LF-only 在 Windows 上直接执行失败）、PowerShell `.ps1` 用 CRLF；判据见 link:specs/general/encoding.adoc[]「换行符」「跨平台检出」，不靠人工手动调整。
+* 校验规范完整性：修改规范后运行 `python3 script/check_specs.py`（检查引用存在、链接格式、节名引用、栈登记一致、调度器登记、私有约定、历史来源、INSTALL 模板、**文档注水**、**要点防线/优先级防线/准入防线/自检防线/来源防线/换行符防线/Java 测试类命名防线**与 AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查引用方项目**；含提示词主侧重/优先级防线），并跑 `python3 -W ignore -m unittest discover -s script -p '*_test.py'`；CI（`.github/workflows/check-specs.yml`）自动执行二者及 `script/check_effective.py`（含配套测试）。该脚本及 CI 属 Agent 项目自身工具（见根目录 `AGENTS.adoc`），不随通用规范分发。
 
 == 网站首页
 

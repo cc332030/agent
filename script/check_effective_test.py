@@ -63,6 +63,27 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(
             statuses["校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）"], "has-grip")
 
+    def test_self_check_has_mechanical_grip(self):
+        # 自检规范的要点由 check_self_check_guard 机械钉住（存在性/落点/登记）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["执行前自检（非平凡任务须逐项自检，防'加载了却没执行'）"], "has-grip")
+
+    def test_source_truthfulness_has_mechanical_grip(self):
+        # 来源真实性要点由 check_source_guard 机械钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["不得编造事实与来源（引用真实、标准不编、宁可不引）"], "has-grip")
+
+    def test_destructive_op_has_mechanical_grip(self):
+        # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["不可逆操作先确认（删除/清空/强推，P5）"], "has-grip")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

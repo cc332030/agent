@@ -1,6 +1,10 @@
 = Bash/Shell 脚本规范（技术栈层）
 
-以下规范适用于 bash/sh 等 POSIX shell 脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
+以下规范适用于 bash/sh 等 POSIX shell 脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。换行符（行尾）的权威口径见 link:../general/encoding.adoc[]「换行符」，本文件只重申本栈的取值。
+
+== 行尾
+
+* **LF，不得 CRLF（L1）**：`.sh` 脚本与以 bash/sh 为 shebang 的脚本一律 **LF**，禁止落盘 CRLF（Windows 上编辑后也须存回 LF）——`bash`/`sh` 会把行尾的 `\r` 当作命令或参数的一部分，典型报错 `bash: $'\r': command not found`、`\r': No such file or directory`；Windows 上运行须用 Git Bash/WSL 等提供 `/bin/sh` 的环境，不要改用批处理绕开（依据：POSIX 对文本行以 `\n` 分隔的定义；完整判据与检出配置见 link:../general/encoding.adoc[]「换行符」「跨平台检出」）
 
 == 文件头与解释器
 

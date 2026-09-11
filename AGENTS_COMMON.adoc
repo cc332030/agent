@@ -16,11 +16,15 @@
 
 == 最高优先级铁律（先读）
 
-* **文件移动/重命名必须用 `git mv`，禁止 delete+create**（不得用「新增新文件 + 删除旧文件」代替移动/重命名，否则 git 历史断裂）：**最高优先级（L1）、最高关注项 P1、凌驾于一切其他规则**，任何"重构/拆分/整理"理由都不得规避；**重构/去重时不得删除或降级本条及其引用**（级别与原因见 link:specs/core/priority.adoc[]「最高关注项」）。判定标准、一拆多与兜底核对见 link:specs/core/execution.adoc[]「最高优先级铁律」与 link:specs/general/git.adoc[]「文件移动与重命名」。
+* **文件移动/重命名必须用 `git mv`，禁止 delete+create**（不得用「新增新文件 + 删除旧文件」代替移动/重命名，否则 git 历史断裂）：**最高优先级（L1）、最高关注项 P1、凌驾于一切其他规则**，任何"重构/拆分/整理"理由都不得规避；**重构/去重时不得删除或降级本条及其引用**（级别与原因见 link:specs/core/priority.adoc[]「最高关注项」）。判定标准、一拆多与兜底核对见 link:specs/general/git.adoc[]「文件移动与重命名」（权威完整定义）与 link:specs/core/execution.adoc[]「文件操作强制检查」。
 
-* **优先站在前人的肩膀上看世界**：规范条目的依据应**优先引用广泛、高知名度、高可靠性的业界标准与文献**（ISO/IEC/IEEE、RFC、W3C、OWASP 等），让读者知其所以然、能举一反三；**标注出处只写标准名/编号、不附链接**（链接会失效或指向非官方来源；标准名称唯一、AI 可自行检索；个人项目、知名度很低、仅此一处者除外），仅在项目对标准有**明确的自身要求**时才显式覆盖并说明理由。以标准为参照调整规范时，须保证**完整性、同义性**（详见 link:specs/core/execution.adoc[]「优先站在前人的肩膀上看世界」）。
+* **不得执行任何会不可逆丢失内容的操作**（删除文件/目录、清空数据、`rm -rf`、`git reset --hard`、强推覆盖远端等）：**先确认目标、先备份可取回、范围可界定**，再执行；不确定即不做、先确认。**最高优先级（L1）**——破坏性操作不可逆，属安全底线（判定与兜底核对见 link:specs/core/execution.adoc[]「破坏性操作」）。
 
-规范条目按 **L1 强制 / L2 建议 / L3 允许** 分级，最高关注项**不可降级**——分级定义、各级遵守要求与"强调用分级+引用、不用重复书写"的做法见 link:specs/core/priority.adoc[]（必加载层）。
+* **不得编造事实与来源**（命令/API 签名、依赖坐标、标准编号与名称、链接与路径、数据与结论）：**不知道就说不知道并去查证，宁可不给也不得编**。**最高优先级（L1）**——一次虚构会污染整条下游引用链（完整规则见 link:specs/general/source.adoc[]）。
+
+* **优先站在前人的肩膀上看世界**：规范条目的依据应**优先引用广泛、高知名度、高可靠性的业界标准与文献**（ISO/IEC/IEEE、RFC、W3C、OWASP 等），让读者知其所以然、能举一反三；**标注出处只写标准名/编号、不附链接**（链接会失效或指向非官方来源；标准名称唯一、AI 可自行检索；个人项目、知名度很低、仅此一处者除外），仅在项目对标准有**明确的自身要求**时才显式覆盖并说明理由。以标准为参照调整规范时，须保证**完整性、同义性**（完整规则见 link:specs/general/source.adoc[]，条目依据与完整性见 link:specs/general/spec-lifecycle.adoc[]「准入判定」）。
+
+规范条目按 **L1 强制 / L2 建议 / L3 允许** 分级，最高关注项**不可降级**——分级定义、各级遵守要求与"强调用分级+引用、不用重复书写"的做法见 link:specs/core/priority.adoc[]（必加载层）；**一条规范该定哪一级（定级四问 + 条款类型判定表 + 归类举证）**见 link:specs/general/spec-lifecycle.adoc[]「如何给一条规范定级」（写规范时才用，不随常驻层加载）。
 
 变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
 
@@ -35,7 +39,7 @@
   ** 规范优先级与最高关注项（L1/L2/L3 分级、不可降级项）：link:specs/core/priority.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言）
-  ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件） → link:specs/general/script.adoc[]（通用脚本规范，跨语言）
+  ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF，判据见下文编码条目）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
   ** 写/更新变更记录（changelog，识别特征：存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]
   ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]
@@ -44,17 +48,22 @@
   ** git/版本控制操作 → link:specs/general/git.adoc[]
   ** code review → link:specs/general/review.adoc[]
   ** 多 agent 协作 → link:specs/general/collab.adoc[]
+  ** 读取范围与长会话上下文治理（**任务开始时即加载**；识别特征：任何需要读取项目文件/资料的执行任务，或所在会话已执行过多个任务、上下文明显变长） → link:specs/general/context.adoc[]
+  ** 执行任何非平凡任务（需读完再动手的多步骤任务，含文档/代码/脚本）**或产出规范、文档、汇报、review 意见（涉及标准/文献/命令/API/路径/数据等"引用与事实"） → link:specs/general/self-check.adoc[]（执行前/过程/完成前自检清单与知识边界）+ link:specs/general/source.adoc[]（内部引用、外部标准/文献与事实数据的来源真实性）
+  ** 编写跨语言通用规则、注释/文档/日志的措辞与语言无关性，或**涉及文件编码与换行符**（识别特征：`specs/` 通用内容、面向使用方的说明文档、多语言项目；或新增/编辑文件、跨 Linux 与 Windows 协作、写 Windows 批处理 `.bat`/`.cmd`、出现"换行符不一致"提示、需要配置 `.gitattributes`） → link:specs/general/encoding.adoc[]（**换行符权威判据：仓库内容以 LF 为基准、`.bat`/`.cmd` 必须 CRLF、`.ps1` 用 CRLF**，且须由 `.gitattributes` 固定、不靠人工手动调整）
+  ** 编写涉及安全边界的代码（**涉及外部输入、认证/授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载**） → link:specs/general/security.adoc[]
+  ** 引入/调整/升级依赖（识别特征：`pom.xml`/`build.gradle`/`package.json`/`requirements.txt` 等依赖清单或锁文件发生变化、需要选型引入第三方库） → link:specs/general/dependency.adoc[]
   ** 跑测试/补测试 → link:specs/general/testing.adoc[]（公共测试规范，跨语言）
   ** 编译/运行/分步验证 → link:specs/general/verify.adoc[]
-  ** 新增/调整/归位规范条目（判定一条规则属公共规范还是项目规范、属哪一层、是否该收进规范集合，以及新增规范提案的校验与升级） → link:specs/general/spec-lifecycle.adoc[]
+  ** 新增/调整/归位/重构规范条目（判定一条规则属公共规范还是项目规范、属哪一层、是否该收进规范集合、该定哪一级，以及新增规范提案的校验与升级、规范集合自身的瘦身归位与**重构后的有效性核对**） → link:specs/general/spec-lifecycle.adoc[]
   ** 配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、CI 平台流水线配置等，或涉及流水线运行时/步骤调优） → link:specs/general/ci-cd.adoc[]
 * 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
-  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]
+  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端，后两者不随常规测试执行）
   ** Spring 项目（存在 Spring 依赖/注解）→ link:specs/stack/spring.adoc[]
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
-  ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
-  ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
-  ** PowerShell 脚本（存在 `.ps1` 文件）→ link:specs/stack/powershell.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载）
+  ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 LF）
+  ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 LF）
+  ** PowerShell 脚本（存在 `.ps1` 文件）→ link:specs/stack/powershell.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 CRLF，**含同名 `.bat` 启动脚本的编码与 CRLF 要求**）
   ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS_COMMON.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 项目类型层（**按项目在其自身规范中的主动声明加载，声明才加载、未声明不加载**——仅适用于特定项目类型、对普通项目不生效的规范归入此层，由项目主动声明所属类型触发加载，不靠特征自动检测）：
   ** 通用工具/库类项目（以可复用组件/库/工具为主、要求每个类在设计时保证绝对正确与绝对可维护性的项目）→ link:specs/general/doc-tool.adoc[]（文档组织：类级细节归代码文档注释、独立文档承载模块/功能级总结与规划）。**触发方式**：项目在其**自身规范**（引用方项目自己编写的项目规范，如项目根目录 `AGENTS.adoc`）中**主动声明**本项目为通用工具/库类项目，agent 检测到该声明即加载本规范；未声明则视为普通项目，不加载。**声明模板（可直接粘贴到项目自身规范头部）**：`本项目为通用工具/库类项目，各类须保证绝对正确与可维护性。`；等价表述关键词放宽匹配"通用工具/库类项目""通用工具类项目""工具库""可复用组件库""组件库项目"等，描述意思一致即可

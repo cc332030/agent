@@ -1,6 +1,6 @@
 = PowerShell 脚本规范（技术栈层）
 
-以下规范适用于 PowerShell（`.ps1`）脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
+以下规范适用于 PowerShell（`.ps1`）脚本。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。换行符（行尾）的权威口径见 link:../general/encoding.adoc[]「换行符」，本文件只重申本栈的取值。
 
 == 启动脚本（同名 .bat）
 
@@ -15,8 +15,11 @@
   ** 用 `%*` 把 `.bat` 收到的所有命令行参数透传给 `.ps1`；
   ** `.bat` 与 `.ps1` 保持**同名**，便于识别对应关系。
 * `.bat` 与 `.ps1` 同步维护：`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，二者成对存在、保持一致，避免启动入口失效。
+* **启动脚本保存为 ANSI/GBK、不得存为 UTF-8（L1）**：`.bat` 会被 `cmd.exe` 按系统 ANSI 代码页（简体中文 Windows 为 GBK/CP936）解析，且按字节读行尾——**存为 UTF-8（尤其带 BOM）或存成 LF 时，启动脚本会解析失败**（如 `@echo off` 变成命令本身、`@echo` 被当作命令名、中文 echo 乱码、块语句直接报错；依据：Microsoft Learn 的 Windows 命令参考）。故：`.bat` 只写纯 ASCII 指令（路径与参数用 `%~dp0`/`%*` 变量表达、不硬编码中文），文件内容逐字节为 ANSI/GBK 的 ASCII、**行尾 CRLF**，不存为 UTF-8；`.bat` 与 `.ps1` **同名但编码与行尾不同**，二者分别按本条与「编码与行尾」的要求保存。行尾判据见 link:../general/encoding.adoc[]「换行符」（`.bat`/`.cmd` 必须 CRLF）。
 
-== 编码与执行
+== 编码与行尾
 
-* 编码：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM，避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
+* **编码（L1）**：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM，避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
+* **行尾（L1）**：`.ps1` **落盘 CRLF**（与同名 `.bat` 一致）——PowerShell 虽能解析 LF，但带 BOM 的脚本改用 BOM 字符集、CRLF 是 Windows 工具链与编辑器的一致预期；**不得**为"统一成 LF"把 `.ps1`/`.bat` 改成 LF（`.bat` 改成 LF 会直接失效，见上「启动脚本」）。行尾由 `.gitattributes` 的 `*.ps1 text eol=crlf` 与 `*.bat text eol=crlf` 声明（见 link:../general/encoding.adoc[]「跨平台检出」），不靠人工逐个文件手动调整。
+* 编码与行尾核对：`file <脚本>` 应显示 ASCII/UTF-8(BOM) 文本且 `with CRLF line terminators`；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
 * 执行策略：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略。
