@@ -9,6 +9,12 @@
   * check_stack_consistency—— 技术栈双向一致（正：登记且存在；反：漏登记 / 登记不存在）
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
   * check_filler_docs      —— 文档注水兜底（正：简短条目/标题词+内容/纯格式行不误报；反：占位段/完全重复段）
+  * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
+  * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
+  * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
+  * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
+  * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
+  * check_spec_admission_guard 另钉读法形态与重构后的有效性核对（反：两节被删）
 
 范围：只校验本仓库维护的规范/模板文本，**不检查 git 工作区状态、不检查引用方项目**
 （引用方项目内部的 delete+create 等操作对本仓库校验不可见，详见 check_specs.py 文件头）。
@@ -433,15 +439,37 @@ class TestIntegration(CheckSpecsTestCase):
 # check_priority_guard（规范优先级防线：最高关注项不得被删/降级）
 # --------------------------------------------------------------------------- #
 class TestCheckPriorityGuard(CheckSpecsTestCase):
-    """钉住 L1/L2/L3 分级与最高关注项 P1/P2/P3 的存在性与级别。"""
+    """钉住 L1/L2/L3 分级与最高关注项 P1/P2/P3/P4 的存在性与级别。"""
 
     def _write_valid(self):
+        # 五个最高关注项各自级别（P1/P2/P3/P5 条款本身 L1、P4 条款本身 L2 但同列最高关注项）；
+        # 定级口径与自身重构已归位通用层 spec-lifecycle.adoc（由准入防线钉住），
+        # 故必加载层不再出现这些方法论节。
         self.write("specs/core/priority.adoc",
                    "= 规范优先级\n\n"
                    "**L1 强制**/**L2 建议**/**L3 允许**\n\n"
-                   "最高关注项**不可降级**：P1 git mv、P2 完整性、P3 内容不得减少\n")
+                   "常驻层只给\"怎么走\"（规则 + 判定标准 + 依据名），不铺开原因与取舍。\n\n"
+                   "== 分级定义（L1 / L2 / L3）\n\n"
+                   "最高关注项**不可降级**：\n\n"
+                   "=== P1. 文件移动/重命名必须用 `git mv`\n\n"
+                   "* **要求（L1，最高）**：不得用 delete+create 代替。\n"
+                   "* **依据**：变更可追溯（ISO 10007）。\n\n"
+                   "=== P2. 规范完整性校验\n\n"
+                   "* **要求（L1，最高）**：改完必须跑机械校验。\n"
+                   "* **依据**：ISO/IEC/IEEE 29148。\n\n"
+                   "=== P3. 内容不得减少\n\n"
+                   "* **要求（L1，最高）**：内容一项不能少。\n"
+                   "* **依据**：ISO 9001。\n\n"
+                   "=== P4. 读取按最小必要\n\n"
+                   "* **要求（L2 建议，最高关注项）**：只读最小必要信息集。\n"
+                   "* **依据**：Anthropic 工程博客《Effective context engineering for AI agents》。\n\n"
+                   "=== P5. 不可逆操作先确认，不得编造事实与来源\n\n"
+                   "* **要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。\n"
+                   "* **依据**：ISO 10007。\n")
         self.write("specs/core/execution.adoc",
-                   "文件移动必须使用 `git mv`，禁止 delete+create\n")
+                   "文件移动必须使用 `git mv`，禁止 delete+create\n"
+                   "读取范围与长会话上下文治理见 `specs/general/context.adoc`。\n"
+                   "== 破坏性操作\n不可逆操作先确认；不得编造见 `specs/general/source.adoc`。\n")
 
     def test_valid_priority_file_passes(self):
         self._write_valid()
@@ -450,7 +478,7 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
 
     def test_missing_priority_file_reports(self):
         # 反例：优先级文件整体被删
-        self.write("specs/core/execution.adoc", "git mv")
+        self.write("specs/core/execution.adoc", "git mv context.adoc")
         cm.check_priority_guard()
         self.assertIn("缺少规范优先级文件", self.error_texts())
 
@@ -458,7 +486,7 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
         # 反例：L2/L3 分级被删（只剩 L1）
         self.write("specs/core/priority.adoc",
                    "= t\n**L1 强制**\n不可降级 P1 git mv P2 完整性 P3 内容不得减少\n")
-        self.write("specs/core/execution.adoc", "git mv")
+        self.write("specs/core/execution.adoc", "git mv context.adoc")
         cm.check_priority_guard()
         self.assertIn("L2 建议", self.error_texts())
         self.assertIn("L3 允许", self.error_texts())
@@ -466,16 +494,20 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
     def test_dropped_top_priority_item_reports(self):
         # 反例：最高关注项 P1 被删（重构/去重最危险的误删）
         self.write("specs/core/priority.adoc",
-                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\n不可降级 P2 完整性 P3 内容不得减少\n")
-        self.write("specs/core/execution.adoc", "git mv")
+                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\n"
+                   "不可降级 P2 完整性 P3 内容不得减少 P4 读取按最小必要 P5 不可逆操作\n")
+        self.write("specs/core/execution.adoc",
+                   "git mv context.adoc 破坏性操作 source.adoc")
         cm.check_priority_guard()
         self.assertIn("P1", self.error_texts())
 
     def test_dropped_non_downgrade_declaration_reports(self):
         # 反例：去掉"不可降级"声明 = 允许最高关注项被降级
-        self.write("specs/core/priority.adoc",
-                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\nP1 git mv P2 完整性 P3 内容不得减少\n")
-        self.write("specs/core/execution.adoc", "git mv")
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace("最高关注项**不可降级**：", "最高关注项：")
+        self.write("specs/core/priority.adoc", text)
         cm.check_priority_guard()
         self.assertIn("不可降级", self.error_texts())
 
@@ -485,6 +517,117 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
         self.write("specs/core/execution.adoc", "文件操作见相关规范\n")
         cm.check_priority_guard()
         self.assertIn("git mv", self.error_texts())
+
+    def test_leveling_method_moved_back_to_always_on_reports(self):
+        # 反例：定级方法论（属通用层、"写规范时"才用）又涨回必加载层 → 每次会话都为它付上下文
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/core/priority.adoc",
+                   text + "\n== 设级别（定级口径四问）\n违反后果/豁免性/可验证性\n")
+        cm.check_priority_guard()
+        self.assertIn("设级别", self.error_texts())
+
+    def test_dropped_how_to_walk_declaration_reports(self):
+        # 反例：常驻层"只给怎么走"的形态声明被删 → 常驻层又会把原因与取舍铺回每个条目
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                "常驻层只给\"怎么走\"（规则 + 判定标准 + 依据名），不铺开原因与取舍。\n", "")
+        self.write("specs/core/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("怎么走", self.error_texts())
+
+    def test_dropped_basis_line_reports(self):
+        # 反例：某最高关注项的『依据』行被整段删掉（依据可压成标准名/编号，但不能消失）
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace("* **依据**：ISO 10007。\n", "")
+        self.write("specs/core/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_silently_downgraded_p1_reports(self):
+        # 反例：P1-P3 被静默从 L1 降级为 L2（最高关注项条款本身即 L1 铁律）
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                "**要求（L1，最高）**：不得用 delete+create 代替。",
+                "**要求（L2 建议）**：不得用 delete+create 代替。")
+        self.write("specs/core/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("P1", self.error_texts())
+
+    def test_silently_promoted_p4_reports(self):
+        # 反例：P4 被静默从 L2 改标为 L1（级别不得顺手改写，须按定级口径判定）
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                "* **要求（L2 建议，最高关注项）**：只读最小必要信息集。",
+                "* **要求（L1，最高）**：只读最小必要信息集。")
+        self.write("specs/core/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("P4", self.error_texts())
+
+    def test_silently_downgraded_p5_reports(self):
+        # 反例：P5 被静默从 L1 降级为 L2（不可逆操作与来源真实性属无裁量余地的底线）
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "core", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                "**要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。",
+                "**要求（L2 建议）**：不可逆操作先确认；不得编造事实与来源。")
+        self.write("specs/core/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("P5", self.error_texts())
+
+    def test_dropped_context_read_item_reports(self):
+        # 反例：最高关注项 P4（读取按最小必要/长会话上下文治理）被删
+        self.write("specs/core/priority.adoc",
+                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\n"
+                   "不可降级 P1 git mv P2 完整性 P3 内容不得减少\n")
+        self.write("specs/core/execution.adoc",
+                   "git mv context.adoc 破坏性操作 source.adoc")
+        cm.check_priority_guard()
+        self.assertIn("P4", self.error_texts())
+
+    def test_execution_missing_context_ref_reports(self):
+        # 反例：最高关注项 P4 的必加载层落点（执行原则对其的引用）被改写
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "读取范围见相关规范\n")
+        cm.check_priority_guard()
+        self.assertIn("context.adoc", self.error_texts())
+
+    def test_dropped_destructive_op_item_reports(self):
+        # 反例：最高关注项 P5（不可逆操作先确认 + 不得编造）被删
+        self.write("specs/core/priority.adoc",
+                   "= t\n**L1 强制**/**L2 建议**/**L3 允许**\n"
+                   "不可降级 P1 git mv P2 完整性 P3 内容不得减少 P4 读取按最小必要\n")
+        self.write("specs/core/execution.adoc",
+                   "git mv context.adoc 破坏性操作 source.adoc")
+        cm.check_priority_guard()
+        self.assertIn("P5", self.error_texts())
+
+    def test_execution_missing_destructive_section_reports(self):
+        # 反例：P5 的必加载层落点（「破坏性操作」一节）被删
+        self._write_valid()
+        self.write("specs/core/execution.adoc",
+                   "git mv context.adoc source.adoc\n")
+        cm.check_priority_guard()
+        self.assertIn("破坏性操作", self.error_texts())
+
+    def test_execution_missing_source_ref_reports(self):
+        # 反例：P5 的专项落点（来源真实性规范引用）被删
+        self._write_valid()
+        self.write("specs/core/execution.adoc",
+                   "git mv context.adoc 破坏性操作\n")
+        cm.check_priority_guard()
+        self.assertIn("source.adoc", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #
@@ -514,8 +657,18 @@ class TestCheckAdmissionGuard(CheckSpecsTestCase):
                    "= 规范分类与准入\n\n"
                    "== 公共规范还是项目规范（归属判定）\n\n"
                    "== 准入判定（该不该收进规范集合）\n\n"
+                   "== 如何给一条规范定级（定级口径四问）\n\n"
+                   "=== 与条款类型一一对应（L1 / L2 / L3 判定表）\n\n"
+                   "=== 归属谁（对象 × 强度两维判定）\n\n"
+                   "=== 归类举证（写入规范时同步登记）\n\n"
+                   "=== 级别变更与复盘（防降级、防级别混乱）\n\n"
                    "== 新增规范的提案校验\n\n"
-                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n")
+                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n\n"
+                   "== 同一条规则有两种读法（读的形态要跟着场景变）\n\n"
+                   "执行场景只给规则与判定标准；依据与取舍归思考/决策场景。\n\n"
+                   "== 规范集合的自身重构（瘦身与归位）\n\n"
+                   "先判归属 → 再判层级 → 再判重复 → 最后压缩表述。\n"
+                   "重构后须核对规范有效性（两形态分离 / 可执行性不降级 / 可见性不丢）。\n")
         self.write("AGENTS_COMMON.adoc",
                    "通用层登记 `specs/general/spec-lifecycle.adoc`")
         self.write("AGENTS.adoc", "见 `specs/general/spec-lifecycle.adoc`")
@@ -551,6 +704,53 @@ class TestCheckAdmissionGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc", "见 `specs/general/spec-lifecycle.adoc`")
         cm.check_spec_admission_guard()
         self.assertIn("举一反三", self.error_texts())
+
+    def test_dropped_leveling_criteria_reports(self):
+        # 反例：定级口径（四问/判定表等）被删 → 条目级别再无判定依据、级别会重新混乱
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "spec-lifecycle.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        text = text.split("== 如何给一条规范定级")[0] + "== 新增规范的提案校验\n\n" + \
+            text.split("== 新增规范的提案校验")[1]
+        self.write("specs/general/spec-lifecycle.adoc", text)
+        cm.check_spec_admission_guard()
+        self.assertIn("如何给一条规范定级", self.error_texts())
+
+    def test_dropped_refactor_order_reports(self):
+        # 反例：规范自身重构的判断顺序被删 → 会先删后想，把放错位置的内容直接删掉
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "spec-lifecycle.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/general/spec-lifecycle.adoc",
+                   text.replace("先判归属 → 再判层级 → 再判重复 → 最后压缩表述。", "重构一下。"))
+        cm.check_spec_admission_guard()
+        self.assertIn("先判归属", self.error_texts())
+
+    def test_dropped_reading_shape_reports(self):
+        # 反例：读法形态判据被删 → "执行侧只给怎么走、依据归决策侧"的口径丢失，
+        # 规范重新变成"给执行者一堆解释"或"为简洁把依据删掉"两个极端
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "spec-lifecycle.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        text = text.split("== 同一条规则有两种读法")[0] + "== 规范集合的自身重构" + \
+            text.split("== 规范集合的自身重构")[1]
+        self.write("specs/general/spec-lifecycle.adoc", text)
+        cm.check_spec_admission_guard()
+        self.assertIn("同一条规则有两种读法", self.error_texts())
+
+    def test_dropped_effectiveness_check_reports(self):
+        # 反例：重构后的有效性核对被删 → 只查"内容丢没丢"，判据被压成口号/依据被删无人拦
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "spec-lifecycle.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                "重构后须核对规范有效性（两形态分离 / 可执行性不降级 / 可见性不丢）。\n", "")
+        self.write("specs/general/spec-lifecycle.adoc", text)
+        cm.check_spec_admission_guard()
+        self.assertIn("重构后须核对规范有效性", self.error_texts())
 
     def test_not_registered_in_dispatcher_reports(self):
         # 反例：文件存在但未登记调度器 → 永不被加载、规则实际失效
@@ -695,6 +895,279 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------- #
 # check_prompts_primary（提示词主侧重与优先级防线：方向不得被删/降级）
 # --------------------------------------------------------------------------- #
+class TestCheckSelfCheckGuard(CheckSpecsTestCase):
+    """钉住执行前自检规范的存在性、要点与必加载层落点。
+
+    自检是把"规范加载了却没被执行"兜住的关键环节，故与最高关注项一样加机械防线：
+    文件被删、要点缺失、execution.adoc 落点丢失、未登记调度器，任一即报。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_self_check = cm.SELF_CHECK_FILE
+        cm.SELF_CHECK_FILE = os.path.join(self.root, "specs", "general", "self-check.adoc")
+
+    def tearDown(self) -> None:
+        cm.SELF_CHECK_FILE = self._orig_self_check
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/general/self-check.adoc",
+                   "= 执行前自检规范\n\n"
+                   "== 知识边界\n\n不得顺口编造，不知道就去查证。\n\n"
+                   "== 执行前自检清单（动手前逐项过）\n\n"
+                   "适用范围是非平凡任务，逐项检查。\n\n"
+                   "== 完成前自检\n\n对照原要求逐条核。\n")
+        self.write("specs/core/execution.adoc",
+                   "执行前自检见 `specs/general/self-check.adoc`。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "通用层登记 `specs/general/self-check.adoc`")
+
+    def test_valid_self_check_spec_passes(self):
+        self._write_valid()
+        cm.check_self_check_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：自检规范文件整体被删（自检关口丢失）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_self_check_guard()
+        self.assertIn("缺少执行前自检规范文件", self.error_texts())
+
+    def test_dropped_checklist_reports(self):
+        # 反例：删掉"执行前自检清单"（只剩泛泛要求，无逐项内容）
+        self.write("specs/general/self-check.adoc",
+                   "= 自检\n\n不得顺口编造。非平凡任务须自检。完成前自检。\n")
+        self.write("specs/core/execution.adoc", "`specs/general/self-check.adoc`")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/self-check.adoc`")
+        cm.check_self_check_guard()
+        self.assertIn("执行前自检清单", self.error_texts())
+
+    def test_dropped_scope_boundary_reports(self):
+        # 反例：删掉适用范围界定（会被"只对大任务"架空）
+        self.write("specs/general/self-check.adoc",
+                   "= 自检\n\n执行前自检清单。不得顺口编造。完成前自检。\n")
+        self.write("specs/core/execution.adoc", "`specs/general/self-check.adoc`")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/self-check.adoc`")
+        cm.check_self_check_guard()
+        self.assertIn("非平凡任务", self.error_texts())
+
+    def test_execution_landing_point_missing_reports(self):
+        # 反例：必加载层未引用自检规范 → 实际不会被加载
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "见相关规范。\n")
+        cm.check_self_check_guard()
+        self.assertIn("self-check.adoc", self.error_texts())
+
+    def test_not_registered_in_dispatcher_reports(self):
+        # 反例：文件存在但未登记调度器 → 永不被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_self_check_guard()
+        self.assertIn("未在加载调度器登记", self.error_texts())
+
+
+class TestCheckSourceGuard(CheckSpecsTestCase):
+    """钉住来源真实性规范的存在性与要点。
+
+    来源一旦不实会污染整条下游引用链（引错标准、引不存在的文件），故机械钉住
+    "引用当前真实存在的目标""只写名称编号""不得编造""宁可不引"四条要点。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_source = cm.SOURCE_FILE
+        cm.SOURCE_FILE = os.path.join(self.root, "specs", "general", "source.adoc")
+
+    def tearDown(self) -> None:
+        cm.SOURCE_FILE = self._orig_source
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/general/source.adoc",
+                   "= 依据与来源真实性\n\n"
+                   "引用须指向当前真实存在的目标；外部标准只写名称与编号、不附链接；"
+                   "不得编造编号与名称；无法确证时宁可不引。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/source.adoc`")
+
+    def test_valid_source_spec_passes(self):
+        self._write_valid()
+        cm.check_source_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：来源规范文件整体被删
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_source_guard()
+        self.assertIn("缺少依据与来源真实性规范文件", self.error_texts())
+
+    def test_dropped_no_fabrication_reports(self):
+        # 反例：删掉"不得编造"（来源防线最核心的一条）
+        self.write("specs/general/source.adoc",
+                   "= t\n\n引用须指向当前真实存在的目标；只写名称编号、不附链接；宁可不引。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/source.adoc`")
+        cm.check_source_guard()
+        self.assertIn("不得编造", self.error_texts())
+
+    def test_dropped_no_link_rule_reports(self):
+        # 反例：删掉"不附链接"（出处写法要求）
+        self.write("specs/general/source.adoc",
+                   "= t\n\n引用须指向当前真实存在的目标；不得编造；宁可不引。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/source.adoc`")
+        cm.check_source_guard()
+        self.assertIn("不附链接", self.error_texts())
+
+    def test_not_registered_in_dispatcher_reports(self):
+        # 反例：文件存在但未登记调度器 → 永不被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_source_guard()
+        self.assertIn("未在加载调度器登记", self.error_texts())
+
+
+class TestCheckJavaTestNaming(CheckSpecsTestCase):
+    """钉住 Java 测试类命名契约（四类后缀）在规范与调度器两侧一致。
+
+    后缀与构建工具的执行边界绑定（`PerfTests`/`IT` 不随常规测试执行），任一处漏掉
+    某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明四类判据。
+    """
+
+    JAVA_LINE = ("  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ "
+                 "link:specs/stack/java.adoc[] + link:specs/stack/java-testing.adoc[]"
+                 "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端）")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_TEST_FILE
+        cm.JAVA_TEST_FILE = os.path.join(self.root, "specs", "stack", "java-testing.adoc")
+
+    def tearDown(self) -> None:
+        cm.JAVA_TEST_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n"
+                   "== 测试类命名（L1 强制）\n"
+                   "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
+                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n")
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
+
+    def test_valid_naming_contract_passes(self):
+        self._write_valid()
+        cm.check_java_test_naming()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：Java 测试规范文件整体被删
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
+        cm.check_java_test_naming()
+        self.assertIn("缺少 Java 测试规范文件", self.error_texts())
+
+    def test_dropped_suffix_reports(self):
+        # 反例：规范侧删掉某一类后缀（如 BootTests）
+        self.write("specs/stack/java-testing.adoc",
+                   "= t\n\n== 测试类命名\n后缀：`Tests`、`PerfTests`、`IT`（被测类名 + 后缀、常规）\n")
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
+        cm.check_java_test_naming()
+        self.assertIn("BootTests", self.error_texts())
+
+    def test_dispatcher_missing_suffix_reports(self):
+        # 反例：调度器只写一半后缀 → 与规范命名契约口径漂移
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "  ** Java 项目 → link:specs/stack/java-testing.adoc[]（含 `Tests` 后缀）")
+        cm.check_java_test_naming()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        self.assertIn("PerfTests", self.error_texts())
+
+    def test_not_registered_in_dispatcher_reports(self):
+        # 反例：文件存在但未登记调度器 → 永不被加载
+        self.write("specs/stack/java-testing.adoc",
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`（被测类名 + 后缀、常规）")
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_java_test_naming()
+        self.assertIn("未在加载调度器登记", self.error_texts())
+
+
+class TestCheckLineEndingGuard(CheckSpecsTestCase):
+    """钉住跨平台换行符规则（LF 基准 + Windows 批处理 CRLF）。
+
+    行尾错配是"跨平台直接执行失败"（`.bat` 在 LF 下不可执行），且"统一换行符"式的
+    精简最易把它删成一句空话，故机械钉住判据与配套栈文件。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_enc = cm.ENCODING_FILE
+        self._orig_stack = cm.LINE_ENDING_STACK_FILES
+        cm.ENCODING_FILE = os.path.join(self.root, "specs", "general", "encoding.adoc")
+        cm.LINE_ENDING_STACK_FILES = tuple(
+            os.path.join(self.root, "specs", "stack", f)
+            for f in ("bash.adoc", "python.adoc", "powershell.adoc"))
+
+    def tearDown(self) -> None:
+        cm.ENCODING_FILE = self._orig_enc
+        cm.LINE_ENDING_STACK_FILES = self._orig_stack
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/general/encoding.adoc",
+                   "= 编码与语言无关\n\n"
+                   "== 换行符（行尾）\n"
+                   "内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF；`.ps1` 用 CRLF；"
+                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}", "行尾：按本栈要求（LF 或 CRLF）\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+
+    def test_valid_line_ending_rules_pass(self):
+        self._write_valid()
+        cm.check_line_ending_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_encoding_file_reports(self):
+        # 反例：编码规范文件整体被删 → 行尾判据失去集中落点
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_line_ending_guard()
+        self.assertIn("缺少编码与语言无关规范文件", self.error_texts())
+
+    def test_dropped_windows_batch_crlf_reports(self):
+        # 反例：删掉 `.bat` 必须 CRLF（这正是"BAT 用 Linux 换行符"的失效源头）
+        self.write("specs/general/encoding.adoc",
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.ps1` 用 CRLF；"
+                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}", "行尾：LF\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+        cm.check_line_ending_guard()
+        self.assertIn(".bat", self.error_texts())
+
+    def test_dropped_checkout_normalization_reports(self):
+        # 反例：删掉"不靠人工手动调整"的检出归一依据（core.autocrlf/.gitattributes）
+        self.write("specs/general/encoding.adoc",
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}", "行尾：LF\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+        cm.check_line_ending_guard()
+        self.assertIn(".gitattributes", self.error_texts())
+
+    def test_stack_file_without_line_ending_reports(self):
+        # 反例：脚本栈文件未写明行尾要求 → 引用方按该栈文件学习学不到
+        self._write_valid()
+        self.write("specs/stack/python.adoc", "= Python 脚本规范\n")
+        cm.check_line_ending_guard()
+        self.assertIn("specs/stack/python.adoc", self.error_texts())
+
+    def test_not_registered_in_dispatcher_reports(self):
+        # 反例：文件存在但未登记调度器 → 永不被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_line_ending_guard()
+        self.assertIn("未在加载调度器登记", self.error_texts())
+
+
 class TestCheckPromptsPrimary(CheckSpecsTestCase):
     """钉住提示词的「主侧重（方向前提）」与「优先级规则（L1/L2/L3）」。
 

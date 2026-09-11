@@ -1,6 +1,10 @@
 = Python 脚本规范（技术栈层）
 
-以下规范适用于以 Python 编写的脚本文件（风格依据：PEP 8 代码风格、PEP 257 文档字符串约定、PEP 20 之"Python 之禅"）。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
+以下规范适用于以 Python 编写的脚本文件（风格依据：PEP 8 代码风格、PEP 257 文档字符串约定、PEP 20 之"Python 之禅"）。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。换行符（行尾）的权威口径见 link:../general/encoding.adoc[]「换行符」，本文件只重申本栈的取值。
+
+== 行尾
+
+* **LF，不得 CRLF（L1）**：`.py` 脚本一律 **LF**（Python 能解析 CRLF、但仓库内统一 LF，避免混用与假变更；shebang `#!/usr/bin/env python3` 在 Linux 下带 `\r` 会定位不到解释器，依据：POSIX 对 shebang 行的解析）；完整判据与检出配置见 link:../general/encoding.adoc[]「换行符」「跨平台检出」
 
 == 文件头与解释器
 

@@ -1,15 +1,54 @@
 = Java 测试规范（技术栈层，JUnit）
 
-以下规范适用于 **Java 项目**的测试（JUnit 5）。公共测试设计原则见 link:../general/testing.adoc[]；本文件只收录 Java/JUnit 专属规则。加载触发特征：项目存在 `.java` 源文件、测试依赖（JUnit 等）。Java 项目跑测试/补测试前须加载本文件及公共测试规范（见 AGENTS_COMMON.adoc 加载调度规则）。
+以下规范适用于 **Java 项目**的测试（JUnit 5）。公共测试设计原则见 link:../general/testing.adoc[]；本文件只收录 Java/JUnit 专属规则。加载触发特征：项目存在 `.java` 源文件、测试依赖（JUnit 等）。Java 项目跑测试/补测试前须加载本文件及公共测试规范（见 AGENTS_COMMON.adoc 加载调度规则）；涉及 Spring/Spring Boot 的启动型测试（`BootTests`）须一并加载 spring 规范。
+
+本文件的测试分类与后缀是**全项目统一的命名契约**：命名不自洽会让测试被构建工具误跑、误跳过或误判为失败（详见下「测试分类与执行边界」），故后缀不得自创。
 
 == 框架与目录
 
 * 测试框架：单元测试使用 JUnit 5
 * 目录结构与包路径（**L1 强制**）：测试类（`src/test/java`）的**包路径与对应源类（`src/main/java`）保持相同**，不额外加 `test` 段等路径层（如源类 `com.example.core.util.StringUtils`，其测试类应位于同包 `com.example.core.util`）；**并须为同一目录**——同一包路径在源码树中只允许出现一处（`src/main/java` 下）与测试树中一处（`src/test/java` 下），不得为区分测试类再追加包路径层级（如 `com.example.core.util.test.StringUtilsTests`）
-* 测试类命名（**L1 强制**）：测试类名为**被测类名相同**、加 `Tests` 后缀（如 `StringUtils` → `StringUtilsTests`、`OrderService` → `OrderServiceTests`），以此与源类区分（同包内类名不同、互不冲突）——**每个被测类一对一**：一个被测类对应一个 `<被测类名>Tests` 测试类
-  ** 存量随动迁移、不一次性收敛**：不合上述包路径与命名的存量测试类（后缀缺失、后缀错用 `Test`、或被测类名出现多余片段，如 `StringUtilsTest`、`TestsStringUtils`、`StringUtilsUnitTests`）**不发动全库改造、不要求一次性改齐**（连"完全不满足"的也照旧）——**碰到哪个改哪个**：该测试类本次因需求而变动时，随动调整为定式（重命名按 link:../general/git.adoc[]「文件移动与重命名」用 `git mv` 保留历史）；本次不变动则保持原样，下次变动时再迁。用户明确要求一次性全库收敛时按其声明执行（原理见 link:../core/execution.adoc[]「规范变更的存量处理」）
-  ** 测试类不存在时**须按上述包路径与命名**新增**（新增测试见 link:../general/testing.adoc[]）
-  ** 批量测试同一被测类不同场景时，仍合并为一个 `<被测类名>Tests` 类**放入对应 `@Nested`/用例分类，不得按场景拆成多个类
+
+== 测试类命名（L1 强制）
+
+测试类名一律为「**被测类名 + 测试类型后缀**」（如 `StringUtils` → `StringUtilsTests`），以此与源类区分（同包内类名不同、互不冲突）。**每个被测对象一对一**：一个被测类对应一个 `<被测类名><后缀>` 测试类。后缀按**测试运转形态**选用（测试运转形态与执行边界见下节），**优先级自下而上**——能跑常规单元测试就走 `Tests`，越往上越是"需要特殊启动方式/独立执行"的形态：
+
+[cols="1,2,2,2", options="header"]
+|===
+| 后缀 | 承载什么 | 何时用 | 是否纳入常规 `test` 阶段
+| `<被测类名>Tests` | 可执行、可重复运行的常规测试：单元测试、切片测试、以及需要容器但能自启的集成测试（`@SpringBootTest`、Testcontainers） | **默认**，只要不违反"独立、可重复、无外部人工依赖"即可 | 是（surefire 执行）
+| `<被测类名>BootTests` | 需 Spring Boot 启动类承载、须特定 profile/环境/启动参数（如嵌入式容器、测试专用数据源与配置）的启动型测试 | 不能与普通测试同一次启动跑通、须显式指定启动方式（如 `@ActiveProfiles`、专用 SpringBoot 启动类） | 是，但**须按 Boot 方式启动**（专用运行配置/`@Tag` 分组/专用启动类）
+| `<被测类名>PerfTests` | 性能/基准对比测试（`perf`） | 对比性能的基准与方案对比（公共规范「性能测试」要求） | **否**，独立于常规测试、仅显式触发（见 link:../general/testing.adoc[]「性能测试」）
+| `<被测类名>IT` | 端到端/冒烟，依赖部署好的真实外部环境（真实 DB/消息队列/第三方服务/已运行的应用） | 无法自包含、必须有外部环境才能跑通 | **否**，独立执行（maven-failsafe-plugin 等 IT 插件）
+|===
+
+* **后缀与后缀之内不得自创变体（L1）**：新增测试必须归入上表某一类，不得自造后缀（如 `UnitTests`、`IntegrationTests`、`BenchmarkTests`、`BenchTests`）或把类型塞进类名前缀；确有一种测试**无法归入上表**时，先按 link:../general/spec-lifecycle.adoc[] 的准入判定提案**扩表**，再动手写类（见下「扩展新测试类型」）。
+* `IT` 是与业内约定（Maven Failsafe 的 `**/IT*.java`、`**/*IT.java`、`**/*ITCase.java`）**刻意对齐**的唯一非 `Tests` 后缀（依据：Maven Failsafe Plugin 的默认 includes 约定），以便开箱被识别、避免被 surefire 误跑。
+* BootTests 的"启动型"判定见下「测试分类与执行边界」；`BootTests` 中的 B 大写（`Boot` + `Tests`）。
+* **存量随动迁移、不一次性收敛**：不合上述包路径与命名的存量测试类（后缀缺失、后缀错用 `Test`、被测类名出现多余片段，如 `StringUtilsTest`、`TestsStringUtils`、`StringUtilsUnitTests`，或类型后缀错用，如单元测试用 `IT`、单元测试用 `PerfTests`）**不发动全库改造、不要求一次性改齐**（连"完全不满足"的也照旧）——**碰到哪个改哪个**：该测试类本次因需求而变动时，随动调整为定式（重命名按 link:../general/git.adoc[]「文件移动与重命名」用 `git mv` 保留历史）；本次不变动则保持原样，下次变动时再迁。用户明确要求一次性全库收敛时按其声明执行（原理见 link:../core/execution.adoc[]「规范变更的存量处理」）
+* **测试类不存在时**须按上述包路径与命名**新增**（新增测试见 link:../general/testing.adoc[]）
+* **批量测试同一被测类不同场景时，仍合并为一个测试类**放入对应 `@Nested`/用例分类，不得按场景拆成多个类；一个被测类同时有多类测试时，各类各一个类（如 `OrderServiceTests` + `OrderServiceIT`），不得合并成一个类后混用标签
+
+== 测试分类与执行边界
+
+命名不只是"取个好名字"，它与构建工具的执行边界绑定——**测试只有归入正确类别，才不会被误跑/误跳过**（执行与验证规则见同文件「执行与验证」）：
+
+* **常规测试类（`Tests`/`BootTests`/`PerfTests`/`IT` 的取舍顺序）**：先判定测试**是否自包含**（不依赖外部人工准备的环境、不依赖外部服务、可重复执行）。自包含 → `Tests`；确需容器/外部服务，但能由测试自身启动（`@SpringBootTest`、Testcontainers、嵌入式实现）→ 仍用 `Tests`（公共规范「环境与兼容」要求优先用测试专用或嵌入式替代）；**不能自包含、须人工准备真实环境** → 才用 `IT`（依据：测试替身与集成测试的诉求，见 ISTQB Glossary 的 "test double"/"integration testing"；JUnit 5 官方的 `@Tag` 过滤机制）。
+* **BootTests 的启动型判定**：满足任一即归 `BootTests`——①须由 Spring Boot 启动类/完整上下文承载，且**不能与常规测试在同一次启动内跑通**（须单独指定 profile/环境/启动参数，如 `@ActiveProfiles`、专用测试用 SpringBoot 启动类）；②需要测试专用启动依赖（如嵌入式容器、测试专用数据源/配置）；③被启动的应用本身包含需隔离的初始化（如初始化失败须单独诊断）。**仅"用了 `@SpringBootTest`"不构成 BootTests**——能自启、可重复的 Spring 测试仍属 `Tests`。
+* **`@Tag` 与类别标识（L2）**：可在类上标 `@Tag("boot")`/`@Tag("perf")`/`@Tag("it")` 便于按类别过滤，**只作分类标识，不替代后缀**（后缀才是类别判据，二者须一致，不得用一个 `@Tag` 掩盖后缀错用）。
+* **执行要求（L1）**：`PerfTests` 与 `IT` 均**不得**混入常规 `test` 阶段的执行集合（surefire 默认 includes 为 `**/Test*.java`、`**/*Test.java`、`**/*Tests.java`、`**/*TestCase.java`，`IT` 天然被排除）；须以**独立执行**方式运行（Maven Failsafe 的 `integration-test`/`verify`，或按 `@Tag` 过滤），并在项目构建配置中固定好分组，不靠人工记忆（依据：Maven Surefire Plugin 的默认 includes 约定）。`PerfTests` 的执行触发规则见 link:../general/testing.adoc[]「性能测试」。
+* **构建配置落点（L2）**：surefire/failsafe 的 includes/excludes 与 `@Tag` 分组须在 `pom.xml` 中显式配置并注释写明依据（测试分类 → 执行阶段 → 命令）；配置只允许"把某类测试放进对应阶段"，不得借配置放宽"`PerfTests`/`IT` 不随常规测试执行"这一条。
+
+== 扩展新测试类型（新增后缀前先过准入）
+
+出现上表未覆盖的测试形态时，**不得就地自创后缀**，按 link:../general/spec-lifecycle.adoc[] 的准入判定流程处理：①先判定是否**真为新形态**（多数情况只是"该用 `Tests` 还是 `IT`"的归类问题，不构成新类型）；②确需新后缀时，给出形态判据（何时用/何时不用）、执行边界（是否纳入常规 `test` 阶段、如何独立执行）与**业内既有约定或标准依据**（优先采用生态约定，如 Maven/Gradle/JUnit 的构建插件约定；确无既有约定才用项目自定后缀，并写清通用判据以支撑"举一反三"）；③扩表后同步落点：本文件表格、`check_specs.py` 的 `check_java_test_naming`（避免防线与规范脱节）、公共测试规范（若涉及跨语言的测试分类口径）、CHANGELOG（若影响引用方项目）。
+
+可选形态与候选后缀（**仅作备选示意，不是规范许可用后缀**；采用前须按上述准入判定扩表）：
+
+* **架构与依赖结构测试**（ArchUnit 等，校验分层/依赖方向/命名规则）：并入 `Tests`（按被测的关注点命名，如 `LayerRulesTests`）；类名由自身语义决定，不视为某源类的测试类。
+* **契约测试**（Pact、Spring Cloud Contract 等，校验与外部服务/消费方的契约）：消费方校验并入 `Tests`；需要提供者或代理服务才能跑的组合测试归 `IT`。
+* **消费方驱动的端到端验收**（须真实环境 + 业务验收口径）：归 `IT`；确需与"技术集成冒烟"区分时，先按准入判定扩表，不自行新增 `AcceptanceTests`/`E2ETests` 一类后缀。
+* **迁移/一次性校验测试**（如数据迁移前后比对，跑完即弃）：属**一次性脚本化产物**，写成测试方法或独立一次性校验程序，不为其新增测试类后缀。
 
 == 断言
 
@@ -26,6 +65,13 @@
 == 执行与验证
 
 * 验证以 Maven 结果为准（surefire 的 Tests run/Failures/Errors/Skipped 统计），具体见 specs/stack/maven.adoc
+* 按类别分别取统计：常规测试看 surefire 统计，`IT` 看 failsafe 统计（`verify` 阶段），`PerfTests` 看性能测试自身的对比结果（不并入常规测试结论）；哪一类没跑就**不得**声称其通过（见 link:../general/verify.adoc[]「编译/运行验证」）
+
+== 启动型与端到端测试
+
+* **`BootTests`（Spring Boot 启动型）**：须有 Spring Boot 启动类/完整上下文承载，测试专用配置（profile、数据源、嵌入式容器等）放**测试资源**（`src/test/resources`）或测试内部配置类，**不得**改主代码配置迁就测试；启动失败的用例须给出可诊断的启动日志（不得静默 `catch` 后跳过）。命名与被测类一对一（如 `OrderApplicationBootTests`）；具体启动方式随 Spring Boot 版本与项目约定，框架与配置规则见 link:../stack/spring.adoc[]
+* **`IT`（端到端/冒烟）**：依赖**外部已就绪环境**（真实 DB/消息队列/第三方服务/已部署应用），须在测试类或项目配置中**显式标注环境依赖**（所需服务、连接方式、缺失时如何跳过），环境不可用按其声明跳过并**在验证结论中如实说明未执行**（不得记为通过）；用例围绕端到端业务路径与冒烟场景，不做穷举覆盖（穷举覆盖属单元测试职责）
+* **`PerfTests`（性能）**：对比测试、排除初始化干扰等要求见 link:../general/testing.adoc[]「性能测试」；Java 中结果分析须写明对比的各类实现与原因（如反射/序列化/初始化开销）
 
 == 覆盖与变异测试
 
