@@ -31,7 +31,7 @@
 加载规则按下列分层执行（涉及即加载，不得跳过）：
 
 * 必加载层（每次工作都须加载）：
-  ** 执行原则：link:specs/core/execution.adoc[]
+  ** 执行原则（含「规范变更的存量处理」：规范新增/调整后存量**随动迁移、不一次性变更**，除非主动声明收敛）：link:specs/core/execution.adoc[]
   ** 规范优先级与最高关注项（L1/L2/L3 分级、不可降级项）：link:specs/core/priority.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言）

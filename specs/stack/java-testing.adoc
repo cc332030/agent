@@ -5,7 +5,11 @@
 == 框架与目录
 
 * 测试框架：单元测试使用 JUnit 5
-* 目录结构与命名：测试类与源类包路径保持相同——测试类（`src/test/java`）的包路径与对应源类（`src/main/java`）一致（如源类 `com.example.core.util.StringUtils`，其测试类 `StringUtilsTests` 应位于同包 `com.example.core.util`），不额外加 `test` 段等路径层
+* 目录结构与包路径（**L1 强制**）：测试类（`src/test/java`）的**包路径与对应源类（`src/main/java`）保持相同**，不额外加 `test` 段等路径层（如源类 `com.example.core.util.StringUtils`，其测试类应位于同包 `com.example.core.util`）；**并须为同一目录**——同一包路径在源码树中只允许出现一处（`src/main/java` 下）与测试树中一处（`src/test/java` 下），不得为区分测试类再追加包路径层级（如 `com.example.core.util.test.StringUtilsTests`）
+* 测试类命名（**L1 强制**）：测试类名为**被测类名相同**、加 `Tests` 后缀（如 `StringUtils` → `StringUtilsTests`、`OrderService` → `OrderServiceTests`），以此与源类区分（同包内类名不同、互不冲突）——**每个被测类一对一**：一个被测类对应一个 `<被测类名>Tests` 测试类
+  ** 存量随动迁移、不一次性收敛**：不合上述包路径与命名的存量测试类（后缀缺失、后缀错用 `Test`、或被测类名出现多余片段，如 `StringUtilsTest`、`TestsStringUtils`、`StringUtilsUnitTests`）**不发动全库改造、不要求一次性改齐**（连"完全不满足"的也照旧）——**碰到哪个改哪个**：该测试类本次因需求而变动时，随动调整为定式（重命名按 link:../general/git.adoc[]「文件移动与重命名」用 `git mv` 保留历史）；本次不变动则保持原样，下次变动时再迁。用户明确要求一次性全库收敛时按其声明执行（原理见 link:../core/execution.adoc[]「规范变更的存量处理」）
+  ** 测试类不存在时**须按上述包路径与命名**新增**（新增测试见 link:../general/testing.adoc[]）
+  ** 批量测试同一被测类不同场景时，仍合并为一个 `<被测类名>Tests` 类**放入对应 `@Nested`/用例分类，不得按场景拆成多个类
 
 == 断言
 
