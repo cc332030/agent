@@ -53,6 +53,7 @@ MECHANISMS = [
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py", "TestScopeStaysOnCommonContent 钉住 check_specs.py 不得读 git 工作区状态/HEAD"),
     ("最高关注项（L1/不可降级）不得被删或降级", "specs/core/priority.adoc", "script/check_specs.py", "check_priority_guard 钉住 P1/P2/P3 与 L1/L2/L3 分级仍在"),
     ("去重不得误删最高关注项的引用", "AGENTS.adoc", "script/check_specs.py", "check_priority_guard：最高关注项的存在性机械钉住（引用是否被删由该防线兜底发现）"),
+    ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
 ]
 
 
