@@ -20,6 +20,8 @@
 
 规范条目按 **L1 强制 / L2 建议 / L3 允许** 分级，最高关注项**不可降级**——分级定义、各级遵守要求与"强调用分级+引用、不用重复书写"的做法见 link:specs/core/priority.adoc[]（必加载层）。
 
+变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
+
 == 分类与懒加载（加载调度器）
 
 规范按"必加载层 / 通用层 / 技术栈层 / 项目类型层 / 平台层"分层分类存储于 `specs/` 下，**按需懒加载**（避免常驻加载不需要的规范、节省上下文）。懒加载是手段，**"强制不漏"是底线**——凡工作涉及对应主题或项目具备对应技术特征，必须加载对应规范，不得因"规范文件不在常驻上下文"而凭记忆或仅凭本入口文件猜测执行。
@@ -33,6 +35,7 @@
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言）
   ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件） → link:specs/general/script.adoc[]（通用脚本规范，跨语言）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
+  ** 写/更新变更记录（changelog，识别特征：存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt`、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]
   ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
   ** 模块级文档组织（存在**多模块结构**，或涉及"模块文档放哪、根 `doc/` 放什么"的归属判定） → link:specs/general/doc-module.adoc[]

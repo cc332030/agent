@@ -37,7 +37,7 @@
 * `AGENTS.adoc`（根目录） — **Agent 项目自身规范**（本仓库维护专用，不随通用规范分发）：声明本仓库通用规范与项目自身规范的隔离，并收录规范集合的维护规则（规范管理）与检查脚本/CI 等 Agent 项目自身工具。引用方项目无需也不应引入本文件。本文件采用 `AGENTS.adoc` 命名、位于仓库根目录，会被平台自动识别为本仓库的 agent 规范。
 * `specs/` — 通用规范分类目录，按"必加载层 / 通用层 / 技术栈层 / 项目类型层 / 平台层"分层存储：
   ** `specs/core/` — 必加载层：执行原则、规范优先级与最高关注项（link:specs/core/priority.adoc[]，L1/L2/L3 分级与不可降级项）
-  ** `specs/general/` — 通用层：通用编码、文档、git、code review、agent 协作、测试、验证、脚本；项目类型层规范（如 doc-tool.adoc）也存放于本目录，按项目主动声明懒加载
+  ** `specs/general/` — 通用层：通用编码、文档、变更日志（changelog）、git、code review、agent 协作、测试、验证、脚本；项目类型层规范（如 doc-tool.adoc）也存放于本目录，按项目主动声明懒加载
   ** `specs/stack/` — 技术栈层：java、java 工具类、spring、maven、java 测试、bash/python/powershell 脚本（按项目类型加载）
   ** `specs/platform/` — 平台层：cnb
 * `script/` — 配套脚本目录（多数为 Agent 项目自身工具，见根目录 `AGENTS.adoc`）：
