@@ -2,29 +2,43 @@
 """
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
-检查项：
-  1. AsciiDoc 基础语法（块级结构、反引号路径）通过 asciidoctor 验证（若已安装）。
-  2. 所有 spec 文件（含 AGENTS_COMMON.adoc）中的每个 `specs/...` 引用文件必须真实存在
-     （既校验 AGENTS_COMMON.adoc 加载调度器登记/引用的文件，也校验各 spec 文件之间互相
-     引用的文件，避免 spec 间交叉引用悬空）。
-  3. AGENTS_COMMON.adoc 技术栈层登记的栈文件，必须与 specs/stack/ 实际文件双向一致
-     （既不能登记不存在的栈，也不能漏登记已存在的栈）。
-  4. 禁止误导入私有强约束约定（如 ctool4j 的 C/IC 前缀、@Bean c 前缀等被当作
-     强制规范的表述；中性示例允许保留）。
-  5. 调度器登记完整性：凡被其他规范文件引用的 `specs/...` 规范文件，必须同时在
-     AGENTS_COMMON.adoc 加载调度器中登记（登记集合 ⊇ 被引用集合），避免"只建
-     文件不登记"导致该规范永远不会被加载、其中规则实际失效。
+检查项（每项对应一个 check_ 函数，逐条见各函数 docstring 的判定口径）：
+  1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
+     当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
+  2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
+  3. 节名引用存在性：`link:x.adoc[]「节名」` 引用的节必须真实存在，防改名后静默悬空。
+  4. 技术栈一致：AGENTS_COMMON.adoc 技术栈层登记与 specs/stack/ 实际文件双向一致。
+  5. 调度器登记完整性：被引用的规范文件必须都在加载调度器中登记（登记集合 ⊇ 被引用
+     集合），防"只建文件不登记"导致规则实际失效。
+  6. 私有约定误导入：禁止把项目私有强约束（C/IC 前缀、@Bean c 前缀等）当作通用规范。
+  7. 历史来源声明：禁止指向旧文件/旧命名/旧位置的历史来源注记（会让引用悬空）。
+  8. INSTALL 模板：INSTALL.adoc 的 AGENTS.adoc 入口模板代码块须逐字保留（含换行空行）。
+  9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；
+     "是否有价值、是否长篇大论"属语义判断，交人 review，不设字符数阈值以免误伤。
+ 10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
+ 11. 规范优先级防线：specs/core/priority.adoc 必须仍在，且 L1/L2/L3 分级与最高关注项
+     （P1 git mv / P2 完整性校验 / P3 内容不减少）仍存在、仍标为 L1，防被删/降级。
+ 12. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
+
+范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为），
+**不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（`AGENTS_COMMON.adoc`
++ `specs/`，可另行下载 `script/clean_tmp.py`），其内部操作在本仓库的校验中不可见。
+
+用法：
+  python3 script/check_specs.py             # 阶段级进度 + 错误清单（默认）
+  python3 script/check_specs.py --verbose   # 追加逐文件进度（排查某文件时用）
+  python3 script/check_specs.py --help
 
 退出码：0 通过，1 存在不规范项。
 """
 
+import argparse
 import os
 import posixpath
 import re
 import shutil
 import sys
 import subprocess
-import time
 
 # 兼容 Windows GBK 等非 UTF-8 终端，统一按 UTF-8 输出
 try:
@@ -64,25 +78,38 @@ HISTORICAL_NOTE_PATTERNS = [
 ]
 
 errors = []
-_phase_start = 0.0
+
+
+VERBOSE = False
 
 
 def log(msg: str) -> None:
-    """带时间戳的进度日志，立即 flush 避免被缓冲吞掉。"""
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    """阶段级进度日志（始终输出）。立即 flush：既要给人看，也可能被 CI 与测试实时捕获。
+
+    不打时间戳：本脚本是纯本地毫秒级校验，时间戳只会淹没真正重要的进度与结论
+    （在单元测试输出中尤其明显），对排查没帮助。
+    """
+    print(msg, flush=True)
+
+
+def detail(msg: str) -> None:
+    """逐文件级进度日志（默认**不输出**，`--verbose` 时输出）。
+
+    默认静默：全量检查会对每个文件逐条打印（26 个文件 × 多项检查），在 CI 日志与
+    单元测试输出里数百行噪音会盖住真正有用的信息（进度小结与错误清单）。
+    """
+    if VERBOSE:
+        print(msg, flush=True)
 
 
 def phase(name: str) -> None:
     """标记一个检查阶段的开始。"""
-    global _phase_start
-    _phase_start = time.time()
     log(f"▶ {name}...")
 
 
 def phase_done() -> None:
-    """标记当前阶段结束，打印耗时。"""
-    elapsed = time.time() - _phase_start
-    log(f"  ✓ 完成 ({elapsed:.1f}s)")
+    """标记当前阶段结束。"""
+    log("  ✓ 完成")
 
 
 def err(msg: str, path: str = "", line: int = 0) -> None:
@@ -93,6 +120,13 @@ def err(msg: str, path: str = "", line: int = 0) -> None:
 
 
 def collect_adoc_files():
+    """收集纳入检查的 .adoc 文件。
+
+    口径：`specs/` 下全部规范文件 + 通用规范入口 `AGENTS_COMMON.adoc` + 项目自身规范
+    `AGENTS.adoc` + 安装文档 `INSTALL.adoc`——即"随规范集合维护的全部文档"，
+    **不止 specs/ 一个目录**（下文各检查的 docstring 一律以本口径为准）。
+    README/PROMPTS 等面向使用者的说明文档不在本集合内（其维护检查见 CI 其余步骤）。
+    """
     result = []
     for root, _, files in os.walk(SPECS_DIR):
         for f in files:
@@ -124,7 +158,7 @@ def check_asciidoctor_syntax():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        log(f"  [{i}/{len(files)}] 检查 {rel}")
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
         try:
             r = subprocess.run(
                 ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],
@@ -141,6 +175,17 @@ def _is_placeholder_ref(ref: str) -> bool:
     return (ref.endswith("/")
             or ref.endswith("...")
             or "<" in ref or ">" in ref)
+
+
+def _ref_base(f: str) -> str:
+    """某规范文件内 `link:` 引用的解析基准（相对仓库根目录，根文件为空串）。
+
+    AGENTS_COMMON.adoc 与 INSTALL.adoc、AGENTS.adoc 均位于仓库根，`specs/...` 惯例
+    从仓库根解析；其余文件按"相对当前文件所在目录"解析（与 IDE/浏览器相对语义一致）。
+    """
+    if f in (GENERIC_FILE, INSTALL_FILE):
+        return ""
+    return os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
 
 
 def extract_specs_refs(text: str, base_dir: str = ""):
@@ -199,12 +244,8 @@ def check_refs_exist():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
-        log(f"  [{i}/{len(files)}] 扫描 {rel}")
+        base = _ref_base(f)
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
         with open(f, encoding="utf-8") as fh:
             text = fh.read()
         refs = extract_specs_refs(text, base)
@@ -262,10 +303,7 @@ def check_dispatcher_registry():
         registered = set(extract_specs_refs(fh.read(), ""))
     referenced = set()
     for f in collect_adoc_files():
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        base = _ref_base(f)
         with open(f, encoding="utf-8") as fh:
             referenced |= set(extract_specs_refs(fh.read(), base))
     missing = sorted(referenced - registered)
@@ -293,7 +331,7 @@ def check_forbidden_patterns():
             for pat, desc in FORBIDDEN_PATTERNS:
                 if re.search(pat, line):
                     if not found_in_file:
-                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        detail(f"  [{i}/{len(files)}] 检查 {rel}")
                         found_in_file = True
                     err(f"{desc}", rel, j)
         checked += 1
@@ -320,7 +358,7 @@ def check_historical_notes():
                 for pat, desc in HISTORICAL_NOTE_PATTERNS:
                     if re.search(pat, line):
                         if not found_in_file:
-                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            detail(f"  [{i}/{len(files)}] 检查 {rel}")
                             found_in_file = True
                         err(f"{desc}（『不保留无用的历史来源声明』），应删除或改为直接指向当前有效表述", rel, j)
         checked += 1
@@ -399,11 +437,7 @@ def check_link_refs():
     files = collect_adoc_files()
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        base = _ref_base(f)
         found_in_file = False
         with open(f, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
@@ -413,7 +447,7 @@ def check_link_refs():
                     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("#"):
                         continue
                     if not found_in_file:
-                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        detail(f"  [{i}/{len(files)}] 检查 {rel}")
                         found_in_file = True
                     if target.startswith("/"):
                         err("内部链接禁止用根绝对路径（link:/specs/... 在 IDE 中会按文件系统根解析、无法跳转），"
@@ -475,10 +509,7 @@ def check_section_refs():
     checked = 0
     for i, f in enumerate(files, 1):
         rel = os.path.relpath(f, REPO_ROOT)
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+        base = _ref_base(f)
         found_in_file = False
         with open(f, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
@@ -499,7 +530,7 @@ def check_section_refs():
                     for sec in re.findall(r"「([^」]+)」", m.group(2)):
                         section = sec.strip()
                         if not found_in_file:
-                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            detail(f"  [{i}/{len(files)}] 检查 {rel}")
                             found_in_file = True
                         checked += 1
                         simple = re.sub(r"[（(].*$", "", section).strip()
@@ -507,6 +538,133 @@ def check_section_refs():
                             err(f"引用了不存在的节名: {resolved}「{section}」"
                                 f"（该节可能已改名/删除，须同步更新引用）", rel, j)
     log(f"  校验 {checked} 处节名引用")
+    phase_done()
+
+
+# 『文档不得注水』的机械可判定形态（保守口径，只拦"必然成立"的形态，避免误伤
+# 简短但有实质内容的条目——语义判断不在机械检查范围，由人 review 承担）。
+# 占位词：整段除它之外没有任何实质内容时，才算"无实质内容的占位段"。
+# 判定刻意**不含字符数阈值**——"参考：""内容为：" 这类短引导句是正常文档写法，
+# 按字数判注水必然误伤；短不等于水，篇幅问题属语义判断、交人 review。
+FILLER_PLACEHOLDER_WORDS = ("此处", "本段", "待补", "待完善", "待补充", "后续补充",
+                            "内容同上", "详见上文", "TODO", "略")
+FILLER_DUP_MIN_CHARS = 12       # 判重段落的实质字符下限（只滤掉"重复标点/符号行"，短而真实的重复条目仍应报）
+FILLER_MIN_SUBSTANCE_CHARS = 4  # 段落"实质字符"下限：低于此值视为格式分隔行（如 `：`、`——`），不判注水
+# 承载实质内容的行结构：列表条目、表格行、链接、块属性、注释行
+MEANINGFUL_LINE_PAT = re.compile(r"^\s*(?:\*|\d+\.|\||\[|<|link:|include::)")
+# 判"是否只剩占位词"时需忽略的标点与格式符
+FILLER_NOISE_PAT = re.compile(r"[\s*`\-—、。，,：:；;（）()\[\]\"\'“”~…]")
+
+
+def _iter_blocks(path: str):
+    """按 AsciiDoc 块结构切分正文，逐块产出 (起始行号, 行列表, 是否含承载行)。
+
+    代码块（`----` 定界）内容、节标题与块属性行不计入段落；空行分段。列表/表格等
+    结构行归入所在段，并标记该段是否"含承载实质内容的行"——只有**整段都没有承载行**
+    时才可能是注水段（避免把正常规则条目误判为注水）。
+    """
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.readlines()
+    in_block = False
+    para, start, meaningful = [], 0, False
+    for i, raw in enumerate(lines, 1):
+        line = raw.rstrip("\n").rstrip("\r")
+        if line.strip() == "----":
+            in_block = not in_block
+            continue
+        if in_block:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            if para:
+                yield start, para, meaningful
+                para, start, meaningful = [], 0, False
+            continue
+        if re.match(r"^=+\s+", stripped) or stripped.startswith(":") or stripped.startswith("["):
+            if para:
+                yield start, para, meaningful
+                para, start, meaningful = [], 0, False
+            continue
+        if not para:
+            start = i
+        para.append(line)
+        if MEANINGFUL_LINE_PAT.match(line):
+            meaningful = True
+    if para:
+        yield start, para, meaningful
+
+
+def _para_metrics(para: list) -> tuple:
+    """统计段落：去格式符后的实质字符数、条目数、是否含列表标记。"""
+    texts, items, has_bullet = set(), 0, False
+    for line in para:
+        s = line.strip()
+        if re.match(r"^\s*(?:[*]|\d+\.)\s+", line):
+            has_bullet = True
+            items += 1
+        norm = FILLER_NOISE_PAT.sub("", s)
+        if norm:
+            texts.add(norm)
+    return len("".join(sorted(texts))), items, has_bullet
+
+
+def _placeholder_only(text: str) -> bool:
+    """整段是否"只剩占位词、没有别的实质内容"。
+
+    去掉占位词与标点、格式符后若不再剩任何字符，即判为占位段（如"此处待补充""（略）"）；
+    只要还留有别的字词（"参考：""内容为：""第 3 步：略"）就不算——短引导句与
+    "标题词 + 后接内容"都是正常文档写法，机械检查不得误伤。按词长从长到短去除，
+    避免先去掉短词（"待补"）导致长词（"待补充"）只被去掉前缀、残留无关字符。
+    """
+    rest = text
+    for word in sorted(FILLER_PLACEHOLDER_WORDS, key=len, reverse=True):
+        rest = rest.replace(word, "")
+    return FILLER_NOISE_PAT.sub("", rest) == ""
+
+
+def _substance_chars(text: str) -> int:
+    """段落的"实质字符"数（去掉标点/格式符后剩下的字数）。
+
+    用于滤掉纯格式行（如 `：`、`——`、`***`）——它们既非占位也非内容，
+    判注水属误报，故低于下限时不参与占位段/重复段判定。
+    """
+    return len(FILLER_NOISE_PAT.sub("", text))
+
+
+def check_filler_docs():
+    """『文档不得注水』机械兜底（只拦机械可判定、必然成立的形态）。
+
+    背景：规范要求"禁止无意义、划水、凑字数"，若只停留在文档里的要求、无任何抓手，
+    则属"定义未执行"。本检查保守地钉住两类必然成立、且不误伤正常内容的形态：
+      1) 纯占位段：整段除占位词外无任何实质内容（"此处待补充"这类占位）；
+      2) 同段重复：同一文件内出现**完全逐字相同且承载实质内容**的段落（凑数堆砌）。
+    "内容是否有价值、是否长篇大论、是否流水账"属语义判断，不作机械判定——交人
+    review 承担；机械检查只盯"必然成立"的形态，避免把简短但真实的条目判成注水。
+    """
+    phase("文档注水检查")
+    files = collect_adoc_files()
+    for i, f in enumerate(files, 1):
+        rel = os.path.relpath(f, REPO_ROOT)
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
+        seen_paras = set()
+        for lineno, para, meaningful in _iter_blocks(f):
+            text = " ".join(p.strip() for p in para).strip()
+            # 0) 纯格式行（`：`、`——`、`***` 等）：无实质字符，不判注水（防误报）
+            if _substance_chars(text) < FILLER_MIN_SUBSTANCE_CHARS:
+                continue
+            # 1) 纯占位段：整段无承载行，且除占位词外没有实质内容
+            if not meaningful and _placeholder_only(text):
+                err(f"疑似注水：无实质内容的占位段『{text[:30]}』"
+                    "（『文档不得注水』），补上可核对的实质内容或删除", rel, lineno)
+                continue
+            # 2) 同段重复：逐字相同且承载实质内容的段落（凑数堆砌）——**对全部段落判重**，
+            #    不只判"含列表/表格行"的段落：否则同段重复出现在节标题分隔的两处时会被漏掉
+            if _substance_chars(text) >= FILLER_DUP_MIN_CHARS:
+                if text in seen_paras:
+                    err(f"疑似注水：与上文完全重复的段落『{text[:30]}』"
+                        "（『文档不得注水』），合并去重", rel, lineno)
+                    continue
+                seen_paras.add(text)
     phase_done()
 
 
@@ -534,7 +692,70 @@ def check_principle_guard():
     phase_done()
 
 
-def main():
+def check_priority_guard():
+    """『规范优先级防线』：最高关注项必须仍在、且仍为最高级（L1）。
+
+    背景：规范已按业界做法（RFC 2119 / ISO shall-should-may / 关键性分级）分为
+    L1 强制 / L2 建议 / L3 允许三级，并单列"最高关注项"（不可降级）。最大的风险是
+    **重构/去重时把最高关注项删掉或降级**——这正是本仓库发生过的问题（同一最高
+    关注项在多处出现被 AI 判为"重复"而合并）。本检查机械钉住：
+
+      * specs/core/priority.adoc 存在（分级与最高关注项的落点）；
+      * 三级定义（L1 强制 / L2 建议 / L3 允许）仍存在；
+      * 三个最高关注项 P1/P2/P3 仍存在，且其关联的 L1 关键词仍出现；
+      * specs/core/execution.adoc 仍保留 `git mv` 铁律（最高关注项 P1 的必加载层落点）。
+
+    只钉"存在性与级别"，不改写内容——语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("规范优先级防线检查")
+    rel_priority = "specs/core/priority.adoc"
+    path = os.path.join(REPO_ROOT, rel_priority)
+    if not os.path.isfile(path):
+        err("缺少规范优先级文件 specs/core/priority.adoc——L1/L2/L3 分级与最高关注项无处定义",
+            rel_priority)
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    # 分级定义必须齐全（防只留 L1、删掉 L2/L3 或反之）
+    for key in ("L1 强制", "L2 建议", "L3 允许"):
+        if key not in text:
+            err(f"规范优先级防线被破坏：{rel_priority} 缺失分级定义『{key}』", rel_priority)
+    # 最高关注项 P1/P2/P3 必须仍在，且须各自保持"最高/L1"定性
+    for pid, name in (("P1", "git mv"), ("P2", "完整性"), ("P3", "内容不得减少")):
+        if pid not in text:
+            err(f"规范优先级防线被破坏：{rel_priority} 缺失最高关注项 {pid}（{name}）——"
+                "最高关注项不得被删除或降级", rel_priority)
+        elif "不可降级" not in text:
+            err(f"规范优先级防线被破坏：{rel_priority} 缺失『不可降级』声明——"
+                "最高关注项须明确只能加强、不得削弱", rel_priority)
+    # 最高关注项 P1 的必加载层落点仍须保留 git mv 铁律
+    exec_path = os.path.join(REPO_ROOT, "specs/core/execution.adoc")
+    if not os.path.isfile(exec_path):
+        err("缺少 specs/core/execution.adoc，最高关注项 P1（git mv）的必加载层落点丢失",
+            "specs/core/execution.adoc")
+    else:
+        with open(exec_path, encoding="utf-8") as fh:
+            exec_text = fh.read()
+        if "git mv" not in exec_text:
+            err("规范优先级防线被破坏：specs/core/execution.adoc 缺失 `git mv` 铁律——"
+                "最高关注项 P1 的必加载层落点被删除/改写", "specs/core/execution.adoc")
+    phase_done()
+
+
+def main(argv=None) -> int:
+    """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
+
+    参数：`-v/--verbose` 打开逐文件进度日志（默认只打阶段级进度与最终结论）。
+    """
+    global VERBOSE
+    parser = argparse.ArgumentParser(
+        description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
+                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线 + AsciiDoc 语法）")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
+    args = parser.parse_args(argv)
+    VERBOSE = args.verbose
+
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
     print()
@@ -547,7 +768,9 @@ def main():
     check_forbidden_patterns()
     check_historical_notes()
     check_install_codeblock()
+    check_filler_docs()
     check_principle_guard()
+    check_priority_guard()
     check_asciidoctor_syntax()
 
     print()
@@ -555,10 +778,11 @@ def main():
         log(f"发现 {len(errors)} 个规范性问题：")
         for e in errors:
             print("  - " + e)
-        sys.exit(1)
+        return 1
     log("OK 规范检查全部通过。")
-    sys.exit(0)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+
