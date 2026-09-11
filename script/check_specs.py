@@ -56,6 +56,8 @@ GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
 INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
+# 本仓库自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围）
+PROJECT_FILE = os.path.join(REPO_ROOT, "AGENTS.adoc")
 
 # 公共任务提示词（非规范本体，但属本仓库维护范围）：登记入口、正文目录与公共片段。
 # 提示词侧重点错即方向错（后续操作全做错），故对「主侧重 + 优先级」加机械防线，
@@ -144,9 +146,8 @@ def collect_adoc_files():
                 result.append(os.path.join(root, f))
     result.append(GENERIC_FILE)
     # Agent 项目自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围，一并校验）
-    project = os.path.join(REPO_ROOT, "AGENTS.adoc")
-    if os.path.isfile(project):
-        result.append(project)
+    if os.path.isfile(PROJECT_FILE):
+        result.append(PROJECT_FILE)
     # 安装文档（其内代码块模板逐字保留，纳入机械校验，避免模板被折叠/丢失换行）
     if os.path.isfile(INSTALL_FILE):
         result.append(INSTALL_FILE)
@@ -190,10 +191,13 @@ def _is_placeholder_ref(ref: str) -> bool:
 def _ref_base(f: str) -> str:
     """某规范文件内 `link:` 引用的解析基准（相对仓库根目录，根文件为空串）。
 
-    AGENTS_COMMON.adoc 与 INSTALL.adoc、AGENTS.adoc 均位于仓库根，`specs/...` 惯例
-    从仓库根解析；其余文件按"相对当前文件所在目录"解析（与 IDE/浏览器相对语义一致）。
+    AGENTS_COMMON.adoc 与 INSTALL.adoc、AGENTS.adoc 均位于仓库根，其引用按**从仓库根
+    开始**的路径解析（与 AsciiDoc 中根级文件的惯例写法一致）；其余文件按"相对当前文件
+    所在目录"解析（与 IDE/浏览器相对语义一致）。注：根文件按仓库根解析时，对同目录文件
+    的 `link:README.adoc[]` 这类写法**检查器无法与本文件约定区分**（`README.adoc` 既非
+    specs/ 下、也不在检查集合内），故根文件的跨文件引用统一按仓库根基准书写。
     """
-    if f in (GENERIC_FILE, INSTALL_FILE):
+    if f in (GENERIC_FILE, INSTALL_FILE, PROJECT_FILE):
         return ""
     return os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
 

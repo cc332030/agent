@@ -48,16 +48,19 @@ def _mk_blackbox_base(root: str) -> str:
 class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
-        self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE)
+        self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE,
+                      cm.PROJECT_FILE)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.SPECS_DIR = os.path.join(self.root, "specs")
         cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
+        cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
 
     def tearDown(self) -> None:
         cm.errors.clear()
-        cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE = self._orig
+        (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.INSTALL_FILE,
+         cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
