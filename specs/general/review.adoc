@@ -1,6 +1,6 @@
 = code review 规范（通用层）
 
-以下规范适用于 code review 活动。
+以下规范适用于 code review 活动（依据：IEEE 1028 软件评审与审查标准；安全视角参考 OWASP Code Review Guide）。
 
 == 问题记录
 

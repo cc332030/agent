@@ -1,6 +1,6 @@
 = CI/CD 规范（通用层）
 
-以下规范适用于 CI/CD（持续集成/部署，含 GitHub Actions、CNB、Jenkins 等流水线）配置的编写与调优。某技术栈/平台的构建细节见 `specs/stack/`、`specs/platform/` 对应文件。
+以下规范适用于 CI/CD（持续集成/部署，含 GitHub Actions、CNB、Jenkins 等流水线）配置的编写与调优。某技术栈/平台的构建细节见 `specs/stack/`、`specs/platform/` 对应文件。（依据：The Twelve-Factor App 关于"构建/发布/运行"分离与配置外置的原则，GitHub Actions 官方文档 关于 setup/缓存/版本固定的实践）
 
 适用范围：**编写/调优 CI/CD 脚本时即须遵守本规范**（agent 开发、AI 生成或修改流水线时都按本规范一次写对，不得先写出会用默认运行时试探/可能失败的流水线、等跑失败再调）；**CI 内调用 AI 执行任务**（如自动生成/修复脚本、处理构建）时，该 AI 亦须遵守通用 agent 规范与本规范。
 

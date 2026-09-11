@@ -1,6 +1,6 @@
 = Python 脚本规范（技术栈层）
 
-以下规范适用于以 Python 编写的脚本文件。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
+以下规范适用于以 Python 编写的脚本文件（风格依据：PEP 8 代码风格、PEP 257 文档字符串约定、PEP 20 之"Python 之禅"）。跨所有脚本语言的通用格式规则见 link:../general/script.adoc[]，脚本中的编码规则遵守 link:../general/coding.adoc[]；本文件只收录本栈专属规则。
 
 == 文件头与解释器
 
