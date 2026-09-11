@@ -18,6 +18,12 @@
 
 以下规范适用于本规范集合本身的维护，属 Agent 项目自身规范。
 
+== 规范准入（分类与准入的落点）
+
+* 分类、分层与准入：一条规则属公共规范还是项目规范、属哪一层、是否该收进规范集合（七问准入判定），以及用户提出新增规范时的提案校验（合理性、是否已有标准、是否已有条目、升级与举一反三）见通用规范 link:specs/general/spec-lifecycle.adoc[]。本仓库维护**公共内容**时按该文件执行；项目自身的私有规则写在本文件，不进 `specs/`。
+* 准入判定必须留痕：新增/调整规范条目时，须能逐项回答准入七问（通用性、可执行、非重复、有依据、有承载价值、有落点、成本可接受）；不得以"用户要求"为由跳过判定直接收录。
+* 规范准入防线：分类与准入规范文件、调度器登记项、以及"提案校验（是否已有标准 / 是否已有条目 / 升级举一反三）"要点不得被删或降级，由 `script/check_specs.py` 的 `check_spec_admission_guard` 机械钉住（见下「Agent 项目自身工具声明」）。
+
 == 规范分层
 
 * 规范分层：规范只收录通用规则；局部决策/已知取舍写在对应代码注释，不写入全局规范。规范按"必加载层 / 通用层 / 技术栈层 / 项目类型层 / 平台层"分层存储于 `specs/` 下，分层定义、加载调度与技术栈扩展约定见通用规范 `AGENTS_COMMON.adoc`「分类与懒加载」「技术栈扩展约定」
@@ -52,7 +58,7 @@
 
 以下工具属于 **Agent 项目自身**（维护本规范集合用），不属于通用规范、不随 `specs/` 分发：
 
-* `script/check_specs.py` — 规范完整性机械校验（引用存在、链接格式、**节名引用存在**、技术栈一致、**调度器登记完整**、私有约定、历史来源声明、INSTALL 模板、**文档注水**、要点防线、**优先级防线（最高关注项 P1/P2/P3 不得被删/降级）**、**提示词防线（各提示词主侧重/方向与 L1/L2/L3 优先级不得被删/降级）** + AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查 git 工作区状态、不检查引用方项目**，检查项清单见其文件头 docstring）；配套测试 `script/check_specs_test.py`（含 `TestScopeStaysOnCommonContent` 钉住上述范围、`TestCheckPriorityGuard` 钉住最高关注项、`TestCheckPromptsPrimary` 钉住提示词主侧重与优先级）
+* `script/check_specs.py` — 规范完整性机械校验（引用存在、链接格式、**节名引用存在**、技术栈一致、**调度器登记完整**、私有约定、历史来源声明、INSTALL 模板、**文档注水**、要点防线、**优先级防线（最高关注项 P1/P2/P3 不得被删/降级）**、**提示词防线（各提示词主侧重/方向与 L1/L2/L3 优先级不得被删/降级）** + **规范准入防线（分类/准入规范文件、调度器登记、提案校验要点不得被删或降级）** + AsciiDoc 语法；**只校验本仓库维护的规范/模板文本，不检查 git 工作区状态、不检查引用方项目**，检查项清单见其文件头 docstring）；配套测试 `script/check_specs_test.py`（含 `TestScopeStaysOnCommonContent` 钉住上述范围、`TestCheckPriorityGuard` 钉住最高关注项、`TestCheckAdmissionGuard` 钉住规范准入、`TestCheckPromptsPrimary` 钉住提示词主侧重与优先级）
 * `script/check_effective.py` — "定义未执行"深度核验工具；配套测试 `script/check_effective_test.py`
 * `.github/workflows/check-specs.yml` — 本仓库 CI：在 push/PR 上运行上述校验及其配套测试（**只做确定性校验**；面向语义的规范审查交人 review，不在 CI 中调用外部 AI）
 

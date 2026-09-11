@@ -488,6 +488,86 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_spec_admission_guard（规范准入防线：分类/准入与提案校验口径不得被删）
+# --------------------------------------------------------------------------- #
+class TestCheckAdmissionGuard(CheckSpecsTestCase):
+    """钉住规范分类与准入文件的存在性、要点、调度器登记与项目落点。
+
+    准入口径（公共/项目归属、分层判定、该不该收、提案如何校验与升级）是后续新增
+    规范的判定依据，被"精简/去重"顺手删掉后新增就会回到零散追加，故与最高关注项
+    一样加机械防线。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_admission = cm.ADMISSION_FILE
+        cm.ADMISSION_FILE = os.path.join(self.root, "specs", "general",
+                                         "spec-lifecycle.adoc")
+
+    def tearDown(self) -> None:
+        cm.ADMISSION_FILE = self._orig_admission
+        super().tearDown()
+
+    def _write_valid(self):
+        # 实现用「仓库根相对路径」登记/引用（与调度器口径一致），测试文件写在临时根下
+        self.write("specs/general/spec-lifecycle.adoc",
+                   "= 规范分类与准入\n\n"
+                   "== 公共规范还是项目规范（归属判定）\n\n"
+                   "== 准入判定（该不该收进规范集合）\n\n"
+                   "== 新增规范的提案校验\n\n"
+                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "通用层登记 `specs/general/spec-lifecycle.adoc`")
+        self.write("AGENTS.adoc", "见 `specs/general/spec-lifecycle.adoc`")
+
+    def test_valid_admission_spec_passes(self):
+        self._write_valid()
+        cm.check_spec_admission_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_admission_file_reports(self):
+        # 反例：准入规范文件整体被删（新增规范失去判定依据）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc", "= t")
+        cm.check_spec_admission_guard()
+        self.assertIn("缺少规范分类与准入文件", self.error_texts())
+
+    def test_dropped_key_point_reports(self):
+        # 反例：准入判定被删（只剩归属判定）→ 准入抓手失效
+        self.write("specs/general/spec-lifecycle.adoc",
+                   "= t\n\n== 公共规范还是项目规范\n\n== 提案校验\n\n"
+                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/spec-lifecycle.adoc`")
+        self.write("AGENTS.adoc", "见 `specs/general/spec-lifecycle.adoc`")
+        cm.check_spec_admission_guard()
+        self.assertIn("准入判定", self.error_texts())
+
+    def test_dropped_escalation_point_reports(self):
+        # 反例：举一反三（升级要求）被删 → 新增只会照抄用户原话
+        self.write("specs/general/spec-lifecycle.adoc",
+                   "= t\n\n== 公共规范还是项目规范\n\n== 准入判定\n\n"
+                   "== 提案校验\n\n检查是否已有标准；检查是否已有本项目条目。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/spec-lifecycle.adoc`")
+        self.write("AGENTS.adoc", "见 `specs/general/spec-lifecycle.adoc`")
+        cm.check_spec_admission_guard()
+        self.assertIn("举一反三", self.error_texts())
+
+    def test_not_registered_in_dispatcher_reports(self):
+        # 反例：文件存在但未登记调度器 → 永不被加载、规则实际失效
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_spec_admission_guard()
+        self.assertIn("未在加载调度器登记", self.error_texts())
+
+    def test_missing_project_landing_point_reports(self):
+        # 反例：AGENTS.adoc 未指向准入规范 → 本仓库新增规范时不按其执行
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目自身规范\n")
+        cm.check_spec_admission_guard()
+        self.assertIn("维护落点", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
 # check_section_refs（节名引用存在性：防改名后引用悬空）
 # --------------------------------------------------------------------------- #
 class TestCheckSectionRefs(CheckSpecsTestCase):
