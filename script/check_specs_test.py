@@ -465,8 +465,18 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
 ----
 """
 
+    # 入口文件名规则（默认 `AGENTS.adoc` + 兼容已存在的 `AGENTS.md`），与真实 INSTALL.adoc 同口径；
+    # 单独一段便于反例只去掉它（钉住该规则被删时能被机械校验发现）。
+    FILENAME_RULES = """
+== 已存在 AGENTS 文档
+
+先检查根目录是否已存在 agent 规范文档，按 `AGENTS.adoc` → `AGENTS.md` 顺序取第一个命中者：仅 `AGENTS.md`
+存在时在它上面融合，文件名保持 `AGENTS.md`、**不重命名、不迁移**；已存在 `AGENTS.adoc` 时**不另建** `AGENTS.md`。
+"""
+
     def test_wellformed_template_passes(self):
-        self.write("INSTALL.adoc", self.TEMPLATE)
+        # 正例须含入口文件名规则（默认 AGENTS.adoc + 兼容 AGENTS.md），与真实 INSTALL.adoc 同口径
+        self.write("INSTALL.adoc", self.TEMPLATE + self.FILENAME_RULES)
         cm.check_install_codeblock()
         self.assertEqual(cm.errors, [])
 
@@ -506,6 +516,23 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
         self.write("INSTALL.adoc", bad)
         cm.check_install_codeblock()
         self.assertIn("定界符", self.error_texts())
+
+    def test_agents_md_only_in_fused_section_reports(self):
+        # 反例：兼容规则只写"按 AGENTS.md 融合"，漏掉"不重命名 / 不另建"（会重命名或分叉出两个入口）
+        doc = self.TEMPLATE + (
+            "\n== 已存在 AGENTS 文档\n\n"
+            "仅 `AGENTS.md` 存在时在它上面融合（文件名为 `AGENTS.md`）。\n")
+        self.write("INSTALL.adoc", doc)
+        cm.check_install_codeblock()
+        self.assertIn("入口文件名规则被破坏", self.error_texts())
+
+    def test_dropping_agents_md_compat_reports(self):
+        # 反例：只认 AGENTS.adoc、把 AGENTS.md 兼容规则删掉（既有 AGENTS.md 的项目无法安装）
+        self.write("INSTALL.adoc", self.TEMPLATE)  # TEMPLATE 不含 FILENAME_RULES
+        cm.check_install_codeblock()
+        self.assertNotEqual(cm.errors, [])
+        self.assertIn("入口文件名规则被破坏", self.error_texts())
+        self.assertIn("AGENTS.md", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #
