@@ -17,8 +17,11 @@
 == 配置
 
 * 配置项统一用 `@ConfigurationProperties` 绑定（类型安全），不在业务代码中散落 `@Value`；`@Value` 仅限少量简单配置
+* 配置类不写逻辑（**任何情况都不允许**）：`@ConfigurationProperties` 类与 `@Configuration` 类只承载"配置项声明 + 按配置装配对象"，逻辑一律下沉到工具类或 Service——取值兜底、条件判断、格式转换、派生值与数据加工**一律不在配置类中做**，只放字段与访问器（判定标准：条件分支/循环为零、不做计算与对外访问、取值用工具方法或语言内置写法；被容器调用的 `@Bean` 装配方法另见 link:../general/coding.adoc[]「类设计」）
 * `@ConfigurationProperties` 类须提供校验（`@Validated` + JSR-303 注解），启动即校验配置合法性，避免运行期才发现配置错误
+* `@ConfigurationProperties` 类的校验注解只做**声明式**校验：校验逻辑写在自定义 `ConstraintValidator` 或工具类中，不得在配置类里写校验/判空逻辑
 * 配置项须有默认值或显式必填声明；必填项缺失时启动失败（fail-fast），不静默使用空值
+* 与框架既有做法的边界（防静默推翻）：本条**严于** Spring 的常规用法——官方允许在配置类里放派生 getter、在 `@Bean` 方法内做条件装配（`@ConditionalOnXxx` 除外，见「Bean 定义」）；本规范要求这类加工下沉到工具类/Service，已有项目按 link:../core/execution.adoc[]「规范变更的存量处理」**随动迁移**（改到的文件顺带调整，不发动全库改造）
 
 == 事务
 

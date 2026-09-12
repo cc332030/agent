@@ -127,6 +127,14 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(
             statuses["依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空"], "has-grip")
 
+    def test_config_class_guard_has_mechanical_grip(self):
+        # "配置类不写逻辑"由 check_config_class_guard 钉住（条文/判定标准/识别特征/公开说明同步）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）"],
+            "has-grip")
+
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")
