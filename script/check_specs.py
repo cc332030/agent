@@ -434,11 +434,21 @@ def _is_placeholder_ref(ref: str) -> bool:
 def _ref_base(f: str) -> str:
     """某规范文件内 `link:` 引用的解析基准（相对仓库根目录，根文件为空串）。
 
-    AGENTS_COMMON.adoc 与 INSTALL.adoc、AGENTS.adoc 均位于仓库根，其引用按**从仓库根
-    开始**的路径解析（与 AsciiDoc 中根级文件的惯例写法一致）；其余文件按"相对当前文件
-    所在目录"解析（与 IDE/浏览器相对语义一致）。注：根文件按仓库根解析时，对同目录文件
-    的 `link:README.adoc[]` 这类写法**检查器无法与本文件约定区分**（`README.adoc` 既非
-    specs/ 下、也不在检查集合内），故根文件的跨文件引用统一按仓库根基准书写。
+    **基准口径与渲染者一致（单一说明，不留第二套说法）**：本仓库的 `.adoc` 由站点
+    `index.html` 用 **Asciidoctor.js（浏览器端现渲染）** 渲染，其 `link:` 目标按
+    **文档源所在目录**解析。站点渲染的文档在**仓库根**，故 `link:` 相对仓库根解析——
+    即 `link:INSTALL.adoc[]` 在站点上解析为 `/INSTALL.adoc`（仓库根的 `INSTALL.adoc`）。
+    本函数对**仓库根文件**返回空串（基准=仓库根）正是为与之一致。
+
+    为何"根文件约定按仓库根书写"：AsciiDoc 的 `link:` 没有"仓库根"概念，只有"文档
+    所在目录"；对位于仓库根的文件两者恰好等价（`../` 会越出仓库根、无法表达"根级
+    相对"），故根级跨文件引用统一按仓库根基准书写。**其余文件**（`specs/`、`library/`
+    等）按其所在目录解析（与 IDE/浏览器相对语义一致）；图书馆内的引用由
+    `_lib_resolve` 按"仓库根优先、再本文件目录"解析，与本节同为**仓库根基准**。
+
+    记录性风险（已随本节说明消解）：若有人把此处的基准“修正”成"一律按本文件目录"，
+    会去把 `README.adoc` 里的根级 `link:` 改成 `../` 形态——那反而把**站点上的链接**
+    弄死（站点渲染的文档就在仓库根，`../` 会越出站点根）。故改动基准前须先改渲染者。
     """
     if os.path.isabs(f):
         rel = _rel_of(f)  # 绝对路径 → 仓库根相对
@@ -2195,6 +2205,64 @@ LIBRARY_SOURCE_MARKERS = (
     "未逐字取回",
 )
 
+
+def _lib_resolve(target: str):
+    """把馆内引用的写法解析为**仓库根相对路径**（单一基准），无法解析/越界则返回 None。
+
+    基准口径（与反引号写法一致，见 check_library_guard 的"引用可解析"条）：
+      1. 先按**仓库根**解析（`CHANGELOG.adoc`、`AGENTS_COMMON.adoc`、`specs/general/doc.adoc`）
+         —— 与 Asciidoctor.js 渲染的文档站一致（`link:` 按文档源所在目录解析，文档在仓库根）；
+      2. 未命中再按**本文件所在目录**解析（`../specs/...` 这类真正离开 `library/` 的写法）。
+
+    **同一写法只有一个基准**：历史实现里反引号按仓库根、`link:` 按本文件目录，
+    结果同一句引用 `CHANGELOG.adoc` 的两种写法在"文件存在/不存在"上给出相反结论。
+    """
+    t = target.strip()
+    if not t or t.startswith("#"):
+        return None
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):
+        return None
+    if t.startswith("/"):
+        return None                       # 根绝对路径：格式问题单独报，不进存在性核对
+    is_dir = t.endswith("/")
+    repo_rel = posixpath.normpath(t).replace("\\", "/")
+    if repo_rel != ".." and not repo_rel.startswith("../"):
+        if is_dir:
+            if os.path.isdir(os.path.join(REPO_ROOT, *repo_rel.split("/"))):
+                return repo_rel + "/"
+        elif os.path.isfile(os.path.join(REPO_ROOT, *repo_rel.split("/"))):
+            return repo_rel
+    local = posixpath.normpath(posixpath.join("library", t)).replace("\\", "/")
+    if local == ".." or local.startswith("../"):
+        return repo_rel                  # 越出仓库根：返回仓库根解析结果，交由存在性判定报错
+    return local + "/" if (is_dir and not local.endswith("/")) else local
+
+
+def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: bool = False):
+    """核对一条馆内引用的落点是否为**本仓库内真实存在的文件/目录**。
+
+    `m` 为写法（反引号内的路径或 `link:` 目标）；`desc` 为报错里的引用描述。
+    """
+    if _is_placeholder_ref(m):
+        return
+    is_dir = bool(m.endswith("/"))
+    resolved = _lib_resolve(m)
+    if resolved is None:
+        return
+    if resolved == ".." or resolved.startswith("../"):
+        if allow_escape:
+            err(f"{desc} 越出仓库根——馆内引用须指向本仓库内的真实文件", rel, j)
+        return
+    if is_dir:
+        if not os.path.isdir(os.path.join(REPO_ROOT, *resolved.rstrip("/").split("/"))):
+            err(f"{desc} 指向不存在的目录——悬空引用等于依据链断在这里", rel, j)
+        return
+    if not os.path.isfile(os.path.join(REPO_ROOT, *resolved.split("/"))):
+        err(f"{desc} 指向不存在的文件——"
+            "悬空引用等于依据链断在这里（公共内容里的死链与它无关："
+            "图书馆是本仓库私有内容，读者就在本仓库内）", rel, j)
+
+
 # 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
 # 只有在此列内的写法才被当作"路径"核对存在性——防止把普通词/文件名约定当路径误报）。
 _LIB_ROOT_FILES = ("AGENTS.adoc", "AGENTS_COMMON.adoc", "AGENTS.md", "PUBLIC.adoc",
@@ -2253,10 +2321,13 @@ def check_library_guard():
         不是第二真源）——登记了不存在的主题、或存在未登记的主题文件，都报错；
       * **逐字引文仍在**：所登记外部标准的关键片段（题名、模板片段、代码模式等）仍在
         图书馆内——少一句就意味着依据被压成了名称；
-      * **引用可解析**：图书馆文件里的引用按**仓库根基准**解析（`specs|library|script|...`
-        等带目录前缀的反引号写法、**根级文件名写法**（`AGENTS.adoc`/`PROMPTS.adoc` 等，
-        见 `_LIB_ROOT_FILES` 白名单）、以及 `link:` 目标；目录型写法核目录、其余核文件；
-        `../` 相对写法只允许指向仓库内）都命中真实落点——悬空引用等于依据链断在这里。
+      * **引用可解析**：图书馆文件里的引用**一律按仓库根基准**解析——反引号写法
+        （`specs|library|script|...` 带目录前缀，以及**根级文件名** `AGENTS.adoc`/
+        `PROMPTS.adoc` 等，见 `_LIB_ROOT_FILES` 白名单）、`link:` 目标、`../` 相对写法
+        三种**同一基准**：先按仓库根解析，命中即通过；未命中再按"本文件所在目录"解析
+        （`../specs/...` 这类真正离开 `library/` 的写法）——**同一写法只有一个基准**，
+        不出现"反引号按仓库根、link: 按本文件目录"两套口径（历史缺陷：同一句引用
+        `CHANGELOG.adoc` 的两种写法结论相反）。目录型写法核目录、其余核文件。
 
     "该依据是否真的支持该条、依据找得全不全、有没有把解释当原文"属语义判断，交人/
     子 agent 复核承担。
@@ -2334,32 +2405,23 @@ def check_library_guard():
                     continue                   # 非根级文件名白名单内 → 当普通词，不核
                 if _is_placeholder_ref(m):
                     continue
-                if _is_dir_ref(m):
-                    # 目录型引用：核对目录是否存在（不再整体跳过——目录被改名同样是悬空）
-                    d = os.path.join(REPO_ROOT, *m.rstrip("/").split("/"))
-                    if not os.path.isdir(d):
-                        err(f"图书馆内的引用 `{m}` 指向不存在的目录——"
-                            "悬空引用等于依据链断在这里", rel, j)
-                    continue
-                if not os.path.isfile(os.path.join(REPO_ROOT, *m.split("/"))):
-                    err(f"图书馆内的引用 `{m}` 指向不存在的文件——"
-                        "悬空引用等于依据链断在这里（公共内容里的死链与它无关："
-                        "图书馆是本仓库私有内容，读者就在本仓库内）", rel, j)
-            # link: 写法：相对本文件目录解析（'../specs/...' 等），须仍在仓库内
+                _check_library_target(m, f"图书馆内的引用 `{m}`", rel, j)
+            # link: 写法：**与反引号同一基准**（见 _lib_resolve）。
+            # 馆内 link: 很自然会写根级名（`link:AGENTS_COMMON.adoc[]`、`link:CHANGELOG.adoc[]`），
+            # 原实现只按"本文件所在目录"解析 → 同一句引用两种写法结论相反：
+            # 文件存在时 link: 形态误报（解析成 library/xxx，不存在）、文件缺失时不报（漏报）。
             for raw in re.findall(r"\blink:([^\[]+)\[", line):
                 target = raw.strip()
                 if not target or target.startswith("#"):
                     continue
                 if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target):
                     continue
-                resolved = posixpath.normpath(
-                    posixpath.join("library", target)).replace("\\", "/")
-                if resolved.startswith("../") or resolved == "..":
-                    err(f"图书馆内的链接 link:{target}[] 越出仓库根——"
-                        "馆内引用须指向本仓库内的真实文件", rel, j)
-                elif not os.path.isfile(os.path.join(REPO_ROOT, *resolved.split("/"))):
-                    err(f"图书馆内的链接 link:{target}[] 指向不存在的文件（{resolved}）——"
-                        "悬空引用等于依据链断在这里", rel, j)
+                if target.startswith("/"):
+                    err(f"图书馆内的链接 link:{target}[] 是根绝对路径——"
+                        "馆内引用按仓库根基准的相对写法书写，不用根绝对路径", rel, j)
+                    continue
+                _check_library_target(target, f"图书馆内的链接 link:{target}[]", rel, j,
+                                      allow_escape=True)
     phase_done()
 
 
@@ -2389,13 +2451,23 @@ def _split_adoc_sections(text: str):
 
 
 def _names_in_zone(zone_body: str, rel: str) -> bool:
-    """某节区里是否**以表格行**点名了 `rel`（`| `rel` | 说明` 这一列）。
+    """某节区里是否**以表格行**点名了 `rel`（行锚 `|` + 该行内任一点名形式）。
 
     用途：区分"在「入口清单」表里"（= 该文件确在覆盖面内）与"在正文/反向举例段被
     提一句"（= 说明性提及）。只靠 `rel in 全文` 判"在清单里"会把正文提及也算进去，
     "某入口被悄悄移出表格"这类改动因此不会被拦下。
+
+    **点名形式**取表格行内任一种（这是"内容在不在表里"这一件判据，不该绑死某一种
+    排版）：反引号（`` | `INSTALL.adoc` | ... ``）、`link:` 文本（`| link:x[INSTALL.adoc] |`）、
+    裸文件名（`| INSTALL.adoc |`）。历史缺陷：原实现只认"反引号 + 文件名字面"，于是
+    把同一格改成 AsciiDoc 惯用的 `link:` 文本写法（表格结构、所在节、覆盖面均未变，
+    纯排版）后，**明明列在表里却报"未列进表"**——判据把"行的位置"与"文件名的排版"
+    混成了一件。
     """
-    return re.search(r"^\|[^\n]*`" + re.escape(rel) + r"`", zone_body, re.M) is not None
+    row = r"^\|[^\n]*" + re.escape(rel)
+    return re.search(row + r"`"                       # 反引号：| `INSTALL.adoc` |
+                   r"|" + row + r"\b",               # link: 文本 / 裸文件名：| ... INSTALL.adoc ...
+                   zone_body, re.M) is not None
 
 
 def check_public_content_coverage():

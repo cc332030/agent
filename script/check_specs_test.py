@@ -1442,6 +1442,46 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         cm.check_library_guard()
         self.assertIn("指向不存在的文件", self.error_texts())
 
+    def _write_topic_body(self, body: str) -> None:
+        """把 `body` 写进主题文件正文（避开入口登记表：表里的 link: 会被当作主题登记）。"""
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n" + body + "\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
+
+    def test_root_level_name_link_form_dangling_reports(self):
+        # 反例：馆内以**根级文件名 + link: 写法**引用（`link:CHANGELOG.adoc[]`）而该文件不存在
+        # 依据：馆内引用一律按仓库根基准——根级名走 link: 形态**同样是引用写法**，
+        # 悬空即断链（原实现只按"本文件所在目录"解析 link: → 解析成 library/CHANGELOG.adoc，
+        # 与反引号形态的基准不一致：文件缺失时 link: 形态漏报、文件在时又误报）
+        self._write_valid()
+        self._write_topic_body("变更历史见 link:CHANGELOG.adoc[]。")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def test_root_level_name_link_form_resolvable_passes(self):
+        # 正例：根级文件名走 link: 形态、文件真实存在 → 不报（与反引号形态同一基准）
+        self._write_valid()
+        self.write("CHANGELOG.adoc", "= 变更历史\n")
+        self._write_topic_body("变更历史见 link:CHANGELOG.adoc[]。")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_ref_base_is_single_for_both_forms(self):
+        # 钉住"同一引用只有一个基准"：同一文件两种写法（反引号 / link:）结论必须一致
+        for form, label in (("`CHANGELOG.adoc`", "backtick"), ("link:CHANGELOG.adoc[]", "link")):
+            self._write_valid()
+            self.write("CHANGELOG.adoc", "= 变更历史\n")
+            self._write_topic_body(f"变更历史见 {form}。")
+            cm.errors.clear()
+            cm.check_library_guard()
+            self.assertEqual([e for e in cm.errors if "CHANGELOG" in e], [],
+                             f"文件存在时 {label} 形态不应报错")
+            os.remove(os.path.join(self.root, "CHANGELOG.adoc"))
+            cm.errors.clear()
+            cm.check_library_guard()
+            self.assertIn("指向不存在的文件", self.error_texts(),
+                          f"文件缺失时 {label} 形态必须报错")
+
     def test_root_level_file_ref_dangling_reports(self):
         # 反例：馆内以**根级文件名**写法引用（`PROMPTS.adoc`）而该文件不存在
         # 依据：馆内引用一律按仓库根解析——根级文件名同样是引用写法，悬空即断链
@@ -1572,6 +1612,28 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
                    "== 组织与其边界\n\n引用方接入时读 `INSTALL.adoc`。\n")
         cm.check_public_content_coverage()
         self.assertIn("未把 INSTALL.adoc 列进", self.error_texts())
+
+    def test_entry_in_table_link_form_passes(self):
+        # 正例：同一格改用 AsciiDoc 惯用的 `link:` **文本**写法——表格结构、所在节、
+        # 覆盖面均未变，纯排版，**不得**报"未列进表"
+        # （原判据把"表格行的位置"与"文件名用反引号"混成一件：明明列在表里却报"未列出"）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| 安装入口 | link:INSTALL.adoc[INSTALL.adoc] |\n"
+                   "| 通用规范入口 | link:AGENTS_COMMON.adoc[AGENTS_COMMON.adoc] |\n")
+        cm.check_public_content_coverage()
+        self.assertNotIn("未把", self.error_texts())
+
+    def test_names_in_zone_accepts_forms_but_keeps_row_anchor(self):
+        # 钉住判据口径：表格行内任一点名形式均命中；非表格行（正文提及）仍不命中
+        z = "| 安装入口 |"
+        self.assertTrue(cm._names_in_zone(z + " `INSTALL.adoc` |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[INSTALL.adoc] |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[] |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " INSTALL.adoc |", "INSTALL.adoc"))
+        self.assertFalse(cm._names_in_zone("接入时读 INSTALL.adoc。", "INSTALL.adoc"))
+        self.assertFalse(cm._names_in_zone(z + " `AGENTS_COMMON.adoc` |", "INSTALL.adoc"))
 
     def test_listing_not_registered_reports(self):
         # 反例：清单未在项目规范入口登记（维护方读不到它）
