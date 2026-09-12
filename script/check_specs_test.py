@@ -57,7 +57,7 @@ class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
         self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-                      cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR)
+                      cm.INSTALL_FILE, cm.PROJECT_FILE)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
@@ -65,14 +65,11 @@ class CheckSpecsTestCase(unittest.TestCase):
         cm.PROJECT_SPECS_DIR = os.path.join(self.root, "specs-project-maintainer")
         cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
-        # prompts/ 已并入 collect_adoc_files 的检查集合，须同其他根目录一起重定向
-        # 到临时根，否则测试会误扫真实仓库的 prompts/（隔离失效）。
-        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
 
     def tearDown(self) -> None:
         cm.errors.clear()
         (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-         cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR) = self._orig
+         cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
@@ -165,16 +162,31 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
 
 
 class TestCheckDelegationGuard(CheckSpecsTestCase):
-    """钉住从属者与能力自评、执行者来源选择（"定义了却不会执行"的高发盲点）。"""
+    """钉住从属者与能力自评、执行者来源选择（"定义了却不会执行"的高发盲点）。
+
+    执行者来源这一半**已由"优先同源"收紧为"强制同 Agent + 不得点名外部 NPC"**，故本
+    组用例同步按新口径写正例/反例：只留旧字样（"优先同源""同源不可用后换外部来源"）不再
+    算通过——后者正是要被拦下的"换个 Agent 当第一手段"。
+    """
 
     def _write_valid(self):
         self.write("AGENTS_COMMON.adoc", "= t\n\n从属者：加载由已加载入口驱动。\n")
         self.write("specs/general/self-check.adoc", "= t\n\n== 环境能力自评\n无机制走降级。\n")
         self.write("specs/general/collab.adoc",
-                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
-                   "* **子 Agent 不可用时的降级路径（L1）**\n\n* **优先一次性调用（L1）**\n")
-        self.write("specs/general/testing.adoc", "= t\n\n* **执行者选择：先同源、再降级（L1）**\n")
-        self.write("specs-project-maintainer/verify.adoc", "= t\n\n* **子 Agent 优先与执行者同源**\n")
+                   "= t\n\n"
+                   "**子任务必须由与执行者相同的 Agent 承担（L1，强制同 Agent）**："
+                   "判据：**同 Agent** 与**同一 Agent 身份**。\n\n"
+                   "**不得点名外部 Agent / 外部 NPC（L1）**：判定标准——"
+                   "①**派发目标**是外部标识；②**交换面**超出本执行者可直接调用；"
+                   "③结论**回传面**读不到。\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**：**不换任何外部来源**，"
+                   "①**由执行者本人（主 agent）串行承担**。\n\n"
+                   "* **优先一次性调用（L1）**\n")
+        self.write("specs/general/testing.adoc",
+                   "= t\n\n* **执行者选择：强制同 Agent（L1）**：三视角复核一律由与执行者"
+                   "相同的 Agent 承担，**不得点名外部 Agent / 外部 NPC**。\n")
+        self.write("specs-project-maintainer/verify.adoc",
+                   "= t\n\n**子 Agent 强制与执行者同 Agent（维护方落点）**\n")
 
     def test_valid_passes(self):
         self._write_valid()
@@ -195,19 +207,47 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
         cm.check_delegation_guard()
         self.assertIn("环境能力自评", self.error_texts())
 
-    def test_missing_same_source_executor_reports(self):
-        # 反例：删掉"优先用与执行者同源的 Agent"→ 缺复核时随手抓外部执行者（不可核对）
+    def test_missing_same_agent_requirement_reports(self):
+        # 反例：删掉"子任务必须与执行者同 Agent"→ 缺复核时随手抓外部执行者（不可核对）
         self._write_valid()
         self.write("specs/general/collab.adoc",
                    "= t\n\n* **优先一次性调用（L1）**\n\n* **子 Agent 不可用时的降级路径（L1）**\n")
         cm.check_delegation_guard()
-        self.assertIn("优先由与执行者相同的 Agent 承担子任务", self.error_texts())
+        self.assertIn("子任务必须由与执行者相同的 Agent 承担", self.error_texts())
 
-    def test_missing_same_source_fallback_reports(self):
-        # 反例：删掉"同源不可用时的降级路径"→ 只剩"换外部来源"一条路
+    def test_missing_named_external_npc_ban_reports(self):
+        # 反例：删掉"不得点名外部 Agent / 外部 NPC"→ 评论里直接 @ 外部 NPC 又无人拦
         self._write_valid()
         self.write("specs/general/collab.adoc",
-                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
+                   "= t\n\n**子任务必须由与执行者相同的 Agent 承担（L1，强制同 Agent）**："
+                   "判据：**同 Agent** 与**同一 Agent 身份**。\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**：**不换任何外部来源**，"
+                   "①**由执行者本人（主 agent）串行承担**。\n\n"
+                   "* **优先一次性调用（L1）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("不得点名外部 Agent / 外部 NPC", self.error_texts())
+
+    def test_external_npc_ban_without_criteria_reports(self):
+        # 反例：只留"不得点名外部 NPC"字样、判定标准被抽掉 → 判据不可执行（假绿）
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n**子任务必须由与执行者相同的 Agent 承担（L1，强制同 Agent）**："
+                   "判据：**同 Agent** 与**同一 Agent 身份**。\n\n"
+                   "**不得点名外部 Agent / 外部 NPC（L1）**\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**：**不换任何外部来源**，"
+                   "①**由执行者本人（主 agent）串行承担**。\n\n"
+                   "* **优先一次性调用（L1）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_missing_same_agent_fallback_reports(self):
+        # 反例：删掉"同 Agent 不可用时的降级路径"→ 只剩"换外部来源"一条路
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n**子任务必须由与执行者相同的 Agent 承担（L1，强制同 Agent）**："
+                   "判据：**同 Agent** 与**同一 Agent 身份**。\n\n"
+                   "**不得点名外部 Agent / 外部 NPC（L1）**：判定标准——①**派发目标**是外部标识；"
+                   "②**交换面**超出本执行者可直接调用；③结论**回传面**读不到。\n\n"
                    "* **优先一次性调用（L1）**\n")
         cm.check_delegation_guard()
         self.assertIn("降级路径（L1）", self.error_texts())
@@ -216,17 +256,21 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
         # 反例：删掉"优先一次性调用"→ 又回到"交一个有自主探查权的执行者"（超时无法判定）
         self._write_valid()
         self.write("specs/general/collab.adoc",
-                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
-                   "* **子 Agent 不可用时的降级路径（L1）**\n")
+                   "= t\n\n**子任务必须由与执行者相同的 Agent 承担（L1，强制同 Agent）**："
+                   "判据：**同 Agent** 与**同一 Agent 身份**。\n\n"
+                   "**不得点名外部 Agent / 外部 NPC（L1）**：判定标准——①**派发目标**是外部标识；"
+                   "②**交换面**超出本执行者可直接调用；③结论**回传面**读不到。\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**：**不换任何外部来源**，"
+                   "①**由执行者本人（主 agent）串行承担**。\n")
         cm.check_delegation_guard()
         self.assertIn("优先一次性调用", self.error_texts())
 
     def test_missing_maintainer_executor_source_reports(self):
-        # 反例：维护方落点丢掉"外部复核者不是第一手段"→ 又先去派外部 NPC
+        # 反例：维护方落点丢掉"强制同 Agent"→ 又先去派外部 NPC
         self._write_valid()
-        self.write("specs-project-maintainer/verify.adoc", "= t\n\n（无同源口径）\n")
+        self.write("specs-project-maintainer/verify.adoc", "= t\n\n（无条件口径）\n")
         cm.check_delegation_guard()
-        self.assertIn("子 Agent 优先与执行者同源", self.error_texts())
+        self.assertIn("子 Agent 强制与执行者同 Agent", self.error_texts())
 
     def test_missing_file_reports(self):
         self.write("AGENTS_COMMON.adoc", "从属者")
@@ -2746,3 +2790,231 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
         cm.check_checklist_guard()
         self.assertIn("clean_tmp.py", self.error_texts())
 
+
+
+class TestCheckEnvMarkerGuard(CheckSpecsTestCase):
+    """钉住『环境标志与专用口径』：专用口径必须挂在可实测的标志上、且保留中性口径。
+
+    提示词会被未知项目复制执行，而各执行环境差异很大；把"某环境才成立的做法"当通用
+    要求写进提示词，会让别的环境照着做而失败。故钉住三件确定项：片段仍在且写明标志与
+    中性口径、每个提示词仍注入该片段、登记处仍写明其标志。
+    """
+
+    GUARD = (
+        "// tag::env-guard[]\n"
+        "**按环境标志选执行口径**：执行 `printenv CNB_EVENT`，非空且触发内容含 `@<Agent名>` 时按专用口径；\n"
+        "未命中 → 按其末尾**中性口径**执行。\n"
+        "// end::env-guard[]\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR,
+         cm.COMMON_PROMPT_FILE) = self._orig_prompts
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("prompts/_common.txt", self.GUARD)
+        self.write("PROMPTS.adoc",
+                   "环境标志与专用口径（`env-guard`）：标志为 `printenv CNB_EVENT` 非空。\n")
+        self.write("prompts/review.adoc", "include::_common.txt[tag=env-guard]\n")
+        self.write("prompts/refactor.adoc", "include::_common.txt[tag=env-guard]\n")
+
+    def test_valid_env_guard_passes(self):
+        self._write_valid()
+        cm.check_env_marker_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_fragment_reports(self):
+        # 反例：公共片段里没有 env-guard（专用口径失去开关与中性口径）
+        self._write_valid()
+        self.write("prompts/_common.txt", "普通片段\n")
+        cm.check_env_marker_guard()
+        self.assertIn("env-guard", self.error_texts())
+
+    def test_fragment_without_marker_command_reports(self):
+        # 反例：只写"某环境"、没有可实测的标志命令（无法判定，等于没开关）
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::env-guard[]\n在特定环境里按专用口径执行。\n// end::env-guard[]\n")
+        cm.check_env_marker_guard()
+        self.assertIn("printenv", self.error_texts())
+
+    def test_fragment_without_neutral_path_reports(self):
+        # 反例：未命中标志时怎么办没写 → 环境专用做法会被当通用要求
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::env-guard[]\n标志：`printenv CNB_EVENT` 非空 且 含 `@<Agent名>`。\n"
+                   "// end::env-guard[]\n")
+        cm.check_env_marker_guard()
+        self.assertIn("中性口径", self.error_texts())
+
+    def test_prompt_without_include_reports(self):
+        # 反例：提示词未注入片段 → 环境判断不会被执行
+        self._write_valid()
+        self.write("prompts/refactor.adoc", "对本项目执行一次全量重构。\n")
+        cm.check_env_marker_guard()
+        self.assertIn("env-guard", self.error_texts())
+
+    def test_registry_without_marker_reports(self):
+        # 反例：登记处未写明标志 → 后来者无从知道它何时生效
+        self._write_valid()
+        self.write("PROMPTS.adoc", "提示词登记（无环境标志登记）。\n")
+        cm.check_env_marker_guard()
+        self.assertIn("env-guard", self.error_texts())
+
+
+class TestCheckNpcMergeGuard(CheckSpecsTestCase):
+    """钉住『NPC 禁合并』：NPC/CI 执行者不得合并、且不因人工授权豁免。
+
+    这是**唯一一类"用户明确要求也不照做"**的约束，最易被两件事冲掉：
+      * **"顺手满足用户"的惯性** —— 人工一句"直接合吧"就把禁令静默写回（授权当豁免）；
+      * **关键词堆砌式假绿** —— 只留节名/一句口号、把判定标准或边界抽掉，检查照样过。
+    故本组用例除正例外，专门覆盖"删禁令""降级成建议""判定标准被抽""边界被删"
+    "提示词公共片段漏条""登记处不同步"等反例。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR,
+         cm.COMMON_PROMPT_FILE) = self._orig_prompts
+        super().tearDown()
+
+    CNB = ("= CNB 规范（平台层）\n\n"
+           "== 合并请求的合并主体（NPC 禁合并）\n"
+           "* **CNB NPC（即 CI/CD 执行环境中的 agent）严禁合并（L1）**。\n"
+           "* **人工要求、直接授权也不得合并（L1，无豁免）**：即使人工明确要求合并、"
+           "或给出直接授权，**仍必须拒绝**；**授权不免除该禁令**。\n"
+           "* **判定标准**：①**执行了合并动作**；②以授权为由**豁免**该禁令；"
+           "③**顶替**执行也算未拦住。\n"
+           "* **越界清理**：本条只禁合并——推送分支、**解决冲突**、**同步目标分支**"
+           "都**不是合并**。\n\n"
+           "== 分支与合并请求统一\n"
+           "* 同一 issue 拆分出的多个任务，即使并行执行，也**只能修改同一个分支**。\n\n"
+           "== 冲突处理\n"
+           "* 并行任务改动同一文件导致合并冲突时，须**自动解决冲突**（保留双方有效改动），"
+           "不搁置、不要求用户人工介入。\n")
+
+    COMMON = ("提示词公共片段。\n"
+              "// tag::delivery[]\n"
+              "8. 交付：\n"
+              "   - **合并一律不做（L1，无环境区分、人工授权也拒绝）**："
+              "即使发起人明确要求合并、或给出**直接授权**，也**必须拒绝**；**授权不免除**。\n"
+              "（直授**也必须拒绝**：授权不免除该禁令。）\n"
+              "// end::delivery[]\n")
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write("prompts/_common.txt", self.COMMON)
+        self.write("PROMPTS.adoc", "公共约定：**合并一律不做（L1）**。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_npc_merge_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：平台层规范文件被删 → 要求无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_npc_merge_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_missing_ban_reports(self):
+        # 反例：禁令本体被删（只留节名）→ "顺手满足用户"再无阻拦
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 合并请求的合并主体（NPC 禁合并）\n（本节待补）\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("严禁合并", self.error_texts())
+
+    def test_no_exemption_removed_reports(self):
+        # 反例：删掉"人工要求/直授也必须拒绝"（把授权当豁免）→ 静默写回
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 合并请求的合并主体（NPC 禁合并）\n"
+                   "* **CNB NPC 严禁合并（L1）**。\n"
+                   "* **判定标准**：①**执行了合并动作**；②**豁免**；③**顶替**。\n"
+                   "* **越界清理**：**解决冲突**、**同步目标分支**都**不是合并**。\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("直接授权", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留禁令字样、判定标准被抽掉 → 判据不可执行
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 合并请求的合并主体（NPC 禁合并）\n"
+                   "* **CNB NPC 严禁合并（L1）**，**人工要求**、**直接授权**也必须拒绝"
+                   "（**授权不免除**）。\n"
+                   "* **越界清理**：**解决冲突**、**同步目标分支**都**不是合并**。\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例：删掉边界说明 → 与「冲突处理」节的自动解决冲突自相矛盾/误伤合法操作
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 合并请求的合并主体（NPC 禁合并）\n"
+                   "* **CNB NPC 严禁合并（L1）**，**人工要求**、**直接授权**也必须拒绝"
+                   "（**授权不免除**）。\n"
+                   "* **判定标准**：①**执行了合并动作**；②**豁免**；③**顶替**。\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("不是合并", self.error_texts())
+
+    def test_delivery_fragment_without_ban_reports(self):
+        # 反例：提示词公共片段漏条 → 复制到未知项目执行的那份没有这条禁令
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::delivery[]\n8. 交付：按环境区分提交与推送。\n// end::delivery[]\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("合并一律不做", self.error_texts())
+
+    def test_existing_conflict_section_replaced_reports(self):
+        # 反例（本轮实测犯过的真实回归）：新增节点把同文件既有的「冲突处理」整段替换掉
+        # ——规则凭空消失，而其余检查全绿（文件只是变短、无引用悬空、语法无错）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("== 冲突处理", "== 其它"))
+        cm.check_npc_merge_guard()
+        self.assertIn("冲突处理", self.error_texts())
+
+    def test_existing_conflict_criterion_removed_reports(self):
+        # 反例：既有「冲突处理」节还在，但判据被抽走（只剩个标题）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("自动解决冲突", "另议"))
+        cm.check_npc_merge_guard()
+        self.assertIn("自动解决冲突", self.error_texts())
+
+    def test_existing_branch_rule_removed_reports(self):
+        # 反例：既有「分支与合并请求统一」的判据被删（同文件规则不得被顶掉）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("只能修改同一个分支", "自行决定"))
+        cm.check_npc_merge_guard()
+        self.assertIn("只能修改同一个分支", self.error_texts())
+
+    def test_registry_not_synced_reports(self):
+        # 反例：公开提示词入口未同步 → 登记处与实际口径不一致，照登记处读会漏
+        self._write_valid()
+        self.write("PROMPTS.adoc", "公共约定：交付按执行环境区分。\n")
+        cm.check_npc_merge_guard()
+        self.assertIn("合并一律不做", self.error_texts())
+
+    def test_prompts_file_missing_reports(self):
+        # 反例：公开提示词入口被删
+        self._write_valid()
+        os.remove(cm.PROMPTS_FILE)
+        cm.check_npc_merge_guard()
+        self.assertIn("缺少公开提示词入口", self.error_texts())

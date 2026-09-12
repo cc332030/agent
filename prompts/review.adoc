@@ -8,12 +8,13 @@
 
 将下方代码块内的文字**完整原样**复制给 AI 作为任务指令。
 
-**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `baseline` / `final-verify` / `delivery`）组装。若你读到的是**文本形式**、其中 `include::_common.txt[tag=…]` 指令**未被展开**，请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**——不得因指令未展开就跳步或漏掉公共步骤。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
+**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `baseline` / `final-verify` / `delivery`）组装。若你读到的是**文本形式**、其中 `include::_common.txt[tag=…]` 指令**未被展开**，请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**——不得因指令未展开就跳步或漏掉公共步骤。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
 
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『检查修复问题』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
 3. `isolation`：隔离要求（不混用其他提示词、不做跨任务顺手改动）；
-4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤。
+4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤；
+5. `env-guard`：**按环境标志选执行口径**——只在命中标志（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`）的环境里生效，未命中按其末尾中性口径执行；作为执行前的前置判断读入，不改变本次任务的目标与步骤。
 
 [listing]
 ----
@@ -22,6 +23,7 @@ include::_common.txt[tag=primary]
 include::_common.txt[tag=priority-rules]
 include::_common.txt[tag=isolation]
 include::_common.txt[tag=intro-rules]
+include::_common.txt[tag=env-guard]
 
 include::_common.txt[tag=baseline]
 2. 全量检查：逐模块检查全部代码与文档的问题（代码：规范符合性、重复/坏味道、命名、注释、异常与边界、安全隐患、日志、资源与缓存生命周期等；文档：内容与代码不符、描述缺失/过时、格式与命名不规范等；测试：用例缺失/断言无效/编号与文档不一致等），分级编号成清单写入 tmp/ 作核对依据（每项须标明类型：代码问题/文档问题/测试问题，以及判定"明确"还是"待确认"），不得遗漏模块与文件。**本步只检查与记录，不改任何代码或文档**（改动一律在第 3、4 步进行）。
@@ -32,5 +34,5 @@ include::_common.txt[tag=baseline]
 include::_common.txt[tag=final-verify]
 include::_common.txt[tag=delivery]
 
-完成后汇报：**先回报主侧重（"检查修复问题"）的达成情况**——本次检查了哪些模块、查出多少问题、各问题的处理状态（已修复/待确认/不处理及原因）；**"本次检查未发现问题、按主侧重结束"也是完整结论**（不得为"有产出"而动手重构）。随后汇报：各步骤执行情况、问题清单（编号）与处理状态、待确认清单的确认结果、验证结果、改动文件清单（未发现问题时应为空，且须说明）与**交付情况**（本地场景：改动保留在本地工作空间、未提交未推送；自动化场景：已提交推送的分支与 PR）。
+完成后汇报：**先回报主侧重（"检查修复问题"）的达成情况**——本次检查了哪些模块、查出多少问题、各问题的处理状态（已修复/待确认/不处理及原因）；**"本次检查未发现问题、按主侧重结束"也是完整结论**（不得为"有产出"而动手重构）。随后汇报：各步骤执行情况、问题清单（编号）与处理状态、待确认清单的确认结果、验证结果、改动文件清单（未发现问题时应为空，且须说明）与**交付情况**（本地场景：改动保留在本地工作空间、未提交未推送；自动化场景：已提交推送的分支与 PR；**两种情况都不执行合并**——合入目标分支只由人工完成，即使被要求合并/直授也拒绝，见 `delivery` 片段 L1 条）。
 ----

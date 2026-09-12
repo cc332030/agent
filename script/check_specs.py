@@ -3,10 +3,6 @@
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
 检查项（每项对应一个 check_ 函数，逐条见各函数 docstring 的判定口径）：
-  0. 检查集合：仓库根全部 .adoc + `specs/`、`specs-project-maintainer/`、`library/`、
-     `prompts/` 四目录递归（见 `collect_adoc_files`）。漏收一目录即该目录下全部文档
-     脱离下列口径；`prompts/` 是要复制给未知项目执行的产物，其自身引用完整性
-     同样必须受覆盖。
   1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
      当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
   2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
@@ -1547,9 +1543,9 @@ def check_delegation_guard():
         就会出现"照抄'已清洁上下文'/'已委派'"的假自检（`specs/general/self-check.adoc`）。
       * **执行者来源失控**："缺独立复核"时最容易抓来的是**外部来源的执行者**（外部 NPC、
         另一个产品）——它看不到本执行者已加载的规范，判据是否一致、耗时多久都不可核对
-        （本项目实证：镜像不存在致派发即 error、另一次 1 h+ 未回传）。故须有"**优先用与
-        执行者同源的子 Agent；换来源只在同源不可用后；同源也不可用时降级为主 agent 串行
-        + 如实标悬置，且优先一次性调用**"的机制（`specs/general/collab.adoc`，
+        （本项目实证：镜像不存在致派发即 error、另一次 1 h+ 未回传）。故须有"**子任务一律
+        由与执行者相同的 Agent 承担（不得点名外部 Agent/NPC）；同 Agent 不可用时降级为
+        执行者本人串行 + 如实标悬置，且优先一次性调用**"的机制（`specs/general/collab.adoc`，
         维护方侧落点 `specs-project-maintainer/verify.adoc`）。
     """
     phase("从属者与能力自评防线检查")
@@ -1566,20 +1562,29 @@ def check_delegation_guard():
         if key not in text:
             err(f"从属者与能力自评防线被破坏：{rel} 缺失『{key}』机制——{desc}；"
                 "该类要点属'定义了却不会执行'的高发盲点，不得删除或并入他处而失去痕迹", rel)
-    # 执行者来源选择：『优先用与执行者同源的 Agent』的要点（换来源只在同源不可用后、
-    # 同源也不可用时降级为主 agent 串行/标悬置、优先一次性调用）。此处只钉"要求文本
-    # 仍在"——"本次是否真按同源优先派发"属运行时行为，机械无法判定，交人/子 agent 复核。
-    for rel, key, desc in (
-        ("specs/general/collab.adoc", "优先由与执行者相同的 Agent 承担子任务",
-         "子任务/复核优先用同源执行者，换外部来源只是同源不可用后的备选"),
-        ("specs/general/collab.adoc", "降级路径（L1）",
-         "同源不可用也不得换成不可核对的外部执行者，须降级为主 agent 串行或标悬置"),
-        ("specs/general/collab.adoc", "优先一次性调用",
+    # 执行者来源选择：『**强制同 Agent**』的五处要点——(a) 子任务必须与执行者同 Agent、
+    # (b) **不得点名外部 Agent/NPC**（含判定标准）、(c) 同 Agent 不可用时的降级路径（本
+    # 地串行/标悬置、不换外部来源）、(d) 优先一次性调用、(e) 三视角与维护方落点同口径。
+    # 此处只钉"要求文本仍在"——"本次是否真按同 Agent 派发、有没有点名外部 NPC"属运行时
+    # 行为（评论/派发的实际内容），机械无法判定，交人/子 agent 复核；但"要求被抽掉"必须
+    # 拦住（本项目已有两次外部 NPC 实证：派发即失败、1 h+ 未回传）。**每条要求须同时命中
+    # 多处要素**，否则别处一句同名字样即可让检查假绿（与 check_checklist_guard 同口径）。
+    for rel, keys, desc in (
+        ("specs/general/collab.adoc", ("子任务必须由与执行者相同的 Agent 承担",
+                                       "不得点名外部 Agent / 外部 NPC",
+                                       "同一 Agent 身份"),
+         "子任务一律同 Agent（同 Agent 身份 + 同入口/调度器），不得点名外部 Agent/NPC"),
+        ("specs/general/collab.adoc", ("判定标准", "派发目标", "交换面", "回传面"),
+         "『不得点名外部 NPC』须给出可核对的判定标准，否则只剩一句口号"),
+        ("specs/general/collab.adoc", ("降级路径（L1）", "不换任何外部来源",
+                                       "由执行者本人（主 agent）串行承担"),
+         "同 Agent 不可用也不得换外部来源，须降级为执行者本人串行或如实标悬置"),
+        ("specs/general/collab.adoc", ("优先一次性调用",),
          "派发优先一次性、边界明确、可超时，不交有自主探查权的执行者"),
-        ("specs/general/testing.adoc", "先同源、再降级",
-         "三视角复核优先同源子 Agent，外部来源只在同源不可用后成立"),
-        ("specs-project-maintainer/verify.adoc", "子 Agent 优先与执行者同源",
-         "维护方落点：外部复核者不是第一手段、派发前先核实可用性"),
+        ("specs/general/testing.adoc", ("强制同 Agent", "不得点名外部 Agent"),
+         "三视角复核口径须与协作规范同口径（强制同 Agent、不得点名外部 NPC）"),
+        ("specs-project-maintainer/verify.adoc", ("子 Agent 强制与执行者同 Agent",),
+         "维护方落点：强制同 Agent、外部复核者不作为备选"),
     ):
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         if not os.path.isfile(path):
@@ -1587,8 +1592,9 @@ def check_delegation_guard():
             continue
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-        if key not in text:
-            err(f"执行者来源选择防线被破坏：{rel} 缺失『{key}』要点——{desc}；"
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"执行者来源选择防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
                 "该要点防的是'缺复核时随手抓一个不可核对的外部执行者'，"
                 "不得删除或并入他处而失去痕迹", rel)
     phase_done()
@@ -2468,10 +2474,31 @@ def _names_in_zone(zone_body: str, rel: str) -> bool:
     纯排版）后，**明明列在表里却报"未列进表"**——判据把"行的位置"与"文件名的排版"
     混成了一件。
     """
-    row = r"^\|[^\n]*" + re.escape(rel)
-    return re.search(row + r"`"                       # 反引号：| `INSTALL.adoc` |
-                   r"|" + row + r"\b",               # link: 文本 / 裸文件名：| ... INSTALL.adoc ...
-                   zone_body, re.M) is not None
+    # **限定在"文件"这一列**（表格第 2 格）：表格是 `| 入口 | 文件 | 说明`，
+    # 若只在**说明列**里顺带提到某文件（如"见 `AGENTS.adoc`（另见 INSTALL.adoc 的说明）"），
+    # 那不是"它被列进了清单"——按"整行任一点名"判定会把说明列的提及也算命中（实测：
+    # 把 `INSTALL.adoc` 那行改成"文件列写别的、说明列提一句 INSTALL.adoc"，检查不报）。
+    # 故取"第一个 `|` 之后、**第二个 `|` 之前**"这一段（= 文件列）来判。
+    for line in zone_body.split("\n"):
+        if not line.startswith("|"):
+            continue
+        for cell in line.split("|")[1:]:
+            c = cell.strip()
+            # 该格须**本身就是这个文件名的点名**（允许包裹反引号、或 `link:xxx[]` 文本形态、
+            # 或裸文件名），而不是"说明句里顺带提到它"——判据是"格内去掉点名后无实质剩余"。
+            probe = c
+            probe = re.sub(r"`\s*" + re.escape(rel) + r"\s*`", "", probe)
+            probe = re.sub(r"link:\S*?\[" + re.escape(rel) + r"\]", "", probe)
+            probe = re.sub(r"\b" + re.escape(rel) + r"\b", "", probe)
+            if not c or probe == c:
+                continue
+            rest = probe
+            # 去掉纯排版残留（包裹括号、`link:` 空壳、反引号、空白、顿号/逗号等连接符）
+            rest = re.sub(r"link:\S*?\[\s*\]", "", rest)
+            rest = rest.strip(" \t`（）()［］[]·、,，,。;；:：")
+            if not rest:
+                return True
+    return False
 
 
 def check_public_content_coverage():
@@ -2667,6 +2694,135 @@ def check_prompts_primary():
     phase_done()
 
 
+def check_env_marker_guard():
+    """『环境标志与专用口径防线』：环境专用口径不得脱离标志、也不得漏掉中性口径。
+
+    背景：任务提示词会被**未知项目**复制执行，但执行环境差异很大（本地人工 / CI 流水线 /
+    CNB 平台 NPC 唤起）。把"某个环境才成立的做法"当成通用要求写进提示词，会让其它环境
+    照着做而失败（本仓库实证：同一份提示词在两个环境里的工作区、默认分支、包管理器可用
+    性都不同）。故新增"环境专用口径"必须**挂在可实测的标志上**、并**保留未命中时的中性
+    口径**；"标志存在"也不能靠印象，须实际执行命令核对。本防线钉住三件确定性的事：
+
+      * 公共片段里 `env-guard` 片段仍在，且仍写明标志（`printenv CNB_EVENT`）、
+        触发条件（含 `@<Agent名>`）与**中性口径**；
+      * 每个任务提示词代码块仍 `include` 该片段（否则环境判断不会被执行）；
+      * 提示词登记入口 `PROMPTS.adoc` 仍登记该片段的标志——**登记处即本文件**，
+        新增环境专用口径而不登记，后来者无从知道它何时生效。
+
+    只钉"存在性与登记"，片段措辞的语义强弱仍由人/子 agent 复核承担。
+    """
+    phase("环境标志与专用口径防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——环境标志与专用口径无处承载", rel_common)
+        phase_done()
+        return
+    common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+    if "tag::env-guard[]" not in common.replace("::", "=") and "tag::env-guard[]" not in common:
+        err(f"公共片段 {rel_common} 缺少 `env-guard`——环境专用口径失去开关与中性口径", rel_common)
+    else:
+        block = common.split("tag::env-guard[]", 1)[-1].split("end::env-guard[]", 1)[0]
+        for key, desc in (("printenv", "标志须是可实测的命令，不得只写‘某环境’这类无法判定的描述"),
+                          ("@<Agent名>", "标志的触发条件（NPC 唤起评论）须写清"),
+                          ("中性口径", "未命中标志时的口径须写清，防环境专用做法被当通用要求")):
+            if key not in block:
+                err(f"公共片段 `env-guard` 缺失『{key}』——{desc}", rel_common)
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE) or "env-guard" not in open(
+            PROMPTS_FILE, encoding="utf-8").read():
+        err(f"{rel_prompts} 未登记 `env-guard` 及其标志——新增环境专用口径须在登记处写明"
+            "何时生效，否则后来者无从判断", rel_prompts)
+    for f in _iter_prompt_files():
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        if "include::_common.txt[tag=env-guard]" not in open(f, encoding="utf-8").read():
+            err(f"提示词 {rel} 未注入公共片段 `env-guard`——"
+                "环境判断不会被执行（环境专用口径会在错误的环境里生效）", rel)
+    phase_done()
+
+
+def check_npc_merge_guard():
+    """『NPC 禁合并防线』：NPC/CI 执行者不得合并、且不因人工授权豁免的要点不得被删。
+
+    背景（一条**"用户明确要求也不照做"**的硬约束，最容易被"顺手满足用户"的惯性冲掉）：
+    CNB 平台上的 NPC（CI/CD 环境里被评论唤起的 agent）**严禁合并合并请求**，**即使人工
+    明确要求或直接授权也必须拒绝**。本项目实证反例：曾出现"AI 在对话中被直接授权后实际
+    执行了合并"——**授权被当成豁免**，自动化执行者替人承担了不可逆且合规相关的动作。
+    故把这条的服务侧要求与判定标准钉在公共内容 `specs/platform/cnb.adoc`，并在会被未知
+    项目复制执行的提示词公共片段 `delivery` 里同口径落一条（`prompts/_common.txt`）。
+
+    本防线钉住**七处要点**（每条须同时命中多处要素，否则别处一句同名字样即可假绿——与
+    `check_delegation_guard` / `check_checklist_guard` 同口径）：(a) 主体禁令（CNB NPC
+    严禁合并）；(b) **无豁免**（人工要求/直授也必须拒绝，含"授权不免除该禁令"）；(c)
+    **判定标准**（可逐条核对：执行了合并动作 / 以授权为由豁免 / 转交他人顶替）；(d)
+    **边界**（只禁合并——推送分支/解决分支内冲突/同步目标分支不算合并，不误伤「冲突处理」）；
+    (e) **同文件既有规则不得被新节顶掉**（「分支与合并请求统一」「冲突处理」两节与其判据
+    都须仍在——本轮实测犯过：新增节点把「冲突处理」整段替换掉，规则凭空消失而其余检查
+    全绿）；(f) 提示词公共片段 `delivery` 的同口径 L1 条；(g) 公开提示词入口 `PROMPTS.adoc`
+    的公共约定同步（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条）。
+
+    只钉"要求文本仍在"——"某次是否真的执行了合并"属运行时行为（平台操作记录/评论实际
+    内容），机械无法判定，交人/子 agent 复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("NPC 禁合并防线检查")
+    # (a)-(d) 公共内容侧：specs/platform/cnb.adoc
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『NPC 禁合并』要求无处承载（平台层规范缺失）", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("合并请求的合并主体", "NPC 禁合并", "严禁合并"),
+             "主体禁令：CNB NPC/CI 执行者一律不得合并合并请求（须有节名与禁令本身）"),
+            (("人工要求", "直接授权", "必须拒绝", "授权不免除"),
+             "无豁免：人工明确要求/直接授权也必须拒绝，且写明『授权不免除该禁令』"),
+            (("判定标准", "合并动作", "豁免", "顶替"),
+             "判定标准：须给出可逐条核对的违规形态（执行了合并/以授权为由豁免/转交他人顶替），"
+             "否则只剩一句口号、无法判定"),
+            (("不是合并", "解决冲突", "同步目标分支"),
+             "边界：明确『推送分支/解决分支内冲突/同步目标分支都不是合并』，"
+             "避免与「冲突处理」节的自动解决冲突自相矛盾、也不误伤合法操作"),
+            (("== 分支与合并请求统一", "只能修改同一个分支"),
+             "同文件既有规则不得被新节顶掉（本轮实测犯过：新增节点把「冲突处理」整段"
+             "替换掉，规则凭空消失而 check_specs.py 全绿——文件只是变短、无引用悬空）："
+             "「分支与合并请求统一」须在且含『只能修改同一个分支』"),
+            (("== 冲突处理", "自动解决冲突"),
+             "同文件既有规则不得被新节顶掉：「冲突处理」须在且含『自动解决冲突』"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"NPC 禁合并防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
+                    "本条是『用户明确要求也不照做』的唯一一类操作，最易被『顺手满足用户』冲掉，"
+                    "不得删除、不得降级为建议（L1）", rel)
+    # (e) 提示词公共片段：prompts/_common.txt 的 delivery 片段
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『合并一律不做』无处承载", rel_common)
+    else:
+        common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        block = common.split("tag::delivery[]", 1)[-1].split("end::delivery[]", 1)[0] \
+            if "tag::delivery[]" in common else ""
+        for keys, desc in (
+            (("合并一律不做", "无环境区分"),
+             "公共片段 `delivery` 须含『合并一律不做（L1，无环境区分）』一条"),
+            (("直接授权", "也必须拒绝", "授权不免除"),
+             "公共片段须写明人工直授也必须拒绝、授权不免除（提示词会被复制到未知项目执行）"),
+        ):
+            missing = [k for k in keys if k not in block]
+            if missing:
+                err(f"NPC 禁合并防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 {missing}——"
+                    f"{desc}；提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条禁令",
+                    rel_common)
+    # (f) 公开提示词入口：PROMPTS.adoc 的公共约定
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
+    elif "合并一律不做" not in open(PROMPTS_FILE, encoding="utf-8").read():
+        err(f"{rel_prompts} 的公共约定未同步『合并一律不做（L1）』——"
+            "登记处与实际口径不一致，后来者按登记处读会漏掉这条禁令", rel_prompts)
+    phase_done()
+
+
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
 
@@ -2676,7 +2832,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
                     "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
-                    "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面 + AsciiDoc 语法）")
+                    "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
+                    "环境标志与专用口径 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -2713,6 +2870,8 @@ def main(argv=None) -> int:
     check_library_guard()
     check_public_content_coverage()
     check_prompts_primary()
+    check_env_marker_guard()
+    check_npc_merge_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 

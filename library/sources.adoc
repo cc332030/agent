@@ -156,6 +156,12 @@
 * 依据要点：**rename 检测按内容相似度、默认阈值 50%**（`-M<n>` 可调）；`.gitattributes` 的 `text`/`eol` 属性与 `core.autocrlf` 的优先级；行尾归一化（`core.autocrlf`/`core.eol`）与"整文件全红"的行尾噪声。
 * 用途：`specs/general/git.adoc`「文件移动与重命名」（P1 的判定标准与自检命令）、`specs/general/encoding.adoc`「跨平台检出」（`.gitattributes` 为权威落盘口）。
 
+== DORA（交付性能研究）与 GitHub Docs（合并请求的变更控制）
+
+* 材料：DORA（DevOps Research and Assessment）的年度《Accelerate State of DevOps Report》与 Google Cloud 的公开研究文章；GitHub Docs 的 *About protected branches*、*Managing a branch protection rule*（**官方网页已取回，仅题名可逐字核对**）。
+* 依据要点：变更**小批量、短生命周期分支、频繁小步合入主干**；**变更审批要求提交者以外的人批准、且不得自审自并**（`Require approvals` / `Do not allow bypassing the above settings` / `Require review from Code Owners`）——**"改动由人工批准后再进主干"是平台与业界的通行做法**，把合并动作留给人工不是本项目自创的规矩。
+* 用途：`specs/platform/cnb.adoc`「分支与合并请求统一」（trunk-based development 与 DORA 的交付性能研究）、「合并请求的合并主体（NPC 禁合并）」（**人工通过合并请求施加的审批是唯一入口**——自动化执行者自行合并即等于跳过审批；非自审自并的同类依据另见 IEEE 1028 与 `specs/general/review.adoc`）。
+
 == The Twelve-Factor App
 
 * 材料：The Twelve-Factor App（十二要素应用方法论，公开文本十二要素之一至之三、之二等）。
@@ -183,8 +189,15 @@
 * 材料：《阿里巴巴 Java 开发手册》（公开出版的手册文本）。
 * 用途：`specs/stack/java.adoc` 首段"遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准"——即**引用其作为下限、本集合可以更严**（`specs/general/source.adoc`「引用不替代规则本身」）。
 
+== 变更审批与"合并主体"（DORA / GitHub Docs）
+
+* 材料：**DORA**（DevOps Research and Assessment，Accelerate State of DevOps 报告系列）关于交付性能的研究结论——**变更审批（change approval）/代码评审**的**质量**与交付性能相关，而**把审批做成形式化的把关**并不提升性能；以及 **GitHub Docs** 关于**受保护分支（protected branches）与 required pull request reviews** 的官方说明：合入受保护分支的变更**须经独立于改动提出者的评审通过**，且**提交者不得自行绕过**所配置的评审要求。
+* 依据要点（**说明：此条为"业界权威实践的公开陈述"，引文为要点转述、非逐字摘录**，如日后需逐字比对，以 DORA 报告原文与 GitHub Docs 的 protected branches / required reviews 页面为对照面）：**让改动方自己去合入、或让同一自动化执行者既改又合**，等于取消独立评审这一环；**"谁提的改动谁负责任地提出、合入由独立的一方（人）确认"**是通行做法。
+* **须注意的语义差异（同义性）**：DORA 的结论指向"**审批要有实质、不要形式化**"，本**未**声称"某一类执行者绝对不得合并"；本集合据此推出的是一条**本项目自身的组织约定**——**CNB 平台上的 NPC/CI 执行者一律不得合并**（`specs/platform/cnb.adoc`「合并请求的合并主体（NPC 禁合并）」），其**根因**是：CI 环境是一次性、无合规责任主体的自动执行者，**授权给"同一个自动执行者"不构成独立评审**；**不得**把本节读成"标准规定 AI 不得合并"。
+* 实证反例（**本项目真实记载**）：本项目曾发生"由 **AI（CNB NPC/CI 环境中的执行者）实际执行了合并**"的实例——起因是发起人在对话中直接授权；该实例正是本条要防的失效形态：**授权被当成豁免、自动化执行者替人承担了不可逆且合规相关的动作**（本条也因此把"因用户要求/授权故本次合并"单列为判定标准②）。
+
 == 关于标准版本年份（引用的取舍）
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本（L2）」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；JaCoCo / PIT；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA（Accelerate 报告系列）/ GitHub Docs（受保护分支与 required reviews）；JaCoCo / PIT；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。

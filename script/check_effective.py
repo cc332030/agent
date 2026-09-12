@@ -74,6 +74,7 @@ MECHANISMS = [
     ("公共内容被未知项目加载时的可控性（影响面/成本/可控性）", "specs/general/testing.adoc", "script/check_specs.py", "check_adoption_guard 钉住「运行契约」节、三维判据与维护方承接清单登记；另由 check_public_content_has_no_private_refs 机械拦住\"公共内容把本仓库私有物当抓手引用\"（引用方读到的死链）；「某条具体规则落到未知项目里会不会静默推翻其约定」属语义判断，交人/子 agent 复核"),
     ("任务各节点须自查（提出/理解/方案/执行/验证/交付/复盘）", "specs/core/execution.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住节点清单以表格行存在、并钉住『哪些节点不设』的独立声明；『某个节点上是否真的自查了』属运行时行为，靠 agent 遵守 + 人 review"),
     ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py", "check_checklist_guard 钉住『硬超时』『超时的处置』两要点仍在（否则“派了就一直等”重新出现，实证为外部评审卡 1h+ 未回传）；『本次是否真的设了时限并在到点时放弃』属运行时行为，靠留证 + 人 review"),
+    ("子任务强制同 Agent、不得点名外部 Agent/NPC", "specs/general/collab.adoc", "script/check_specs.py", "check_delegation_guard 钉住五处要求的多要素（同 Agent 判据 / 不得点名外部 NPC / 可核对的判定标准 / 同 Agent 不可用时的降级路径 / 优先一次性调用）仍在；『本次派发是否真同 Agent、有无点名外部 NPC』属运行时行为（派发与评论的实际内容），机械无法判定，交人/子 agent 复核"),
     ("语义复核留证须是三态台账（通过 / 未发现问题 / 悬置，不得合并）", "specs/general/testing.adoc", "script/check_specs.py", "check_checklist_guard 钉住『三态』『悬置』两要点仍在；『具体某次留证是否真按三态分列』属产物内容判断，交人/子 agent 复核"),
     ("验证按改动性质取值（代码类走机械判据、规范类才做三视角与全局核对）", "specs/general/testing.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住「验证的适用边界」节、两类改动、唯一判据问句、『不得互串』『取更严的一侧』与『每次验证换干净上下文』；『本次是否真按性质取值』属运行时行为，靠遵守 + 人 review"),
     ("规范何时该拆分（默认不拆、三条硬条件、拆后逐项自洽核对）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住「一条规范何时该拆分」与「拆分后的自洽核对」两节及三条硬条件、默认不拆、单独过准入九问；『某次拆分是否由实害驱动』属语义判断，交人/子 agent 复核"),
@@ -87,6 +88,7 @@ MECHANISMS = [
     ("代码安全底线（输入校验/输出编码/凭据不硬编码）", "specs/general/security.adoc", None, "无机械抓手：具体实现属引用方项目代码（本仓库不可见）；靠遵守 + 该项目的静态检查/SAST"),
     ("依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空", "AGENTS.adoc", "script/check_specs.py", "check_library_guard 钉住图书馆（仓库根 library/）入口与主题文件存在且被项目规范入口登记、入口登记与实际主题双向一致、外部标准逐字引文锚点仍在、馆内引用可解析（悬空即依据链断在这里）；『某条依据是否真的支持该条、依据找得全不全』属语义判断，交人/子 agent 复核"),
     ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定，交人/子 agent 复核"),
+    ("CNB NPC（CI/CD 执行者）严禁合并 PR、人工要求或直授也必须拒绝", "specs/platform/cnb.adoc", "script/check_specs.py", "check_npc_merge_guard 钉住六处要点（禁令本体 / 无豁免含『授权不免除』 / 可逐条核对的判定标准 / 与「冲突处理」不矛盾的边界 / 提示词公共片段 `delivery` 同口径 L1 条 / 公开提示词入口 PROMPTS.adoc 同步）；『某次是否真的执行了合并』属运行时行为（平台操作记录与评论实际内容），机械无法判定，交人/子 agent 复核"),
 ]
 
 

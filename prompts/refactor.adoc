@@ -8,12 +8,13 @@
 
 将下方代码块内的文字**完整原样**复制给 AI 作为任务指令。
 
-**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `baseline` / `final-verify` / `delivery`）组装。若你读到的是**文本形式**、其中 `include::_common.txt[tag=…]` 指令**未被展开**，请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**——不得因指令未展开就跳步或漏掉公共步骤。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
+**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `baseline` / `final-verify` / `delivery`）组装。若你读到的是**文本形式**、其中 `include::_common.txt[tag=…]` 指令**未被展开**，请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**——不得因指令未展开就跳步或漏掉公共步骤。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
 
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『重构』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
 3. `isolation`：隔离要求（不混用其他提示词、不做跨任务顺手改动）；
-4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤。
+4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤；
+5. `env-guard`：**按环境标志选执行口径**——只在命中标志（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`）的环境里生效，未命中按其末尾中性口径执行；作为执行前的前置判断读入，不改变本次任务的目标与步骤。
 
 [listing]
 ----
@@ -22,6 +23,7 @@ include::_common.txt[tag=primary]
 include::_common.txt[tag=priority-rules]
 include::_common.txt[tag=isolation]
 include::_common.txt[tag=intro-rules]
+include::_common.txt[tag=env-guard]
 
 include::_common.txt[tag=baseline]
 2. 现状检查与重构方案：逐模块检查代码现状（这是重构的前提、**必须做全、不得跳过（L1）**），定位需重构的结构问题（重复代码、职责不清、过长/过复杂方法、类与模块耦合、坏味道、难扩展的实现等；检查中发现的其他问题一并记录，但**只记录、不改动**——与重构无关的修复交 link:review.adoc[]（检查修复提示词）处理或记入重构清单，不属本任务范围），按优先级排序成重构清单写入 tmp/ 作核对依据，不得遗漏模块；每项写明重构目标、方式与预期收益（可维护性/可读性/扩展性/性能），有取舍的给出备选方案与取舍依据。对每处性能相关重构判定是否需性能测试：命中任一特征才需——①关键路径/高频调用（每请求/循环反复执行）②大数据量或规模可增长（批量/全量遍历聚合）③昂贵资源（IO/网络/DB/缓存/线程/锁/序列化）④多方案选型需数据佐证；未命中为普通重构、直接实施、不加性能测试，不得一律加、也不得漏掉真敏感点；对需测试的敏感点先测并记录重构前结果作基线。
@@ -32,5 +34,5 @@ include::_common.txt[tag=baseline]
 include::_common.txt[tag=final-verify]
 include::_common.txt[tag=delivery]
 
-完成后汇报：**先回报主侧重（"重构"）的达成情况**——本次做了哪些**结构改动**、改动前后的结构对比与收益（若判定确无可重构点，须给出逐模块判定依据与用户确认结果，不得用"检查报告"充当产出）。随后汇报：各步骤执行情况、重构清单（编号）与实施状态、性能对比结果与迭代结论、验证结果、改动文件清单与**交付情况**（本地场景：改动保留在本地工作空间、未提交未推送；自动化场景：已提交推送的分支与 PR）。
+完成后汇报：**先回报主侧重（"重构"）的达成情况**——本次做了哪些**结构改动**、改动前后的结构对比与收益（若判定确无可重构点，须给出逐模块判定依据与用户确认结果，不得用"检查报告"充当产出）。随后汇报：各步骤执行情况、重构清单（编号）与实施状态、性能对比结果与迭代结论、验证结果、改动文件清单与**交付情况**（本地场景：改动保留在本地工作空间、未提交未推送；自动化场景：已提交推送的分支与 PR；**两种情况都不执行合并**——合入目标分支只由人工完成，即使被要求合并/直授也拒绝，见 `delivery` 片段 L1 条）。
 ----
