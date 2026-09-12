@@ -57,7 +57,7 @@ class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
         self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-                      cm.INSTALL_FILE, cm.PROJECT_FILE)
+                      cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
@@ -65,11 +65,14 @@ class CheckSpecsTestCase(unittest.TestCase):
         cm.PROJECT_SPECS_DIR = os.path.join(self.root, "specs-project-maintainer")
         cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+        # prompts/ 已并入 collect_adoc_files 的检查集合，须同其他根目录一起重定向
+        # 到临时根，否则测试会误扫真实仓库的 prompts/（隔离失效）。
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
 
     def tearDown(self) -> None:
         cm.errors.clear()
         (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-         cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
+         cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
@@ -295,6 +298,62 @@ class TestExtractSpecsRefs(unittest.TestCase):
         text = "`specs/stack/java.adoc` `specs/stack/java.adoc` link:../stack/java.adoc[]"
         self.assertEqual(cm.extract_specs_refs(text, base_dir="specs/general"),
                          ["specs/stack/java.adoc"])
+
+
+# --------------------------------------------------------------------------- #
+# collect_adoc_files
+# --------------------------------------------------------------------------- #
+class TestCollectAdocFiles(CheckSpecsTestCase):
+    """检查集合口径：prompts/ 下的 .adoc 必须纳入（会被分发执行的产物）。
+
+    背景：`prompts/*.adoc` 会被复制给未知项目执行，其自身引用完整性同样须受四口径
+    覆盖；此前集合写死 specs/ 与 specs-project-maintainer/ 两目录，prompts/ 下的
+    .adoc 整体漏检（注入死链/悬空节名仍静默通过）。
+    """
+
+    def test_prompts_adoc_collected(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "= 提示词")
+        self.assertIn(os.path.join(self.root, "prompts", "review.adoc"),
+                      cm.collect_adoc_files())
+
+    def test_all_three_spec_dirs_scanned_recursively(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/a.adoc", "= a")
+        self.write("specs-project-maintainer/b.adoc", "= b")
+        self.write("prompts/c.adoc", "= c")
+        files = cm.collect_adoc_files()
+        self.assertIn(os.path.join(self.root, "specs", "general", "a.adoc"), files)
+        self.assertIn(os.path.join(self.root, "specs-project-maintainer", "b.adoc"), files)
+        self.assertIn(os.path.join(self.root, "prompts", "c.adoc"), files)
+
+    def test_prompts_dangling_ref_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "见 link:no_such_file.adoc[]")
+        cm.check_refs_exist()
+        self.assertIn("不存在", self.error_texts())
+        self.assertIn("prompts/no_such_file.adoc", self.error_texts())
+
+    def test_prompts_dangling_section_ref_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "link:../specs/general/doc.adoc[]「不存在的节XYZ」")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 真实节")
+        cm.check_section_refs()
+        self.assertIn("不存在的节XYZ", self.error_texts())
+
+    def test_prompts_root_absolute_link_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "见 link:/prompts/refactor.adoc[]")
+        cm.check_link_refs()
+        self.assertIn("根绝对", self.error_texts())
+
+    def test_prompts_cross_ref_not_required_dispatcher_registry(self):
+        """prompts/ 是任务提示词、不进规范加载链，其互相引用不得被要求登记进调度器。"""
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "见 link:refactor.adoc[]")
+        self.write("prompts/refactor.adoc", "= 重构")
+        cm.check_dispatcher_registry()
+        self.assertEqual(cm.errors, [])
 
 
 # --------------------------------------------------------------------------- #

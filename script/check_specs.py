@@ -3,6 +3,9 @@
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
 检查项（每项对应一个 check_ 函数，逐条见各函数 docstring 的判定口径）：
+  0. 检查集合：`specs/`、`specs-project-maintainer/`、`prompts/` 三目录递归 + 根目录
+     `AGENTS_COMMON.adoc`/`AGENTS.adoc`/`INSTALL.adoc`（见 `collect_adoc_files`）。
+     `prompts/` 是要复制给未知项目执行的产物，其自身引用完整性同受下列口径覆盖。
   1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
      当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
   2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
@@ -266,14 +269,18 @@ def err(msg: str, path: str = "", line: int = 0) -> None:
 def collect_adoc_files():
     """收集纳入检查的 .adoc 文件。
 
-    口径：`specs/` 下全部规范文件 + 通用规范入口 `AGENTS_COMMON.adoc` + 项目自身规范
-    `AGENTS.adoc` + 安装文档 `INSTALL.adoc`——即"随规范集合维护的全部文档"，
-    **不止 specs/ 一个目录**（下文各检查的 docstring 一律以本口径为准）。
-    README/PROMPTS 等面向使用者的说明文档不在本集合内（其维护检查见 CI 其余步骤），
-    但提示词的**方向性内容**（主侧重/优先级）另由 check_prompts_primary 专门盯住。
+    口径：`specs/`、`specs-project-maintainer/`、`prompts/` 三目录下全部 .adoc 递归 +
+    通用规范入口 `AGENTS_COMMON.adoc` + 项目自身规范 `AGENTS.adoc` + 安装文档
+    `INSTALL.adoc`——即"随规范集合维护的全部文档"，**不止 specs/ 一个目录**
+    （下文各检查的 docstring 一律以本口径为准）。
+    `prompts/` 是**会被复制给未知项目执行**的产物，其自身的引用完整性
+    （链接格式、引用存在性、节名引用、语法）同样须纳入四口径检查，否则文档里的死链/悬空
+    引用会随分发一起流出去。README/PROMPTS 等面向使用者的说明文档不在本集合内
+    （其维护检查见 CI 其余步骤），但提示词的**方向性内容**（主侧重/优先级）另由
+    check_prompts_primary 专门盯住。
     """
     result = []
-    for d in (SPECS_DIR, PROJECT_SPECS_DIR):
+    for d in (SPECS_DIR, PROJECT_SPECS_DIR, PROMPTS_DIR):
         for root, _, files in os.walk(d):
             for f in files:
                 if f.endswith(".adoc"):
@@ -462,8 +469,12 @@ def check_dispatcher_registry():
         base = _ref_base(f)
         with open(f, encoding="utf-8") as fh:
             referenced |= set(extract_specs_refs(fh.read(), base))
+    # prompts/ 是任务提示词（非规范本体、不进规范加载链），其内部互相引用
+    # （如 review.adoc ↔ refactor.adoc、_common.txt）不应要求登记进 AGENTS_COMMON.adoc
+    # 的规范调度器——它们不是"会被懒加载的规范文件"，登记与否不影响加载。故排除。
     missing = sorted(r for r in referenced - registered
-                     if not r.startswith("specs-project-maintainer/"))
+                     if not r.startswith("specs-project-maintainer/")
+                     and not r.startswith("prompts/"))
     log(f"  调度器登记 {len(registered)} 个, 被引用 {len(referenced)} 个")
     for m in missing:
         err(f"规范文件被引用但未在加载调度器登记（不会被加载、其中规则实际失效）: {m}",
