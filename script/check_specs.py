@@ -1340,6 +1340,12 @@ def check_delegation_guard():
       * **无机制自欺**：自检与长会话治理大量依赖执行环境能力（能否清空上下文、能否
         派发子 agent），环境不提供时若无"先判能力、缺失走降级路径、不空自评"的机制，
         就会出现"照抄'已清洁上下文'/'已委派'"的假自检（`specs/general/self-check.adoc`）。
+      * **执行者来源失控**："缺独立复核"时最容易抓来的是**外部来源的执行者**（外部 NPC、
+        另一个产品）——它看不到本执行者已加载的规范，判据是否一致、耗时多久都不可核对
+        （本项目实证：镜像不存在致派发即 error、另一次 1 h+ 未回传）。故须有"**优先用与
+        执行者同源的子 Agent；换来源只在同源不可用后；同源也不可用时降级为主 agent 串行
+        + 如实标悬置，且优先一次性调用**"的机制（`specs/general/collab.adoc`，
+        维护方侧落点 `specs-project-maintainer/verify.adoc`）。
     """
     phase("从属者与能力自评防线检查")
     for rel, key, desc in (
@@ -1355,6 +1361,31 @@ def check_delegation_guard():
         if key not in text:
             err(f"从属者与能力自评防线被破坏：{rel} 缺失『{key}』机制——{desc}；"
                 "该类要点属'定义了却不会执行'的高发盲点，不得删除或并入他处而失去痕迹", rel)
+    # 执行者来源选择：『优先用与执行者同源的 Agent』的要点（换来源只在同源不可用后、
+    # 同源也不可用时降级为主 agent 串行/标悬置、优先一次性调用）。此处只钉"要求文本
+    # 仍在"——"本次是否真按同源优先派发"属运行时行为，机械无法判定，交人/子 agent 复核。
+    for rel, key, desc in (
+        ("specs/general/collab.adoc", "优先由与执行者相同的 Agent 承担子任务",
+         "子任务/复核优先用同源执行者，换外部来源只是同源不可用后的备选"),
+        ("specs/general/collab.adoc", "降级路径（L1）",
+         "同源不可用也不得换成不可核对的外部执行者，须降级为主 agent 串行或标悬置"),
+        ("specs/general/collab.adoc", "优先一次性调用",
+         "派发优先一次性、边界明确、可超时，不交有自主探查权的执行者"),
+        ("specs/general/testing.adoc", "先同源、再降级",
+         "三视角复核优先同源子 Agent，外部来源只在同源不可用后成立"),
+        ("specs-project-maintainer/verify.adoc", "子 Agent 优先与执行者同源",
+         "维护方落点：外部复核者不是第一手段、派发前先核实可用性"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少文件 {rel}——{desc} 无处承载", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        if key not in text:
+            err(f"执行者来源选择防线被破坏：{rel} 缺失『{key}』要点——{desc}；"
+                "该要点防的是'缺复核时随手抓一个不可核对的外部执行者'，"
+                "不得删除或并入他处而失去痕迹", rel)
     phase_done()
 
 
