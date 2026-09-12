@@ -85,6 +85,7 @@ MECHANISMS = [
     ("执行环境能力先自评、无机制走降级路径且不空自评", "specs/general/self-check.adoc", "script/check_specs.py", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）；'自评是否属实'属运行时行为，靠遵守 + 人 review"),
     ("常驻层体积与调度器条目数不得无上限膨胀", "AGENTS_COMMON.adoc", "script/check_specs.py", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限；'体量与层级的语义是否合理'仍交人/子 agent 复核"),
     ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
+    ("对外能力的可替换点须有唯一装配点、须有可用默认（接入成本是设计指标）", "specs/general/coding.adoc", "script/check_specs.py", "check_abstraction_adoption_guard 钉住「抽象与接入成本」节的两条 L1（唯一装配点、可替换点须有可用默认或显式必填声明）与其判定特征、四条要点齐全、L1/L2 级别标注、依据行在、Spring「配置」侧引用承接；『某个抽象是否真的做到了唯一装配点』属引用方项目代码（本仓库不可见），交人/子 agent 复核"),
     ("配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）", "specs/general/coding.adoc", "script/check_specs.py", "check_config_class_guard 钉住通用层条文（含『任何情况都不允许』与去向）、判定标准、Java/Spring 识别特征与 README 同步；『某个具体配置类有没有夹带逻辑』属引用方项目代码（本仓库不可见），交人/子 agent 复核"),
     ("执行前自检（非平凡任务须逐项自检，防'加载了却没执行'）", "specs/general/self-check.adoc", "script/check_specs.py", "check_self_check_guard 钉住自检规范文件、适用边界与 execution.adoc 必加载层落点；自检是否真做属运行时行为，靠 agent 遵守 + 人 review"),
     ("不得编造事实与来源（引用真实、标准不编、宁可不引）", "specs/general/source.adoc", "script/check_specs.py", "check_source_guard 钉住来源规范要点；引用存在性另由 check_refs_exist/check_section_refs 兜底"),
