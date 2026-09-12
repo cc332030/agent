@@ -57,7 +57,7 @@ class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
         self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-                      cm.INSTALL_FILE, cm.PROJECT_FILE)
+                      cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR)
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
@@ -65,11 +65,14 @@ class CheckSpecsTestCase(unittest.TestCase):
         cm.PROJECT_SPECS_DIR = os.path.join(self.root, "specs-project-maintainer")
         cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+        # prompts/ 已并入 collect_adoc_files 的检查集合，须同其他根目录一起重定向
+        # 到临时根，否则测试会误扫真实仓库的 prompts/（隔离失效）。
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
 
     def tearDown(self) -> None:
         cm.errors.clear()
         (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
-         cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
+         cm.INSTALL_FILE, cm.PROJECT_FILE, cm.PROMPTS_DIR) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
