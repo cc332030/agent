@@ -304,11 +304,13 @@ class TestExtractSpecsRefs(unittest.TestCase):
 # collect_adoc_files / _is_dir_ref / _is_placeholder_ref
 # --------------------------------------------------------------------------- #
 class TestCollectAdocFiles(CheckSpecsTestCase):
-    """钉住"检查集合的覆盖面"：纳入 `library/**` 与仓库根全部 .adoc。
+    """钉住"检查集合的覆盖面"：纳入 `library/**`、`prompts/**` 与仓库根全部 .adoc。
 
     原实现只收 `specs/` + `AGENTS_COMMON.adoc` + `AGENTS.adoc` + `INSTALL.adoc`，
     `library/**` 与根 `PUBLIC.adoc`/`README.adoc`/`PROMPTS.adoc`（连 `CHANGELOG.adoc`）
     全部漏收——语法编译、引用存在性、节名引用、链接格式四口径对它们整体失效。
+    `prompts/**` 亦曾漏收，而它是要复制给未知项目执行的产物（见 `PUBLIC.adoc`）：
+    其自身死链/悬空引用会随分发流出。
     """
 
     def test_library_files_collected(self):
@@ -325,6 +327,43 @@ class TestCollectAdocFiles(CheckSpecsTestCase):
         files = cm.collect_adoc_files()
         for rel in ("PUBLIC.adoc", "README.adoc", "PROMPTS.adoc"):
             self.assertIn(rel, files)
+
+    def test_prompts_files_collected(self):
+        # prompts/*.adoc 是要复制给未知项目执行的产物，其自身引用完整性须受四口径覆盖
+        self.write("prompts/review.adoc", "= 提示词：检查修复\n")
+        self.write("prompts/_common.txt", "公共片段\n")
+        files = cm.collect_adoc_files()
+        self.assertIn("prompts/review.adoc", files)
+        # 非 .adoc（_common.txt）不入集合：四口径只针对 .adoc 引用
+        self.assertNotIn("prompts/_common.txt", files)
+
+    def test_prompts_dangling_ref_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:no_such_file.adoc[]\n")
+        cm.check_refs_exist()
+        self.assertIn("prompts/no_such_file.adoc", self.error_texts())
+
+    def test_prompts_dangling_section_ref_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc",
+                   "link:../specs/general/doc.adoc[]「不存在的节XYZ」\n")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 真实节\n")
+        cm.check_section_refs()
+        self.assertIn("不存在的节XYZ", self.error_texts())
+
+    def test_prompts_root_absolute_link_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:/prompts/refactor.adoc[]\n")
+        cm.check_link_refs()
+        self.assertIn("根绝对", self.error_texts())
+
+    def test_prompts_need_not_register_dispatcher(self):
+        # prompts/ 非规范本体、不进规范加载链，其互相引用不得被要求登记进调度器
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:refactor.adoc[]\n")
+        self.write("prompts/refactor.adoc", "= 重构\n")
+        cm.check_dispatcher_registry()
+        self.assertEqual(cm.errors, [])
 
     def test_paths_are_repo_relative(self):
         # 统一为"仓库根相对 POSIX 路径"（"某文件在不在集合里"可直接核验）
@@ -2026,6 +2065,23 @@ class TestCheckPublicContentSelfContained(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "= t")
         self.write("AGENTS.adoc",
                    "= 项目自身规范\n\n最高关注项见 link:specs-project-maintainer/priority.adoc[]\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_private_layer_ref_in_prompts_reports(self):
+        # 反例：prompts/*.adoc 会被复制到未知项目执行，其私有落点同样是引用方读不到的死链
+        # （PUBLIC.adoc：「自足要求的适用范围」②类，明写机械检查按公共内容口径覆盖它们）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc",
+                   "= 提示词\n\n核对见 `specs-project-maintainer/verify.adoc`。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("prompts/review.adoc", self.error_texts())
+
+    def test_prompts_without_private_refs_passes(self):
+        # 正例：提示词自足表达，不指向本仓库私有落点
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc",
+                   "= 提示词\n\n加载项目规范入口后按规范执行。\n")
         cm.check_public_content_is_self_contained()
         self.assertEqual(cm.errors, [])
 

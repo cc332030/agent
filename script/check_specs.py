@@ -299,7 +299,8 @@ def collect_adoc_files():
     `specs-project-maintainer/`）+ 仓库根的全部 .adoc（通用规范入口
     `AGENTS_COMMON.adoc`、项目自身规范 `AGENTS.adoc`、安装文档 `INSTALL.adoc`、
     公共内容入口索引 `PUBLIC.adoc`、说明文档 `README.adoc`/`PROMPTS.adoc`、
-    变更记录 `CHANGELOG.adoc`）+ 图书馆 `library/` 下的全部 .adoc——即
+    变更记录 `CHANGELOG.adoc`）+ 图书馆 `library/` 下的全部 .adoc + 任务提示词
+    `prompts/` 下的全部 .adoc（会被复制给未知项目执行，见 `PUBLIC.adoc`）——即
     "随规范集合维护的全部文档"，**不止 specs/ 一个目录**。
     （下文各检查的 docstring 一律以本口径为准。）
 
@@ -307,22 +308,23 @@ def collect_adoc_files():
     覆盖范围，漏收一个目录即该目录下全部文档脱离这些口径（悬空引用/悬空节名/错格式
     链接都无人发现）。历史缺陷正是如此：`library/**` 与根 `PUBLIC.adoc`/`README.adoc`/
     `PROMPTS.adoc` 曾同时不在本集合内，三口径对它们整体失效（实测 `library/README.adoc`
-    就有 3 处悬空节名无人拦）。故此处以"仓库根全部 .adoc + 各目录递归"一次收全，
-    新增目录/新文件自动纳入，不再靠逐项登记（漏登记即漏检查）。
+    就有 3 处悬空节名无人拦）；`prompts/**` 同样漏收过——而它是要复制给未知项目执行的
+    产物，其自身的死链/悬空引用会随分发一起流出。故此处以"仓库根全部 .adoc + 各目录
+    递归"一次收全，新增目录/新文件自动纳入，不再靠逐项登记（漏登记即漏检查）。
     """
     result = []
     # 目录一律**由 REPO_ROOT 现场推导**（不直接引用可能被重定向的模块常量）：
     # 各检查/单测会把 REPO_ROOT 指向临时根，现场推导才能保证"只收本仓库内的文件"，
     # 不会把真实仓库的目录（如真实 library/）漏收进来。
     root_dir = os.path.abspath(REPO_ROOT)
-    for sub in ("specs", "specs-project-maintainer", "library"):
+    for sub in ("specs", "specs-project-maintainer", "library", "prompts"):
         d = os.path.join(root_dir, sub)
         for dirpath, _, files in os.walk(d):
             for f in files:
                 if f.endswith(".adoc"):
                     result.append(os.path.join(dirpath, f))
     # 仓库根：全部 .adoc（含 AGENTS.adoc / INSTALL.adoc / PUBLIC.adoc / README.adoc /
-    # PROMPTS.adoc / CHANGELOG.adoc / AGENTS_COMMON.adoc；library/ 已由上面收，不重复）
+    # PROMPTS.adoc / CHANGELOG.adoc / AGENTS_COMMON.adoc；library/、prompts/ 已由上面收，不重复）
     if os.path.isdir(root_dir):
         for f in sorted(os.listdir(root_dir)):
             if f.endswith(".adoc"):
@@ -1859,6 +1861,15 @@ def check_public_content_is_self_contained():
       * **不得出现指向维护方自查层（`specs-project-maintainer/`）的引用**——该层不随公共
         内容分发，引用方拿不到；公共内容里的规则必须在本文件与 `specs/` 内自足表达。
 
+    覆盖对象是"自足受限集合"的两类（见 `PUBLIC.adoc`「自足要求的适用范围」）：
+      * ①**会被入口取到的**——`AGENTS_COMMON.adoc` 与 `specs/**`；
+      * ②**会被复制到未知项目执行的**——`prompts/*.adoc`。它们同样在未知项目里执行，
+        其中指向本仓库私有落点的路径同样是引用方读不到的死链（`PUBLIC.adoc` 明写
+        "机械检查按『公共内容』口径覆盖它们"——此前该承诺不成立：`prompts/` 既不在
+        检查集合、也不在本条过滤范围内）。
+    边界：`prompts/_common.txt` 亦属②类（公共片段），但它不是 `.adoc`、不进
+    `collect_adoc_files`，故不在本条覆盖内——其自足性目前无机械抓手，属已知缺口。
+
     与 check_public_content_has_no_private_refs 的分工：那条拦"把本仓库私有物（脚本名、
     工具声明）当抓手引用"，本条拦"把私有**规范文件**当规则正文引用"（悬空引用）。
 
@@ -1869,8 +1880,11 @@ def check_public_content_is_self_contained():
         rel = _rel_of(f)
         if rel == "AGENTS.adoc":
             continue  # 根 AGENTS.adoc 是项目自身内容，可引用任意私有落点
-        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
-            continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）
+        # 自足受限集合 = ①会被入口取到的（AGENTS_COMMON.adoc + specs/**）
+        #              ∪ ②会被复制到未知项目执行的（prompts/**，见 PUBLIC.adoc）
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
+                and not rel.startswith("prompts/"):
+            continue  # 其余（library/、README 等）不属本条的约束对象
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         if not os.path.isfile(path):
             continue
