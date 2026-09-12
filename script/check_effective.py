@@ -85,7 +85,8 @@ MECHANISMS = [
     ("不可逆操作先确认（删除/清空/强推，P5）", "specs/core/execution.adoc", "script/check_specs.py", "check_priority_guard 钉住 P5 存在性与「破坏性操作」落点；是否真确认属运行时行为，靠遵守 + 人 review"),
     ("换行符按解释器分流（LF 基准、.bat/.cmd 必须 CRLF、.gitattributes 固定）", "specs/general/encoding.adoc", "script/check_specs.py", "check_line_ending_guard 钉住编码规范的分流判据与 bash/python/powershell 栈文件的行尾要求；某文件实际是否为 CRLF 属引用方工作区状态，本仓库不可见，靠引用方 `git ls-files --eol` 自检"),
     ("代码安全底线（输入校验/输出编码/凭据不硬编码）", "specs/general/security.adoc", None, "无机械抓手：具体实现属引用方项目代码（本仓库不可见）；靠遵守 + 该项目的静态检查/SAST"),
-    ("依据不得只剩名称：依据图书馆须可查到、可逐字核对、且自足", "specs/library/README.adoc", "script/check_specs.py", "check_library_guard 钉住图书馆入口与主题文件存在且被调度器登记、入口登记与实际主题双向一致、外部标准逐字引文锚点仍在、馆内不得出现私有落点与私有抓手名；『某条依据是否真的支持该条、依据找得全不全』属语义判断，交人/子 agent 复核"),
+    ("依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空", "AGENTS.adoc", "script/check_specs.py", "check_library_guard 钉住图书馆（仓库根 library/）入口与主题文件存在且被项目规范入口登记、入口登记与实际主题双向一致、外部标准逐字引文锚点仍在、馆内引用可解析（悬空即依据链断在这里）；『某条依据是否真的支持该条、依据找得全不全』属语义判断，交人/子 agent 复核"),
+    ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定，交人/子 agent 复核"),
 ]
 
 
