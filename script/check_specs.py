@@ -1997,6 +1997,136 @@ def check_checklist_guard():
                     "防线的声称与实现不一致（改名/删除后未同步文档）", rel)
     phase_done()
 
+
+# 依据图书馆（公共内容，按需懒加载）：其价值全在"依据真的能查到、真的对得上"——
+# 入口登记的主题文件必须真实存在，外部标准的**逐字引文**必须仍在（少一句就意味着
+# "依据被压成名称"）；图书馆内容随规范分发给引用方，故须自足（不得出现私有落点）。
+# 判定只认机械可判定的形态：文件/片段存在性与私有落点字样；"该依据是否真的支持该条、
+# 依据找得全不全"属语义判断，交人/子 agent 复核承担（见 specs/general/verify.adoc「验证总纲」）。
+LIBRARY_DIR = os.path.join(SPECS_DIR, "library")
+LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
+# 入口登记的主题文件（登记集合须与实际文件双向一致，防"建了文件没登记"或"登记了空壳"）
+LIBRARY_TOPICS = ("sources.adoc",)
+# 逐字引文锚点：每条外部标准的关键片段（只取"可静态确证、逐字取自原文"的片段，
+# 不把解释性文字当锚点）。任一缺失即说明该标准只剩名称、依据已无从核对。
+LIBRARY_QUOTE_ANCHORS = (
+    "Software Reviews and Audits",
+    "IEEE Standard for Information Technology--Systems Design--Software Design Descriptions",
+    "Software and systems engineering — Software testing — Part 4: Test techniques",
+    "Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model",
+    "ISO/IEC Directives, Part 2 — Principles and rules for the structure and drafting",
+    "Ergonomics of human-system interaction — Part 110: Interaction principles",
+    "Key words for use in RFCs to Indicate Requirement Levels",
+    "Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words",
+    "UTF-8, a transformation format of ISO 10646",
+    "Date and Time on the Internet: Timestamps",
+    "The OAuth 2.0 Authorization Framework",
+    "Best Current Practice for OAuth 2.0 Security",
+    "The 'Basic' HTTP Authentication Scheme",
+    "Digital Identity Guidelines: Authentication and Lifecycle Management",
+    "Deserialization of Untrusted Data",
+    "Observable Timing Discrepancy",
+    "Generation of Error Message Containing Sensitive Information",
+    "Active Debug Code",
+    "Dependency specification for Python Software Packages",
+    "Style Guide for Python Code",
+    "Docstring Conventions",
+    "**/IT*.java",
+    "**/*ITCase.java",
+    "**/*TestCase.java",
+    "MAJOR version when you make incompatible API changes",
+    "In many IETF documents, several words",
+    "when they are in all capitals as shown below",
+)
+
+
+def check_library_guard():
+    """『依据图书馆防线』：依据须查得到、对得上、且自足。
+
+    背景：规范正文刻意只给"怎么走"（规则 + 判定标准 + 依据名），但依据**不能只存在
+    名称**——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不成立、无法据以
+    取舍与举一反三。图书馆（`specs/library/`）就是依据的落点：外部标准的**原文摘录**、
+    "这条标准确实支持这条规则"的映射、内在依据与真实失效实证。
+
+    故本条钉住四件确定项（都是机械可判定的）：
+
+      * **存在与登记**：图书馆入口与各主题文件存在，且**被加载调度器登记**（未登记即
+        永远不会被加载，图书馆等于不存在）；
+      * **单向登记一致**：入口「主题登记」里 `link:` 到的主题文件真实存在，且主题目录
+        下没有"建了文件却没登记"的孤儿（读者按入口找不到它）；
+      * **逐字引文仍在**：所登记外部标准的关键片段（题名、模板片段、代码模式等）仍在
+        图书馆内——少一句就意味着依据被压成了名称；
+      * **自足**：图书馆属**公共内容**（随规范分发给引用方），故不得引用私有落点
+        （维护方自查层）——一处引用方读不到的路径即让依据断链。
+
+    "该依据是否真的支持该条、依据找得全不全、有没有把解释当原文"属语义判断，交人/
+    子 agent 复核承担。
+    """
+    phase("依据图书馆防线检查")
+    if not os.path.isfile(LIBRARY_INDEX):
+        err("缺少依据图书馆入口 specs/library/README.adoc——"
+            "规范条目背后的依据将只剩名称、无从核对（见 specs/general/source.adoc）",
+            "specs/library/README.adoc")
+        phase_done()
+        return
+
+    with open(LIBRARY_INDEX, encoding="utf-8") as fh:
+        index_text = fh.read()
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        dispatcher = fh.read()
+
+    # 1) 调度器登记：图书馆入口须在加载调度器登记（否则按调度器执行时永远不会被加载）
+    if "specs/library/README.adoc" not in dispatcher:
+        err("依据图书馆未在加载调度器（AGENTS_COMMON.adoc）登记——"
+            "按调度器执行时它永远不会被加载，依据实际无从查到",
+            "AGENTS_COMMON.adoc")
+
+    # 2) 入口登记的主题 ↔ 主题目录实际文件，双向一致
+    registered = set(re.findall(r"link:([^\[\]]+\.adoc)\[", index_text))
+    actual = set()
+    if os.path.isdir(LIBRARY_DIR):
+        actual = {f for f in os.listdir(LIBRARY_DIR)
+                  if f.endswith(".adoc") and f != "README.adoc"}
+    for r in sorted(registered):
+        if not os.path.isfile(os.path.join(LIBRARY_DIR, r)):
+            err(f"依据图书馆入口登记了不存在的主题文件: {r}——"
+                "读者按入口找不到依据（登记与实际不一致）", "specs/library/README.adoc")
+    for a in sorted(actual - registered):
+        err(f"依据图书馆存在未登记的主题文件: {a}——"
+            "未登记即不会被读者发现，依据实际不可达（写文件与登记是同一个动作）",
+            "specs/library/README.adoc")
+    for t in LIBRARY_TOPICS:
+        if t not in actual:
+            err(f"依据图书馆缺少主题文件: {t}", "specs/library/README.adoc")
+
+    # 3) 逐字引文锚点：依据不得只剩名称
+    texts = {}
+    for f in sorted(actual):
+        with open(os.path.join(LIBRARY_DIR, f), encoding="utf-8") as fh:
+            texts[f] = fh.read()
+    blob = "\n".join(texts.values())
+    missing = [q for q in LIBRARY_QUOTE_ANCHORS if q not in blob]
+    if missing:
+        err(f"依据图书馆缺失逐字引文锚点 {missing}——依据被压成名称后将无从核对"
+            "（判据：所引标准的关键片段须能在馆内逐字找到）",
+            "specs/library/README.adoc")
+
+    # 4) 自足：图书馆属公共内容，不得出现私有落点（维护方自查层）与私有抓手名
+    for f in sorted(actual):
+        with open(os.path.join(LIBRARY_DIR, f), encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if "specs-project-maintainer/" in line:
+                    err("依据图书馆属公共内容、会随规范分发给引用方，"
+                        "不得引用维护方自查层『specs-project-maintainer/』"
+                        "（引用方读到的是死链，依据链断在这里）",
+                        f"specs/library/{f}", j)
+                if "script/check_" in line:
+                    err("依据图书馆属公共内容，不得把本仓库私有抓手名写进去"
+                        "（引用方看不到、也拿不到该脚本）",
+                        f"specs/library/{f}", j)
+    phase_done()
+
+
 def check_prompts_primary():
     """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
 
@@ -2146,6 +2276,7 @@ def main(argv=None) -> int:
     check_source_guard()
     check_line_ending_guard()
     check_java_test_naming()
+    check_library_guard()
     check_prompts_primary()
     check_checklist_guard()
     check_asciidoctor_syntax()

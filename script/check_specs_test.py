@@ -1141,7 +1141,102 @@ class TestCheckPrincipleGuard(CheckSpecsTestCase):
         self.assertIn("缺少 Agent 项目自身规范入口", self.error_texts())
 
 
+
+class TestCheckLibraryGuard(CheckSpecsTestCase):
+    """钉住『依据图书馆防线』：依据须查得到、对得上、且自足。
+
+    依据不能只存在名称——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不
+    成立、无法据以取舍（specs/general/verify.adoc「验证总纲」的"防慢慢脱离初衷"）。
+    图书馆（specs/library/）是依据的落点，故其存在性、登记、逐字引文与自足性都由
+    本条机械钉住。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_lib = (cm.LIBRARY_DIR, cm.LIBRARY_INDEX, cm.LIBRARY_TOPICS)
+        cm.LIBRARY_DIR = os.path.join(self.root, "specs", "library")
+        cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
+        cm.LIBRARY_TOPICS = ("sources.adoc",)
+
+    def tearDown(self) -> None:
+        (cm.LIBRARY_DIR, cm.LIBRARY_INDEX, cm.LIBRARY_TOPICS) = self._orig_lib
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n见 `specs/library/README.adoc`（依据图书馆）。\n")
+        self.write("specs/library/README.adoc",
+                   "= 依据图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n")
+        self.write("specs/library/sources.adoc",
+                   "= 外部标准原文摘录\n\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+
+    def test_valid_library_passes(self):
+        self._write_valid()
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_library_index_reports(self):
+        # 反例：图书馆入口整体被删（依据将只剩名称、无从核对）
+        self._write_valid()
+        os.remove(cm.LIBRARY_INDEX)
+        cm.check_library_guard()
+        self.assertIn("缺少依据图书馆入口", self.error_texts())
+
+    def test_unregistered_in_dispatcher_reports(self):
+        # 反例：图书馆未在加载调度器登记（按调度器执行时永远不会被加载）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= 入口\n")
+        cm.check_library_guard()
+        self.assertIn("未在加载调度器", self.error_texts())
+
+    def test_registered_topic_missing_file_reports(self):
+        # 反例：入口登记了不存在的主题文件（读者按入口找不到依据）
+        self._write_valid()
+        self.write("specs/library/README.adoc",
+                   "= 依据图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n| link:gone.adoc[] | 不存在\n")
+        cm.check_library_guard()
+        self.assertIn("不存在的主题文件", self.error_texts())
+
+    def test_orphan_topic_file_reports(self):
+        # 反例：主题目录里有文件却未登记（依据实际不可达）
+        self._write_valid()
+        self.write("specs/library/internal.adoc", "= 未登记的主题\n")
+        cm.check_library_guard()
+        self.assertIn("未登记的主题文件", self.error_texts())
+
+    def test_quote_anchor_deleted_reports(self):
+        # 反例：逐字引文被压成名称（依据无从核对 = 图书馆的价值消失）
+        self._write_valid()
+        self.write("specs/library/sources.adoc",
+                   "= 外部标准原文摘录\n\n- RFC 2119 见官方文档\n")
+        cm.check_library_guard()
+        self.assertIn("缺失逐字引文锚点", self.error_texts())
+
+    def test_private_ref_in_library_reports(self):
+        # 反例：图书馆（公共内容）引用了维护方私有落点 → 引用方读到死链
+        self._write_valid()
+        self.write("specs/library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 `specs-project-maintainer/verify.adoc`\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+        cm.check_library_guard()
+        self.assertIn("维护方自查层", self.error_texts())
+
+    def test_private_grip_name_in_library_reports(self):
+        # 反例：图书馆里写了本仓库私有抓手名（引用方看不到、也拿不到）
+        self._write_valid()
+        self.write("specs/library/sources.adoc",
+                   "= 外部标准原文摘录\n\n由 script/check_specs.py 钉住\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+        cm.check_library_guard()
+        self.assertIn("私有抓手名", self.error_texts())
+
+
 if __name__ == "__main__":
+
     unittest.main(verbosity=2)
 
 
