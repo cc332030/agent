@@ -289,10 +289,13 @@ class TestExtractSpecsRefs(unittest.TestCase):
         self.assertEqual(cm.extract_specs_refs(text, base_dir="specs/core"),
                          ["specs/nope.adoc"])
 
-    def test_placeholder_and_dir_excluded(self):
+    def test_placeholder_excluded_dir_kept(self):
+        # 占位符（`...`、`<...>`）不参与存在性；**目录型引用保留**（以 `/` 结尾），
+        # 由调用方按 os.path.isdir 核对——原实现把目录型一并跳过，等于必然漏报。
         text = ("`specs/...` `specs/stack/` `specs/stack/<语言>-testing.adoc` "
                 "link:../stack/<语言>-testing.adoc[]")
-        self.assertEqual(cm.extract_specs_refs(text, base_dir="specs/core"), [])
+        self.assertEqual(cm.extract_specs_refs(text, base_dir="specs/core"),
+                         ["specs/stack/"])
 
     def test_dedupe_preserve_order(self):
         text = "`specs/stack/java.adoc` `specs/stack/java.adoc` link:../stack/java.adoc[]"
@@ -301,58 +304,173 @@ class TestExtractSpecsRefs(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
-# collect_adoc_files
+# collect_adoc_files / _is_dir_ref / _is_placeholder_ref
 # --------------------------------------------------------------------------- #
 class TestCollectAdocFiles(CheckSpecsTestCase):
-    """检查集合口径：prompts/ 下的 .adoc 必须纳入（会被分发执行的产物）。
+    """钉住"检查集合的覆盖面"：纳入 `library/**`、`prompts/**` 与仓库根全部 .adoc。
 
-    背景：`prompts/*.adoc` 会被复制给未知项目执行，其自身引用完整性同样须受四口径
-    覆盖；此前集合写死 specs/ 与 specs-project-maintainer/ 两目录，prompts/ 下的
-    .adoc 整体漏检（注入死链/悬空节名仍静默通过）。
+    原实现只收 `specs/` + `AGENTS_COMMON.adoc` + `AGENTS.adoc` + `INSTALL.adoc`，
+    `library/**` 与根 `PUBLIC.adoc`/`README.adoc`/`PROMPTS.adoc`（连 `CHANGELOG.adoc`）
+    全部漏收——语法编译、引用存在性、节名引用、链接格式四口径对它们整体失效。
+    `prompts/**` 亦曾漏收，而它是要复制给未知项目执行的产物（见 `PUBLIC.adoc`）：
+    其自身死链/悬空引用会随分发流出。
     """
 
-    def test_prompts_adoc_collected(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("prompts/review.adoc", "= 提示词")
-        self.assertIn(os.path.join(self.root, "prompts", "review.adoc"),
-                      cm.collect_adoc_files())
-
-    def test_all_three_spec_dirs_scanned_recursively(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/a.adoc", "= a")
-        self.write("specs-project-maintainer/b.adoc", "= b")
-        self.write("prompts/c.adoc", "= c")
+    def test_library_files_collected(self):
+        self.write("library/README.adoc", "= 图书馆\n")
+        self.write("library/sources.adoc", "= 来源\n")
         files = cm.collect_adoc_files()
-        self.assertIn(os.path.join(self.root, "specs", "general", "a.adoc"), files)
-        self.assertIn(os.path.join(self.root, "specs-project-maintainer", "b.adoc"), files)
-        self.assertIn(os.path.join(self.root, "prompts", "c.adoc"), files)
+        self.assertIn("library/README.adoc", files)
+        self.assertIn("library/sources.adoc", files)
+
+    def test_root_docs_collected(self):
+        self.write("PUBLIC.adoc", "= 公共内容入口索引\n")
+        self.write("README.adoc", "= 说明\n")
+        self.write("PROMPTS.adoc", "= 提示词\n")
+        files = cm.collect_adoc_files()
+        for rel in ("PUBLIC.adoc", "README.adoc", "PROMPTS.adoc"):
+            self.assertIn(rel, files)
+
+    def test_prompts_files_collected(self):
+        # prompts/*.adoc 是要复制给未知项目执行的产物，其自身引用完整性须受四口径覆盖
+        self.write("prompts/review.adoc", "= 提示词：检查修复\n")
+        self.write("prompts/_common.txt", "公共片段\n")
+        files = cm.collect_adoc_files()
+        self.assertIn("prompts/review.adoc", files)
+        # 非 .adoc（_common.txt）不入集合：四口径只针对 .adoc 引用
+        self.assertNotIn("prompts/_common.txt", files)
 
     def test_prompts_dangling_ref_reported(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("prompts/review.adoc", "见 link:no_such_file.adoc[]")
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:no_such_file.adoc[]\n")
         cm.check_refs_exist()
-        self.assertIn("不存在", self.error_texts())
         self.assertIn("prompts/no_such_file.adoc", self.error_texts())
 
     def test_prompts_dangling_section_ref_reported(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("prompts/review.adoc", "link:../specs/general/doc.adoc[]「不存在的节XYZ」")
-        self.write("specs/general/doc.adoc", "= 文档\n\n== 真实节")
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc",
+                   "link:../specs/general/doc.adoc[]「不存在的节XYZ」\n")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 真实节\n")
         cm.check_section_refs()
         self.assertIn("不存在的节XYZ", self.error_texts())
 
     def test_prompts_root_absolute_link_reported(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("prompts/review.adoc", "见 link:/prompts/refactor.adoc[]")
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:/prompts/refactor.adoc[]\n")
         cm.check_link_refs()
         self.assertIn("根绝对", self.error_texts())
 
-    def test_prompts_cross_ref_not_required_dispatcher_registry(self):
-        """prompts/ 是任务提示词、不进规范加载链，其互相引用不得被要求登记进调度器。"""
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("prompts/review.adoc", "见 link:refactor.adoc[]")
-        self.write("prompts/refactor.adoc", "= 重构")
+    def test_prompts_need_not_register_dispatcher(self):
+        # prompts/ 非规范本体、不进规范加载链，其互相引用不得被要求登记进调度器
+        self.write("AGENTS_COMMON.adoc", "= t\n")
+        self.write("prompts/review.adoc", "见 link:refactor.adoc[]\n")
+        self.write("prompts/refactor.adoc", "= 重构\n")
         cm.check_dispatcher_registry()
+        self.assertEqual(cm.errors, [])
+
+    def test_paths_are_repo_relative(self):
+        # 统一为"仓库根相对 POSIX 路径"（"某文件在不在集合里"可直接核验）
+        self.write("specs/general/coding.adoc", "= 编码\n")
+        for f in cm.collect_adoc_files():
+            self.assertFalse(os.path.isabs(f), f)
+            self.assertNotIn("\\", f)
+
+    def test_does_not_leak_real_repo_files(self):
+        # 只收本仓库（此处为临时根）内的文件：不得把真实仓库的 library/ 漏收进来
+        self.write("specs/general/coding.adoc", "= 编码\n")
+        self.assertNotIn("library/README.adoc", cm.collect_adoc_files())
+
+
+class TestRefKindPredicates(unittest.TestCase):
+    """钉住 `_is_dir_ref` 与 `_is_placeholder_ref` 的分工（目录型不再整体跳过）。"""
+
+    def test_dir_ref_recognized(self):
+        self.assertTrue(cm._is_dir_ref("specs/"))
+        self.assertTrue(cm._is_dir_ref("script/"))
+        self.assertFalse(cm._is_dir_ref("specs/general/coding.adoc"))
+
+    def test_dir_ref_is_not_placeholder(self):
+        # 目录型有确定判据（目录是否存在），不得被当成占位符整体跳过
+        self.assertFalse(cm._is_placeholder_ref("script/"))
+        self.assertFalse(cm._is_placeholder_ref("specs/"))
+
+    def test_true_placeholders_still_recognized(self):
+        self.assertTrue(cm._is_placeholder_ref("specs/..."))
+        self.assertTrue(cm._is_placeholder_ref("specs/**"))
+        self.assertTrue(cm._is_placeholder_ref("specs/stack/<语言>.adoc"))
+
+
+# --------------------------------------------------------------------------- #
+# check_asciidoctor_syntax（--failure-level=WARN）
+# --------------------------------------------------------------------------- #
+class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
+    """钉住语法编译的**效力边界**：asciidoctor 默认对 WARNING/ERROR 仍返回 0。
+
+    故命令行必须显式带 `--failure-level=WARN`，否则 `include::` 目标缺失、`image::`
+    找不到这类"只告警不报错"的问题必然漏报（防线形同虚设）。
+    """
+
+    def test_failure_level_constant_present(self):
+        src = open(os.path.join(os.path.dirname(cm.__file__),
+                                "check_specs.py"), encoding="utf-8").read()
+        self.assertIn("--failure-level=WARN", src)
+
+    def test_no_asciidoctor_skips_without_error(self):
+        # 本环境无 asciidoctor：跳过而非报错（保证幂等）
+        orig = cm.shutil.which
+        cm.shutil.which = lambda name: None
+        try:
+            cm.check_asciidoctor_syntax()
+        finally:
+            cm.shutil.which = orig
+        self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_refs_exist：目录型引用
+# --------------------------------------------------------------------------- #
+class TestCheckRefsExistDirRefs(CheckSpecsTestCase):
+    def test_existing_dir_ref_passes(self):
+        self.write("AGENTS_COMMON.adoc", "见 `script/`")
+        self.write("script/clean_tmp.py", "#!/usr/bin/env python3\n")
+        cm.check_refs_exist()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_dir_ref_reports(self):
+        # 反例：目录型引用指向不存在的目录 —— 原实现整体跳过，这里必须报出
+        self.write("AGENTS_COMMON.adoc", "见 `script/`")
+        cm.check_refs_exist()
+        self.assertIn("不存在的目录", self.error_texts())
+        self.assertIn("script/", self.error_texts())
+
+    def test_missing_link_dir_ref_reports(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "见 link:../../gone-dir/[]")
+        cm.check_refs_exist()
+        self.assertIn("不存在的目录", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
+# check_refs_exist / check_section_refs：CHANGELOG 历史豁免
+# --------------------------------------------------------------------------- #
+class TestHistoricalFileExemption(CheckSpecsTestCase):
+    """CHANGELOG.adoc 是只追加的变更历史：旧路径"查不到"是记录本身，不属悬空。"""
+
+    def test_changelog_in_collected(self):
+        self.write("CHANGELOG.adoc", "= 变更\n")
+        self.assertIn("CHANGELOG.adoc", cm.collect_adoc_files())
+
+    def test_changelog_old_paths_not_reported(self):
+        self.write("CHANGELOG.adoc", "= 变更\n\n见 `specs/gone/old.adoc`\n")
+        cm.check_refs_exist()
+        self.assertEqual(cm.errors, [])
+
+    def test_changelog_old_section_not_reported(self):
+        self.write("CHANGELOG.adoc", "= 变更\n")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 注释与文档\n")
+        self.write("CHANGELOG.adoc",
+                   "= 变更\n\n见 link:specs/general/doc.adoc[]「已改名节」\n")
+        cm.check_section_refs()
         self.assertEqual(cm.errors, [])
 
 
@@ -1097,6 +1215,24 @@ class TestCheckSectionRefs(CheckSpecsTestCase):
         cm.check_section_refs()
         self.assertEqual(cm.errors, [])
 
+    def test_library_file_section_refs_are_checked(self):
+        # 图书馆文件（仓库根 library/）纳入节名检查 —— 原实现漏收 library/**，
+        # 其悬空节名无人发现（实测 library/README.adoc 曾有三处）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 注释与文档\n")
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n见 link:../specs/general/doc.adoc[]「不存在的节」\n")
+        cm.check_section_refs()
+        self.assertIn("不存在的节名", self.error_texts())
+
+    def test_library_file_valid_section_refs_pass(self):
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc", "= 文档\n\n== 注释与文档\n")
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n见 link:../specs/general/doc.adoc[]「注释与文档」\n")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
     def test_intra_file_section_ref_dangling_reports(self):
         # 反例：写"同文件「节名」"但本文件无此节（节实际在另一个文件）—— 须报悬空
         # （曾实测：verify.adoc 写"见同文件「规范集合的自身重构」"，而该节在
@@ -1165,6 +1301,16 @@ class TestScopeStaysOnCommonContent(CheckSpecsTestCase):
         self.assertIn("os.path.isdir", body, "须在非 git 目录时跳过（保持幂等）")
         self.assertNotIn("open(", body, "不得读工作区文件内容")
 
+    def test_lowered_rename_threshold_for_rewritten_moves(self):
+        # 改写式移动（内容大幅重写，相似度低于 git 默认 50%）须仍被识别为 rename：
+        # 阈值须低于默认值，否则合规的 `git mv` + 改写会被误判成 delete+create
+        src = open(os.path.join(HERE, "check_specs.py"), encoding="utf-8").read()
+        body = src[src.index("def check_git_mv_selfcheck"):]
+        body = body[:body.index(chr(10) + "def ")]
+        self.assertIn("-M10%", body,
+                      "须用低于默认阈值的 -M10%（本仓库实证：搬家时入口被整篇重写，"
+                      "相似度跌到 16%，默认阈值下只剩 删除+新增）")
+
     def test_git_untracked_file_does_not_break_checks(self):
         self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/general/doc.adoc", "= 文档\n\n简短但有实质内容的一句话规则。\n")
@@ -1200,7 +1346,370 @@ class TestCheckPrincipleGuard(CheckSpecsTestCase):
         self.assertIn("缺少 Agent 项目自身规范入口", self.error_texts())
 
 
+
+class TestCheckLibraryGuard(CheckSpecsTestCase):
+    """钉住『图书馆防线』：依据须查得到、对得上、引用不悬空（本仓库私有内容）。
+
+    依据不能只存在名称——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不
+    成立、无法据以取舍（specs/general/verify.adoc「验证总纲」的"防慢慢脱离初衷"）。
+    图书馆（**仓库根 `library/`**，本仓库私有、不随规范分发）是依据的落点，故其
+    存在性、入口登记、逐字引文与引用可解析性都由本条机械钉住；**不再核对"自足性/
+    是否夹带私有落点"**——那是对公共内容的要求（私有内容本来就可以引用自己仓库的
+    任何落点），图书馆搬出 `specs/` 后该约束自然不再适用。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_lib = (cm.LIBRARY_DIR, cm.LIBRARY_INDEX, cm.LIBRARY_TOPICS)
+        self._orig_project = cm.PROJECT_FILE
+        cm.LIBRARY_DIR = os.path.join(self.root, "library")
+        cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
+        cm.LIBRARY_TOPICS = ("sources.adoc",)
+        cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+
+    def tearDown(self) -> None:
+        (cm.LIBRARY_DIR, cm.LIBRARY_INDEX, cm.LIBRARY_TOPICS) = self._orig_lib
+        cm.PROJECT_FILE = self._orig_project
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        # 项目规范入口登记图书馆入口（写文件与登记是同一个动作）
+        self.write("AGENTS.adoc",
+                   "= 项目规范\n\n依据图书馆入口 library/README.adoc（见下「依据图书馆」）。\n")
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n")
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+
+    def test_valid_library_passes(self):
+        self._write_valid()
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_library_index_reports(self):
+        # 反例：图书馆入口整体被删（依据将只剩名称、无从核对）
+        self._write_valid()
+        os.remove(cm.LIBRARY_INDEX)
+        cm.check_library_guard()
+        self.assertIn("缺少图书馆入口", self.error_texts())
+
+    def test_unregistered_in_project_entry_reports(self):
+        # 反例：图书馆未在项目规范入口登记（读者无从知道何时加载它）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目规范\n")
+        cm.check_library_guard()
+        self.assertIn("未在本仓库项目规范入口", self.error_texts())
+
+    def test_registered_topic_missing_file_reports(self):
+        # 反例：入口登记了不存在的主题文件（读者按入口找不到依据）
+        self._write_valid()
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n| link:gone.adoc[] | 不存在\n")
+        cm.check_library_guard()
+        self.assertIn("不存在的主题文件", self.error_texts())
+
+    def test_orphan_topic_file_reports(self):
+        # 反例：主题目录里有文件却未登记（依据实际不可达）
+        self._write_valid()
+        self.write("library/internal.adoc", "= 未登记的主题\n")
+        cm.check_library_guard()
+        self.assertIn("未登记的主题文件", self.error_texts())
+
+    def test_quote_anchor_deleted_reports(self):
+        # 反例：逐字引文被压成名称（依据无从核对 = 图书馆的价值消失）
+        self._write_valid()
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n- RFC 2119 见官方文档\n")
+        cm.check_library_guard()
+        self.assertIn("缺失逐字引文锚点", self.error_texts())
+
+    def test_dangling_ref_in_library_reports(self):
+        # 反例：馆内引用悬空（依据链断在这里）——`specs/...` 反引号写法按仓库根解析
+        self._write_valid()
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 `specs/general/gone.adoc`\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def test_link_dangling_in_library_reports(self):
+        # 反例：馆内 link: 引用悬空（相对本文件目录解析）
+        self._write_valid()
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 link:../specs/general/gone.adoc[]\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def _write_topic_body(self, body: str) -> None:
+        """把 `body` 写进主题文件正文（避开入口登记表：表里的 link: 会被当作主题登记）。"""
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n" + body + "\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
+
+    def test_root_level_name_link_form_dangling_reports(self):
+        # 反例：馆内以**根级文件名 + link: 写法**引用（`link:CHANGELOG.adoc[]`）而该文件不存在
+        # 依据：馆内引用一律按仓库根基准——根级名走 link: 形态**同样是引用写法**，
+        # 悬空即断链（原实现只按"本文件所在目录"解析 link: → 解析成 library/CHANGELOG.adoc，
+        # 与反引号形态的基准不一致：文件缺失时 link: 形态漏报、文件在时又误报）
+        self._write_valid()
+        self._write_topic_body("变更历史见 link:CHANGELOG.adoc[]。")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def test_root_level_name_link_form_resolvable_passes(self):
+        # 正例：根级文件名走 link: 形态、文件真实存在 → 不报（与反引号形态同一基准）
+        self._write_valid()
+        self.write("CHANGELOG.adoc", "= 变更历史\n")
+        self._write_topic_body("变更历史见 link:CHANGELOG.adoc[]。")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_ref_base_is_single_for_both_forms(self):
+        # 钉住"同一引用只有一个基准"：同一文件两种写法（反引号 / link:）结论必须一致
+        for form, label in (("`CHANGELOG.adoc`", "backtick"), ("link:CHANGELOG.adoc[]", "link")):
+            self._write_valid()
+            self.write("CHANGELOG.adoc", "= 变更历史\n")
+            self._write_topic_body(f"变更历史见 {form}。")
+            cm.errors.clear()
+            cm.check_library_guard()
+            self.assertEqual([e for e in cm.errors if "CHANGELOG" in e], [],
+                             f"文件存在时 {label} 形态不应报错")
+            os.remove(os.path.join(self.root, "CHANGELOG.adoc"))
+            cm.errors.clear()
+            cm.check_library_guard()
+            self.assertIn("指向不存在的文件", self.error_texts(),
+                          f"文件缺失时 {label} 形态必须报错")
+
+    def test_root_level_file_ref_dangling_reports(self):
+        # 反例：馆内以**根级文件名**写法引用（`PROMPTS.adoc`）而该文件不存在
+        # 依据：馆内引用一律按仓库根解析——根级文件名同样是引用写法，悬空即断链
+        # （此前正则只认"带目录前缀"的写法，`AGENTS.adoc`/`PROMPTS.adoc` 这类
+        #  引用被整体跳过，改成不存在的名字也不会被发现）
+        self._write_valid()
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc`\n")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def test_root_level_file_ref_resolvable_passes(self):
+        # 正例：根级文件名写法命中真实文件 → 不报
+        self._write_valid()
+        self.write("PROMPTS.adoc", "= 提示词\n")
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc` 与 `AGENTS.adoc`\n")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_resolvable_refs_do_not_report(self):
+        # 正例：馆内引用真实存在（`specs/...` 反引号 + `../` 相对 link 都命中）
+        self._write_valid()
+        self.write("specs/general/verify.adoc", "= 验证\n")
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 `specs/general/verify.adoc` 与 "
+                   "link:../specs/general/verify.adoc[]\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
+                   + "\n")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_source_markers_are_constantized(self):
+        # 三类取样来源标记须被常量化（防线要能覆盖"依据被压成名称"）
+        self.assertEqual(
+            tuple(cm.LIBRARY_SOURCE_MARKERS),
+            ("官方文本已取回", "官方网页已取回", "未逐字取回"))
+        for m in cm.LIBRARY_SOURCE_MARKERS:
+            self.assertIn(m, cm.LIBRARY_QUOTE_ANCHORS)
+
+    def test_source_marker_deleted_reports(self):
+        # 反例：把"取样来源标记"整体删掉（依据的可信度边界无从判断）→ 须报错
+        self._write_valid()
+        text = "= 外部标准原文摘录\n\n" + "\n".join(
+            "- " + q for q in cm.LIBRARY_QUOTE_ANCHORS
+            if q not in cm.LIBRARY_SOURCE_MARKERS) + "\n"
+        self.write("library/sources.adoc", text)
+        cm.check_library_guard()
+        self.assertIn("缺失逐字引文锚点", self.error_texts())
+
+    def test_dir_ref_in_library_resolves(self):
+        # 目录型引用在馆内也须按目录存在性核对（不再整体跳过）
+        self._write_valid()
+        os.makedirs(os.path.join(self.root, "specs", "general"), exist_ok=True)
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 `specs/general/`\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_dangling_dir_ref_in_library_reports(self):
+        self._write_valid()
+        self.write("library/sources.adoc",
+                   "= 外部标准原文摘录\n\n见 `specs/gone-dir/`\n"
+                   + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
+        cm.check_library_guard()
+        self.assertIn("不存在的目录", self.error_texts())
+
+
+class TestCheckPublicContentCoverage(CheckSpecsTestCase):
+    """钉住『公共内容覆盖面防线』：公共内容的入口清单须完整、且与实际文件一致。
+
+    背景：公共内容此前只有一句口头定义（"`AGENTS_COMMON.adoc` + `specs/`"），而
+    `INSTALL.adoc`（接入时读）、`prompts/_common.txt`（AI 以纯文本读取公共片段）与
+    `script/clean_tmp.py`（随规范分发的通用工具）同样会被引用方取到——清单缺失会让
+    机械检查漏掉半个公共内容，或把"自足"要求误加到只对维护方成立的文件上。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_public = cm.PUBLIC_FILE
+        self._orig_project = cm.PROJECT_FILE
+        cm.PUBLIC_FILE = os.path.join(self.root, "PUBLIC.adoc")
+        cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+
+    def tearDown(self) -> None:
+        cm.PUBLIC_FILE = self._orig_public
+        cm.PROJECT_FILE = self._orig_project
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("AGENTS.adoc", "= 项目规范\n\n公共内容入口清单见 PUBLIC.adoc。\n")
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n"
+                   "== 公共内容入口清单\n"
+                   "| `INSTALL.adoc` | 安装入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `specs/` | 规范正文\n"
+                   "| `prompts/_common.txt` | 公共片段\n"
+                   "| `script/clean_tmp.py` | 随规范分发的工具\n")
+        self.write("INSTALL.adoc", "= 安装\n")
+        self.write("AGENTS_COMMON.adoc", "= 入口\n")
+        self.write("prompts/_common.txt", "片段\n")
+        self.write("script/clean_tmp.py", "#!/usr/bin/env python3\n")
+
+    def test_valid_listing_passes(self):
+        self._write_valid()
+        cm.check_public_content_coverage()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_listing_reports(self):
+        # 反例：清单整体缺失（覆盖面界不清）
+        self._write_valid()
+        os.remove(cm.PUBLIC_FILE)
+        cm.check_public_content_coverage()
+        self.assertIn("缺少公共内容入口索引", self.error_texts())
+
+    def test_entry_only_in_prose_reports(self):
+        # 反例：入口只在正文被提一句、未列进「入口清单」表——此前用 `rel in 全文`
+        # 判断，这种"被悄悄移出表格"的改动不会被发现（表格才是覆盖面的定义处）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `specs/` | 规范正文\n"
+                   "| `prompts/_common.txt` | 公共片段\n"
+                   "| `script/clean_tmp.py` | 随规范分发的工具\n\n"
+                   "== 组织与其边界\n\n引用方接入时读 `INSTALL.adoc`。\n")
+        cm.check_public_content_coverage()
+        self.assertIn("未把 INSTALL.adoc 列进", self.error_texts())
+
+    def test_entry_in_table_link_form_passes(self):
+        # 正例：同一格改用 AsciiDoc 惯用的 `link:` **文本**写法——表格结构、所在节、
+        # 覆盖面均未变，纯排版，**不得**报"未列进表"
+        # （原判据把"表格行的位置"与"文件名用反引号"混成一件：明明列在表里却报"未列出"）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| 安装入口 | link:INSTALL.adoc[INSTALL.adoc] |\n"
+                   "| 通用规范入口 | link:AGENTS_COMMON.adoc[AGENTS_COMMON.adoc] |\n")
+        cm.check_public_content_coverage()
+        self.assertNotIn("未把", self.error_texts())
+
+    def test_names_in_zone_accepts_forms_but_keeps_row_anchor(self):
+        # 钉住判据口径：表格行内任一点名形式均命中；非表格行（正文提及）仍不命中
+        z = "| 安装入口 |"
+        self.assertTrue(cm._names_in_zone(z + " `INSTALL.adoc` |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[INSTALL.adoc] |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[] |", "INSTALL.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " INSTALL.adoc |", "INSTALL.adoc"))
+        self.assertFalse(cm._names_in_zone("接入时读 INSTALL.adoc。", "INSTALL.adoc"))
+        self.assertFalse(cm._names_in_zone(z + " `AGENTS_COMMON.adoc` |", "INSTALL.adoc"))
+
+    def test_listing_not_registered_reports(self):
+        # 反例：清单未在项目规范入口登记（维护方读不到它）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目规范\n")
+        cm.check_public_content_coverage()
+        self.assertIn("未在本仓库项目规范入口", self.error_texts())
+
+    def test_entry_missing_from_listing_reports(self):
+        # 反例：清单漏了公开入口（漏一个即半个公共内容不在覆盖面内）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n")
+        cm.check_public_content_coverage()
+        self.assertIn("未列出 INSTALL.adoc", self.error_texts())
+
+    def test_entry_list_section_renamed_reports(self):
+        # 反例：清单节的标题被改写 → 按节切表格区的定位失效，须报错（不得静默不查）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 入口一览\n"
+                   "| `INSTALL.adoc` | 安装入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n")
+        cm.check_public_content_coverage()
+        self.assertIn("未找到「公共内容入口清单」节", self.error_texts())
+
+    def test_named_file_missing_reports(self):
+        # 反例：清单点名了不存在的文件（清单与实际不一致）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `INSTALL.adoc` | 安装入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `prompts/gone.txt` | 已改名\n")
+        cm.check_public_content_coverage()
+        self.assertIn("点名了不存在的文件", self.error_texts())
+
+    def test_non_public_example_named_file_missing_reports(self):
+        # 反例：「不属公共内容」一段的反向举例点名了不存在的文件 —— 原实现靠硬编码
+        # 5 个 .adoc 名跳过该段，改名/新增举例都无人核；改按节切后须真实存在
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `INSTALL.adoc` | 安装入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `specs/` | 规范正文\n"
+                   "| `prompts/_common.txt` | 公共片段\n"
+                   "| `script/clean_tmp.py` | 随规范分发的工具\n"
+                   "\n== 组织与其边界\n"
+                   "* **不属公共内容入口清单**：`gone-internal.adoc`（已改名）\n")
+        cm.check_public_content_coverage()
+        self.assertIn("点名了不存在的文件", self.error_texts())
+
+    def test_non_public_example_existing_files_pass(self):
+        # 正例：「不属公共内容」一段点名真实存在的文件（不必再靠硬编码豁免名单）
+        self._write_valid()
+        self.write("internal-note.adoc", "= 维护方内容\n")
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `INSTALL.adoc` | 安装入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `specs/` | 规范正文\n"
+                   "| `prompts/_common.txt` | 公共片段\n"
+                   "| `script/clean_tmp.py` | 随规范分发的工具\n"
+                   "\n== 组织与其边界\n"
+                   "* **不属公共内容入口清单**：`internal-note.adoc`（维护方内容）\n")
+        cm.check_public_content_coverage()
+        self.assertEqual(cm.errors, [])
+
+
 if __name__ == "__main__":
+
     unittest.main(verbosity=2)
 
 
@@ -1621,6 +2130,23 @@ class TestCheckPublicContentSelfContained(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "= t")
         self.write("AGENTS.adoc",
                    "= 项目自身规范\n\n最高关注项见 link:specs-project-maintainer/priority.adoc[]\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_private_layer_ref_in_prompts_reports(self):
+        # 反例：prompts/*.adoc 会被复制到未知项目执行，其私有落点同样是引用方读不到的死链
+        # （PUBLIC.adoc：「自足要求的适用范围」②类，明写机械检查按公共内容口径覆盖它们）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc",
+                   "= 提示词\n\n核对见 `specs-project-maintainer/verify.adoc`。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("prompts/review.adoc", self.error_texts())
+
+    def test_prompts_without_private_refs_passes(self):
+        # 正例：提示词自足表达，不指向本仓库私有落点
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc",
+                   "= 提示词\n\n加载项目规范入口后按规范执行。\n")
         cm.check_public_content_is_self_contained()
         self.assertEqual(cm.errors, [])
 

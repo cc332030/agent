@@ -1,0 +1,190 @@
+= 外部标准原文摘录（依据图书馆）
+
+本文件是依据图书馆的主题之一：**外部标准的逐字原文**——规范正文里每条"依据（标准名/编号）"背后的**原始表述**。
+
+== 使用与核对
+
+* **怎么用**：规范正文或项目决策引用了某标准时，在本文件按标准名查原文，确认"这条标准确实支持这条规则"（`specs/general/verify.adoc`「规范验证」②要求核对"引用的标准**确实支持该条**"，不得只验证依据行还在）；原文也是**举一反三**的入口。
+* **怎么核对**：正文数字编号、字面词、声称类条目附的原文片段都是**逐字摘录**，可追溯到所标来源；本仓库由机械校验核对其中关键片段仍在（见 `specs/general/verify.adoc`「规范验证」）。摘录是**节选**（标注"摘"），不替代标准原文。
+* **校对边界（怎么判断"逐字"是否可信）**：每条依据都带**取样来源标记**，可据此复核——①标"**官方文本已取回**"者（RFC 系列、SemVer、Maven 插件文档、SemVer/git 官方文档等），是用命令实际取回官方文本后比对，**可复取**：例如 `curl -s https://www.rfc-editor.org/rfc/rfc2119.txt` 即得到该文件引文所在原文；②标"**官方网页已取回**"者（IEEE/ISO 的题名页），是同法取回题名后比对（**仅题名与版本号**可逐字核对）；③标"**未逐字取回**"者（编写时该官方页返回的是 JS 壳、正文不可取），已**如实标注且不引用其字句**，只保留静态可查的题名/版本/状态。
+* **复核的动作（可执行）**：抽查任一条——先看它的取样来源标记，命中 ①/② 时按上述方式取回官方文本比对引文；命中 ③ 时核对"是否确实没有引用字句"（若引用了字句却没标可复取来源，即为不合格）。
+
+== IEEE 1028（软件评审与审查）
+
+* 正式题名（IEEE 标准**摘要页**官方网页已取回）：Software Reviews and Audits。
+* 版本与状态：IEEE Std 1028-2008（由 IEEE Std 1028-1997 修订）。**状态信息（静态可查、官方摘要素材来源）**：该标准摘要页标注为 Inactive-Reserved（非现行保留），并已由 **ISO/IEC/IEEE 1028:2025** 取代——引用时须知道它已不是现行版本（`specs/general/source.adoc`「引用现行版本」）。本集合引用时**只写标准名/编号**（`specs/general/source.adoc`「只写标准名/编号、不附链接」），用途为**评审这一手段的依据**，不涉版本条款比对（见本文件「关于标准版本年份」）。
+* 使用位置：`specs/general/review.adoc`、`specs/general/testing.adoc`「验证总纲」「规范验证」、`specs/general/collab.adoc`（作为"须另起独立上下文复核"的依据）。
+
+== IEEE 1016（软件设计描述）
+
+* 正式题名（官方**标准页**已取回）：IEEE Standard for Information Technology--Systems Design--Software Design Descriptions。
+* 版本：IEEE Std 1016-2009。
+* 用途：设计信息的**组织与表达**（设计描述须承载什么）——支撑 `specs/general/doc-design.adoc` 对设计文档内容范围（方案与取舍、兜底、适用范围、已知限制）的要求。
+
+== ISO/IEC/IEEE 29119-4（软件测试——测试技术）
+
+* 标准名（ISO 官方网页已取回）：Software and systems engineering — Software testing — Part 4: Test techniques。
+* 官方页（`iso.org/standard/81291.html`，2026-09-12 取回）标注：**Edition 2, 2021-10**（取代 Edition 1, 2015），国际标准分类号 35.080。
+* **未逐字取回摘要**：编写时该页返回的是 JS 壳（无摘要文本），故**不引用其摘要字句**；此处只保留题名/版本/状态这类取自官方页的元信息。要点"测试技术分为黑盒、白盒与经验型"由标准题名与范围表述（Test techniques）静态可查，如需逐字比对，请以标准第 1 章 Scope 与第 4 章为对照面。
+* 用途：`specs/general/testing.adoc`「设计方法」的白盒/黑盒/经验补充分类与边界值、等价类划分、判定/条件覆盖、决策表等技术的依据。
+
+== ISO/IEC/IEEE 25010（系统与软件质量模型）
+
+* 标准名（ISO 官方网页已取回）：Systems and software engineering — Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model。
+* 版本：ISO/IEC 25010:2023（**Edition 2**，2023-11 发布，取代 2011 年版）；官方页（`iso.org/standard/78176.html`）标国际标准分类号 35.080。
+* **未逐字取回摘要**：编写时该页返回 JS 壳，故此处**不引用其特性清单的字句**；"性能效率""信息安全性"是 25010 质量特性的通用名称（静态可查），如需逐字比对，请以标准第 5 章 Product quality model 为对照面。
+* 用途：`specs/general/testing.adoc`「运行契约」②成本（"不得以不贵含糊带过"）、`specs/general/testing.adoc`「规范验证」②第⑥维性能、`specs/general/security.adoc` 的安全底线。
+* **须注意的语义差异**：258 页级术语是**产品质量特性**，本集合用作"性能/安全是**质量特性**、其代价须说得清"的依据，**未**声称某项目须通过某项 25010 评估（同义性要求见 `specs/general/source.adoc`「外部引用」）。
+
+== ISO/IEC/IEEE 29148（需求工程）
+
+* 标准名（ISO 官方网页已取回）：Systems and software engineering — Life cycle processes — Requirements engineering。
+* 版本：ISO/IEC/IEEE 29148:2018（**Edition 2**，2018-11 发布）。
+* **未逐字取回摘要**：编写的 2026-09-12 该页（`iso.org/standard/72089.html`）返回 JS 壳（无摘要文本），故此处**不引用摘要字句**（宁可标"未确证"也不编：`specs/general/source.adoc`「无法确证时的正确做法」）。
+* 可静态确证的要点（标准题名的范围表述：Requirements engineering）：需求须**单一、无歧义、可验证、可追溯**——本集合据此用于 「如何给一条规范定级」「归属谁」与 `specs/general/testing.adoc`「验证总纲」。如需逐字比对，请以标准第 5 章（Requirements engineering processes）与附录 A（需求书写特性）为对照面。
+* 用途：可追溯（`specs/general/source.adoc`、`specs/general/testing.adoc`「验证总纲」）、需求须单一/无歧义/可验证/可追溯（「如何给一条规范定级」「归属谁」）、干系人需求（`specs/general/testing.adoc`「运行契约」）。
+
+== ISO/IEC Directives Part 2（规则起草与表述）
+
+* 标准名：ISO/IEC Directives, Part 2 — Principles and rules for the structure and drafting of ISO and IEC documents。
+* 版本：**Edition 9.0, 2021**（题名与版本号静态可查；编写时 ISO/IEC 官方页返回 JS 壳，未逐字取回正文）。
+* 用途：要求（shall）与建议（should）不得混用、**要求须可验证**、说明性内容不构成要求——见 `specs/core/execution.adoc`「分级与最高关注项」、「与条款类型一一对应」「定级口径四问」。
+* 说明：本集合**引用其原则**（"要求须可验证""要求与建议不混用"），未逐条比对 2021 版条款原文；如需逐字比对，可以该版第 3 章（Verbal forms）与附录 H 为对照面。
+
+== ISO 10007（配置管理指南）
+
+* 标准名：Quality management — Guidelines for configuration management。
+* 版本：**ISO 10007:2017**（Edition 3）。
+* 用途：变更控制与可追溯（ P1/P2/P3/P5 的依据、`specs/general/testing.adoc`「验证总纲」①完整性）。
+
+== ISO 9001（质量管理体系——要求）
+
+* 标准名：Quality management systems — Requirements。
+* 版本：**ISO 9001:2015**（Edition 5）。
+* 用途：**文件化信息的控制**（成文信息须受控、可追溯）——`specs/general/testing.adoc`「验证总纲」。
+* 说明：标准正式用语是"**documented information**（成文信息）"；本集合多处写作"文件信息控制"，指的是 ISO 9001 中这一类控制要求，**同义性已在此说明**（`specs/general/source.adoc`「外部引用」）。
+
+== ISO 9241-110（交互原则）
+
+* 标准名（ISO 官方网页已取回）：Ergonomics of human-system interaction — Part 110: Interaction principles。
+* 版本：**ISO 9241-110:2020**（Edition 2）。
+* 作用（按官方题名与通用说明，**未逐字取回摘要**）：该部分规定人机交互原则（通用名称含**可控性与符合预期**等）；本集合据此论证"公共内容被未知项目加载时须**可预期、可关闭、能自行执行、不得阻断**"（`specs/general/testing.adoc`「运行契约」③可控性）。
+* **须注意的语义差异（同义性）**：9241-110 的对象是**人机交互**，本集合把它**类推**到"规范被未知项目加载"这一"人与规则的交互"，属**借用其原则**而非声称标准直接规定软件规范；此处的映射关系须如实说明，不得当成标准原文（`specs/general/source.adoc`「外部引用」）。
+
+== RFC 2119 / RFC 8174（要求级别的用语）
+
+* **RFC 2119**（BCP 14）：Key words for use in RFCs to Indicate Requirement Levels。官方文本已取回，两处逐字摘：
+  ** 用语清单："The key words `"MUST"`, `"MUST NOT"`, `"REQUIRED"`, `"SHALL"`, `"SHALL NOT"`, `"SHOULD"`, `"SHOULD NOT"`, `"RECOMMENDED"`, `"MAY"`, and `"OPTIONAL"`"（原文用双引号包裹各词）。
+  ** 强度语义："1. MUST   This word, or the terms `"REQUIRED"` or `"SHALL"`, mean that the definition is an absolute requirement of the specification."、"2. MUST NOT   This phrase, or the phrase `"SHALL NOT"`, mean that the definition is an absolute prohibition of the specification."（另注："Note that the force of these words is modified by the requirement level of the document in which they are used."）
+* **RFC 8174**（BCP 14 的澄清，2017-05）：Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words。官方文本已取回，逐字摘（第 2 节 NEW 文本）："In many IETF documents, several words, **when they are in all capitals as shown below**, are used to signify the requirements in the specification."（要点：**只有全大写且本身是规范用语时**才具约束力）。
+* 用途：`specs/core/execution.adoc`「分级与最高关注项」（L1/L2/L3 的用语归并）、「与条款类型一一对应」、`prompts/_common.txt` 的 `priority-rules`。
+
+== RFC 3629（UTF-8）
+
+* 标准名：UTF-8, a transformation format of ISO 10646。
+* 逐字摘（官方文本已取回，RFC 3629 摘要）："UTF-8, a transformation format of ISO 10646"；编码形态"a string of octets"（摘其短语）。
+* 用途：`specs/general/encoding.adoc`「一律 UTF-8（L1）」、`specs/general/doc.adoc`「文件格式与编码」。
+
+== RFC 3339（时间戳格式）
+
+* 标准名：Date and Time on the Internet: Timestamps。
+* 逐字摘（官方文本已取回，RFC 3339 摘要）："date and time on the Internet"，以及时间戳示例"1996-12-19T16:39:57-08:00"（示例逐字取自附录示例）。日期格式 `YYYY-MM-DD` 为 `full-date` 的形态。
+* 用途：`specs/general/changelog.adoc`「条目书写」的日期格式（与 ISO 8601 同一基线）——`YYYY-MM-DD`。
+
+== RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018（认证、会话与口令）
+
+* RFC 6749（OAuth 2.0 授权框架）：The OAuth 2.0 Authorization Framework。用途：`specs/general/security.adoc`「认证、授权与会话」。
+* RFC 9700（OAuth 2.0 安全最佳实践；**2025-01 发布，取代 RFC 6819**）：Best Current Practice for OAuth 2.0 Security。用途：同上——引用时写 **RFC 9700**，不写已被取代的 RFC 6819。
+* RFC 7617（HTTP Basic 认证）：The 'Basic' HTTP Authentication Scheme。用途：同上（凭据传输与会话标识不得进 URL/日志的同类依据）。
+* RFC 8018（PKCS #5 口令基密钥派生）：PKCS #5: Password-Based Cryptography Specification Version 2.1。用途：`specs/general/security.adoc`「不自行发明加密与认证」中口令存储（慢哈希/KDF）的依据。
+
+== NIST SP 800-63B（数字身份指南——认证与生命周期）
+
+* 标准名：NIST Special Publication 800-63B, Digital Identity Guidelines: Authentication and Lifecycle Management。
+* 用途：`specs/general/security.adoc`「不自行发明加密与认证」——口令与随机数要求（口令经 KDF 处理、不得自造随机数）。
+
+== OWASP 与 CWE（安全风险与弱点）
+
+* OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据、`specs/general/review.adoc`「安全视角」。
+* OWASP ASVS（Application Security Verification Standard，应用安全验证标准）：应用安全验证要求清单；现行主线为 **ASVS 5.0**（2025）。用途：同上。
+* CWE（Common Weakness Enumeration）：软件弱点编号体系。被点名编号：**CWE-502**（Deserialization of Untrusted Data）、**CWE-208**（Observable Timing Discrepancy）、**CWE-209**（Generation of Error Message Containing Sensitive Information）、**CWE-489**（Active Debug Code）。用途：`specs/general/security.adoc` 各条末尾的编号标注——编号即"这条要求针对哪一类已知弱点"的锚点。
+
+== Semantic Versioning 2.0.0
+
+* 标准名：Semantic Versioning 2.0.0（作者 Tom Preston-Werner）。逐字摘（官方文本已取回）："Given a version number MAJOR.MINOR.PATCH, increment the: MAJOR version when you make incompatible API changes, MINOR version when you add functionality in a backwards compatible manner, and PATCH version when you make backwards compatible bug fixes."，以及标题句"…'v1.2.3'…"所定义的版本形态。
+* 用途：`specs/general/doc-design.adoc`「版本与变更记录」（版本号递增语义）。**本集合的取舍**：只采用其主/次版本递增语义，**不采用**完整三段式与预发布标识要求——规则与标准不一致处须显式覆盖（`specs/general/source.adoc`「外部引用」）。
+
+== PEP 8 / PEP 20 / PEP 257（Python 风格）
+
+* PEP 8：Style Guide for Python Code（标题逐字）。用途：`specs/stack/python.adoc` 的命名、缩进、可读性等风格依据。
+* PEP 20：The Zen of Python（标题逐字）。用途：`specs/stack/python.adoc` 的"简单、可读优先"取向。
+* PEP 257：Docstring Conventions（标题逐字）。用途：`specs/stack/python.adoc` 的 docstring（文档注释）机制。
+
+== PEP 508 / 锁文件（依赖声明与可重现）
+
+* PEP 508（正式文本标识与标题）：Dependency specification for Python Software Packages。用途：`specs/general/dependency.adoc`"声明明确的版本/受控范围、锁文件与可重现"的依据之一。
+* 同类可援引的官方材料：`npm ci` 与 `package-lock.json` 的官方文档（npm Docs）、Maven 的 `<dependencyManagement>`（Maven 官方 POM 参考）、Poetry/pip 的锁文件机制——分别对应各生态的"锁定模式、可重现构建"。
+* **说明**：以上材料名取自各项目官方文档的文档名（静态可查），本文件**未**逐字摘录它们的正文。
+
+== POSIX
+
+* 标准名：POSIX（IEEE Std 1003.1 / The Open Group Base Specifications）。
+* 被引用的要点：**文本行以 `\n` 分隔**（行尾判据）、**进程退出状态**（退出码 0 成功/非 0 失败）、**shebang 行解析**（首行 `#!`）。
+* 用途：`specs/general/encoding.adoc`「换行符」、`specs/general/script.adoc`「退出码约定」、`specs/stack/bash.adoc`、`specs/stack/python.adoc`。
+
+== GNU Make 手册
+
+* 材料：GNU Make 官方手册（行尾与行/字节严格解析相关的说明）。
+* 用途：`specs/general/encoding.adoc`「易被 CRLF 破坏的文本类格式」——`Makefile` 默认 LF。
+
+== Maven Surefire / Failsafe 插件默认 includes
+
+* 材料：Apache Maven 官方插件文档。
+* **Surefire 默认 includes 逐字摘**（官方文档已取回）："`**/Test*.java`"、"`**/*Test.java`"、"`**/*Tests.java`"、"`**/*TestCase.java`"。
+* **Failsafe 默认 includes 逐字摘**（官方文档已取回）："`**/IT*.java`"、"`**/*IT.java`"、"`**/*ITCase.java`"。
+* 用途：`specs/stack/java-testing.adoc`「测试类命名」「测试分类与执行边界」——`Tests` 被 surefire 的 `**/*Tests.java` 收进常规 `test` 阶段，而 `IT` **天然被 surefire 排除、由 failsafe 承接**。这两组 includes 是该文件"四类后缀 + 独立执行"契约的**决定性依据**（后缀取错即被误跑或误跳过）。
+
+== Microsoft Learn（Windows 命令参考）
+
+* 材料：Microsoft Learn 上 Windows 命令（`cmd.exe`）的官方参考。
+* 依据要点：命令解释器**按字节读取行尾、不做行尾归一化**（LF-only 批处理会直接执行失败：`goto`/标签匹配、`if`/`for` 复合语句、行尾注释与续行都可能失效）；批处理按**系统 ANSI 代码页**解析（简体中文 Windows 为 GBK/CP936），存为 UTF-8（尤其带 BOM）会解析失败。
+* 用途：`specs/general/encoding.adoc`「Windows 批处理必须 CRLF（L1）」、`specs/stack/powershell.adoc`「启动脚本保存为 ANSI/GBK」。
+
+== git 官方文档
+
+* 材料：git 官方文档（`git-mv`、`git-diff --find-renames`/`-M`、`gitattributes`、`core.autocrlf`/`core.eol`、`git ls-files --eol`）。
+* 依据要点：**rename 检测按内容相似度、默认阈值 50%**（`-M<n>` 可调）；`.gitattributes` 的 `text`/`eol` 属性与 `core.autocrlf` 的优先级；行尾归一化（`core.autocrlf`/`core.eol`）与"整文件全红"的行尾噪声。
+* 用途：`specs/general/git.adoc`「文件移动与重命名」（P1 的判定标准与自检命令）、`specs/general/encoding.adoc`「跨平台检出」（`.gitattributes` 为权威落盘口）。
+
+== The Twelve-Factor App
+
+* 材料：The Twelve-Factor App（十二要素应用方法论，公开文本十二要素之一至之三、之二等）。
+* 要素名称逐字取（官方文本）：**Build, release, run**、**Config**、**Dependencies**。本集合引用其"构建/发布/运行分离、配置外置、依赖显式声明"的要点。
+* 用途：`specs/general/ci-cd.adoc` 总依据、`specs/general/security.adoc`「不硬编码密钥」、`specs/general/dependency.adoc`。
+
+== JaCoCo 与 PIT（Java 覆盖率与变异测试）
+
+* 材料：JaCoCo 官方文档（`jacoco-maven-plugin`，行/分支覆盖率指标）、PIT（pitest）官方文档（`pitest-maven-plugin`，变异体与"存活变异体"概念）。
+* 用途：`specs/stack/java-testing.adoc`「覆盖与变异测试」——JaCoCo 的 **branch coverage** 对应公共规范的"分支覆盖率"，PIT 的**存活变异体**对应"测试有效性"。
+
+== Google Java Style Guide 与 Oracle Java 命名约定
+
+* 材料：Google Java Style Guide（Google 官方）、Oracle 的 Java 命名约定（Oracle 官方教程）。
+* 用途：`specs/stack/java.adoc`"命名与代码风格另参考"两处。
+
+== Google Shell Style Guide 与 ShellCheck
+
+* 材料：Google Shell Style Guide（Google 官方）；ShellCheck（shell 静态分析工具）的诊断码。
+* 依据要点：严格模式组合 `set -euo pipefail` 的推荐；变量引用须加引号（**SC2086**：未加引号的变量会触发字段分割与路径名展开）。
+* 用途：`specs/stack/bash.adoc`「严格模式」「变量与引用」。
+
+== 阿里巴巴 Java 开发手册
+
+* 材料：《阿里巴巴 Java 开发手册》（公开出版的手册文本）。
+* 用途：`specs/stack/java.adoc` 首段"遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准"——即**引用其作为下限、本集合可以更严**（`specs/general/source.adoc`「引用不替代规则本身」）。
+
+== 关于标准版本年份（引用的取舍）
+
+* **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本（L2）」约束。
+* **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
+* **本集合的取值（便于日后复核）**：IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；JaCoCo / PIT；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。

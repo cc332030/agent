@@ -120,6 +120,13 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(
             statuses["不得编造事实与来源（引用真实、标准不编、宁可不引）"], "has-grip")
 
+    def test_library_has_mechanical_grip(self):
+        # "依据不得只剩名称"由 check_library_guard 钉住（图书馆存在/入口登记/逐字引文/引用可解析）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空"], "has-grip")
+
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")
