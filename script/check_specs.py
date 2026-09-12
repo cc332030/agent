@@ -80,9 +80,11 @@
      须仍在（防"卡死无人负责"与"查不出/没做无法分辨"退化成口号）。
  26. 公开面文档自足：README.adoc（公开站点首页由其渲染）/ PROMPTS.adoc / INSTALL.adoc
      不得出现维护方自查层『specs-project-maintainer/』的路径——引用方按同样方式解析，
-     指向该层即死链（该层不随公共内容分发）；要说明"本仓库另有一层只对维护方成立"
+     指向该层即死链（该层不是公共入口的加载项：引用方按公共输入加载时取不到、其项目里
+     也没有本仓库的文件）；要说明"本仓库另有一层只对维护方成立"
      用文字描述即可，不给可点开的私有路径。
- 27. 图书馆防线：仓库根 `library/`（**本仓库私有、不随规范分发**）须存在，入口
+ 27. 图书馆防线：仓库根 `library/`（**不在默认引用面内**：本仓库内容全部会发布，
+     区别只在"默认引用什么"——它没有公共加载项、引用方项目里也没有本仓库的文件）须存在，入口
      `library/README.adoc` 被项目规范入口 `AGENTS.adoc` 登记；入口主题登记与实际主题
      文件**双向一致**；外部标准的**逐字引文锚点**仍在（依据不得被压成名称）；馆内引用
      **按仓库根可解析**（悬空引用等于依据链断在这里）。
@@ -91,16 +93,19 @@
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
      并把"自足"要求误加到只对维护方成立的文件上。
- 30. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
-     两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
-     L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
-     ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
-     "功能都实现了，却很难用"）。
- 29. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
+ 30. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
      （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
      `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
      也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
      纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
+ 31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`），
+     条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
+     （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。
+ 32. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+     两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
+     L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
+     ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
+     "功能都实现了，却很难用"）。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -237,16 +242,17 @@ PROMPTS_FILE = os.path.join(REPO_ROOT, "PROMPTS.adoc")
 PROMPTS_DIR = os.path.join(REPO_ROOT, "prompts")
 COMMON_PROMPT_FILE = os.path.join(PROMPTS_DIR, "_common.txt")
 
-# 图书馆（仓库根 `library/`，**本仓库私有内容、不随规范分发**）：规范条目与项目决策
+# 图书馆（仓库根 `library/`，**不在默认引用面内**：本仓库内容全部会发布，区别只在
+# "默认引用什么"——它没有公共加载项、引用方项目里也没有本仓库的文件）：规范条目与项目决策
 # 背后的依据落点——外部标准原文摘录、"标准确实支持该条"的映射、当初的失效与实证。
-# 它**不在公共内容里**（`specs/**` 会整个分发给未知项目，而图书馆天然含只对本项目
+# 它**不在默认引用面内**（`specs/**` 由引用方按入口加载、即引用方的输入，而图书馆天然含只对本项目
 # 成立的内容：当初的失效、取舍、实证、选型理由），故落在仓库根、与 `prompts/` 同性质；
 # 详见 AGENTS.adoc「依据图书馆」与 check_library_guard。
 LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
 LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
 # 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
 # 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
-LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc")
+LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc")
 # 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
 # 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
 # ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
@@ -260,6 +266,20 @@ _LIBRARY_ADOPTION_ANCHORS = (
     "**未**规定此优先级顺序",
     '**均未**规定"某一类执行者绝对不得合并"',
     "是本项目自身的组织约定",
+)
+# 『依据的写入与关联』主题（library/usage.adoc）的要点锚点：
+# 该主题回答图书馆此前没有判据的两件事——**何时该写、写什么**（触发特征与不写判据）与
+# **依据与规则怎么关联、怎么反查**（两侧各写一半、只取一份不遍历的解析算法）。
+# 缺这几句，"写依据"重新变成靠自觉：AI 不主动写、写什么全凭发挥，或把规则本体抄进馆（第二真源）。
+_LIBRARY_USAGE_ANCHORS = (
+    "== 一、什么时候该把依据写进图书馆（触发特征）",
+    "== 二、依据与规则怎么关联（关联协议）",
+    "=== 反查解析算法（只取一份，不遍历）",
+    "== 三、默认引用面与非引用面（外部项目怎么处理）",
+    "判据是问句，不是印象",
+    "以下情形**不写**",
+    "**入库必写项**",
+    "**终止条件（L1）**",
 )
 # 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
 # specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
@@ -389,6 +409,13 @@ def _rel_of(path: str) -> str:
 # 须纳入语法编译（防模板/换行被破坏），但**引用存在性、节名引用、链接格式、历史来源声明**
 # 四类检查对它一律不适用——历史条目里的旧路径"查不到"是记录本身，不是悬空/违规。
 HISTORICAL_FILES = ("CHANGELOG.adoc",)
+# 『变更日志条目形态』（`specs/general/changelog.adoc`「条目书写」）：主格式为**单行**
+# ——`版本号 | 日期 | 变更摘要`，条目内不得换行、不得写成多段。真实失效（本项目实测）：
+# 变更日志被当成追加区，同一条目被**多行续写**（heredoc / 多次 append），
+# 结果形态看不出来，还容易与下一条粘连。单行是**机械可判定**的（行首 `- 版本 | 日期 |`
+# 之后不得出现续行），故在此钉住，不靠人工抽查。
+CHANGELOG_ENTRY_RE = re.compile(r"^-\s+[0-9][^|\n]*\|\s*\d{4}-\d{2}-\d{2}\s*\|")
+CHANGELOG_ENTRY_MAX = 2000
 
 
 def _is_historical(rel: str) -> bool:
@@ -569,7 +596,7 @@ def check_refs_exist():
             text = fh.read()
         refs = extract_specs_refs(text, base)
         for ref in refs:
-            # 维护方自查层（specs-project-maintainer/）不随公共内容分发给普通引用方项目：
+            # 维护方自查层（specs-project-maintainer/）不是公共入口的加载项：
             # 其中指向 `specs/` 的引用在引用方可能不存在（引用方并未引入这些文件），
             # 属设计预期而非悬空；故只校验其指向本层自身的引用（见 check_dispatcher_registry
             # 的登记口径）。这些文件**在本仓库内**的引用仍由 check_link_refs /
@@ -577,7 +604,7 @@ def check_refs_exist():
             if rel.startswith("specs-project-maintainer" + os.sep) \
                     and not ref.startswith("specs-project-maintainer/"):
                 continue
-            # 图书馆（仓库根 library/，本仓库私有）引用公共内容/维护方落点属正常，
+            # 图书馆（仓库根 library/，不在默认引用面内）引用公共内容/维护方落点属正常，
             # 反向引用（公共内容引用图书馆）已由 check_public_content_is_self_contained
             # 拦下；故图书馆自身的非 library 引用不在此重复报错。
             if rel.startswith("library" + os.sep) \
@@ -645,7 +672,7 @@ def check_dispatcher_registry():
     referenced = set()
     for rel in collect_adoc_files():
         # 只统计**公共规范内容**（`AGENTS_COMMON.adoc` + `specs/`）内部文件的引用：
-        # 调度器是公共规范内容的登记处。维护方私有落点（`specs-project-maintainer/`、
+        # 调度器是公共规范内容的登记处。非公共入口登记的落点（`specs-project-maintainer/`、
         # 根 `library/`、`PUBLIC.adoc`、根 `README.adoc`/`PROMPTS.adoc`/`CHANGELOG.adoc`、
         # `prompts/`）**不在公共内容里、也不由公共调度器登记**（各由 `AGENTS.adoc` 登记），
         # 把它们的引用算进来即为误报。
@@ -2124,7 +2151,8 @@ def check_public_content_is_self_contained():
             for j, line in enumerate(fh.readlines(), 1):
                 if "specs-project-maintainer/" in line:
                     err("公共内容不得引用维护方自查层『specs-project-maintainer/』——"
-                        "该层不随公共内容分发，引用方看不到该文件（读到的规则只成立一半）；"
+                        "该层不是公共入口的加载项，引用方按公共输入加载时看不到该文件"
+                        "（读到的规则只成立一半）；"
                         "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
     phase_done()
 
@@ -2135,8 +2163,8 @@ def check_public_facing_docs_stay_self_contained():
     背景（本轮重构暴露的真实缺陷）：`specs/` 被刚性地拦住了指向 `specs-project-maintainer/`
     的引用，但 `README.adoc`（公开站点首页由它渲染）、`PROMPTS.adoc`（公开提示词入口）与
     `INSTALL.adoc`（引用方安装文档）**同样会被未知项目看到**——它们里的 `link:` 与仓库相对
-    路径，引用方按同样方式解析，指向维护方自查层就是**死链**（该层不随公共内容分发、也没有
-    引用方侧入口）；而它们又最能"顺手"把维护类元规范写进去（本轮就发生过：README 新增了
+    路径，引用方按同样方式解析，指向维护方自查层就是**死链**（该层不是公共入口的加载项、
+    也没有引用方侧入口；引用方项目里更没有本仓库的文件）；而它们又最能"顺手"把维护类元规范写进去（本轮就发生过：README 新增了
     8 处指向维护方层的链接）。
 
     判定：这几份公开面文档中**不得出现**维护方自查层的目录名（`specs-project-maintainer/`）。
@@ -2154,7 +2182,7 @@ def check_public_facing_docs_stay_self_contained():
             for j, line in enumerate(fh.readlines(), 1):
                 if "specs-project-maintainer/" in line:
                     err("公开面文档不得给出维护方自查层『specs-project-maintainer/』的路径——"
-                        "本文件会被引用方阅读/在公开站点渲染，该层不随公共内容分发，"
+                        "本文件会被引用方阅读/在公开站点渲染，该层不是公共入口的加载项，"
                         "引用方读到的是死链；请改为文字描述（'本仓库另有一层只对维护方成立'）"
                         "或删掉该链接", rel, j)
     phase_done()
@@ -2409,11 +2437,12 @@ def check_checklist_guard():
     phase_done()
 
 
-# 图书馆（仓库根 `library/`，**本仓库私有内容、不随规范分发**）：其价值全在"依据真的
+# 图书馆（仓库根 `library/`，**不在默认引用面内**）：其价值全在"依据真的
 # 能查到、真的对得上"——入口登记的主题文件必须真实存在，外部标准的**逐字引文**必须仍在
-# （少一句就意味着"依据被压成名称"）。图书馆不在公共内容里，故"内容会被分发"一类约束
-# 不再适用；剩下的是**本仓库自己的完整性**：有没有、登记是否双向一致、引文还在不在、
-# 文件里的引用是否真能解析（引用方看不到这里，引用悬空只有本仓库自己能发现）。
+# （少一句就意味着"依据被压成名称"）。图书馆不在默认引用面内（本仓库内容全部会发布，
+# 但引用方按公共输入加载时取不到它、其项目里也没有本仓库的文件），故"内容会被分发"一类
+# 约束不按公共内容口径适用；剩下的是**本仓库自己的完整性**：有没有、登记是否双向一致、
+# 引文还在不在、文件里的引用是否真能解析（引用方看不到这里，引用悬空只有本仓库自己能发现）。
 # 判定只认机械可判定的形态：文件/片段存在性与引用可解析性；"该依据是否真的支持该条、
 # 依据找得全不全"属语义判断，交人/子 agent 复核承担（见 specs/general/verify.adoc「验证总纲」）。
 # **取样来源标记**：图书馆的每条外部依据都须带"它是怎么被取回的"标记——这是"不划水、
@@ -2481,8 +2510,8 @@ def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: boo
         return
     if not os.path.isfile(os.path.join(REPO_ROOT, *resolved.split("/"))):
         err(f"{desc} 指向不存在的文件——"
-            "悬空引用等于依据链断在这里（公共内容里的死链与它无关："
-            "图书馆是本仓库私有内容，读者就在本仓库内）", rel, j)
+            "悬空引用等于依据链断在这里（公共内容里的死链判据与它无关："
+            "图书馆不在默认引用面内，读者在本仓库内，故按仓库根基准核对）", rel, j)
 
 
 # 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
@@ -2523,17 +2552,19 @@ LIBRARY_QUOTE_ANCHORS = (
 
 
 def check_library_guard():
-    """『图书馆防线』：依据须查得到、对得上、引用不悬空（本仓库私有内容）。
+    """『图书馆防线』：依据须查得到、对得上、引用不悬空（不在默认引用面内的内容）。
 
     背景：规范正文刻意只给"怎么走"（规则 + 判定标准 + 依据名），但依据**不能只存在
     名称**——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不成立、无法据以
     取舍与举一反三。图书馆（仓库根 `library/`）就是依据的落点：外部标准的**原文摘录**、
     "这条标准确实支持这条规则"的映射、当初的失效与实证。
 
-    **落点**：图书馆属**本仓库私有内容**（不随规范分发给引用方），故它落在仓库根而不是
-    `specs/` 下——`specs/**` 会整个分发给未知项目，而图书馆天然含只对本项目成立的内容。
-    由此本条**不检查"自足性 / 是否夹带私有落点"**（那是对公共内容的要求：私有内容本来
-    就可以引用自己仓库的任何落点），只检查它作为"依据落点"是否真的可用。
+    **落点**：图书馆**不在默认引用面内**（本仓库内容全部会被发布出去，见 `README.adoc`；
+    它的落点在仓库根而不是 `specs/` 下，是因为 `specs/**` 属**默认引用的公共规范**、
+    其内容即引用方的输入，而图书馆天然含只对本项目成立的内容；引用方按公共输入执行时
+    既取不到它、其项目里也没有本仓库的文件）。
+    由此本条**不按"自足性 / 是否夹带私有落点"口径检查**（那是默认引用项的要求：不在
+    默认引用面内的内容本就可以引用自己仓库的任何落点），只检查它作为"依据落点"是否真的可用。
 
     故本条钉住四件确定项（都是机械可判定的）：
       * **存在与登记**：图书馆入口存在，且**被本仓库项目规范入口 `AGENTS.adoc` 登记**
@@ -2558,7 +2589,8 @@ def check_library_guard():
     if not os.path.isfile(LIBRARY_INDEX):
         err("缺少图书馆入口 library/README.adoc——"
             "规范条目与项目决策背后的依据将只剩名称、无从核对"
-            "（本仓库为根目录 library/，见 AGENTS.adoc「依据图书馆」）",
+            "（本仓库为根目录 library/；注意它不是\"未发布\"，站点与仓库都发布它，"
+            "它只是不属默认引用面——见 AGENTS.adoc「依据图书馆」）",
             "library/README.adoc")
         phase_done()
         return
@@ -2620,6 +2652,18 @@ def check_library_guard():
                 "（依据不实，见 specs/general/source.adoc「外部引用」）",
                 "library/adoption.adoc")
 
+    # 3c) 『依据的写入与关联』主题的要点锚点：该主题的价值全在"写入有触发判据、反查有可执行
+    # 算法"——缺这几句，"写依据"重新变成靠自觉（不主动写、写什么凭发挥），或把规则本体抄进馆
+    # （第二真源，改一处必漏一处）；解析算法被删则又回到"遍历项目找依据"。
+    if "usage.adoc" in actual:
+        usage_text = texts.get("usage.adoc", "")
+        miss_usage = [q for q in _LIBRARY_USAGE_ANCHORS if q not in usage_text]
+        if miss_usage:
+            err(f"图书馆『依据的写入与关联』主题缺失要点锚点 {miss_usage}——"
+                "写入触发判据与反查解析算法被删后，依据的写入重新靠自觉、"
+                "关联重新退化成'凭印象检索'",
+                "library/usage.adoc")
+
     # 4) 引用可解析：馆内引用按仓库根基准解析（悬空引用 = 依据链断在这里）
     for f in sorted(actual) + ["README.adoc"]:
         path = os.path.join(LIBRARY_DIR, f)
@@ -2656,6 +2700,106 @@ def check_library_guard():
                     continue
                 _check_library_target(target, f"图书馆内的链接 link:{target}[]", rel, j,
                                       allow_escape=True)
+    phase_done()
+
+
+# 『默认引用面』口径（全仓库统一的表述判据）：**本仓库所有内容都会被发布出去**
+# （站点渲染本仓库文档），各内容之间的区别只在"**默认引用什么**"——被引用方按入口加载的
+# 是**公共规范**（`AGENTS_COMMON.adoc` + `specs/`），其余落点（图书馆、维护方自查层、
+# 站点说明文档等）**不在默认引用面内**（没有公共加载项）。历史口径把后者写成"**本仓库
+# 私有 / 不对外发布**"，与平台事实相反：它们同样是被发布的内容（在站点上可读），只是
+# 引用方不按入口加载它们、其项目里也没有本仓库的文件。口径写错会连带改错判断：维护方会
+# 以为"发布与不发布可选"，而实际只能选择"默认引用面里放什么"。
+# 故把**已被纠正的错误表述形态**机械钉住（只认"发布与否"这一形态，不碰"私有落点/
+# 私有抓手名"这类**自足性**判据——那拦的是引用好不好用，与发布与否是两件事）。
+_REF_SCOPE_BAD_PATTERNS = (
+    (re.compile(r"(本仓库|本站)[^。\n]{0,12}私有[^。\n]{0,12}(不随|不分发|不对外|不外发)"),
+     "不得写\"本仓库私有…不随规范分发\"——本仓库所有内容都会被发布，应写\"不在默认引用面内\""),
+    (re.compile(r"私有内容[^。\n]{0,10}(不随|不对外)"),
+     "不得写\"私有内容不随规范分发\"——发布与否不是判据，判据是\"是否被引用方按入口加载\""),
+    (re.compile(r"不随规范分发"),
+     "不得写\"不随规范分发\"——本仓库全部内容都会被发布，正确表述是\"不在默认引用面内\""),
+)
+# 豁免：历史记录（`CHANGELOG.adoc` 记录的是**当时口径**，不得改写）；以及**引用/澄清
+# 该错误表述本身**的句子（含"不是/并非/≠/不得写/错"等词），以及"私有落点/私有抓手名"
+# 这类自足性用语（与发布与否无关）。
+_REF_SCOPE_BAD_EXEMPT = ("不是", "并非", "≠", "错误", "不得写", "纠正", "区分")
+
+
+def check_ref_scope_wording_guard():
+    """『默认引用面口径防线』：不得再把本仓库内容写成"私有 / 不对外发布"。
+
+    背景（用户纠正的事实错误）：本仓库**所有内容都会被发布出去**（站点由 `index.html`
+    渲染本仓库文档），所谓"私有"从来没有发生——**默认只有公共规范被引用方加载**
+    （`AGENTS_COMMON.adoc` + `specs/`），其余落点只是**不在默认引用面内**。原口径把图书馆、
+    维护方自查层、站点说明文档一律写成"本仓库私有、不随规范分发"，与平台事实相反，且会
+    连带改错判断（以为"发布/不发布"是可选项）。
+
+    判定：本仓库维护范围内的 `.adoc` 里不得出现该错误表述形态（见
+    `_REF_SCOPE_BAD_PATTERNS`）；`CHANGELOG.adoc` 豁免（历史条目记的是当时口径），
+    **引用/纠正该表述本身**的句子豁免（含"不是/并非/不得写"等词），"私有落点/私有抓手名"
+    这类**自足性**用语豁免（与发布与否无关）。
+
+    只钉"这一句怎么写"，某处该不该被引用方加载仍由人/子 agent 复核承担。
+    """
+    phase("默认引用面口径检查（不得写成私有/不对外发布）")
+    for rel in collect_adoc_files():
+        if _is_historical(rel):
+            continue                       # 历史条目记的是当时口径，不得改写
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if any(w in line for w in _REF_SCOPE_BAD_EXEMPT):
+                    continue               # 引用/纠正该表述本身，或讨论"私有落点"这一自足性判据
+                for pat, msg in _REF_SCOPE_BAD_PATTERNS:
+                    if pat.search(line):
+                        err(f"口径错误：{msg}"
+                            "（平台事实——本仓库所有内容都会被发布出去，站点可读；"
+                            "\"私有\"与事实不符，且会连带把\"发布与否\"误当成可选项）",
+                            rel, j)
+                        break
+    phase_done()
+
+
+def check_changelog_entry_guard():
+    """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
+
+    背景（本项目实测的失效形态）：变更日志是**按时间倒序、最新在最上方**的只追加记录，
+    条目主格式为单行 `版本号 | 日期 | 变更摘要`；但工具习惯（heredoc / 多次 append /
+    `cat >>`）很容易把**同一条目续写成多行**，或在末尾留下裸文本——形态上仍像"有记录"，
+    实际已与下一条粘连、渲染出来是一句话被拆断。单行是机械可判定的，故在此钉住：
+    行首命中 `- 版本 | 日期 |` 的条目行，其后**不得紧跟续行**（下一条目行、空行或节标题）。
+
+    只钉"形态"，条目内容是否记对了变更点仍由人/子 agent 复核承担
+    （`specs/general/changelog.adoc`「编写原则」）。
+    """
+    phase("变更日志条目形态检查（单行条目）")
+    path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
+    if not os.path.isfile(path):
+        err("缺少统一变更日志 CHANGELOG.adoc——"
+            "变更记录将分散在各文档、多处不一致（见 specs/general/doc-design.adoc"
+            "「版本与变更记录」）", "CHANGELOG.adoc")
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().split("\n")
+    for j, line in enumerate(lines, 1):
+        if not CHANGELOG_ENTRY_RE.match(line):
+            continue
+        if len(line) > CHANGELOG_ENTRY_MAX:
+            err(f"变更日志条目过长（{len(line)} 字符 > {CHANGELOG_ENTRY_MAX}）——"
+                "单行条目须一句话说清'改了什么、给谁带来什么影响'，"
+                "超出即说明该拆成多条或删减（specs/general/changelog.adoc「条目书写」）",
+                "CHANGELOG.adoc", j)
+        nxt = lines[j] if j < len(lines) else ""
+        if nxt.strip() and not CHANGELOG_ENTRY_RE.match(nxt) and \
+                not nxt.lstrip().startswith("="):
+            err("变更日志条目被**续行**（同一条目写成多行）——"
+                "条目须单行 `版本号 | 日期 | 变更摘要`、条目内不换行；"
+                "被续写的条目会与下一条粘连、渲染成一整段"
+                "（specs/general/changelog.adoc「条目书写」）", "CHANGELOG.adoc", j)
     phase_done()
 
 
@@ -3357,6 +3501,8 @@ def main(argv=None) -> int:
     check_line_ending_guard()
     check_java_test_naming()
     check_library_guard()
+    check_ref_scope_wording_guard()
+    check_changelog_entry_guard()
     check_public_content_coverage()
     check_prompts_primary()
     check_env_marker_guard()

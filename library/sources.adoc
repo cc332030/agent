@@ -210,8 +210,55 @@
 * **须注意的语义差异（同义性）**：DORA 的结论指向"**审批要有实质、不要形式化**"，本**未**声称"某一类执行者绝对不得合并"；本集合据此推出的是一条**本项目自身的组织约定**——**CNB 平台上的 NPC/CI 执行者一律不得合并**（`specs/platform/cnb.adoc`「合并请求的合并主体（NPC 禁合并）」），其**根因**是：CI 环境是一次性、无合规责任主体的自动执行者，**授权给"同一个自动执行者"不构成独立评审**；**不得**把本节读成"标准规定 AI 不得合并"。
 * 实证反例（**本项目真实记载**）：本项目曾发生"由 **AI（CNB NPC/CI 环境中的执行者）实际执行了合并**"的实例——起因是发起人在对话中直接授权；该实例正是本条要防的失效形态：**授权被当成豁免、自动化执行者替人承担了不可逆且合规相关的动作**（本条也因此把"因用户要求/授权故本次合并"单列为判定标准②）。
 
+== 决策记载（ADR / MADR / AWS Prescriptive Guidance）
+
+**用途**：支撑 link:usage.adoc[]「一、什么时候该把依据写进图书馆（触发特征）」——**"规则/决策背后的依据要有落点"是业界通行做法，不是本站自创**；也支撑 link:adoption.adoc[] 的准入判定依据。**引文为逐字摘录或如实标注的要点转述**（本文件「使用与核对」的口径）。
+
+=== MADR 模板（官方文本已取回，逐字）
+
+Markdown Architectural Decision Records（adr/madr v4.0.0）**最小模板**的章节序列**逐字**如下（官方仓库 `template/adr-template-minimal.md` 已取回）：
+
+[listing]
+----
+# {short title, representative of solved problem and found solution}
+
+## Context and Problem Statement
+## Considered Options
+## Decision Outcome
+### Consequences
+----
+
+要点（据上列**逐字章节名**可判）：一份决策记载 = **问题/背景** + **考虑过的选项** + **选了什么及理由** + **后果**；"为什么选它、放弃了什么"是模板的必备结构，不是可选修饰。
+
+=== "好的记载"的判据（业界资料汇总，官方文本已取回、逐字）
+
+joelparkerhenderson/architecture-decision-record（业界广泛引用的 ADR 资料汇总）「Suggestions for writing good ADRs」逐字三条：
+
+* "Specific: Each ADR should be about one AD, not multiple ADs."
+* "Immutable: Don't alter existing information in an ADR. Instead, amend the ADR by adding new information, or supersede the ADR by creating a new ADR."
+* "Rationale: Explain the reasons for doing the particular AD. This can include the context (see below), pros and cons of various potential choices, feature comparisons, cost/benefit discussions, and more."
+
+同页「Decision sharing (optional)」另有一句**逐字**："Many ADs recur across projects."，其后接（要点转述）"因而，过往决策的经验无论好坏，都是**在采用明确的知识管理策略时**才成为有价值的可复用资产"。
+
+**它支撑什么**：①"一份记载只讲一个决策、必须写明理由与取舍"→ link:usage.adoc[]「一、什么时候该把依据写进图书馆（触发特征）」把"有取舍或争议的决策"列为入馆触发特征，且要求收**比较与理由**而非只写结论；②"决策一旦定下不改写、变更用新增/取代"→ 本集合的对应做法是**变更由 git 历史承载**（`specs/`）与**统一变更日志只追加**（link:../specs/general/changelog.adoc[]）；③"过往决策**在明确的知识管理策略下**才成为可复用资产"→ 本集合的"明确策略"即 link:usage.adoc[] 的写入判据与反查算法（**光有零散记录不构成依据库**）。
+
+=== 存储与可检索（AWS Prescriptive Guidance，官方网页已取回、要点转述）
+
+AWS Prescriptive Guidance *Best practices for using architectural decision records*（官方文档页已取回；**要点转述、非逐字摘录**）两条与本题直接相关：**"Preserve ADR history"**（保留历史：变更时把旧记载标为 `Superseded` 并**保留在决策日志里**，新记载注明改动）与 **"Store ADRs in a central location"**（集中存放：每个项目成员都能访问该集合，并在项目文档主页上引用它）。
+
+**它支撑什么**：①"中央位置 + 从文档主页可达"→ 图书馆的**入口登记表**（link:README.adoc[]「主题登记」）与**在项目规范入口登记**（`AGENTS.adoc`「依据图书馆」，双向一致由机械防线钉住）——依据库的价值在于**找得到**，不在"存了文件"；②"保留历史、变更可追溯"→ 本集合"依据不作静默改写、换版关系暴露"（本文件「关于标准版本年份」）。
+
+**须注意的语义差异（同义性）**：ADR 面向**架构决策**；本集合把它**类推**到"规范条目与其依据"这一同类场合（link:README.adoc[]「放什么、不放什么」），**属借用其做法**，**未**声称这些材料规定了"规范集合必须配依据库"。
+
+== ISO 30401（知识管理体系——要求）
+
+* 标准名与版本：ISO 30401:2018 *Knowledge management systems — Requirements*（现行版本另有 **Amendment 1:2022** 与 **Amendment 2:2024**）。
+* **取样状态：未逐字取回**（编写时 `iso.org` 对应页面返回反爬校验页，故**不引用其字句**；题名与修正案编号取自公开可查的多处记录）。如需逐字比对，请以标准第 1 章 Scope 与第 4 章为对照面（本文件「使用与核对」）。
+* 用途（**借用其定位、非引用其条文**）：该标准把**知识管理**确立为可被要求、可被审核的**管理体系**对象——本集合据此论证"**依据/知识要有明确的管理策略与可查的落点**，而非零散记录"（link:usage.adoc[]「为什么需要本协议」的"缺触发判据 → AI 不主动写"）。
+* **须注意的语义差异（同义性）**：本集合**未**声称要按 ISO 30401 建管理体系、也不做符合性评估；仅借用"知识管理是需要明确策略的体系"这一方向。
+
 == 关于标准版本年份（引用的取舍）
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本（L2）」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA（Accelerate 报告系列）/ GitHub Docs（受保护分支与 required reviews）；JaCoCo / PIT；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA（Accelerate 报告系列）/ GitHub Docs（受保护分支与 required reviews）；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总（decision-record）/ AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
