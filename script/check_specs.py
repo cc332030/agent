@@ -88,6 +88,11 @@
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
      并把"自足"要求误加到只对维护方成立的文件上。
+ 30. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+     两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
+     L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
+     ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
+     "功能都实现了，却很难用"）。
  29. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
      （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
      `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
@@ -202,6 +207,12 @@ LINE_ENDING_STACK_FILES = (
 # （依据：Spring Boot 官方文档 Externalized Configuration；Google Java Style Guide 3.4.2
 # 对 POJO 的定义；阿里巴巴 Java 开发手册的 POJO 类约定。）
 CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
+# 接入成本（`specs/general/coding.adoc`「抽象与接入成本」）：对外提供能力时的**接入成本判据**——
+# 可替换点须有唯一装配点（同一实现/配置不得按使用点各写一遍）、须有可用默认或显式必填声明。
+# 该条来自用户的真实设计失效报告："要求都实现了、功能都实现了，却很难用"（某接口在 N 个使用点
+# 各实现一遍，接入成本随使用点线性增长）。它是**抽象侧的对外契约**，与"配置类不写逻辑"
+# （类内部职责）不同，故单列一条防线；技术栈层的承接落在 `specs/stack/spring.adoc`「配置」（引用通用文件、不复制条文）。
+ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
 JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
@@ -2726,6 +2737,94 @@ def check_public_content_coverage():
     phase_done()
 
 
+def check_abstraction_adoption_guard():
+    """『抽象与接入成本防线』：对外能力的可替换点须有唯一装配点、须有可用默认。
+
+    背景（本项目真实的设计失效报告）：用户描述"**要求都实现了、功能都实现了，却很难用**"
+    ——某抽象定义了 `ISession` 接口，但每个 service 使用点都要业务项目**各自提供一遍实现类型**，
+    即 N 个使用点 = N 次重复接入、新增使用点还要再传一遍。它属"功能交付了、可用性没交付"：
+    ISO/IEC 25010 把易用性与可维护性列为**产品质量特性**（与功能适用性并列），故接入成本
+    不是锦上添花，而是设计指标；而"同一事实有多个来源"同时违反单一真源（ISO/IEC/IEEE 29148）。
+    故本条**跨语言**收在通用编码规范，并由技术栈层按"引用不复制"承接。
+
+    本防线钉住**五处要点**（钉"要求文本仍在且落在该落点"；"某个抽象有没有真的只在一处装配"
+    属引用方项目代码，本仓库看不到，交人/子 agent 复核）：
+      * **节与两句 L1**：节名、「唯一装配点」条（含"不得要求多个使用点各自提供同一实现或同一配置"）、
+        「可替换点须有可用默认」条（含"禁止既无默认又不声明"）——两句被删/降级即本条失效；
+      * **判定标准可执行**：两条 L1 各自须给出可逐条核对的判定（次数不随使用点增加、
+        "有默认或有显式必填声明二选一"），否则只剩口号；
+      * **四条要点与级别标注**：唯一装配点 / 可用默认 / 自动装配优先 / 多实现用限定符+
+        作用域承载，四条须齐全且标出 L1/L2（防"降级成建议"或"只留一句总述"）；
+      * **依据行**：标准名/编号须在（ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、
+        The Twelve-Factor App、Spring Boot 官方文档、SOLID/DIP）；
+      * **技术栈承接**：`specs/stack/spring.adoc`「配置」须引用该节（Spring 是接入侧最典型的
+        场景，只改通用层等于 Spring 项目读不到），且**不得复制条文**（规则本体唯一）。
+    """
+    phase("抽象与接入成本防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『抽象与接入成本』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        section = ""
+        m = re.search(r"^== " + re.escape(ABSTRACTION_ADOPTION_SECTION) + r"\b.*?(?=^== |\Z)",
+                      text, re.S | re.M)
+        if m is None:
+            err(f"抽象与接入成本防线被破坏：{rel_coding} 缺少"
+                f"「{ABSTRACTION_ADOPTION_SECTION}」节——"
+                "对外能力的接入成本判据（唯一装配点、可用默认）无处承载，"
+                "抽象会重新做成「每个使用点各实现一遍」", rel_coding)
+        else:
+            section = m.group(0)
+        if section:
+            for keys, desc in (
+                (("唯一装配点", "不得要求多个使用点各自提供同一实现或同一配置"),
+                 "L1（a）唯一装配点：可替换点只有一处声明/装配落点，"
+                 "不得要求多个使用点各自提供同一实现或同一配置"),
+                (("可替换点须有可用默认", "禁止既无默认又不声明"),
+                 "L1（b）可用默认：每个可替换点须有默认实现/默认值，"
+                 "给不出默认时须显式声明必填失败，禁止既无默认又不声明"),
+                (("次数不随使用点数量增加", "出现次数 > 1"),
+                 "判定标准可执行：须给出可逐条核对的判定（同一实现/配置在接入方的"
+                 "出现次数不随使用点数量增加），否则只剩口号、无法判定"),
+                (("二者必居其一",),
+                 "判定标准可执行（b）：须写明'有默认'与'显式必填声明'二者必居其一，"
+                 "否则'给不出默认'会被当成默认的豁免"),
+                (("L1", "L2"),
+                 "级别标注：须标出 L1/L2（否则条文会被当成建议，"
+                 "或全部按 L1 反过来挤掉合理裁量）"),
+                (("自动装配", "ServiceLoader"),
+                 "要点：能自动装配/约定生效的不得要求接入方逐点手写（L2）"),
+                (("限定符", "参数穿透", "作用域"),
+                 "要点：多实现用限定符声明式区分、禁逐层传参；跨层级对象用作用域/上下文承载（L2）"),
+                (("存量边界", "随动迁移", "不发动全库改造"),
+                 "存量边界：该条严于「每个使用点各传一遍实现」的常见既成做法，"
+                 "须写明适用于新写的对外能力与改到的既有抽象（随动迁移、不发动全库改造），"
+                 "否则会被读成「必须立即全量重构」"),
+                (("ISO/IEC 25010", "ISO/IEC/IEEE 29148", "The Twelve-Factor App"),
+                 "依据行：须标注标准名/编号（易用性与可维护性属质量特性、"
+                 "需求须单一无歧义可验证、配置外置与依赖显式声明），否则后人无从判断它还成不成立"),
+            ):
+                missing = [k for k in keys if k not in section]
+                if missing:
+                    err(f"抽象与接入成本防线被破坏：{rel_coding}「{ABSTRACTION_ADOPTION_SECTION}」"
+                        f"缺失要点 {missing}——{desc}；该条来自用户的真实设计失效报告，"
+                        "不得删除、不得降级为建议", rel_coding)
+    # 技术栈承接：Spring「配置」须引用该节、不复制条文
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少技术栈文件 {rel_spring}——『抽象与接入成本』的 Spring 承接落点丢失"
+            "（Spring 是接入侧最典型场景，只改通用层等于 Spring 项目读不到）", rel_spring)
+    else:
+        stext = open(SPRING_STACK_FILE, encoding="utf-8").read()
+        if ABSTRACTION_ADOPTION_SECTION not in stext:
+            err(f"{rel_spring} 的「配置」未引用「{ABSTRACTION_ADOPTION_SECTION}」——"
+                "Spring 项目按该文件学习时会漏掉接入成本判据（规则被指向，不复制）",
+                rel_spring)
+    phase_done()
+
+
 def check_config_class_guard():
     """『配置类不写逻辑防线』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
 
@@ -3188,6 +3287,7 @@ def main(argv=None) -> int:
     check_env_marker_guard()
     check_npc_merge_guard()
     check_config_class_guard()
+    check_abstraction_adoption_guard()
     check_reuse_precedent_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()

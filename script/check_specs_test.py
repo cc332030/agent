@@ -3251,6 +3251,133 @@ class TestCheckConfigClassGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
+    """钉住『抽象与接入成本』：对外能力的可替换点须有唯一装配点、须有可用默认。
+
+    该条来自用户的真实设计失效报告（"要求都实现了、功能都实现了，却很难用"——某接口在
+    每个 service 使用点各实现一遍）。最易被三件事冲掉：
+      * **降级成建议** —— 级别标注被拿掉、"须"被改成"建议"，条文形式上还在；
+      * **关键词堆砌式假绿** —— 只留小节名与一句总述，判定标准/要点被抽走；
+      * **技术栈侧断链** —— Spring「配置」不再引用该节（Spring 项目按栈文件学习即漏掉）。
+    故用例除正例外，专门覆盖"节被删""L1 条文被删""判定标准被抽""级别标注被拿掉"
+    "要点被删""依据行被删""Spring 引用断链"等反例。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n== 抽象与接入成本\n\n"
+        "对外提供能力时，**接入成本是设计指标**。判定标准：**同一个可替换点在接入方"
+        "出现的次数不随使用点数量增加**，否则即为抽象漏做（按「代码复用」处理）。\n\n"
+        "* 唯一装配点（L1）：可替换点须有唯一的一处声明/装配落点，"
+        "**不得要求多个使用点各自提供同一实现或同一配置**。"
+        "判定特征：同一实现类型/配置项在接入方出现次数 > 1，即判重复。\n"
+        "* 可替换点须有可用默认（L1）：每个可替换点**须有可用的默认实现/默认值**；"
+        "给不出默认时须显式声明必填失败面，**禁止既无默认又不声明**。"
+        "判定标准：二者必居其一。\n"
+        "* 能自动装配就不要求接入方手写（L2）：如 SPI 自动装配（`ServiceLoader`）。\n"
+        "* 存量边界：本条适用于新写的对外能力与改到的既有抽象"
+        "（按「规范变更的存量处理」随动迁移、不发动全库改造）。\n"
+        "* 多实现用限定符、不逐层传参（L2）：用限定符/命名 Bean 区分，"
+        "禁止参数穿透；跨层级对象用作用域/上下文对象承载。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、"
+        "The Twelve-Factor App、Spring Boot 官方文档。\n")
+
+    SPRING = (
+        "= Spring 规范\n\n== 配置\n"
+        "* 配置项须有默认值或显式必填声明"
+        "（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」）。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.SPRING_STACK_FILE) = (self._orig_coding, self._orig_spring)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/spring.adoc", self.SPRING)
+
+    def test_valid_abstraction_adoption_guard_passes(self):
+        self._write_valid()
+        cm.check_abstraction_adoption_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_coding_file_missing_reports(self):
+        # 反例：通用层落点丢失（该条跨语言，不能只留在某一技术栈文件里）
+        self._write_valid()
+        os.remove(cm.CODING_FILE)
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → "每个使用点各实现一遍"重新变成默认做法
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 不重复。\n")
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("抽象与接入成本", self.error_texts())
+
+    def test_unique_wiring_clause_removed_reports(self):
+        # 反例：L1（a）被删 → 允许"三个 service 各传一遍实现类型"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "不得要求多个使用点各自提供同一实现或同一配置", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("唯一装配点", self.error_texts())
+
+    def test_default_requirement_removed_reports(self):
+        # 反例：L1（b）被删 → 可替换点可以既无默认、也不声明必填
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("禁止既无默认又不声明", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("禁止既无默认又不声明", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：判定标准被抽掉 → 只剩口号、无法判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("次数不随使用点数量增加", "")
+                              .replace("出现次数 > 1", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("判定", self.error_texts())
+
+    def test_level_marks_removed_reports(self):
+        # 反例：级别标注被拿掉（L1 被悄悄降级成建议）
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.CODING.replace("（L1）", "")
+                   .replace("（L2）", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_source_line_removed_reports(self):
+        # 反例：依据行被删（后人无从判断该条还成不成立）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("ISO/IEC/IEEE 29148", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("ISO/IEC/IEEE 29148", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例：存量边界被删 → 该条（严于常见既成做法）会被读成"必须立即全量重构"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不发动全库改造", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("存量边界", self.error_texts())
+
+    def test_spring_backlink_removed_reports(self):
+        # 反例：Spring「配置」不再引用该节 → Spring 项目按栈文件学习会漏掉接入成本判据
+        self._write_valid()
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 配置\n* 配置项绑定。\n")
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("spring.adoc", self.error_texts())
+
+
 class TestCheckReusePrecedentGuard(CheckSpecsTestCase):
     """钉住『既有实现与先例优先』：先查项目已有能力与先例，禁止手写原生写法绕过。
 
@@ -3283,22 +3410,28 @@ class TestCheckReusePrecedentGuard(CheckSpecsTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._orig_coding = cm.CODING_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
         self._orig_java = cm.JAVA_STACK_FILE
         self._orig_syntax = cm.JAVA_SYNTAX_FILE
         self._orig_readme = cm.README_FILE
         cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
         cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
         cm.JAVA_SYNTAX_FILE = os.path.join(self.root, "specs", "stack", "java-syntax.adoc")
         cm.README_FILE = os.path.join(self.root, "README.adoc")
 
     def tearDown(self) -> None:
-        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.JAVA_SYNTAX_FILE,
-         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_syntax,
-                            self._orig_readme)
+        (cm.CODING_FILE, cm.SPRING_STACK_FILE, cm.JAVA_STACK_FILE, cm.JAVA_SYNTAX_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_spring, self._orig_java,
+                            self._orig_syntax, self._orig_readme)
         super().tearDown()
 
     def _write_valid(self) -> None:
         self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 配置\n"
+                   "* 配置项须有默认值或显式必填声明"
+                   "（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」）。\n")
         self.write("specs/stack/java-syntax.adoc", self.SYNTAX)
         self.write("specs/stack/java.adoc",
         "= Java 规范\n"
