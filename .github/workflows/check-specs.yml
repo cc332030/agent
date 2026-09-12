@@ -20,6 +20,7 @@ on:
       - 'INSTALL.adoc'
       - 'README.adoc'
       - 'PROMPTS.adoc'
+      - 'CHANGELOG.adoc'
       - 'prompts/**'
       - 'script/**'
       - '.github/workflows/check-specs.yml'

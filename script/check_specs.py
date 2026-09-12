@@ -88,7 +88,11 @@
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
      并把"自足"要求误加到只对维护方成立的文件上。
- 29. AsciiDoc 语法：有 asciidoctor 时对全部 .adoc 做一次编译验证。
+ 29. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
+     （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
+     `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
+     也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
+     纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -291,26 +295,65 @@ def err(msg: str, path: str = "", line: int = 0) -> None:
 def collect_adoc_files():
     """收集纳入检查的 .adoc 文件。
 
-    口径：`specs/` 下全部规范文件 + 通用规范入口 `AGENTS_COMMON.adoc` + 项目自身规范
-    `AGENTS.adoc` + 安装文档 `INSTALL.adoc`——即"随规范集合维护的全部文档"，
-    **不止 specs/ 一个目录**（下文各检查的 docstring 一律以本口径为准）。
-    README/PROMPTS 等面向使用者的说明文档不在本集合内（其维护检查见 CI 其余步骤），
-    但提示词的**方向性内容**（主侧重/优先级）另由 check_prompts_primary 专门盯住。
+    口径：**本仓库维护范围内的全部 .adoc** = `specs/` 下全部规范文件（含
+    `specs-project-maintainer/`）+ 仓库根的全部 .adoc（通用规范入口
+    `AGENTS_COMMON.adoc`、项目自身规范 `AGENTS.adoc`、安装文档 `INSTALL.adoc`、
+    公共内容入口索引 `PUBLIC.adoc`、说明文档 `README.adoc`/`PROMPTS.adoc`、
+    变更记录 `CHANGELOG.adoc`）+ 图书馆 `library/` 下的全部 .adoc——即
+    "随规范集合维护的全部文档"，**不止 specs/ 一个目录**。
+    （下文各检查的 docstring 一律以本口径为准。）
+
+    为什么必须收全：本集合是**语法编译、引用存在性、节名引用、链接格式**等检查的
+    覆盖范围，漏收一个目录即该目录下全部文档脱离这些口径（悬空引用/悬空节名/错格式
+    链接都无人发现）。历史缺陷正是如此：`library/**` 与根 `PUBLIC.adoc`/`README.adoc`/
+    `PROMPTS.adoc` 曾同时不在本集合内，三口径对它们整体失效（实测 `library/README.adoc`
+    就有 3 处悬空节名无人拦）。故此处以"仓库根全部 .adoc + 各目录递归"一次收全，
+    新增目录/新文件自动纳入，不再靠逐项登记（漏登记即漏检查）。
     """
     result = []
-    for d in (SPECS_DIR, PROJECT_SPECS_DIR):
-        for root, _, files in os.walk(d):
+    # 目录一律**由 REPO_ROOT 现场推导**（不直接引用可能被重定向的模块常量）：
+    # 各检查/单测会把 REPO_ROOT 指向临时根，现场推导才能保证"只收本仓库内的文件"，
+    # 不会把真实仓库的目录（如真实 library/）漏收进来。
+    root_dir = os.path.abspath(REPO_ROOT)
+    for sub in ("specs", "specs-project-maintainer", "library"):
+        d = os.path.join(root_dir, sub)
+        for dirpath, _, files in os.walk(d):
             for f in files:
                 if f.endswith(".adoc"):
-                    result.append(os.path.join(root, f))
-    result.append(GENERIC_FILE)
-    # Agent 项目自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围，一并校验）
-    if os.path.isfile(PROJECT_FILE):
-        result.append(PROJECT_FILE)
-    # 安装文档（其内代码块模板逐字保留，纳入机械校验，避免模板被折叠/丢失换行）
-    if os.path.isfile(INSTALL_FILE):
-        result.append(INSTALL_FILE)
-    return result
+                    result.append(os.path.join(dirpath, f))
+    # 仓库根：全部 .adoc（含 AGENTS.adoc / INSTALL.adoc / PUBLIC.adoc / README.adoc /
+    # PROMPTS.adoc / CHANGELOG.adoc / AGENTS_COMMON.adoc；library/ 已由上面收，不重复）
+    if os.path.isdir(root_dir):
+        for f in sorted(os.listdir(root_dir)):
+            if f.endswith(".adoc"):
+                result.append(os.path.join(root_dir, f))
+    # 统一归一化为**仓库根相对 POSIX 路径**（如 `library/README.adoc`、`specs/…`）：
+    # 这是全仓库通用的规范写法，也让"某文件在不在检查集合里"可被直接核验。
+    return [os.path.relpath(f, root_dir).replace("\\", "/") for f in result]
+
+
+def _rel_of(path: str) -> str:
+    """把任意（绝对或仓库根相对的）文件路径归一化为**仓库根相对 POSIX 路径**。
+
+    检查集合里的元素一律是仓库根相对形式（见 collect_adoc_files），而常量
+    （GENERIC_FILE、PROMPTS_FILE 等）是绝对路径；两处混用时先经本函数归一化，
+    再比较/打开，避免绝对/相对两种写法互相认不出。
+    """
+    if os.path.isabs(path):
+        return os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+    return path.replace("\\", "/")
+
+
+# **历史记录文件**：`CHANGELOG.adoc` 是**只追加的变更历史**，按定义会保留旧路径、旧文件名
+# 与"原位于…迁移至…"这类历史陈述（见 specs/general/changelog.adoc）。故它虽有语法形态、
+# 须纳入语法编译（防模板/换行被破坏），但**引用存在性、节名引用、链接格式、历史来源声明**
+# 四类检查对它一律不适用——历史条目里的旧路径"查不到"是记录本身，不是悬空/违规。
+HISTORICAL_FILES = ("CHANGELOG.adoc",)
+
+
+def _is_historical(rel: str) -> bool:
+    """该仓库根相对路径是否属"历史记录文件"（不参与引用/节名/历史来源检查）。"""
+    return rel in HISTORICAL_FILES
 
 
 def check_asciidoctor_syntax():
@@ -319,31 +362,69 @@ def check_asciidoctor_syntax():
     用 shutil.which 跨平台检测（Windows `where` / Linux `command -v` 通用），
     避免因命令不存在而误判为"跳过"。CI 中应在运行本脚本前安装 asciidoctor，
     使语法验证真正执行。
+
+    **必须带 `--failure-level=WARN`**：asciidoctor 默认对 WARNING/ERROR **仍返回 0**
+    （只把问题打到 stderr），故只看 `returncode != 0` 会漏报这类问题——最典型的是
+    `include::` 目标缺失、`image::` 找不到：它们只发 WARNING，语法"通过"但内容实际
+    缺块。加此开关后 WARNING 及以上即返回非 0，防线才真正生效（判据：asciidoctor 的
+    `--failure-level`，取值域 INFO/WARN/ERROR/FATAL，默认 FATAL=不因告警失败）。
+    老版本 asciidoctor 不支持该开关（会以非 0 退出并打印 unknown option）时，**降级
+    为显式告警**而不是静默通过——降级路径本身要被看见。
     """
     phase("AsciiDoc 语法编译验证")
     if shutil.which("asciidoctor") is None:
         log("  提示: 未检测到 asciidoctor，跳过语法编译验证"
             "（CI 中请先在运行本脚本前安装，见 workflow）。")
         return
+    # 固定口径：WARNING 及以上即视为失败（含 include 目标缺失、image 找不到）
+    failure_level = "--failure-level=WARN"
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    unsupported = False   # 一旦确认本机 asciidoctor 不认 --failure-level，后续一律降级
+    for i, rel in enumerate(files, 1):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
+        base_cmd = ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", path]
+        cmd = base_cmd if unsupported else [base_cmd[0], failure_level] + base_cmd[1:]
         try:
-            r = subprocess.run(
-                ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode != 0:
-                err(f"asciidoctor 语法错误: {r.stderr.strip()}", f)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
-            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {os.path.relpath(f, REPO_ROOT)}")
+            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
+            continue
+        # 老版本 asciidoctor 不认 --failure-level：显式降级（只告警一次），不静默通过
+        if not unsupported and r.returncode != 0 \
+                and "unrecognized option" in (r.stderr or ""):
+            unsupported = True
+            log("  警告: 本机 asciidoctor 不支持 --failure-level，"
+                "WARNING 级问题（含 include 目标缺失）本次无法拦截；"
+                "请升级 asciidoctor（>= 1.5.7）")
+            try:
+                r = subprocess.run(base_cmd, capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
+                continue
+        if r.returncode != 0:
+            err(f"asciidoctor 语法/告警: {r.stderr.strip()}", rel)
     phase_done()
 
 
+def _is_dir_ref(ref: str) -> bool:
+    """判断一个引用是否为**目录型引用**（以 `/` 结尾，如 `specs/`、`script/`）。
+
+    目录型引用**不再整体跳过**——它有确定的判据（该目录是否存在），跳过会让
+    "目录被改名/删除后引用悬空"完全无人发现（原实现把目录型与占位符混为一类跳过，
+    等于把"可能误报"换成了"必然漏报"）。存在性由 check_refs_exist / check_library_guard
+    按 os.path.isdir 核对。
+    """
+    return ref.endswith("/")
+
+
 def _is_placeholder_ref(ref: str) -> bool:
-    """判断一个引用是否指向目录 / 占位符 / 尚不存在的示例（非真实具体文件）。"""
-    return (ref.endswith("/")
-            or ref.endswith("...")
+    """判断一个引用是否为**占位符/示例**（非真实具体文件，无法核对存在性）。
+
+    只含真正的占位形态：`...` 省略、`**` 整目录通配（如 `specs/**`）、`<...>` 尖括号
+    占位。**目录型引用（`specs/`）不在此列**——见 _is_dir_ref（它有确定的判据）。
+    """
+    return (ref.endswith("...")
             or ref.endswith("**")          # 整目录通配（如 `specs/**`），非具体文件
             or "<" in ref or ">" in ref)
 
@@ -357,9 +438,17 @@ def _ref_base(f: str) -> str:
     的 `link:README.adoc[]` 这类写法**检查器无法与本文件约定区分**（`README.adoc` 既非
     specs/ 下、也不在检查集合内），故根文件的跨文件引用统一按仓库根基准书写。
     """
-    if f in (GENERIC_FILE, INSTALL_FILE, PROJECT_FILE):
-        return ""
-    return os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+    if os.path.isabs(f):
+        rel = _rel_of(f)  # 绝对路径 → 仓库根相对
+    elif os.path.dirname(f) == "":
+        rel = f  # 已是仓库根相对形式（collect_adoc_files 的返回值）
+    else:
+        # 既非绝对、也非仓库根相对：按"相对 REPO_ROOT"解释（调用方偶有这种写法）
+        rel = _rel_of(os.path.join(REPO_ROOT, f))
+    d = os.path.dirname(rel)
+    if d in ("", "."):
+        return ""  # 仓库根文件：引用按从仓库根开始的路径解析
+    return d.replace("\\", "/")
 
 
 def extract_specs_refs(text: str, base_dir: str = ""):
@@ -373,11 +462,13 @@ def extract_specs_refs(text: str, base_dir: str = ""):
       * AsciiDoc 超链接：`link:xxx[]`——按**相对当前文件所在目录**解析（IDE 与
         浏览器相对语义一致），目标可能是 `../general/x.adoc` 等含 `../` 的形式。
 
-    排除：目录、占位符、外部 scheme 链接、页内锚点、根绝对路径及越出仓库根的相对路径。
+    排除：占位符、外部 scheme 链接、页内锚点、根绝对路径及越出仓库根的相对路径。
+    **目录型引用（以 `/` 结尾）保留**（不是"排除"）：它由调用方按 os.path.isdir 核对
+    存在性——原实现把目录型一并跳过，导致 `link:../script/[]` 这类目录被改名后无人发现。
     """
     refs = []
-    # 反引号：根目录相对
-    for r in re.findall(r"`(specs(?:-project)?/[^`\s]+)`", text):
+    # 反引号：根目录相对（含目录型 `specs/`、`script/`；占位形态除外）
+    for r in re.findall(r"`((?:specs(?:-project)?|library|script|prompts)/[^`\s]*)`", text):
         if _is_placeholder_ref(r):
             continue
         refs.append(r)
@@ -390,11 +481,14 @@ def extract_specs_refs(text: str, base_dir: str = ""):
             continue
         if t.startswith("/"):  # 根绝对路径，格式检查单独报告，此处不参与存在性
             continue
+        is_dir = t.endswith("/")
         resolved = posixpath.normpath(posixpath.join(base_dir, t))
         if resolved == ".." or resolved.startswith("../"):
             continue  # 越出仓库根，格式检查单独报告
         if _is_placeholder_ref(resolved):
             continue
+        if is_dir and not resolved.endswith("/"):
+            resolved += "/"  # 保留目录型标记，供调用方按目录核对
         refs.append(resolved)
     # 去重并保持顺序
     seen, out = set(), []
@@ -416,11 +510,12 @@ def check_refs_exist():
     """
     phase("引用文件存在性检查")
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        base = _ref_base(f)
+    for i, rel in enumerate(files, 1):
+        base = _ref_base(rel)
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
-        with open(f, encoding="utf-8") as fh:
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧路径，存在性检查对它不适用
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             text = fh.read()
         refs = extract_specs_refs(text, base)
         for ref in refs:
@@ -437,6 +532,13 @@ def check_refs_exist():
             # 拦下；故图书馆自身的非 library 引用不在此重复报错。
             if rel.startswith("library" + os.sep) \
                     and not ref.startswith("library/"):
+                continue
+            if _is_dir_ref(ref):
+                # 目录型引用：核对**目录**是否存在（不再整体跳过——目录被改名/删除
+                # 同样是引用悬空，且原实现正因跳过而对它完全无覆盖）
+                d = os.path.join(REPO_ROOT, *ref.rstrip("/").split("/"))
+                if not os.path.isdir(d):
+                    err(f"引用了不存在的目录: {ref}", rel)
                 continue
             target = os.path.join(REPO_ROOT, *ref.split("/"))
             if not os.path.isfile(target):
@@ -457,7 +559,8 @@ def check_stack_consistency():
         text = fh.read()
     # 提取登记的技术栈文件：specs/stack/xxx.adoc（AGENTS_COMMON.adoc 内部 specs/... 从仓库根解析，base_dir=""）
     registered = set(extract_specs_refs(text, ""))
-    registered_stack = {r for r in registered if r.startswith("specs/stack/")}
+    registered_stack = {r for r in registered
+                        if r.startswith("specs/stack/") and not r.endswith("/")}
 
     actual = set()
     stack_dir = os.path.join(SPECS_DIR, "stack")
@@ -490,20 +593,25 @@ def check_dispatcher_registry():
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         registered = set(extract_specs_refs(fh.read(), ""))
     referenced = set()
-    for f in collect_adoc_files():
-        base = _ref_base(f)
-        with open(f, encoding="utf-8") as fh:
+    for rel in collect_adoc_files():
+        # 只统计**公共规范内容**（`AGENTS_COMMON.adoc` + `specs/`）内部文件的引用：
+        # 调度器是公共规范内容的登记处。维护方私有落点（`specs-project-maintainer/`、
+        # 根 `library/`、`PUBLIC.adoc`、根 `README.adoc`/`PROMPTS.adoc`/`CHANGELOG.adoc`、
+        # `prompts/`）**不在公共内容里、也不由公共调度器登记**（各由 `AGENTS.adoc` 登记），
+        # 把它们的引用算进来即为误报。
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
+            continue
+        base = _ref_base(rel)
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             referenced |= set(extract_specs_refs(fh.read(), base))
-    # 只核对**公共内容**（`AGENTS_COMMON.adoc` + `specs/`）的登记完整性：调度器是
-    # 公共内容的登记处。维护方私有落点（`specs-project-maintainer/`、根 `library/`、
-    # `PUBLIC.adoc` 等）**不在公共内容里、也不由公共调度器登记**（各由 `AGENTS.adoc`
-    # 登记），若把它们算作"未登记"即为误报。
-    # 匹配粒度差异是刻意的：维护方私有**目录**下任意深度的文件都算维护方自有（前缀匹配），
-    # 而 `PUBLIC.adoc` 是**单文件**（精确匹配，防 `PUBLIC2.adoc` 之类被误放行）。
-    maintainer_dirs = ("specs-project-maintainer/", "library/")
-    maintainer_files = ("PUBLIC.adoc",)
+    # 只核对**公共规范内容**（`specs/`）的目标：非 `specs/` 的引用（根文档、`prompts/`、
+    # `library/` 等）不由公共调度器登记，报"未登记"即为误报。`specs-project-maintainer/`
+    # 虽在 `specs-project/…` 命名空间之外，但其 §登记由 AGENTS.adoc 单独承担，此处一并排除。
+    non_public = ("specs-project-maintainer/", "library/")
     missing = sorted(r for r in referenced - registered
-                     if not r.startswith(maintainer_dirs) and r not in maintainer_files)
+                     if r.startswith("specs/")
+                     and not r.endswith("/")   # 目录型引用不是"待登记文件"
+                     and not r.startswith(non_public))
     log(f"  调度器登记 {len(registered)} 个, 被引用 {len(referenced)} 个")
     for m in missing:
         err(f"规范文件被引用但未在加载调度器登记（不会被加载、其中规则实际失效）: {m}",
@@ -517,10 +625,9 @@ def check_forbidden_patterns():
     files = collect_adoc_files()
     checked = 0
     total_lines = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    for i, rel in enumerate(files, 1):
         # AGENTS_COMMON.adoc 作为加载器允许出现中性示例路径，跳过其私有约定命中
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             lines = fh.readlines()
         total_lines += len(lines)
         found_in_file = False
@@ -547,10 +654,11 @@ def check_historical_notes():
     phase("历史来源声明检查")
     files = collect_adoc_files()
     checked = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史本身就是历史陈述，本检查对它不适用
         found_in_file = False
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 for pat, desc in HISTORICAL_NOTE_PATTERNS:
                     if re.search(pat, line):
@@ -652,11 +760,12 @@ def check_link_refs():
     """
     phase("文档链接格式检查")
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        base = _ref_base(f)
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧路径与旧写法，链接格式检查对它不适用
+        base = _ref_base(rel)
         found_in_file = False
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 for m in re.finditer(r"\blink:([^\[]+)\[", line):
                     target = m.group(1).strip()
@@ -725,12 +834,13 @@ def check_section_refs():
     files = collect_adoc_files()
     checked = 0
     intra_checked = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        base = _ref_base(f)
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧节名引用，节名检查对它不适用
+        base = _ref_base(rel)
         found_in_file = False
-        own_names = _collect_section_names(f)
-        with open(f, encoding="utf-8") as fh:
+        own_names = _collect_section_names(os.path.join(REPO_ROOT, *rel.split("/")))
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 # 匹配 `link:目标[]` 及其后连续出现的「节名」（同一行内，可并列多个）
                 for m in re.finditer(r"\blink:([^\[]+)\[\]((?:\s*「[^」]+」)+)", line):
@@ -873,11 +983,10 @@ def check_filler_docs():
     """
     phase("文档注水检查")
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    for i, rel in enumerate(files, 1):
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
         seen_paras = set()
-        for lineno, para, meaningful in _iter_blocks(f):
+        for lineno, para, meaningful in _iter_blocks(os.path.join(REPO_ROOT, *rel.split("/"))):
             text = " ".join(p.strip() for p in para).strip()
             # 0) 纯格式行（`：`、`——`、`***` 等）：无实质字符，不判注水（防误报）
             if _substance_chars(text) < FILLER_MIN_SUBSTANCE_CHARS:
@@ -1717,18 +1826,16 @@ def check_public_content_has_no_private_refs():
                      "check_principle_guard", "check_verify_guard",
                      "check_adoption_guard", "check_source_guard",
                      "check_filler_docs", "CI 拦下")
-    for f in [GENERIC_FILE] + collect_adoc_files():
-        if os.path.basename(f) == "AGENTS.adoc" \
-                and os.path.dirname(os.path.abspath(f)) == REPO_ROOT:
+    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
             continue  # 根 AGENTS.adoc 是项目自身内容，允许引用私有物
-        if os.path.abspath(f) != GENERIC_FILE:
-            parts = os.path.relpath(f, REPO_ROOT).replace("\\", "/").split("/")
-            if parts[0] != "specs":
-                continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）；specs-project-maintainer/ 属维护方自有
-        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
-        if not os.path.isfile(f):
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
+            continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）；specs-project-maintainer/ 属维护方自有
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
             continue
-        with open(f, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 if not any(w in line for w in context_words):
                     continue
@@ -1758,18 +1865,16 @@ def check_public_content_is_self_contained():
     只钉"引用指向的位置是否随公共内容分发"，该表述是否真需自足仍由人/子 agent 复核承担。
     """
     phase("公共内容自足性检查（不引用私有落点）")
-    for f in [GENERIC_FILE] + collect_adoc_files():
-        if os.path.basename(f) == "AGENTS.adoc" \
-                and os.path.dirname(os.path.abspath(f)) == REPO_ROOT:
+    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
             continue  # 根 AGENTS.adoc 是项目自身内容，可引用任意私有落点
-        if os.path.abspath(f) != GENERIC_FILE:
-            parts = os.path.relpath(f, REPO_ROOT).replace("\\", "/").split("/")
-            if parts[0] != "specs":
-                continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）
-        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
-        if not os.path.isfile(f):
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
+            continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
             continue
-        with open(f, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 if "specs-project-maintainer/" in line:
                     err("公共内容不得引用维护方自查层『specs-project-maintainer/』——"
@@ -1837,19 +1942,18 @@ def check_no_mechanism_claims_in_public():
     """
     phase("公共内容不得声明机械防线检查（元信息）")
     claim_words = ("当前", "目前", "已由", "另有", "本仓库", "本项目")
-    for f in [GENERIC_FILE, PROMPTS_FILE, README_FILE] + collect_adoc_files():
-        if os.path.basename(f) == "AGENTS.adoc" \
-                and os.path.dirname(os.path.abspath(f)) == REPO_ROOT:
+    for f in [_rel_of(GENERIC_FILE), _rel_of(PROMPTS_FILE), _rel_of(README_FILE)] \
+            + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
             continue  # 根 AGENTS.adoc 是项目自身内容，可以声明本仓库防线
-        if not os.path.isfile(f):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
             continue
-        if os.path.abspath(f) != GENERIC_FILE:
-            rel_parts = os.path.relpath(f, REPO_ROOT).replace("\\", "/").split("/")
-            if rel_parts[0] not in ("specs",) and os.path.relpath(
-                    f, REPO_ROOT).replace("\\", "/") not in ("README.adoc", "PROMPTS.adoc"):
-                continue  # 只检查公共内容与其说明文档；specs-project-maintainer/ 属维护方自有，可点名自家防线
-        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
-        with open(f, encoding="utf-8") as fh:
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
+                and rel not in ("README.adoc", "PROMPTS.adoc"):
+            continue  # 只检查公共内容与其说明文档；specs-project-maintainer/ 属维护方自有，可点名自家防线
+        with open(path, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 if "防线" in line and any(w in line for w in claim_words) \
                         and not any(w in line for w in ("应", "须", "要求")):
@@ -2066,6 +2170,17 @@ def check_checklist_guard():
 # 文件里的引用是否真能解析（引用方看不到这里，引用悬空只有本仓库自己能发现）。
 # 判定只认机械可判定的形态：文件/片段存在性与引用可解析性；"该依据是否真的支持该条、
 # 依据找得全不全"属语义判断，交人/子 agent 复核承担（见 specs/general/verify.adoc「验证总纲」）。
+# **取样来源标记**：图书馆的每条外部依据都须带"它是怎么被取回的"标记——这是"不划水、
+# 不造假"的判据落点。三类标记缺任一类，就意味着某类依据的**可信度边界**无从判断
+# （"官方文本已取回"可复取比对 vs "官方网页已取回"仅题名可对 vs "未逐字取回"不引其字句）。
+# 常量化后由 check_library_guard 机械钉住：标记整体被删（依据被悄悄压成"看起来很权威的
+# 名称"）即报错——grep 在 sources.adoc 命中只说明文档正文举例还在，不等于防线覆盖到它。
+LIBRARY_SOURCE_MARKERS = (
+    "官方文本已取回",
+    "官方网页已取回",
+    "未逐字取回",
+)
+
 LIBRARY_QUOTE_ANCHORS = (
     "Software Reviews and Audits",
     "IEEE Standard for Information Technology--Systems Design--Software Design Descriptions",
@@ -2094,7 +2209,7 @@ LIBRARY_QUOTE_ANCHORS = (
     "MAJOR version when you make incompatible API changes",
     "In many IETF documents, several words",
     "when they are in all capitals as shown below",
-)
+) + LIBRARY_SOURCE_MARKERS
 
 
 def check_library_guard():
@@ -2187,9 +2302,16 @@ def check_library_guard():
         rel = f"library/{f}"
         for j, line in enumerate(lines, 1):
             # 反引号写法：`specs/...`（按仓库根解析；`library/...` 同基准）
-            for m in re.findall(r"`((?:specs|library|specs-project-maintainer)/[^`\s]+)`",
-                                line):
+            for m in re.findall(r"`((?:specs|library|specs-project-maintainer|script|"
+                                r"prompts)/[^`\s]*)`", line):
                 if _is_placeholder_ref(m):
+                    continue
+                if _is_dir_ref(m):
+                    # 目录型引用：核对目录是否存在（不再整体跳过——目录被改名同样是悬空）
+                    d = os.path.join(REPO_ROOT, *m.rstrip("/").split("/"))
+                    if not os.path.isdir(d):
+                        err(f"图书馆内的引用 `{m}` 指向不存在的目录——"
+                            "悬空引用等于依据链断在这里", rel, j)
                     continue
                 if not os.path.isfile(os.path.join(REPO_ROOT, *m.split("/"))):
                     err(f"图书馆内的引用 `{m}` 指向不存在的文件——"
@@ -2211,6 +2333,31 @@ def check_library_guard():
                     err(f"图书馆内的链接 link:{target}[] 指向不存在的文件（{resolved}）——"
                         "悬空引用等于依据链断在这里", rel, j)
     phase_done()
+
+
+def _split_adoc_sections(text: str):
+    """把一份 .adoc 文本按**二级节**切成 `[(节标题, 节正文含标题行), …]`。
+
+    只认同级 `== ` 标题；`===` 及更深层归入所属二级节正文（本函数只用于"按节取
+    表格/清单区"这类粗粒度定位，不解析完整文档树）。代码块（`----` 定界）内的
+    伪标题不计入——否则块内示例会把节切碎、定位错段。
+    """
+    lines = text.split("\n")
+    sections = []
+    cur_title, cur_lines, in_block = None, [], False
+    for line in lines:
+        if line.strip() == "----":
+            in_block = not in_block
+        is_head = (not in_block) and re.match(r"^==\s+\S", line)
+        if is_head:
+            if cur_title is not None:
+                sections.append((cur_title, "\n".join(cur_lines)))
+            cur_title, cur_lines = line[2:].strip(), [line]
+        elif cur_title is not None:
+            cur_lines.append(line)
+    if cur_title is not None:
+        sections.append((cur_title, "\n".join(cur_lines)))
+    return sections
 
 
 def check_public_content_coverage():
@@ -2256,14 +2403,34 @@ def check_public_content_coverage():
             err(f"公共内容入口清单未列出 {rel}——"
                 "漏一个入口即半个公共内容不在覆盖面内"
                 "（自足检查漏的是它的死链）", "PUBLIC.adoc")
-    for m in sorted(set(re.findall(r"`([A-Za-z0-9_./-]+\.(?:adoc|py|txt))`", listing))):
-        if m.endswith(".adoc") and m in ("AGENTS.adoc", "README.adoc",
-                                         "CHANGELOG.adoc", "PUBLIC.adoc",
-                                         "PROMPTS.adoc"):
-            continue  # 反向举例（"不属公共内容"那一段）里点名这些文件属正常
-        if not os.path.isfile(os.path.join(REPO_ROOT, *m.split("/"))):
-            err(f"公共内容入口清单点名了不存在的文件 `{m}`——"
-                "清单与实际不一致，覆盖面界定失效", "PUBLIC.adoc")
+    # **按节切表格/清单区**判定（不再全文 re.findall + 硬编码豁免）：
+    #   ① 入口清单表所在节：其中以反引号点名的路径即"公共内容入口"，须真实存在；
+    #   ② "不属公共内容"那一段的反向举例：它点名的文件同样须真实存在（是**真实存在的
+    #      非公共内容**，不是"随便写写"）——故一并核对，**不再靠硬编码 5 个 .adoc 名跳过**；
+    #      新增任何合法反向举例都自动纳入核对，不必回来改白名单（"以豁免补判据不足"）。
+    # 全文扫描的失效模式：别节/正文里出现的任意 .adoc 名（如示例、历史叙述）都会被当成
+    # "清单点名"，只能靠硬编码豁免来掩盖——判据不足而非判据。
+    def _names_in(section_body: str):
+        return sorted(set(re.findall(r"`([A-Za-z0-9_./-]+\.(?:adoc|py|txt))`",
+                                     section_body)))
+
+    def _check_names(names, desc):
+        for m in names:
+            if not os.path.isfile(os.path.join(REPO_ROOT, *m.split("/"))):
+                err(f"{desc}点名了不存在的文件 `{m}`——"
+                    "清单与实际不一致，覆盖面界定失效", "PUBLIC.adoc")
+
+    sections = _split_adoc_sections(listing)
+    list_secs = [(t, b) for t, b in sections if "入口清单" in t]
+    non_public_secs = [(t, b) for t, b in sections if "不属公共内容" in b]
+    if not list_secs:
+        err("PUBLIC.adoc 未找到「公共内容入口清单」节——"
+            "覆盖面界定的判据失去落点（本检查按节切表格区核对，节名被改写即报错）",
+            "PUBLIC.adoc")
+    for t, b in list_secs:
+        _check_names(_names_in(b), "公共内容入口清单")
+    for t, b in non_public_secs:
+        _check_names(_names_in(b), "「不属公共内容」一段")
     phase_done()
 
 
