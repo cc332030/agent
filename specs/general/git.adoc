@@ -4,7 +4,7 @@
 
 == 文件移动与重命名
 
-> 本节是 `git mv` 铁律的**权威完整定义**（最高关注项 P1，L1 强制）；其他位置（link:../core/execution.adoc[]「文件操作强制检查」、`AGENTS_COMMON.adoc`「最高优先级铁律」）均为**引用/重申**，不得被判为重复而合并删除（见 link:../core/priority.adoc[]「最高关注项与去重的冲突处理」）。
+> 本节是 `git mv` 铁律的**权威完整定义**（最高关注项 P1，L1 强制）；其他位置（link:../core/execution.adoc[]「文件操作强制检查」、`AGENTS_COMMON.adoc`「最高优先级铁律」）均为**引用/重申**，不得被判为重复而合并删除（见 link:../core/execution.adoc[]「分级与最高关注项」）。
 
 * 文件移动/重命名必须使用 git mv（git 按内容相似度识别 rename、保留跟踪历史；依据：git 官方文档 `git-mv` 与 `git-diff` 的 `-M/--find-renames` rename 检测），禁止用「新增新文件 + 删除旧文件」代替——delete+create 会使 git 历史断裂（旧文件历史丢失）；**判断标准**：只要操作会让某个既有文件的 git 历史无法追溯，就属"文件移动"，必须 git mv，不得因主观认为"这是在重构而非移动文件"而规避；移动/重命名前须先确认源文件已纳入 git 跟踪（未跟踪的新文件先 git add，再从暂存区/工作区 git mv），保证 git 能识别为 renamed
 * **强制核对（兜底）**：凡本次改动涉及文件的新增/删除/移动，操作完成后必须执行 `git status`/`git diff --name-status` 核对——应保留历史的文件若显示为 `deleted` + `new file`（未识别为 rename），说明误用了 delete+create，须同步修复工作区：恢复旧文件后 git mv 正式重命名，再应用内容修改，确保 git 识别为 renamed；该强制核对规则提升于必加载层（specs/core/execution.adoc「文件操作强制检查」）
