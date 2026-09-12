@@ -24,6 +24,7 @@
 * 配置类识别特征（`@ConfigurationProperties` 等，补充通用编码规范）：除通用编码规范中"以 Config/Properties/Options/Settings 等命名"的识别外，**标注 `@ConfigurationProperties` 的类一律属配置类**（无论类名如何）——只放配置项字段与 lombok 访问器注解，**不得含任何逻辑**（无例外），校验注解与绑定注解属声明、不属逻辑（通用规则与判定标准见 link:../general/coding.adoc[]「类设计」）
 * 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行
 * JSON 处理全局统一使用 Jackson，禁止引入其他 JSON 库（如 Gson、fastjson）
+* 既有工具类/先例优先（补充通用编码规范「代码复用」）：Java 项目写代码前先查项目自有工具类（如 ctool4j 的 `CList`/`CStrUtils`/`CIdUtils`）与已引入工具库（如 hutool 的 `IdUtil`/`CollUtil`/`StrUtil`）是否已覆盖该操作，并跟随项目内同类调用的先例；**已有等价能力时禁止手写 JDK 原生写法**（典型反例：已有 `IdUtil.fastUUID()`/`CIdUtils.UUID()` 仍写 `java.util.UUID.randomUUID().toString()`；已有 `CollUtil.isNotEmpty` 仍写 `null != coll and !coll.isEmpty`）。选择优先级与现成 API 清单见 link:../stack/java-syntax.adoc[]「工具类使用优先级」（通用规则见 link:../general/coding.adoc[]「代码复用」）
 * 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
 * 日志打印（禁 println、统一 slf4j 见通用编码规范）：静态文本（无参）不属占位符参数化约束范围，合规；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（如 `log.error("msg: {}", arg, e)`）
 

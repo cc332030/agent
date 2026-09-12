@@ -1,21 +1,22 @@
 = Java 工具类规范（技术栈层）
 
-以下规范适用于 Java 项目的工具类使用。目标：用标准库或成熟工具库替代重复的原生写法，统一代码风格，避免重复造轮子。
+以下规范适用于 Java 项目的工具类使用。目标：**优先复用项目自有工具类与已引入工具库**替代重复的原生写法（项目已有先例时跟随先例），统一代码风格，避免重复造轮子。
 
 == 工具类使用优先级
 
-使用工具类时按以下优先级选择（从高到低）：
+使用工具类时按以下优先级选择（从高到低），**先看项目已有先例再动手**（通用规则见 link:../general/coding.adoc[]「代码复用」）：
 
-* 1. **JDK 标准库自带能力**（零依赖、最通用）：JDK 支持时优先使用，如 `List.of(...)`/`Set.of(...)`/`Map.of(...)`、`Objects`/`String`/`Math` 等原生方法，不为此引入额外依赖
-* 2. **项目自有工具类**（项目已引入的工具库）：如项目引入了 ctool4j 等自有库，使用其提供的工具类（如 `CList.of(...)`、`CStrUtils` 等），避免重复实现
-* 3. **通用第三方工具库**：尽量使用 hutool 中的工具类替代原生重复写法，如：
-  ** `cn.hutool.core.collection.CollUtil`（集合）
+* 1. **项目自有工具类**（最优先）：项目已实现/已引入的自有工具库优先使用（如 ctool4j 的 `CList.of(...)`、`CStrUtils`、`CIdUtils.UUID()` 等），避免重复实现——**项目已有等价能力时，不得改用手写原生写法或 JDK 原生 API**（典型反例：已有 `CIdUtils.UUID()` 仍写 `UUID.randomUUID().toString()`、已有 `CList` 仍手写 `new ArrayList<>()`）
+* 2. **通用第三方工具库**（项目已引入时优先于 JDK 原生写法）：已引入 hutool 时，用其工具类替代原生重复写法，如：
+  ** `cn.hutool.core.util.IdUtil`（如 `IdUtil.fastUUID()`/`fastSimpleUUID()`，替代 `UUID.randomUUID()` 手写）
+  ** `cn.hutool.core.collection.CollUtil`（集合，如 `CollUtil.isNotEmpty`/`isEmpty`，替代 `x != null && !x.isEmpty()` 手写判空）
   ** `cn.hutool.core.util.StrUtil`（字符串）
   ** `cn.hutool.core.map.MapUtil`（Map）
   ** `cn.hutool.core.util.ObjectUtil`（对象）
   ** `cn.hutool.core.util.ArrayUtil`（数组）
+* 3. **JDK 标准库自带能力**（最低优先级，仅在无项目自有/第三方等价能力时）：JDK 支持时使用，如 `List.of(...)`/`Set.of(...)`/`Map.of(...)`、`Objects`/`String`/`Math` 等原生方法，不为此引入额外依赖
 
-约束：各优先级仅在对应依赖已引入时适用；未引入某库则跳过该层级，不强行引入不必要依赖（依赖调整见 specs/stack/maven.adoc）。
+约束：各优先级仅在对应依赖已引入时适用；未引入某库则跳过该层级，不强行引入不必要依赖（依赖调整见 link:../stack/maven.adoc[]）。**同一操作在项目内已有统一入口/先例时，一律跟随先例，不按优先级另选一套。**
 
 == 工具类使用约定
 
