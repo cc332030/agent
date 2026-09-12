@@ -3186,6 +3186,8 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         "给不出默认时须显式声明必填失败面，**禁止既无默认又不声明**。"
         "判定标准：二者必居其一。\n"
         "* 能自动装配就不要求接入方手写（L2）：如 SPI 自动装配（`ServiceLoader`）。\n"
+        "* 存量边界：本条适用于新写的对外能力与改到的既有抽象"
+        "（按「规范变更的存量处理」随动迁移、不发动全库改造）。\n"
         "* 多实现用限定符、不逐层传参（L2）：用限定符/命名 Bean 区分，"
         "禁止参数穿透；跨层级对象用作用域/上下文对象承载。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、"
@@ -3269,6 +3271,14 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
                    self.CODING.replace("ISO/IEC/IEEE 29148", ""))
         cm.check_abstraction_adoption_guard()
         self.assertIn("ISO/IEC/IEEE 29148", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例：存量边界被删 → 该条（严于常见既成做法）会被读成"必须立即全量重构"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不发动全库改造", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("存量边界", self.error_texts())
 
     def test_spring_backlink_removed_reports(self):
         # 反例：Spring「配置」不再引用该节 → Spring 项目按栈文件学习会漏掉接入成本判据
