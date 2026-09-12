@@ -1658,6 +1658,82 @@ def check_adoption_guard():
     phase_done()
 
 
+
+def check_ci_cd_guard():
+    """『CI/CD 与平台协作防线』：CICD 校验链完整性与 CNB 对象钉定要点不得被删或降级。
+
+    背景：来自 CI 内 agent 的踩坑报告——①CI 只跑主校验脚本、**配套测试从未在 CI 执行**
+    （其中一个测试文件因命名无法被自动发现、用例长期零执行）；②触发路径与校验对象不一致；
+    ③流水线引用**不存在的镜像/制品**，在 Prepare 阶段即失败；④任务长期停在 pending、
+    **无可判定超时**；⑤同一分支多次推送 / 压缩提交强推后，复核按分支名取到**过期对象**、
+    结论错位；⑥派发对象未钉定 commit sha。这些失效在"编写/调优流水线"与"在平台上协作"
+    时反复出现，属**可机械钉住的关键判据**，故设本防线。
+
+    只钉"节与要点仍在"，语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("CI/CD 与平台协作防线检查")
+    # ① CI/CD 规范：校验链完整 / 触发范围 / 依赖可用 / 超时
+    rel_ci = "specs/general/ci-cd.adoc"
+    ci_path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(ci_path):
+        err(f"缺少 CI/CD 规范文件 {rel_ci}——"
+            "流水线校验链完整性与超时等判据失去集中落点", rel_ci)
+    else:
+        with open(ci_path, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("校验链完整", "流水线须跑全既定校验（含配套测试），防‘定义未执行’"),
+                ("只跑主校验脚本", "把‘只跑主脚本’显式判为验证不完整"),
+                ("须能被测试框架自动发现", "测试文件命名/位置须落在框架发现规则内"),
+                ("触发路径须覆盖校验对象", "改了却不跑＝漏检"),
+                ("须先确认实际可用", "上游镜像/制品/工具须实测可用，不得凭名称假设"),
+                ("须有可判定的超时", "不得让流水线无限挂在 pending"),
+                ("不在 CI 中调用会给出非确定性结论的外部 AI", "非确定性不得阻塞构建")):
+            if key not in text:
+                err(f"CI/CD 防线被破坏：{rel_ci} 缺失『{key}』（{desc}）——"
+                    "踩坑判据不得被删或降级", rel_ci)
+    # ② CNB 平台规范：对象钉定与可追溯 / 执行者可用性
+    rel_cnb = "specs/platform/cnb.adoc"
+    cnb_path = os.path.join(REPO_ROOT, *rel_cnb.split("/"))
+    if not os.path.isfile(cnb_path):
+        err(f"缺少 CNB 平台规范文件 {rel_cnb}——"
+            "平台上的对象钉定与协作判据失去集中落点", rel_cnb)
+    else:
+        with open(cnb_path, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("派发与复核须钉定 commit sha", "分支名不是稳定标识，须钉 sha"),
+                ("压缩提交/强推会替换对象", "旧 sha 作废、结论须在新 sha 上重核"),
+                ("git fetch -f", "取对象前须强刷 ref，防本地缓存旧 sha"),
+                ("派发前确认执行者实际可用", "镜像/制品 not found 时任务从未真正开始"),
+                ("流水线不无界挂起", "平台 job/step 须可判定超时")):
+            if key not in text:
+                err(f"CNB 平台防线被破坏：{rel_cnb} 缺失『{key}』（{desc}）——"
+                    "平台协作的踩坑判据不得被删或降级", rel_cnb)
+    # ③ 相应的通用侧落点：验证须覆盖全部校验手段、验证对象钉定 sha（verify.adoc）
+    rel_v = "specs/general/verify.adoc"
+    v_path = os.path.join(REPO_ROOT, *rel_v.split("/"))
+    if os.path.isfile(v_path):
+        with open(v_path, encoding="utf-8") as fh:
+            vtext = fh.read()
+        for key, desc in (
+                ("验证须覆盖项目的全部既定校验手段", "‘存在测试’≠‘测试被执行’"),
+                ("验证对象须钉定 commit sha", "验证/复核前须先取定 sha")):
+            if key not in vtext:
+                err(f"CI/CD 防线被破坏：{rel_v} 缺失『{key}』（{desc}）", rel_v)
+    # ④ 协作侧落点：派发对象钉定与执行者可用性（collab.adoc）
+    rel_c = "specs/general/collab.adoc"
+    c_path = os.path.join(REPO_ROOT, *rel_c.split("/"))
+    if os.path.isfile(c_path):
+        with open(c_path, encoding="utf-8") as fh:
+            ctext = fh.read()
+        for key, desc in (
+                ("派发对象须钉定 commit sha", "派发指令须写明具体 sha"),
+                ("派发前确认执行者可执行", "确认镜像/制品实际可取")):
+            if key not in ctext:
+                err(f"CI/CD 防线被破坏：{rel_c} 缺失『{key}』（{desc}）", rel_c)
+    phase_done()
+
 def check_self_check_guard():
     """『自检防线』：执行前自检规范与其必加载层落点不得被删或降级。
 
@@ -2833,7 +2909,7 @@ def main(argv=None) -> int:
         description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
                     "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
-                    "环境标志与专用口径 + AsciiDoc 语法）")
+                    "环境标志与专用口径/CI-CD 与平台协作 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -2862,6 +2938,7 @@ def main(argv=None) -> int:
     check_verify_guard()
     check_lifecycle_guard()
     check_adoption_guard()
+    check_ci_cd_guard()
     check_no_mechanism_claims_in_public()
     check_public_facing_docs_stay_self_contained()
     check_source_guard()

@@ -3018,3 +3018,89 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         os.remove(cm.PROMPTS_FILE)
         cm.check_npc_merge_guard()
         self.assertIn("缺少公开提示词入口", self.error_texts())
+
+
+class TestCheckCiCdGuard(CheckSpecsTestCase):
+    """钉住「CI/CD 与平台协作防线」：踩坑判据不得被删或降级。
+
+    背景（CI 内 agent 的踩坑报告）：CI 只跑主校验脚本、配套测试从未执行；触发路径与
+    校验对象不一致；引用不存在的镜像/制品在 Prepare 阶段即失败；任务长期停在 pending
+    无可判定超时；分支多次推送/压缩提交强推后复核按分支名取到过期对象。这些反复出现，
+    故机械钉住 CICD 规范（校验链完整/触发范围/依赖可用/超时/非确定性 AI）与 CNB 平台
+    规范（钉 sha、强推对应关系、执行者可用性、流水线不无界挂起）的关键要点。
+    """
+
+    def _write_valid(self):
+        self.write("specs/general/ci-cd.adoc",
+                   "= CI/CD 规范（通用层）\n\n"
+                   "* 校验链完整：流水线须跑全既定校验；只跑主校验脚本 属验证不完整；"
+                   "测试文件须能被测试框架自动发现。\n"
+                   "* 触发路径须覆盖校验对象。\n"
+                   "* 上游依赖须先确认实际可用。\n"
+                   "* 每次执行须有可判定的超时。\n"
+                   "* 不在 CI 中调用会给出非确定性结论的外部 AI。\n")
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范（平台层）\n\n"
+                   "* 派发与复核须钉定 commit sha；须先 `git fetch -f` 强刷 ref。\n"
+                   "* 压缩提交/强推会替换对象，旧 sha 的结论视为过期。\n"
+                   "* 派发前确认执行者实际可用。\n"
+                   "* 流水线不无界挂起。\n")
+        self.write("specs/general/verify.adoc",
+                   "= 验证\n\n"
+                   "* 验证须覆盖项目的全部既定校验手段。\n"
+                   "* 验证对象须钉定 commit sha。\n")
+        self.write("specs/general/collab.adoc",
+                   "= 协作\n\n"
+                   "* 派发对象须钉定 commit sha。\n"
+                   "* 派发前确认执行者可执行。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_ci_cd_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_ci_cd_file_reports(self):
+        self.write("specs/platform/cnb.adoc", "CNB")
+        cm.check_ci_cd_guard()
+        self.assertIn("缺少 CI/CD 规范文件", self.error_texts())
+
+    def test_missing_ci_chain_completeness_reports(self):
+        # 反例：把"须跑全既定校验（含配套测试）"抽掉（回到"只跑主脚本也算验证"）
+        self._write_valid()
+        self.write("specs/general/ci-cd.adoc", "= CI/CD 规范\n\n* 早失败。\n")
+        cm.check_ci_cd_guard()
+        self.assertIn("校验链完整", self.error_texts())
+
+    def test_missing_ci_timeout_reports(self):
+        # 反例：超时要求被删（流水线可无限挂在 pending）
+        self._write_valid()
+        p = "specs/general/ci-cd.adoc"
+        t = open(os.path.join(self.root, p), encoding="utf-8").read()
+        self.write(p, t.replace("每次执行须有可判定的超时", "超时另说"))
+        cm.check_ci_cd_guard()
+        self.assertIn("可判定的超时", self.error_texts())
+
+    def test_missing_cnb_sha_pin_reports(self):
+        # 反例：钉定 commit sha 的要点被抽掉、仅保留 NPC 禁合并节（按分支名取到过期对象、复核错位）。
+        # 断言用本防线独有的「git fetch -f」——它与 `check_npc_merge_guard` 各自钉住
+        # 同一文件的不同要点，故本防线须能在"禁合并节还在"时独立报出。
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB\n\n== 合并请求的合并主体（NPC 禁合并）\n\n"
+                   "* NPC 严禁合并合并请求。\n")
+        cm.check_ci_cd_guard()
+        self.assertIn("git fetch -f", self.error_texts())
+
+    def test_missing_verify_full_chain_reports(self):
+        # 反例：通用验证侧"须覆盖全部既定校验手段"被删
+        self._write_valid()
+        self.write("specs/general/verify.adoc", "= 验证\n\n* 以真实结果为准。\n")
+        cm.check_ci_cd_guard()
+        self.assertIn("验证须覆盖项目的全部既定校验手段", self.error_texts())
+
+    def test_missing_collab_pin_reports(self):
+        # 反例：协作侧"派发对象须钉定 commit sha"被删
+        self._write_valid()
+        self.write("specs/general/collab.adoc", "= 协作\n\n* 子 agent。\n")
+        cm.check_ci_cd_guard()
+        self.assertIn("派发对象须钉定 commit sha", self.error_texts())

@@ -48,9 +48,9 @@
   ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
   ** 模块级文档组织（存在**多模块结构**，或涉及"模块文档放哪、根 `doc/` 放什么"的归属判定） → link:specs/general/doc-module.adoc[]
-  ** git/版本控制操作 → link:specs/general/git.adoc[]
+  ** git/版本控制操作（含**文件移动/重命名的 rename 识别**、行尾与检出归一、暂存与提交检查） → link:specs/general/git.adoc[]（**rename 未被识别的两类非操作类根因（合并/基点错位、一拆二/内容再分配）与核对**见「文件移动与重命名」）
   ** code review → link:specs/general/review.adoc[]
-  ** 多 agent 协作 → link:specs/general/collab.adoc[]
+  ** 多 agent 协作（含拆分、调用量控制、硬超时与超时处置、降级路径；以及**派发对象钉定 commit sha、派发前确认执行者可执行**） → link:specs/general/collab.adoc[]
   ** 编写跨语言通用规则、注释/文档/日志的措辞与语言无关性，或**涉及文件编码与换行符**（识别特征：`specs/` 通用内容、面向使用方的说明文档、多语言项目；或新增/编辑文件、跨 Linux 与 Windows 协作、写 Windows 批处理 `.bat`/`.cmd`、出现"换行符不一致"提示、需要配置 `.gitattributes`） → link:specs/general/encoding.adoc[]（**换行符权威判据：仓库内容以 LF 为基准、`.bat`/`.cmd` 必须 CRLF、`.ps1` 用 CRLF**，且须由 `.gitattributes` 固定、不靠人工手动调整）
   ** 编写涉及安全边界的代码（**涉及外部输入、认证/授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载**） → link:specs/general/security.adoc[]
   ** 引入/调整/升级依赖（识别特征：`pom.xml`/`build.gradle`/`package.json`/`requirements.txt` 等依赖清单或锁文件发生变化、需要选型引入第三方库） → link:specs/general/dependency.adoc[]
@@ -58,8 +58,8 @@
   ** 读取范围、长会话上下文治理、**公共内容被未知项目加载时的可控性（运行契约）**（**任务开始时即加载**；识别特征：任何需要读取项目文件/资料的执行任务，所在会话已执行过多个任务、上下文明显变长；或**新增/调整会被引用方项目加载的公共内容（规范、提示词、随规范分发的工具）**） → link:specs/general/context.adoc[]（读取范围与长会话治理的逐条判据同见 link:specs/core/execution.adoc[]「范围控制」；运行契约本体见 link:specs/general/verify.adoc[]「运行契约」）
   ** 执行任何非平凡任务（需读完再动手的多步骤任务，含文档/代码/脚本），或涉及**动手前的自检**（指令是否逐字落实、触发的规范是否已实际加载、规划是否已落盘、读取是否在最小必要信息集内、证据是否已核实、完成如何验证） → link:specs/general/self-check.adoc[]（执行前/过程/完成前自检清单、知识边界与环境能力自评）
   ** 产出规范、文档、汇报、review 意见等涉及**引用与事实**的内容（标准编号与名称、文献、命令与 API、链接与路径、数据与结论） → link:specs/general/source.adoc[]（内部引用、外部标准、事实数据与"无法确证时怎么办"）
-  ** 编译/运行/分步验证（构建/测试的实际统计、分步隔离复核、外部资源须实测可用）与未知项目加载可控性 → link:specs/general/verify.adoc[]「验证与运行契约的落点」
-  ** 配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、CI 平台流水线配置等，或涉及流水线运行时/步骤调优） → link:specs/general/ci-cd.adoc[]
+  ** 编译/运行/分步验证（构建/测试的实际统计、**验证须覆盖项目全部既定校验手段（含配套测试）**、分步隔离复核、外部资源须实测可用、**验证对象须钉定 commit sha**）与未知项目加载可控性 → link:specs/general/verify.adoc[]「验证与运行契约的落点」
+  ** 配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、CI 平台流水线配置等，或涉及流水线运行时/步骤调优；**含判定流水线是否跑全了既定校验、触发路径是否覆盖校验对象、外部依赖是否实测可用、超时是否可判定**） → link:specs/general/ci-cd.adoc[]（**校验链完整、触发与作用范围、依赖与外部资源可用性、超时与资源**各节）
 * 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
   ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端，后两者不随常规测试执行）
   ** Spring 项目（存在 Spring 依赖/注解）→ link:specs/stack/spring.adoc[]
@@ -71,7 +71,7 @@
 * 项目类型层（**按项目在其自身规范中的主动声明加载，声明才加载、未声明不加载**——仅适用于特定项目类型、对普通项目不生效的规范归入此层，由项目主动声明所属类型触发加载，不靠特征自动检测）：
   ** 通用工具/库类项目（以可复用组件/库/工具为主、要求每个类在设计时保证绝对正确与绝对可维护性的项目）→ link:specs/general/doc-tool.adoc[]（文档组织：类级细节归代码文档注释、独立文档承载模块/功能级总结与规划）。**触发方式**：项目在其**自身规范**（引用方项目自己编写的项目规范，如项目根目录 `AGENTS.adoc`）中**主动声明**本项目为通用工具/库类项目，agent 检测到该声明即加载本规范；未声明则视为普通项目，不加载。**声明模板（可直接粘贴到项目自身规范头部）**：`本项目为通用工具/库类项目，各类须保证绝对正确与可维护性。`；等价表述关键词放宽匹配"通用工具/库类项目""通用工具类项目""工具库""可复用组件库""组件库项目"等，描述意思一致即可
 * 平台层（按使用平台加载）：
-  ** CNB 平台 → link:specs/platform/cnb.adoc[]
+  ** CNB 平台（在 CNB 上进行任务开发与合并请求管理、与平台上的 NPC/执行者协作、按分支/PR 派发或复核改动、处理流水线状态） → link:specs/platform/cnb.adoc[]（分支与合并请求统一、冲突处理、**对象钉定与可追溯（派发与复核钉定 sha、压缩提交/强推的对应关系、CI 状态按 sn+sha 定位）**、**协作与执行者可用性**）
 
 * 项目自身维护层（**只对"维护一套被其他项目引用的共享内容（规范集合、模板、公共脚本等）"的项目生效**，识别特征：项目自己维护这类共享资产集合）：
   ** 条目落点：该层的规范文件由**维护方项目自己的项目规范**登记，**不随公共内容分发**，公共内容不引用其私有文件——引用方看不到、拿到了也无从加载，故公共内容里的规则一律在本文件与 `specs/` 内自足表达。
