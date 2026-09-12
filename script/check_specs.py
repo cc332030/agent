@@ -214,6 +214,7 @@ CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
 # （类内部职责）不同，故单列一条防线；技术栈层的承接落在 `specs/stack/spring.adoc`「配置」（引用通用文件、不复制条文）。
 ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
+JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
 # 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
 # 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
@@ -242,7 +243,21 @@ LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
 LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
 # 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
 # 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
-LIBRARY_TOPICS = ("sources.adoc",)
+LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc")
+# 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
+# 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
+# ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
+# 当成外部标准原文，从而误判其可引用性（`specs/general/source.adoc`「外部引用」）。
+# 锚点分两组：①承认同义性差异的句式；②每条取舍的判据句（标准说了什么 / 本站加严了什么）。
+_LIBRARY_ADOPTION_ANCHORS = (
+    "== 同义性差异与覆盖点（本集合自己承认的）",
+    "本文件是依据图书馆的主题之一",
+    "**借用其原则**",
+    '**未**规定"配置类中任何逻辑一律禁止"',
+    "**未**规定此优先级顺序",
+    '**均未**规定"某一类执行者绝对不得合并"',
+    "是本项目自身的组织约定",
+)
 # 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
 # specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
 # 本文件是那份清单，也是 check_public_content_coverage 的核对对象。
@@ -1073,8 +1088,8 @@ def check_priority_guard():
 
       * **公共侧**（`specs/core/execution.adoc`）：分级定义（L1/L2/L3）与最高关注项
         （含"一处完整定义 + 其余一行引用"的保留形态、"强调用升级别+引用"的做法）仍在；
-      * **维护方侧**（`specs-project-maintainer/priority.adoc`）：P1-P5 清单仍在，且各自
-        保持原级别（P1/P2/P3/P5 条款本身为 L1、P4 条款本身为 L2 且同列最高关注项）、
+      * **维护方侧**（`specs-project-maintainer/priority.adoc`）：P1-P6 清单仍在，且各自
+        保持原级别（P1/P2/P3/P5/P6 条款本身为 L1、P4 条款本身为 L2 且同列最高关注项）、
         『依据』行仍在；
       * `specs/core/execution.adoc` 仍保留 `git mv` 铁律、读取范围、破坏性操作与来源
         真实性的落点。
@@ -1115,7 +1130,7 @@ def check_priority_guard():
         err(f"规范优先级防线被破坏：{rel_exec} 缺失读取范围与长会话治理（「范围控制」）——"
             "最高关注项的必加载层落点被删除/改写", rel_exec)
 
-    # 维护方侧：P1-P5 清单与级别
+    # 维护方侧：P1-P6 清单与级别
     rel_priority = "specs-project-maintainer/priority.adoc"
     path = os.path.join(REPO_ROOT, *rel_priority.split("/"))
     if not os.path.isfile(path):
@@ -1127,7 +1142,8 @@ def check_priority_guard():
     for pid, name, level in (("P1", "git mv", "L1，最高"), ("P2", "完整性", "L1，最高"),
                              ("P3", "内容不得减少", "L1，最高"),
                              ("P4", "读取与上下文纪律", "L2 建议"),
-                             ("P5", "不可逆操作与来源真实性", "L1，最高")):
+                             ("P5", "不可逆操作与来源真实性", "L1，最高"),
+                             ("P6", "协作执行者选择", "L1，最高")):
         if pid not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失最高关注项 {pid}（{name}）——"
                 "最高关注项不得被删除或降级", rel_priority)
@@ -1142,7 +1158,7 @@ def check_priority_guard():
             if f"要求（{level}" not in seg:
                 err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
                     f"须标明『要求（{level}』——级别不得被静默改动"
-                    "（P1/P2/P3/P5 为 L1 铁律，P4 条款本身为 L2 建议）", rel_priority)
+                    "（P1/P2/P3/P5/P6 为 L1 铁律，P4 条款本身为 L2 建议）", rel_priority)
             if "**依据**" not in seg:
                 err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
                     "缺失『**依据**』行——依据可压缩为标准名/编号，但不得整段删除"
@@ -1150,6 +1166,31 @@ def check_priority_guard():
         if "不可降级" not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失『不可降级』声明——"
                 "最高关注项须明确只能加强、不得削弱", rel_priority)
+    # P6 的**内容**（不只看名字还在）：本条是"清单里列着、正文却是旧口径"的实证——
+    # 出处选择曾被收紧为"强制同 Agent、不得点名外部 NPC"，这一段却停在"优先同源 +
+    # 外部来源作备选"，于是按最高关注项读的维护方会照旧把复核派给外部执行者；而当时的
+    # 防线只核 `**要求（L1，最高` 与 `**依据**`，两句旧字样照样全绿（防"关键词堆砌假绿"
+    # 的反面：只核格式、不核口径）。故此处同时钉**新口径须在**与**旧口径不得复活**。
+    p6_m = re.search(r"^===\s*P6\..*?(?=\n=== |\Z)", text, re.M | re.S)
+    if p6_m is None:
+        err(f"{rel_priority} 未找到 P6 条目正文——协作执行者选择的口径失去落点", rel_priority)
+    else:
+        p6 = p6_m.group(0)
+        for keys, desc in ((("不得点名外部 Agent", "同 Agent 身份", "降级"),
+                            "P6 须与公共侧同口径写『强制同 Agent、不得点名外部 NPC、"
+                            "不可用时降级为本人串行或如实标悬置而不换外部来源』"),
+                           (("要求（L1，最高", "依据"),
+                            "P6 的级别与依据行仍须保留（级别不得被静默改动、依据不得整段删除）")):
+            missing = [k for k in keys if k not in p6]
+            if missing:
+                err(f"规范优先级防线被破坏：{rel_priority} 的 P6（协作执行者选择）缺失 "
+                    f"{missing}——{desc}", rel_priority)
+        if "备选" in p6 or "同源不可用" in p6:
+            err(f"规范优先级防线被破坏：{rel_priority} 的 P6 正文出现旧口径字样"
+                "（『外部来源作备选』/『同源不可用』）——该口径已被公共侧收紧为"
+                "『强制同 Agent、不得点名外部 Agent/NPC』；此处不同步即"
+                "『清单更高更显眼、正文却是旧路』，按最高关注项读的维护方会继续派外部执行者",
+                rel_priority)
     # 维护方层须由维护方的项目规范入口登记（否则不会被加载、其中规则实际失效）
     if not os.path.isfile(PROJECT_FILE):
         err("缺少 AGENTS.adoc——维护方自查层的登记入口丢失", "AGENTS.adoc")
@@ -2492,6 +2533,18 @@ def check_library_guard():
             "（判据：所引标准的关键片段须能在馆内逐字找到）",
             "library/README.adoc")
 
+    # 3b) 『规范准入与自身取舍』主题的要点锚点：该主题的关键不是"引到某段标准原文"，
+    # 而是"如实写明本集合自己的取舍与外部材料的差异"。缺这几句，依据仍能凑齐，
+    # 但读者会把本站更严取舍/组织约定读成标准规定——这正是该主题存在的理由。
+    if "adoption.adoc" in actual:
+        adoption_text = texts.get("adoption.adoc", "")
+        miss_adoption = [q for q in _LIBRARY_ADOPTION_ANCHORS if q not in adoption_text]
+        if miss_adoption:
+            err(f"图书馆『规范准入与自身取舍』主题缺失要点锚点 {miss_adoption}——"
+                "同义性差异与取舍判据被删后，本站更严取舍会被读成外部标准原文"
+                "（依据不实，见 specs/general/source.adoc「外部引用」）",
+                "library/adoption.adoc")
+
     # 4) 引用可解析：馆内引用按仓库根基准解析（悬空引用 = 依据链断在这里）
     for f in sorted(actual) + ["README.adoc"]:
         path = os.path.join(LIBRARY_DIR, f)
@@ -2859,6 +2912,95 @@ def check_config_class_guard():
     phase_done()
 
 
+def check_reuse_precedent_guard():
+    """『既有实现与先例优先防线』：先查项目已有能力与先例，禁止用手写原生写法绕过。
+
+    背景（用户报告的真实失效）：agent 写业务代码时**不读项目既有实现**，明明项目自有工具类
+    （`CIdUtils.UUID()`）与已引入库（hutool `IdUtil.fastUUID()`）已覆盖，仍手写
+    `UUID.randomUUID().toString()`；明明有 `CollUtil.isNotEmpty` 一类工具，仍手写
+    `x != null && !x.isEmpty()`。**其他语言同理**——这不是 Java 专属问题，故通用层必须
+    有一条跨语言要求，技术栈层再给现成 API 与识别特征。本条是"编码前先查、有则复用、跟随先例"
+    的前置要求，若被删或降级，编码者会退回到"凭语言常识现写"。
+
+    本防线钉住**四处要点**：
+      * **通用层条文**：`specs/general/coding.adoc`「代码复用」须有「既有实现与先例优先」
+        与「不得以语言内置写法绕过既有能力」两条，且**须为 L1**（防被降级成建议）；
+        判定要有可核对的动作（查自有能力/先例、查已引入依赖、复用时跟随先例）。
+      * **反例可判定**：通用条须点出典型反例（UUID 手写、集合判空手写），否则只剩"要复用"
+        一句口号，读者无法判断自己是否命中。
+      * **Java 栈优先级**：`specs/stack/java-syntax.adoc`「工具类使用优先级」须把
+        **项目自有工具类/已引入第三方库排在 JDK 原生写法之前**（原实现把 JDK 放第 1、
+        与用户要求相反），并点名 `IdUtil`/`CollUtil` 与 `CIdUtils`/`CList` 一类现成 API；
+        `specs/stack/java.adoc`「编码」须有 Java 侧识别特征与通用条的引用。
+      * **公开说明同步**：`README.adoc` 的目录说明须让读者知道这条存在。
+
+    只钉"要求文本仍在且落在该落点"——"某次编码是否真的先查了先例"属引用方项目行为，
+    本仓库看不到，交人/子 agent 复核承担。
+    """
+    phase("既有实现与先例优先防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『既有实现与先例优先』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("既有实现与先例优先", "L1"),
+             "条文：须有「既有实现与先例优先」条并标 L1（防被降级成建议）"),
+            (("不得以语言内置写法绕过既有能力",),
+             "条文：须有「不得以语言内置写法绕过既有能力」条，"
+             "否则『有先例也照写原生』的失效会重新出现"),
+            (("IdUtil", "CIdUtils", "UUID"),
+             "反例：须点出 UUID 手写这类典型反例，判据才可判定"),
+            (("CollUtil.isNotEmpty", "isEmpty"),
+             "反例：须点出集合判空手写这类典型反例，判据才可判定"),
+            (("先例", "依赖"),
+             "判定动作：须写明先查项目自有能力/先例、再查已引入依赖，"
+             "否则『先查』无落点"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"既有实现与先例优先防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户报告的真实失效，不得删除、不得降级为建议",
+                    rel_coding)
+    # Java 栈：优先级顺序与现成 API
+    rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_SYNTAX_FILE):
+        err(f"缺少文件 {rel_syntax}——『工具类使用优先级』的 Java 栈落点丢失", rel_syntax)
+    else:
+        syn = open(JAVA_SYNTAX_FILE, encoding="utf-8").read()
+        missing = [k for k in ("工具类使用优先级", "项目自有工具类", "IdUtil",
+                               "CollUtil", "JDK 标准库", "跟随先例") if k not in syn]
+        if missing:
+            err(f"既有实现与先例优先防线被破坏：{rel_syntax} 缺失要点 {missing}——"
+                "「工具类使用优先级」须把项目自有工具类与已引入第三方库排在 JDK 原生写法之前，"
+                "并点名 IdUtil/CollUtil 一类现成 API（原实现把 JDK 放第 1，与用户要求相反）",
+                rel_syntax)
+        # 顺序核对：项目自有工具类须出现在 JDK 标准库之前
+        i_own = syn.find("项目自有工具类")
+        i_jdk = syn.find("JDK 标准库自带能力")
+        if i_own < 0 or i_jdk < 0 or i_own > i_jdk:
+            err(f"{rel_syntax}：优先级顺序被改回『JDK 优先』——须先项目自有/已引入库、"
+                "JDK 原生写法最后（与本条要求一致）", rel_syntax)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(JAVA_STACK_FILE):
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("既有工具类/先例优先", "java-syntax.adoc", "coding.adoc")
+                   if k not in jt]
+        if missing:
+            err(f"既有实现与先例优先防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须补该条的识别特征与通用条/优先级清单的引用（插进来只让通用层有、"
+                "技术栈层没有，Java 执行者仍会手写原生写法）", rel_java)
+    # 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "既有实现与先例优先" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『既有实现与先例优先』——"
+            "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+            rel_readme)
+    phase_done()
+
+
 def check_prompts_primary():
     """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
 
@@ -3146,6 +3288,7 @@ def main(argv=None) -> int:
     check_npc_merge_guard()
     check_config_class_guard()
     check_abstraction_adoption_guard()
+    check_reuse_precedent_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 

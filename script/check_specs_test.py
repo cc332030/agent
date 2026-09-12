@@ -863,7 +863,15 @@ class TestIntegration(CheckSpecsTestCase):
 # check_priority_guard（规范优先级防线：最高关注项不得被删/降级）
 # --------------------------------------------------------------------------- #
 class TestCheckPriorityGuard(CheckSpecsTestCase):
-    """钉住 L1/L2/L3 分级与最高关注项 P1/P2/P3/P4 的存在性与级别。"""
+    """钉住 L1/L2/L3 分级与最高关注项 P1-P6 的存在性、级别与正文口径。"""
+
+    # P6 的正文（口径）也须核对：本条曾出现"清单里列着、正文却是旧口径"——
+    # 公共侧已收紧为"强制同 Agent、不得点名外部 NPC"，P6 却停在"优先同源 + 外部来源
+    # 作备选"，按最高关注项读的维护方会照旧把复核派给不可核对的外部执行者。
+    P6 = ("=== P6. 协作执行者选择：子任务一律同 Agent，不得点名外部执行者\n\n"
+          "* **要求（L1，最高）**：一律由与执行者相同的 Agent（同 Agent 身份、同入口）承担，"
+          "不得点名外部 Agent / 外部 NPC；不可用时**降级**为由执行者本人串行承担，或如实标悬置。\n"
+          "* **依据**：IEEE 1028 软件评审。\n")
 
     def _write_valid(self):
         # 分级定义与最高关注项的**公共口径**在 specs/core/execution.adoc；
@@ -898,7 +906,8 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "* **依据**：Anthropic 工程博客《Effective context engineering for AI agents》。\n\n"
                    "=== P5. 不可逆操作先确认，不得编造事实与来源\n\n"
                    "* **要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。\n"
-                   "* **依据**：ISO 10007。\n")
+                   "* **依据**：ISO 10007。\n\n"
+                   + self.P6)
         self.write("AGENTS.adoc",
                    "登记 `specs-project-maintainer/priority.adoc`\n"
                    "登记 `specs-project-maintainer/spec-lifecycle.adoc`\n"
@@ -937,6 +946,48 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "git mv context.adoc 破坏性操作 source.adoc")
         cm.check_priority_guard()
         self.assertIn("P1", self.error_texts())
+
+    def test_dropped_p6_reports(self):
+        # 反例：最高关注项 P6（协作执行者选择）被删 —— 与公共侧"强制同 Agent"的
+        # 不可降级保护落点一起消失（清单里不再有这项，重构时会顺手清掉）
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace("=== P6. 协作执行者选择：子任务一律同 Agent，不得点名外部执行者", "=== 协作方式")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("P6", self.error_texts())
+
+    def test_p6_stale_wording_reports(self):
+        # 反例（**本轮实际发生的漏改**）：名字与级别还在、正文却是旧口径
+        # （"优先同源 + 外部来源作备选"）→ 按最高关注项读的维护方继续派外部执行者。
+        # 只核小标题/级别/依据行的旧防线对这种情形全绿，故此处必须报。
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                self.P6,
+                "=== P6. 协作执行者选择\n\n"
+                "* **要求（L1，最高）**：需要子 Agent 时优先用与执行者同源的执行者承担，"
+                "外部来源（外部 NPC/另一个产品）只是同源不可用后的备选。\n"
+                "* **依据**：IEEE 1028 软件评审。\n")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("旧口径", self.error_texts())
+
+    def test_p6_keyword_only_reports(self):
+        # 反例：只留新口径的关键词、整条要求被抽掉（防"关键词出现过一次"式假绿）
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                self.P6,
+                "=== P6. 协作执行者选择\n\n"
+                "* **要求（L1，最高）**：不得点名外部 Agent。\n"
+                "* **依据**：IEEE 1028。\n")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("同 Agent 身份", self.error_texts())
 
     def test_dropped_non_downgrade_declaration_reports(self):
         # 反例：去掉"不可降级"声明 = 允许最高关注项被降级（公共口径在 execution.adoc）
@@ -1391,6 +1442,15 @@ class TestCheckPrincipleGuard(CheckSpecsTestCase):
 
 
 
+def _valid_adoption_body() -> str:
+    """生成一份含全部要点锚点的『规范准入与自身取舍』主题正文（正例基准）。
+
+    与 `cm._LIBRARY_ADOPTION_ANCHORS` 同源：锚点即判据句，缺一即"同义性差异未写明"。
+    """
+    head = "= 规范准入与自身取舍的依据（依据图书馆）\n\n本文件是依据图书馆的主题之一。\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_ADOPTION_ANCHORS) + "\n"
+
+
 class TestCheckLibraryGuard(CheckSpecsTestCase):
     """钉住『图书馆防线』：依据须查得到、对得上、引用不悬空（本仓库私有内容）。
 
@@ -1408,7 +1468,7 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         self._orig_project = cm.PROJECT_FILE
         cm.LIBRARY_DIR = os.path.join(self.root, "library")
         cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
-        cm.LIBRARY_TOPICS = ("sources.adoc",)
+        cm.LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
 
     def tearDown(self) -> None:
@@ -1421,11 +1481,13 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc",
                    "= 项目规范\n\n依据图书馆入口 library/README.adoc（见下「依据图书馆」）。\n")
         self.write("library/README.adoc",
-                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n")
+                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n"
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n")
         self.write("library/sources.adoc",
                    "= 外部标准原文摘录\n\n"
                    + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
                    + "\n")
+        self.write("library/adoption.adoc", _valid_adoption_body())
 
     def test_valid_library_passes(self):
         self._write_valid()
@@ -1545,9 +1607,35 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("PROMPTS.adoc", "= 提示词\n")
         self.write("library/README.adoc",
-                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc` 与 `AGENTS.adoc`\n")
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc` 与 `AGENTS.adoc`\n"
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n")
         cm.check_library_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_adoption_topic_missing_anchor_reports(self):
+        # 反例：『规范准入与自身取舍』主题的要点锚点被删——该主题的价值全在
+        # "如实写明本集合自己的取舍与外部材料的差异"；缺了它，读者会把本站更严取舍
+        # （配置类不写逻辑、先例优先优先级、NPC 禁合并）读成外部标准原文（依据不实）
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 规范准入与自身取舍的依据\n\n说了一堆。\n")
+        cm.check_library_guard()
+        self.assertIn("缺失要点锚点", self.error_texts())
+
+    def test_adoption_topic_anchor_kept_passes(self):
+        # 正例：要点锚点齐备（含"同义性差异"节名与三条取舍的判据句）→ 不报
+        self._write_valid()
+        cm.errors.clear()
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_adoption_topic_unregistered_reports(self):
+        # 反例：新建主题文件却未登记入口（写文件与登记是同一个动作）——
+        # adoption.adoc 已列入 LIBRARY_TOPICS 下限，未登记即依据不可达
+        self._write_valid()
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n")
+        cm.check_library_guard()
+        self.assertIn("未登记的主题文件", self.error_texts())
 
     def test_resolvable_refs_do_not_report(self):
         # 正例：馆内引用真实存在（`specs/...` 反引号 + `../` 相对 link 都命中）
@@ -3193,6 +3281,11 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、"
         "The Twelve-Factor App、Spring Boot 官方文档。\n")
 
+    SPRING = (
+        "= Spring 规范\n\n== 配置\n"
+        "* 配置项须有默认值或显式必填声明"
+        "（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」）。\n")
+
     def setUp(self) -> None:
         super().setUp()
         self._orig_coding = cm.CODING_FILE
@@ -3206,10 +3299,7 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
 
     def _write_valid(self) -> None:
         self.write("specs/general/coding.adoc", self.CODING)
-        self.write("specs/stack/spring.adoc",
-                   "= Spring 规范\n\n== 配置\n"
-                   "* 配置项须有默认值或显式必填声明"
-                   "（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」）。\n")
+        self.write("specs/stack/spring.adoc", self.SPRING)
 
     def test_valid_abstraction_adoption_guard_passes(self):
         self._write_valid()
@@ -3286,6 +3376,132 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 配置\n* 配置项绑定。\n")
         cm.check_abstraction_adoption_guard()
         self.assertIn("spring.adoc", self.error_texts())
+
+
+class TestCheckReusePrecedentGuard(CheckSpecsTestCase):
+    """钉住『既有实现与先例优先』：先查项目已有能力与先例，禁止手写原生写法绕过。
+
+    该条对应用户报告的真实失效：agent 不读项目既有实现，已有 `IdUtil.fastUUID()`/
+    `CIdUtils.UUID()` 仍手写 `UUID.randomUUID().toString()`，已有 `CollUtil.isNotEmpty`
+    仍手写 `x != null && !x.isEmpty()`。最易被两件事冲掉：
+      * **降级成建议** —— "尽量复用"读起来无害，于是"有先例也照写原生"回来；
+      * **优先级被改回 JDK 优先** —— 与用户要求相反（原实现即如此）。
+    故本组用例覆盖"条文被删""反例被抽""优先级顺序反了""Java 栈落点缺失""README 未同步"。
+    """
+
+    CODING = (
+        "= 通用编码规范\n"
+        "\n"
+        "== 代码复用\n"
+        "* **既有实现与先例优先（L1，动手前先查）**：写任何代码前，先查项目自有工具类与同类场景先例、再查已引入依赖是否已有等价能力，有则必须复用、写法跟随先例。\n"
+        "* **不得以语言内置写法绕过既有能力（L1）**：已有 `IdUtil.fastUUID()`/`CIdUtils.UUID()` 仍手写 `UUID.randomUUID().toString()`、已有 `CollUtil.isNotEmpty` 仍手写 `x != null && !x.isEmpty()` 属反例。\n"
+    )
+
+    SYNTAX = (
+        "= Java 工具类规范\n"
+        "\n"
+        "== 工具类使用优先级\n"
+        "* 1. **项目自有工具类**（最优先）：如 `CIdUtils.UUID()`、`CList`。\n"
+        "* 2. **通用第三方工具库**：hutool 的 `IdUtil`、`CollUtil`。\n"
+        "* 3. **JDK 标准库自带能力**（最低优先级）：仅无等价能力时使用。\n"
+        "**同一操作已有统一入口/先例时，一律跟随先例。**\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_syntax = cm.JAVA_SYNTAX_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.JAVA_SYNTAX_FILE = os.path.join(self.root, "specs", "stack", "java-syntax.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.SPRING_STACK_FILE, cm.JAVA_STACK_FILE, cm.JAVA_SYNTAX_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_spring, self._orig_java,
+                            self._orig_syntax, self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 配置\n"
+                   "* 配置项须有默认值或显式必填声明"
+                   "（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」）。\n")
+        self.write("specs/stack/java-syntax.adoc", self.SYNTAX)
+        self.write("specs/stack/java.adoc",
+        "= Java 规范\n"
+        "\n"
+        "== 编码\n"
+        "* 既有工具类/先例优先：见 `specs/stack/java-syntax.adoc` 与 `specs/general/coding.adoc`「代码复用」。\n"
+        )
+        self.write("README.adoc", "目录结构：通用编码（含**既有实现与先例优先**）。\n")
+
+    def test_valid_reuse_precedent_guard_passes(self):
+        self._write_valid()
+        cm.check_reuse_precedent_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层条文被删 → 编码者退回"凭语言常识现写"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 复用。\n")
+        cm.check_reuse_precedent_guard()
+        self.assertIn("既有实现与先例优先", self.error_texts())
+
+    def test_bypass_clause_removed_reports(self):
+        # 反例：'不得以语言内置写法绕过既有能力'被删 → 有先例也照写原生
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.split("不得以语言内置写法绕过既有能力")[0])
+        cm.check_reuse_precedent_guard()
+        self.assertIn("绕过既有能力", self.error_texts())
+
+    def test_examples_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：典型反例被抽掉 → 判据不可判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 代码复用\n"
+                   "* **既有实现与先例优先（L1，动手前先查）**：有则必须复用，跟随先例。\n"
+                   "* **不得以语言内置写法绕过既有能力（L1）**：禁止手写原生写法。\n")
+        cm.check_reuse_precedent_guard()
+        self.assertIn("IdUtil", self.error_texts())
+
+    def test_priority_order_reverted_reports(self):
+        # 反例：优先级被改回"JDK 优先"（与用户要求相反）
+        self._write_valid()
+        self.write("specs/stack/java-syntax.adoc",
+                   "= Java 工具类规范\n\n== 工具类使用优先级\n"
+                   "* 1. **JDK 标准库自带能力**：优先使用 `List.of` 等。\n"
+                   "* 2. **项目自有工具类**：`CIdUtils`。\n"
+                   "* 3. **通用第三方工具库**：`IdUtil`、`CollUtil`。\n跟随先例。\n")
+        cm.check_reuse_precedent_guard()
+        self.assertIn("JDK 优先", self.error_texts())
+
+    def test_java_syntax_missing_reports(self):
+        # 反例：Java 栈优先级清单缺失
+        self._write_valid()
+        os.remove(cm.JAVA_SYNTAX_FILE)
+        cm.check_reuse_precedent_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_java_stack_marker_missing_reports(self):
+        # 反例：Java 栈文件未补该条识别特征与引用
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n* 命名规则。\n")
+        cm.check_reuse_precedent_guard()
+        self.assertIn("java.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步
+        self._write_valid()
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_reuse_precedent_guard()
+        self.assertIn("README", self.error_texts())
 
 
 class TestCheckCiCdGuard(CheckSpecsTestCase):
