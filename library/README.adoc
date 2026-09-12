@@ -27,7 +27,18 @@
 |===
 | 主题 | 覆盖的依据
 
+| link:adoption.adoc[] | **规范准入判定与本集合自身取舍的依据**：判定一条规则该不该收进规范集合的分层定位与可验证性要求（ISO/IEC/IEEE 29148）、要求与建议不得混用的用语规则（ISO/IEC Directives Part 2、RFC 2119、RFC 8174）、被未知项目加载时的可控性与符合预期（ISO 9241-110，"借用其原则"非标准原文）、外部依据引用现行版本与实名不编造（ISO/IEC Directives Part 2）、以及本集合**自己承认的更严取舍**（如配置类不写逻辑严于框架常规用法）与**只对本项目成立的内部约定**（NPC 禁合并等组织约定，外部材料**未**规定此类要求）——这类内容**不寄居外部标准主题**，按"依据对谁成立"独立成篇
 | link:sources.adoc[] | **外部标准与权威材料的原文摘录**：IEEE 1028、IEEE 1016、ISO/IEC/IEEE 29119-4、ISO/IEC/IEEE 25010、ISO/IEC/IEEE 29148、ISO/IEC Directives Part 2、ISO 10007、ISO 9001、ISO 9241-110、RFC 2119、RFC 8174、RFC 3629、RFC 3339、RFC 6749、RFC 7617、RFC 9700、RFC 8018、SemVer、PEP 8、PEP 20、PEP 257、PEP 508、POSIX、GNU Make、Maven Surefire/Failsafe、Microsoft Learn、git、The Twelve-Factor App、OWASP、CWE、NIST SP 800-63B、JaCoCo、PIT、Google Java Style、Google Shell Style、ShellCheck、DORA（Accelerate 报告系列）、GitHub Docs（受保护分支与 required reviews）、Spring Boot / Spring Framework 官方文档（Externalized Configuration、Java-based Container Configuration）、阿里巴巴 Java 开发手册——**覆盖公共内容各"依据"行**，并逐条写明它支撑哪些条目
 |===
 
-> 说明：**"内在依据"（为什么这样要求、当初要解决的失效、真实失效实证）目前不另建主题文件**——它散落在**各规范文件自身的说明性段落与依据行、各提示词正文与公共片段、`PROMPTS.adoc` 的维护约定、以及本仓库工具的注释**里（与规则同处一处、是最贴近的落点，也最不容易漂移），例如 link:../specs/core/execution.adoc[]「为什么需要分级（业界依据）」、link:../specs/general/testing.adoc[]「验证总纲」的"防慢慢脱离初衷"、link:../specs/general/collab.adoc[]「资源限制与感知」的实证记录、link:../specs/general/encoding.adoc[]「换行符（行尾）」的执行失败说明、`prompts/_common.txt` 中 `primary`/`priority-rules` 的方向取舍。按 link:../specs/general/doc.adoc[]「注释与文档」"多余文档直接去除"，**不预建空壳主题**——某类内在依据确实需要独立成篇时（例如跨多处、需要长期追溯的实证与反例），再按 link:../specs/general/source.adoc[] 的判据新增主题文件并**同步登记到上表**（写文件与登记是同一个动作）。
+> 说明：**"内在依据"（为什么这样要求、当初要解决的失效、真实失效实证）不寄居外部标准主题**——这类依据对多数规则而言，**就地**散落在**各规范文件自身的说明性段落与依据行、各提示词正文与公共片段、`PROMPTS.adoc` 的维护约定、以及本仓库工具的注释**里（与规则同处一处、是最贴近的落点，也最不容易漂移），例如 link:../specs/core/execution.adoc[]「为什么需要分级（业界依据）」、link:../specs/general/testing.adoc[]「验证总纲」的"防慢慢脱离初衷"、link:../specs/general/collab.adoc[]「资源限制与感知」的实证记录、link:../specs/general/encoding.adoc[]「换行符（行尾）」的执行失败说明、`prompts/_common.txt` 中 `primary`/`priority-rules` 的方向取舍。按 link:../specs/general/doc.adoc[]「注释与文档」"多余文档直接去除"，**不预建空壳主题**。
+
+== 何时该给一类依据独立成篇（判据）
+
+某类内在依据需要独立成篇时（**判据，非"已建清单"**），再按 link:../specs/general/source.adoc[] 新增主题文件并**同步登记到上表**（写文件与登记是同一个动作）。同时命中以下两条即应独立成篇（命中其一即**不该**）：
+
+* **判据①与规则本体分离**：这类依据**不再与某一条规则同处一处**可承载——即它跨越**多份文件**（不是一个规范文件、一个目录的说明性段落），或**需要长期追溯**（实证与反例、选型与取舍、跨轮次的失效记录），或**存在多来源表述需要统一**语义与强度（如同一决策有多处说法、需指明哪一处为准）。
+* **判据②按"依据对谁成立"归类**：同类内部依据里，**既有对外部也成立**的依据、又有**只对本项目成立**的依据——前者与外部标准正文合并成篇（如 link:sources.adoc[] 的"标准原文 + 标准确实支持该条"），后者**必须**独立于外部标准主题，否则一份主题文件会同时混有"对外部成立"与"只对本站成立"两类内容，读者与维护者都会误判其适用范围（`library/README.adoc`「放什么、不放什么」的落点要求）。
+* **已按此判据独立成篇的主题**：link:adoption.adoc[]（规范准入判定与本集合自身取舍）——见其「同义性差异与覆盖点」一节（写明"标准**未**规定此类要求、本条属本站更严取舍或组织约定"）。
+
+> **不预建空壳**：未独立成篇的内在依据仍在上述各处**就地承载**；独立成篇不是"依据必须离开规则所在地"的强制动作，只是"确实需要时"的落点。判据本身即"该不该建"的答案，**不得以"凑主题数"或"看起来完整"为由预建**（link:../specs/general/doc.adoc[]「注释与文档」）。
