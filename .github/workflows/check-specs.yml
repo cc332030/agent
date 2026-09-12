@@ -1,7 +1,8 @@
 name: check-specs
 
 # 本仓库自有 CI：只做**确定性校验**（纯本地、幂等、毫秒级）。
-# 全部校验对象都是本仓库自己维护的公共内容（AGENTS_COMMON.adoc + specs/）与维护工具：
+# 全部校验对象都是本仓库自己维护的公共内容（AGENTS_COMMON.adoc + specs/）、项目自身维护层
+# （specs-project-maintainer/）与维护工具：
 #   * script/check_specs.py       —— 规范完整性机械校验 + 单元测试
 #   * script/check_effective.py   —— “定义未执行”核验工具 + 单元测试
 # 说明：仓库内容主要供其他项目引用，CI 不（也无法）校验引用方项目内部操作；面向语义的
@@ -11,6 +12,7 @@ on:
   push:
     paths: &spec-paths
       - 'specs/**'
+      - 'specs-project-maintainer/**'
       - 'AGENTS_COMMON.adoc'
       - 'AGENTS.adoc'
       - 'INSTALL.adoc'
