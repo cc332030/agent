@@ -1494,6 +1494,16 @@ class TestCheckPrincipleGuard(CheckSpecsTestCase):
 
 
 
+def _valid_usage_body() -> str:
+    """生成一份含全部要点锚点的『依据的写入与关联』主题正文（正例基准）。
+
+    与 `cm._LIBRARY_USAGE_ANCHORS` 同源：锚点即判据句/节名，缺一即"写入靠自觉、
+    关联凭印象"会被读回来（写入无触发判据、反查无算法）。
+    """
+    head = "= 依据的写入与关联（图书馆使用协议）\n\n本文件是依据图书馆的主题之一。\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_USAGE_ANCHORS) + "\n"
+
+
 def _valid_adoption_body() -> str:
     """生成一份含全部要点锚点的『规范准入与自身取舍』主题正文（正例基准）。
 
@@ -1504,14 +1514,15 @@ def _valid_adoption_body() -> str:
 
 
 class TestCheckLibraryGuard(CheckSpecsTestCase):
-    """钉住『图书馆防线』：依据须查得到、对得上、引用不悬空（本仓库私有内容）。
+    """钉住『图书馆防线』：依据须查得到、对得上、引用不悬空（不在默认引用面内的内容）。
 
     依据不能只存在名称——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不
     成立、无法据以取舍（specs/general/verify.adoc「验证总纲」的"防慢慢脱离初衷"）。
-    图书馆（**仓库根 `library/`**，本仓库私有、不随规范分发）是依据的落点，故其
-    存在性、入口登记、逐字引文与引用可解析性都由本条机械钉住；**不再核对"自足性/
-    是否夹带私有落点"**——那是对公共内容的要求（私有内容本来就可以引用自己仓库的
-    任何落点），图书馆搬出 `specs/` 后该约束自然不再适用。
+    图书馆（**仓库根 `library/`**）**不在默认引用面内**（本仓库内容全部会发布出去，
+    区别只在"默认引用什么"——它没有公共加载项、引用方工作区里也没有本仓库的文件），
+    是依据的落点，故其存在性、入口登记、逐字引文与引用可解析性都由本条机械钉住；
+    **不按"自足性/是否夹带私有落点"口径核对**——那是对默认引用项的要求（不在默认
+    引用面内的内容本就可以引用自己仓库的任何落点），图书馆落在仓库根后该口径不再适用。
     """
 
     def setUp(self) -> None:
@@ -1520,7 +1531,7 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         self._orig_project = cm.PROJECT_FILE
         cm.LIBRARY_DIR = os.path.join(self.root, "library")
         cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
-        cm.LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc")
+        cm.LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
 
     def tearDown(self) -> None:
@@ -1534,12 +1545,14 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
                    "= 项目规范\n\n依据图书馆入口 library/README.adoc（见下「依据图书馆」）。\n")
         self.write("library/README.adoc",
                    "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n"
-                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n")
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n"
+                   "| link:usage.adoc[] | 依据的写入与关联：触发特征、入库必写项、反查算法\n")
         self.write("library/sources.adoc",
                    "= 外部标准原文摘录\n\n"
                    + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS)
                    + "\n")
         self.write("library/adoption.adoc", _valid_adoption_body())
+        self.write("library/usage.adoc", _valid_usage_body())
 
     def test_valid_library_passes(self):
         self._write_valid()
@@ -1650,7 +1663,9 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         #  引用被整体跳过，改成不存在的名字也不会被发现）
         self._write_valid()
         self.write("library/README.adoc",
-                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc`\n")
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc`\n"
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n"
+                   "| link:usage.adoc[] | 依据的写入与关联：触发特征、入库必写项、反查算法\n")
         cm.check_library_guard()
         self.assertIn("指向不存在的文件", self.error_texts())
 
@@ -1660,7 +1675,8 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         self.write("PROMPTS.adoc", "= 提示词\n")
         self.write("library/README.adoc",
                    "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc` 与 `AGENTS.adoc`\n"
-                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n")
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n"
+                   "| link:usage.adoc[] | 依据的写入与关联：触发特征、入库必写项、反查算法\n")
         cm.check_library_guard()
         self.assertEqual(cm.errors, [])
 
@@ -1679,6 +1695,47 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         cm.errors.clear()
         cm.check_library_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_usage_topic_missing_anchor_reports(self):
+        # 反例：『依据的写入与关联』主题的要点锚点被删——该主题的价值全在"写入有触发判据、
+        # 反查有可执行算法"；缺了它，"写依据"重新靠自觉（不主动写、写什么凭发挥），
+        # 或把规则本体抄进馆（第二真源、改一处必漏一处）
+        self._write_valid()
+        self.write("library/usage.adoc", "= 依据的写入与关联\n\n说了一堆。\n")
+        cm.check_library_guard()
+        self.assertIn("缺失要点锚点", self.error_texts())
+
+    def test_usage_topic_anchor_kept_passes(self):
+        # 正例：要点锚点齐备（写入触发特征 + 关联协议 + 反查解析算法 + 默认引用面边界）→ 不报
+        self._write_valid()
+        cm.errors.clear()
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_usage_topic_unregistered_reports(self):
+        # 反例：新建 usage 主题文件却未登记入口（写文件与登记是同一个动作）——
+        # usage.adoc 已列入 LIBRARY_TOPICS 下限，未登记即"写入判据"实际不可达
+        self._write_valid()
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 外部标准原文摘录\n"
+                   "| link:adoption.adoc[] | 规范准入与自身取舍的依据——同义性差异与覆盖点\n")
+        cm.check_library_guard()
+        self.assertIn("未登记的主题文件", self.error_texts())
+
+    def test_usage_topic_anchors_are_constantized(self):
+        # 要点锚点须被常量化（防线要能覆盖"写入判据与反查算法被删"），
+        # 且须覆盖三节与关键判据句；第三节标题即"默认引用面与非引用面"（不得退回
+        # "共享部分与私有部分"这一与平台事实不符的口径，见 check_ref_scope_wording_guard）
+        anchors = cm._LIBRARY_USAGE_ANCHORS
+        for q in ("== 一、什么时候该把依据写进图书馆（触发特征）",
+                  "== 二、依据与规则怎么关联（关联协议）",
+                  "=== 反查解析算法（只取一份，不遍历）",
+                  "== 三、默认引用面与非引用面（外部项目怎么处理）",
+                  "判据是问句，不是印象",
+                  "以下情形**不写**",
+                  "**入库必写项**",
+                  "**终止条件（L1）**"):
+            self.assertIn(q, anchors)
 
     def test_adoption_topic_unregistered_reports(self):
         # 反例：新建主题文件却未登记入口（写文件与登记是同一个动作）——
@@ -3640,3 +3697,106 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
         self.write("specs/general/collab.adoc", "= 协作\n\n* 子 agent。\n")
         cm.check_ci_cd_guard()
         self.assertIn("派发对象须钉定 commit sha", self.error_texts())
+
+
+class TestCheckRefScopeWordingGuard(CheckSpecsTestCase):
+    """钉住『默认引用面口径防线』：不得再把本仓库内容写成"私有 / 不对外发布"。
+
+    背景（用户纠正的事实错误）：本仓库**所有内容都会被发布出去**（站点渲染本仓库
+    文档），"私有"从来没有发生——**默认只有公共规范被引用方按入口加载**，其余落点
+    只是**不在默认引用面内**。口径写错会连带改错判断（把"发布与否"当成可选项）。
+    """
+
+    def test_clear_wording_passes(self):
+        # 正例：写"不在默认引用面内"（并如实说明本仓库内容全部会发布）
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n本目录**不在默认引用面内**——本仓库内容全部会被发布，\n"
+                   "区别只在默认引用什么；引用方工作区里也没有本仓库的文件。\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_private_not_distributed_wording_reports(self):
+        # 反例：写成本仓库私有、不随规范分发（与平台事实相反）
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n本目录属本仓库私有内容、不随规范分发给引用方。\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertIn("不得写", self.error_texts())
+
+    def test_private_before_not_distributed_reports(self):
+        # 反例：同一句里"私有"与"不分发"分离出现（真实历史写法）
+        self.write("AGENTS.adoc",
+                   "= 项目规范\n\n仓库根 library/ 是本项目的图书馆（本仓库私有、不随规范分发）。\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertIn("不随规范分发", self.error_texts())
+
+    def test_quoting_the_error_is_exempt(self):
+        # 正例：**引用/纠正**该错误表述本身（含"不是/不得写"等词）不报——否则防线的
+        # 说明文字自己就把自己拦下（防线的判据须可自述）
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n注意：不得写\"本仓库私有、不随规范分发\"——"
+                   "本仓库所有内容都会被发布。\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_private_fallback_wording_is_exempt(self):
+        # 正例："私有落点/私有抓手名"是**自足性**判据，与发布与否无关，不得误伤
+        self.write("specs/general/context.adoc",
+                   "= 上下文\n\n不得让引用方依赖本仓库私有物：条目不得引用引用方看不到的"
+                   "私有脚本名、仓库结构或私有约定。\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_changelog_is_exempt(self):
+        # 正例：CHANGELOG 记的是**当时口径**（历史事实），不得改写、也不得被拦
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 3.4 | 2026-09-12 | 图书馆属本仓库私有、不随规范分发\n")
+        cm.check_ref_scope_wording_guard()
+        self.assertEqual(cm.errors, [])
+
+
+class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
+    """钉住变更日志条目的**单行**形态（防日志被当成追加区、同一条目被多行续写）。
+
+    真实失效形态：herdoc / 多次 append 习惯把同一条目续写成多行，形态上仍像"有记录"，
+    实际与下一条粘连、渲染成一整段——单行是机械可判定的，故须有抓手。
+    """
+
+    def test_single_line_entries_pass(self):
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.1 | 2026-09-12 | 新增某项能力\n"
+                   "- 1.0 | 2026-08-23 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_wrapped_entry_reports(self):
+        # 反例：同一条目被续写成多行（最后一条被追加续行）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.0 | 2026-08-23 | 初始发布\n后面的续行文本\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("续行", self.error_texts())
+
+    def test_multiline_entry_middle_reports(self):
+        # 反例：续行出现在条目之间（下一条不是条目行、也不是空行/标题）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.1 | 2026-09-12 | 新增能力\n"
+                   "（补充说明：这一段其实属于上一条）\n- 1.0 | 2026-08-23 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("续行", self.error_texts())
+
+    def test_section_heading_after_entry_passes(self):
+        # 正例：条目后紧跟节标题（如分节组织日志）不算续行
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.0 | 2026-08-23 | 初始发布\n\n== 历史\n")
+        cm.check_changelog_entry_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_overlong_entry_reports(self):
+        # 反例：单行条目过长（混入了实现细节/清单，应拆条或删减）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.1 | 2026-09-12 | " + "细节" * 1200 + "\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("条目过长", self.error_texts())
+
+    def test_missing_changelog_reports(self):
+        cm.check_changelog_entry_guard()
+        self.assertIn("缺少统一变更日志", self.error_texts())
