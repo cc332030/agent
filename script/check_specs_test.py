@@ -277,6 +277,58 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
         cm.check_delegation_guard()
         self.assertIn("缺少文件", self.error_texts())
 
+    def test_stale_wording_in_list_item_reports(self):
+        # 反例（本轮实际漏检）：**清单概览行**回到旧口径（"优先同源 + 外部来源作备选"），
+        # 而 `=== P6` 条目正文仍是新口径 → 旧防线只读 P6 条目、不看清单行，全绿放过。
+        # 清单行更先被读到，按它读的维护方会继续把复核派给不可核对的外部执行者。
+        self._write_valid()
+        self.write("specs-project-maintainer/priority.adoc",
+                   "= t\n\n"
+                   "* **协作执行者选择（P6，条款本身 L1）**：需要子 Agent（子任务/复核）时"
+                   "**优先用与执行者同源、可用的执行者**承担，"
+                   "**外部来源（外部 NPC/另一个产品）只是同源不可用后的备选**。\n\n"
+                   "**子 Agent 强制与执行者同 Agent（维护方落点）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("重新放宽", self.error_texts())
+
+    def test_stale_wording_appended_in_same_file_reports(self):
+        # 反例：新口径字样都还在，但在同文件的另一句里**追加放宽**
+        # （"拿不到同 Agent 时也可以换外部 Agent 顶替"）→ 只核"要素仍在"的写法会假绿。
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "collab.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/general/collab.adoc",
+                   text + "\n拿不到同 Agent 时也可以换外部 Agent 顶替。\n")
+        cm.check_delegation_guard()
+        self.assertIn("重新放宽", self.error_texts())
+
+    def test_mixed_forbid_and_relax_in_one_clause_reports(self):
+        # 反例（本项目真实形态）：同一分句前半句还在"不得点名外部…"、后半句却放宽
+        # （"也不得把外部复核者当备选" → "也允许换外部复核者当备选"）。
+        # 若否定词按整个分句判定，这类"前半句禁止、后半句放宽"会被误放行。
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "verify.adoc")
+        self.write("specs-project-maintainer/verify.adoc",
+                   "= t\n\n**子 Agent 强制与执行者同 Agent（维护方落点）**："
+                   "**不得点名外部 Agent / 外部 NPC**、也允许换外部复核者当备选\n")
+        cm.check_delegation_guard()
+        self.assertIn("重新放宽", self.error_texts())
+        self.assertTrue(os.path.isfile(path))
+
+    def test_negated_wording_does_not_report(self):
+        # 正例（**防误报**）：禁止式写法与旧口径的反例引用是正当文本，不得被拦
+        # ——否则规范无法写"不得用外部 Agent 顶替"这类要求。
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "collab.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/general/collab.adoc",
+                   text + "\n**不得用外部 Agent 顶替**，也不得把外部 NPC 作备选；"
+                          "不得改回『外部来源可以顶替』的宽松写法。\n")
+        cm.check_delegation_guard()
+        self.assertEqual(cm.errors, [])
+
 
 class TestCheckGitMvSelfcheck(CheckSpecsTestCase):
     """钉住"本仓库自身侧"的 git mv 自查（P1 可机械核对的那一半）。
