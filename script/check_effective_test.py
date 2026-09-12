@@ -50,11 +50,54 @@ class TestEvaluate(unittest.TestCase):
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(statuses["测试文件后缀式命名（禁 test_ 前戳）"], "no-grip")
 
-    def test_git_mv_has_no_mechanical_grip(self):
-        # git mv 铁律作用于**引用方项目**的工作区，本仓库看不到其操作，故如实记为"无机械抓手"
-        # （不得用只在本地工作区才有效的检查冒充抓手）
+    def test_git_mv_grip_is_self_side_only(self):
+        # git mv 铁律：**引用方侧**本仓库看不到其操作（不得冒充抓手），但**本仓库自身侧**
+        # 的暂存区可核对（check_git_mv_selfcheck / check_specs.py）——两侧须分清，
+        # 既不能把引用方侧记作"有抓手"（虚报），也不能把自身侧记作"无抓手"（漏报）。
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
-        self.assertEqual(statuses["文件移动/重命名必须 git mv（防历史断裂）"], "no-grip")
+        self.assertEqual(statuses["文件移动/重命名必须 git mv（防历史断裂）"], "grip-missing")
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(statuses["文件移动/重命名必须 git mv（防历史断裂）"], "has-grip")
+
+    def test_delegation_and_capability_have_mechanical_grip(self):
+        # 从属者适配、环境能力自评：要点存在性由 check_delegation_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["从属者（子 agent/被引用方）加载由已加载入口驱动、不靠自报"], "has-grip")
+        self.assertEqual(
+            statuses["执行环境能力先自评、无机制走降级路径且不空自评"], "has-grip")
+
+    def test_spec_verification_three_lenses_has_mechanical_grip(self):
+        # 改完规范的语义复核三视角（①完整性 + ②有效性与认知质量 + ③接纳面）由
+        # check_verify_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["改完规范须验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面（同一子 agent）"],
+            "has-grip")
+
+    def test_verification_enumerability_has_mechanical_grip(self):
+        # "验了什么、怎么算过、依据哪个标准"须能枚举——由「验证总纲」节与标准出处钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses['验证须能枚举"验了什么、怎么算过、依据哪个标准"（防退化成跑绿脚本、慢慢脱离初衷）'],
+            "has-grip")
+
+    def test_adoption_surface_has_mechanical_grip(self):
+        # 公共内容被未知项目加载的可控性（影响面/成本/可控性）由 check_adoption_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["公共内容被未知项目加载时的可控性（影响面/成本/可控性）"], "has-grip")
+
+    def test_resident_budget_has_mechanical_grip(self):
+        # 常驻层体积/调度器条目数上限由 check_budget_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(statuses["常驻层体积与调度器条目数不得无上限膨胀"], "has-grip")
 
     def test_scope_guard_has_mechanical_grip(self):
         # "校验范围只限公共内容与本仓库工具"由 check_specs_test 的用例钉住

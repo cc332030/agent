@@ -22,6 +22,11 @@
 与引用完整性）② 本仓库自身的维护工具与 CI。**引用方项目内部如何操作（含 delete+create
 等）不在本仓库的可见范围**，不得记作"有抓手"（该铁律对其余项目靠遵守 + 各项目按
 规范（`link:specs/general/git.adoc[]`）自行检查，本仓库只能把规范文本写清楚）。
+
+**但边界不等于零抓手**：本仓库自己也是 git 工作区，其**暂存区状态行**可核对，故
+`check_git_mv_selfcheck` 属"有抓手"——只覆盖本仓库自身侧那一半，引用方侧仍登记为
+靠遵守（不许把两者混为一谈：把引用方侧记作"有抓手"是虚报，把自身侧记作"无抓手"
+是漏报）。
 """
 
 import argparse
@@ -49,7 +54,7 @@ MECHANISMS = [
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py", "20+ 用例"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py", "check_section_refs 钉住「应当记录/不应当记录/条目书写」三节引用不悬空；条目内容的详略判断交人 review"),
-    ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       None,                         "无机械抓手：铁律作用于**引用方项目**的工作区，本仓库（校验入口）看不到其操作；靠遵守 + 各项目自行检查"),
+    ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       "script/check_specs.py",      "check_git_mv_selfcheck 覆盖**本仓库自身侧**（暂存区不得出现 delete+add 形态）；**引用方侧**本仓库看不到、仍靠遵守 + 各项目按 git 规范自检"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,                         "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
     ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据；「某项目某个类该用哪个后缀」属语义判断，交人/子 agent review"),
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py", "TestScopeStaysOnCommonContent 钉住 check_specs.py 不得读 git 工作区状态/HEAD"),
@@ -61,6 +66,18 @@ MECHANISMS = [
     ("重构后须核对规范有效性（两形态分离 / 可执行性不降级 / 可见性不丢）", "specs/general/spec-lifecycle.adoc", "script/check_specs.py", "check_spec_admission_guard 钉住「重构后须核对规范有效性」节；判据是否真未被压成口号属语义判断，交人/子 agent 复核"),
     ("读取按最小必要、长会话简单任务在干净上下文执行（P4）", "specs/general/context.adoc", "script/check_specs.py", "check_priority_guard 钉住 P4 存在性与 execution.adoc 对 context.adoc 的引用；读取是否真越界属运行时行为，靠 agent 自检 + 人 review"),
     ("去重不得误删最高关注项的引用", "AGENTS.adoc", "script/check_specs.py", "check_priority_guard：最高关注项的存在性机械钉住（引用是否被删由该防线兜底发现）"),
+    ("从属者（子 agent/被引用方）加载由已加载入口驱动、不靠自报", "AGENTS_COMMON.adoc", "script/check_specs.py", "check_delegation_guard 钉住『从属者』机制仍在（否则子 agent/被派发任务可'没被告知'为由跳过加载）；'实际是否真按入口加载'属运行时行为，靠遵守 + 人 review"),
+    ("改完规范须验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面（同一子 agent）", "specs/general/verify.adoc", "script/check_specs.py", "check_verify_guard 钉住「验证总纲」「规范验证」两节、三视角与标准出处、②的四维判据、'三视角合用一个干净子 agent'，并核对 P2 与 AGENTS.adoc 三处口径一致；「子 agent 是否真按三视角答全」属运行时行为，靠派发指令 + 人 review"),
+    ("验证须能枚举\"验了什么、怎么算过、依据哪个标准\"（防退化成跑绿脚本、慢慢脱离初衷）", "specs/general/verify.adoc", "script/check_specs.py", "check_verify_guard 钉住「验证总纲」节与标准出处（ISO/IEC Directives Part 2 / RFC 2119 / ISO 10007 / ISO/IEC/IEEE 25010 / IEEE 1028 须在）；「本次是否真逐项枚举」属运行时行为，靠留证 + 人 review"),
+    ("公共内容不得声明机械防线的存在（防线属维护方、随规范分发即宣称与实际不符）", "specs/general/spec-lifecycle.adoc", "script/check_specs.py", "check_no_mechanism_claims_in_public 拦住『当前由某防线钉住』式声明句与裸防线名；该表述是否真在宣称防线由人/子 agent 复核"),
+    ("公共内容被未知项目加载时的可控性（影响面/成本/可控性）", "specs/general/context.adoc", "script/check_specs.py", "check_adoption_guard 钉住「运行契约」节、三维判据与调度器登记，并核对 verify.adoc ③接纳面引到该节；另由 check_public_content_has_no_private_refs 机械拦住\"公共内容把本仓库私有物当抓手引用\"（引用方读到的死链）；「某条具体规则落到未知项目里会不会静默推翻其约定」属语义判断，交人/子 agent 复核"),
+    ("任务各节点须自查（提出/理解/方案/执行/验证/交付/复盘）", "specs/core/execution.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住节点清单以表格行存在、并钉住『哪些节点不设』的独立声明；『某个节点上是否真的自查了』属运行时行为，靠 agent 遵守 + 人 review"),
+    ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py", "check_checklist_guard 钉住『硬超时』『超时的处置』两要点仍在（否则“派了就一直等”重新出现，实证为外部评审卡 1h+ 未回传）；『本次是否真的设了时限并在到点时放弃』属运行时行为，靠留证 + 人 review"),
+    ("语义复核留证须是三态台账（通过 / 未发现问题 / 悬置，不得合并）", "specs/general/verify.adoc", "script/check_specs.py", "check_checklist_guard 钉住『三态』『悬置』两要点仍在；『具体某次留证是否真按三态分列』属产物内容判断，交人/子 agent 复核"),
+    ("验证按改动性质取值（代码类走机械判据、规范类才做三视角与全局核对）", "specs/general/verify.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住「验证的适用边界」节、两类改动、唯一判据问句、『不得互串』『取更严的一侧』与『每次验证换干净上下文』；『本次是否真按性质取值』属运行时行为，靠遵守 + 人 review"),
+    ("规范何时该拆分（默认不拆、三条硬条件、拆后逐项自洽核对）", "specs/general/spec-lifecycle.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住「一条规范何时该拆分」与「拆分后的自洽核对」两节及三条硬条件、默认不拆、单独过准入九问；『某次拆分是否由实害驱动』属语义判断，交人/子 agent 复核"),
+    ("执行环境能力先自评、无机制走降级路径且不空自评", "specs/general/self-check.adoc", "script/check_specs.py", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）；'自评是否属实'属运行时行为，靠遵守 + 人 review"),
+    ("常驻层体积与调度器条目数不得无上限膨胀", "AGENTS_COMMON.adoc", "script/check_specs.py", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限；'体量与层级的语义是否合理'仍交人/子 agent 复核"),
     ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
     ("执行前自检（非平凡任务须逐项自检，防'加载了却没执行'）", "specs/general/self-check.adoc", "script/check_specs.py", "check_self_check_guard 钉住自检规范文件、适用边界与 execution.adoc 必加载层落点；自检是否真做属运行时行为，靠 agent 遵守 + 人 review"),
     ("不得编造事实与来源（引用真实、标准不编、宁可不引）", "specs/general/source.adoc", "script/check_specs.py", "check_source_guard 钉住来源规范要点；引用存在性另由 check_refs_exist/check_section_refs 兜底"),
