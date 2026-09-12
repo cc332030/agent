@@ -3020,6 +3020,149 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         self.assertIn("缺少公开提示词入口", self.error_texts())
 
 
+class TestCheckConfigClassGuard(CheckSpecsTestCase):
+    """钉住『配置类不写逻辑』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
+
+    该条来自用户明确要求且**任何情况都不允许**，最易被两件事冲掉：
+      * **"某处特殊"式豁免** —— 一句"这个配置类比较特殊，就地处理更快"就把无例外写回例外；
+      * **关键词堆砌式假绿** —— 只留标题、把判定标准或识别特征抽掉，规则照样"在"。
+    故本组用例除正例外，专门覆盖"条文被删""降级成建议""判定标准被抽""识别特征被删"
+    "Java/Spring 落点缺失""README 未同步"等反例。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n== 类设计\n"
+        "* 配置类不写逻辑（各类承载配置的类，如 Spring `@ConfigurationProperties`、"
+        "`@Configuration` 等）：除声明配置项与按配置装配对象外，**不得包含任何逻辑**——"
+        "任何情况都不允许，无例外；配置类只保持纯数据对象（POJO）的基本功能，"
+        "需计算/转换/组装时下沉到工具类或服务中。"
+        "判定标准：①不得出现条件分支与循环；②不得做计算与对外部对象的访问；"
+        "③`@Bean` 方法须是构造/装配形态。"
+        "识别特征：以 Config/Properties/Options/Settings 等命名的类"
+        "（已有存量按「规范变更的存量处理」随动迁移）\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.SPRING_STACK_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_spring,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n"
+                   "* 配置类识别特征（`@ConfigurationProperties` 等）：标注 "
+                   "`@ConfigurationProperties` 的类一律属配置类，**不得含任何逻辑**。\n")
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 配置\n"
+                   "* 配置类不写逻辑（**任何情况都不允许**）：`@ConfigurationProperties` 类与 "
+                   "`@Configuration` 类只承载配置项声明与装配，逻辑下沉到工具类或 Service"
+                   "（判定标准：条件分支为零、不做计算与对外访问）。\n"
+                   "* 与框架既有做法的边界：本条**严于** Spring 的常规用法，"
+                   "已有项目按「规范变更的存量处理」随动迁移。\n")
+        self.write("README.adoc", "目录结构：通用编码（含**配置类不写逻辑**）。\n")
+
+    def test_valid_config_class_guard_passes(self):
+        self._write_valid()
+        cm.check_config_class_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_coding_file_missing_reports(self):
+        # 反例：通用层条文无处承载（该条跨语言，不能只留在某一技术栈文件里）
+        self._write_valid()
+        os.remove(cm.CODING_FILE)
+        cm.check_config_class_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_clause_deleted_reports(self):
+        # 反例：条文被删（只留标题）→ 配置类重新变成"什么都能塞"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 类设计\n* 类设计。\n")
+        cm.check_config_class_guard()
+        self.assertIn("配置类不写逻辑", self.error_texts())
+
+    def test_no_exception_claims_removed_reports(self):
+        # 反例：'任何情况都不允许'被删（悄悄降级成建议）→ "某处特殊"式豁免重新出现
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("——任何情况都不允许，无例外", ""))
+        cm.check_config_class_guard()
+        self.assertIn("任何情况都不允许", self.error_texts())
+
+    def test_destination_removed_reports(self):
+        # 反例：'逻辑下沉到工具类或服务'被删 → 逻辑无处安放，执行者只能塞回配置类
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("需计算/转换/组装时下沉到工具类或服务中", ""))
+        cm.check_config_class_guard()
+        self.assertIn("工具类或服务", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：判定标准被抽掉 → 只剩口号、无法判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.split("判定标准")[0])
+        cm.check_config_class_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_identification_removed_reports(self):
+        # 反例：识别特征被删 → 命名不规范的配置类会被漏过
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.CODING.split("识别特征")[0])
+        cm.check_config_class_guard()
+        self.assertIn("识别特征", self.error_texts())
+
+    def test_coding_without_migration_boundary_reports(self):
+        # 反例：未写存量边界 → 严于框架常规用法的条目会变成"静默推翻引用方既有做法"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("（已有存量按「规范变更的存量处理」随动迁移）", ""))
+        cm.check_config_class_guard()
+        self.assertIn("存量处理", self.error_texts())
+
+    def test_spring_without_framework_boundary_reports(self):
+        # 反例：未写明"该条严于框架常规用法 + 存量随动迁移" → 拿"官方本来允许"当豁免
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 配置\n"
+                   "* 配置类不写逻辑：`@ConfigurationProperties` 类与 `@Configuration` 类"
+                   "只承载声明与装配，逻辑下沉到工具类或 Service（判定标准：条件分支为零）。\n")
+        cm.check_config_class_guard()
+        self.assertIn("严于", self.error_texts())
+
+    def test_java_stack_marker_missing_reports(self):
+        # 反例：Java 栈文件未点名 `@ConfigurationProperties` 类属配置类
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n* 命名规则。\n")
+        cm.check_config_class_guard()
+        self.assertIn("配置类识别特征", self.error_texts())
+
+    def test_spring_stack_clause_missing_reports(self):
+        # 反例：Spring 栈文件未在「配置」节点名两类配置类
+        self._write_valid()
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 配置\n* 配置项绑定。\n")
+        cm.check_config_class_guard()
+        self.assertIn("spring.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
+        self._write_valid()
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_config_class_guard()
+        self.assertIn("README", self.error_texts())
+
+
 class TestCheckCiCdGuard(CheckSpecsTestCase):
     """钉住「CI/CD 与平台协作防线」：踩坑判据不得被删或降级。
 

@@ -195,6 +195,15 @@ LINE_ENDING_STACK_FILES = (
     os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
 )
 
+# 配置类不写逻辑（跨语言，落点 specs/general/coding.adoc「类设计」）：与各家 Java 规范
+# 一致的硬性约定——承载配置的类只保持 POJO 的基本功能，逻辑下沉到工具类/服务。它由
+# 通用层条文（跨语言）+ Java/Spring 识别特征（`@ConfigurationProperties`）+ 公开说明
+# （README）三处共同承载；漏任一处，读者按另一处学习就会漏掉该条，故机械钉住三处判据。
+# （依据：Spring Boot 官方文档 Externalized Configuration；Google Java Style Guide 3.4.2
+# 对 POJO 的定义；阿里巴巴 Java 开发手册的 POJO 类约定。）
+CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
+JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
+SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
 # 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
 # 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
 # 出现"做完了才发现方向理解错"或"流程走完了但没人回头看规则是否有问题"。被删则
@@ -2664,6 +2673,93 @@ def check_public_content_coverage():
     phase_done()
 
 
+def check_config_class_guard():
+    """『配置类不写逻辑防线』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
+
+    背景（本项目已发生多次的真实失效）：`@ConfigurationProperties` 一类承载配置的类被写成
+    "顺手的服务"——在配置类里取默认值、做条件判断、拼装派生值，于是配置项的实际行为分散在
+    配置类中，既看不见也测不到。规则来自用户的硬性要求：**配置类不得含任何逻辑，任何情况
+    都不允许**；这不是某个技术栈的偏好，而是与各家公开规范一致的跨语言约定（Spring Boot
+    Externalized Configuration 把配置类定义为绑定配置的 holder；Google Java Style Guide
+    3.4.2 把 POJO 定义为"只有行为、没有逻辑"的数据持有者；阿里巴巴 Java 开发手册的
+    POJO 类约定）。故本条**跨语言**收在通用编码规范，并按技术栈补识别特征。
+
+    本防线钉住**四处要点**（提示词/README 同步的理由见 `check_npc_merge_guard`）：
+      * **通用层条文**：`specs/general/coding.adoc`「类设计」须有「配置类不写逻辑」条，
+        含"任何情况都不允许"（防被降级成建议）与"识别特征：以 Config/Properties 等命名"；
+      * **判定标准可执行**：同条须给出可逐条核对的形态（条件分支/循环、计算与对外访问、
+        `@Bean` 装配形态），否则只剩一句口号、无法判定；
+      * **Java/Spring 识别特征**：`@ConfigurationProperties` 与 `@Configuration` 须被点名
+        （只按类名识别会漏掉命名不规范的配置类，而 lombok 访问器注解的类此前只覆盖了
+        纯数据结构类一侧）；
+      * **公开说明同步**：`README.adoc` 的目录说明须让读者知道这条存在（漏了这层，读者
+        按 README 学习时根本不知道有这条规则）。
+
+    只钉"要求文本仍在且落在该落点"——"某个具体配置类有没有夹带逻辑"属引用方项目代码，
+    本仓库看不到，交人/子 agent 复核承担。
+    """
+    phase("配置类不写逻辑防线检查")
+    # (a)(b) 通用层条文 + 判定标准
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『配置类不写逻辑』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("配置类不写逻辑", "任何情况都不允许", "ConfigurationProperties"),
+             "条文：须有『配置类不写逻辑』条、写明『任何情况都不允许』（无例外），"
+             "并点名 `@ConfigurationProperties` 一类承载配置的类"),
+            (("POJO", "工具类或服务"),
+             "边界与去向：须写明配置类只保持 POJO 的基本功能、逻辑下沉到工具类或服务"
+             "（不写去向则逻辑无处安放，执行者只能塞回去）"),
+            (("判定标准", "条件分支", "对外部对象"),
+             "判定标准：须给出可逐条核对的形态（条件分支/循环、计算与对外访问、"
+             "`@Bean` 装配形态），否则只剩一句口号、无法判定"),
+            (("存量处理", "随动迁移"),
+             "存量边界：该条严于框架常规用法（Spring 官方允许配置类里放派生 getter），"
+             "须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
+             "否则等于静默推翻引用方既有做法"),
+            (("识别特征", "Config", "Properties", "Options", "Settings"),
+             "识别特征：须按 Config/Properties/Options/Settings 等命名识别，"
+             "否则命名不规范的配置类会被漏过"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"配置类不写逻辑防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条是用户明确要求的硬性约定（无例外），不得删除、不得降级为建议",
+                    rel_coding)
+    # (c) 技术栈识别特征：Java / Spring 两侧
+    for path, keys, desc in (
+        (JAVA_STACK_FILE,
+         ("配置类识别特征", "@ConfigurationProperties", "不得含任何逻辑"),
+         "Java 栈文件须补『标注 `@ConfigurationProperties` 的类一律属配置类』的识别特征"
+         "（只按类名识别会漏掉命名不规范的配置类）"),
+        (SPRING_STACK_FILE,
+         ("配置类不写逻辑", "@Configuration", "工具类或 Service", "判定标准",
+          "边界", "严于", "存量处理"),
+         "Spring 栈文件须在「配置」节点名 `@ConfigurationProperties` 与 `@Configuration`"
+         "两类配置类、给出判定标准，并写明与框架既有做法的边界（该条严于 Spring 常规用法、"
+         "存量随动迁移）——否则拿'官方本来允许'当豁免或用它推翻引用方既有做法"),
+    ):
+        rel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(path):
+            err(f"缺少技术栈文件 {rel}——『配置类不写逻辑』的技术栈落点丢失", rel)
+            continue
+        text = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"配置类不写逻辑防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # (d) 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "配置类不写逻辑" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『配置类不写逻辑』——"
+            "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+            rel_readme)
+    phase_done()
+
+
 def check_prompts_primary():
     """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
 
@@ -2909,7 +3005,7 @@ def main(argv=None) -> int:
         description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
                     "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
-                    "环境标志与专用口径/CI-CD 与平台协作 + AsciiDoc 语法）")
+                    "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -2949,6 +3045,7 @@ def main(argv=None) -> int:
     check_prompts_primary()
     check_env_marker_guard()
     check_npc_merge_guard()
+    check_config_class_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 

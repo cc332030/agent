@@ -184,6 +184,13 @@
 * 依据要点：严格模式组合 `set -euo pipefail` 的推荐；变量引用须加引号（**SC2086**：未加引号的变量会触发字段分割与路径名展开）。
 * 用途：`specs/stack/bash.adoc`「严格模式」「变量与引用」。
 
+== 配置类只做数据持有（POJO）——Spring Boot / Google Java Style / Spring 注解
+
+* 材料：**Spring Boot 官方文档**「Externalized Configuration」（`@ConfigurationProperties` 的定位：把外部配置**绑定**到类型安全的对象上）、**Spring Framework 官方文档**「Java-based Container Configuration」（`@Configuration`/`@Bean` 的定位：**声明** Bean 的定义与装配方式，由容器负责实例化与调用）；**Google Java Style Guide 3.4.2（Class member ordering）**对 POJO 的说明——"A POJO **only** has behavior that **acts on its own fields**"，即数据持有者的行为仅限对自身字段的读写，不含计算与对外访问；《阿里巴巴 Java 开发手册》对 POJO 类（DO/DTO/VO 等）的约定——"POJO **类的属性**不要设定任何**属性默认值**"、"POJO 类**必须写 toString** 方法"等**只针对属性与访问器**的条款。
+* 依据要点（**说明：此条为"官方文档定位与风格指南表述"的要点转述、非逐字摘录**，如日后需逐字比对，以 Spring Boot / Spring Framework 参考文档的 Externalized Configuration、Java-based Container Configuration 两节与 Google Java Style Guide 3.4.2 的原文为对照面）：配置类在**框架设计上本就被定义为配置项的数据持有者**——绑定由容器完成，逻辑**不在**它的职责内；这与"纯数据类不写逻辑"是同一条约定的两个用例。
+* **须注意的语义差异（同义性）**：上述材料给出的是**职责定位与风格建议**，**未**规定"配置类中任何逻辑一律禁止"；本集合据此推出的是**本项目自身的硬性约定**——**任何情况都不允许，无例外**（`specs/general/coding.adoc`「类设计」"配置类不写逻辑"，`L1`）；**不得**把本节读成"Spring 文档禁止在配置类里写逻辑"。
+* 实证反例（**本项目真实记载**）：配置类里做取值兜底/条件判断/派生值拼装时，配置项的**实际行为分散在配置类中**（看不见、测不到），与配置类应承担的"声明配置项"职责混淆；本项目为此在用户明确要求下把该条写成**无例外**并配机械防线（`check_config_class_guard`）。
+
 == 阿里巴巴 Java 开发手册
 
 * 材料：《阿里巴巴 Java 开发手册》（公开出版的手册文本）。
