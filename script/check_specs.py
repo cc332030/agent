@@ -2181,6 +2181,12 @@ LIBRARY_SOURCE_MARKERS = (
     "未逐字取回",
 )
 
+# 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
+# 只有在此列内的写法才被当作"路径"核对存在性——防止把普通词/文件名约定当路径误报）。
+_LIB_ROOT_FILES = ("AGENTS.adoc", "AGENTS_COMMON.adoc", "AGENTS.md", "PUBLIC.adoc",
+                   "README.adoc", "PROMPTS.adoc", "CHANGELOG.adoc", "INSTALL.adoc",
+                   "check_specs.py", "check_effective.py", "clean_tmp.py",
+                   "_common.txt", "review.adoc", "refactor.adoc")
 LIBRARY_QUOTE_ANCHORS = (
     "Software Reviews and Audits",
     "IEEE Standard for Information Technology--Systems Design--Software Design Descriptions",
@@ -2233,9 +2239,10 @@ def check_library_guard():
         不是第二真源）——登记了不存在的主题、或存在未登记的主题文件，都报错；
       * **逐字引文仍在**：所登记外部标准的关键片段（题名、模板片段、代码模式等）仍在
         图书馆内——少一句就意味着依据被压成了名称；
-      * **引用可解析**：图书馆文件里的引用按**仓库根基准**解析（`specs/...` 反引号写法与
-        `link:` 目标；`../` 相对写法只允许指向仓库内文件）都命中真实文件——悬空引用等于
-        依据链断在这里。
+      * **引用可解析**：图书馆文件里的引用按**仓库根基准**解析（`specs|library|script|...`
+        等带目录前缀的反引号写法、**根级文件名写法**（`AGENTS.adoc`/`PROMPTS.adoc` 等，
+        见 `_LIB_ROOT_FILES` 白名单）、以及 `link:` 目标；目录型写法核目录、其余核文件；
+        `../` 相对写法只允许指向仓库内）都命中真实落点——悬空引用等于依据链断在这里。
 
     "该依据是否真的支持该条、依据找得全不全、有没有把解释当原文"属语义判断，交人/
     子 agent 复核承担。
@@ -2301,9 +2308,16 @@ def check_library_guard():
             lines = fh.readlines()
         rel = f"library/{f}"
         for j, line in enumerate(lines, 1):
-            # 反引号写法：`specs/...`（按仓库根解析；`library/...` 同基准）
-            for m in re.findall(r"`((?:specs|library|specs-project-maintainer|script|"
-                                r"prompts)/[^`\s]*)`", line):
+            # 反引号写法：`specs/...`（按仓库根解析；`library/...` 同基准）。
+            # **也收根级文件名写法**（`AGENTS.adoc`、`PUBLIC.adoc`、`README.adoc` 等）：
+            # 馆内很自然地会写"登记与维护说明见 `AGENTS.adoc`"，漏收即这类引用悬空
+            # 无人发现（实测：把 `AGENTS.adoc` 改成不存在的名字，检查原本不报）。
+            # 只认**扩展名在册**的根级文件名（下方白名单），避免把普通词当路径。
+            for m in re.findall(r"`((?:(?:specs|library|specs-project-maintainer|script|"
+                                r"prompts)/[^`\s]*)|(?:[A-Za-z0-9_.-]+\.(?:adoc|py|txt|md|"
+                                r"yml|yaml|json|sh|bat|cmd)))`", line):
+                if "/" not in m and m not in _LIB_ROOT_FILES:
+                    continue                   # 非根级文件名白名单内 → 当普通词，不核
                 if _is_placeholder_ref(m):
                     continue
                 if _is_dir_ref(m):
@@ -2360,6 +2374,16 @@ def _split_adoc_sections(text: str):
     return sections
 
 
+def _names_in_zone(zone_body: str, rel: str) -> bool:
+    """某节区里是否**以表格行**点名了 `rel`（`| `rel` | 说明` 这一列）。
+
+    用途：区分"在「入口清单」表里"（= 该文件确在覆盖面内）与"在正文/反向举例段被
+    提一句"（= 说明性提及）。只靠 `rel in 全文` 判"在清单里"会把正文提及也算进去，
+    "某入口被悄悄移出表格"这类改动因此不会被拦下。
+    """
+    return re.search(r"^\|[^\n]*`" + re.escape(rel) + r"`", zone_body, re.M) is not None
+
+
 def check_public_content_coverage():
     """『公共内容覆盖面防线』：公共内容的入口清单须完整、且与实际文件一致。
 
@@ -2376,8 +2400,10 @@ def check_public_content_coverage():
         维护方读不到它，清单等于没有）；
       * 清单里以反引号点名的路径**真实存在**（改名/删除后须同步清单，否则覆盖面
         界定与实际不符）；
-      * 公共内容的两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）都在清单里
-        （漏一个即半个公共内容不在覆盖面内）。
+      * 公共内容的两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）**都列进
+        「入口清单」表**（漏一个即半个公共内容不在覆盖面内；**表**才是覆盖面的定义处
+        ——只靠"全文里出现过"判定，会把正文里提一句也算命中，"某入口被移出表格"就
+        不会被发现）。
 
     "某文件到底算不算公共内容"属判定，交人/子 agent 复核承担（清单本身可被修改，
     但修改要过归类举证）。
@@ -2398,11 +2424,22 @@ def check_public_content_coverage():
     if "PUBLIC.adoc" not in project_entry:
         err("公共内容入口索引未在本仓库项目规范入口（AGENTS.adoc）登记——"
             "维护方无从知道公共内容有哪些入口", "AGENTS.adoc")
+    # 两个公开入口须**列进「入口清单」表**：`rel not in listing` 判的是**全文**，
+    # 正文里提一句（如"'为什么需要本索引'里举例说 INSTALL.adoc 也会被读到"）同样命中，
+    # 于是"某入口被移出表格、只剩正文提到"这种改动**不会被发现**——而表格才是覆盖面
+    # 的定义处（实测：把 `INSTALL.adoc` 那行从表里删掉、只在正文保留一句 `INSTALL.adoc`，
+    # 检查仍全绿）。故本条须按**表格区**判定，与下面按节切的核对口径一致。
+    sections_pre = _split_adoc_sections(listing)
+    list_bodies = [b for t, b in sections_pre if "入口清单" in t]
     for rel in ("INSTALL.adoc", "AGENTS_COMMON.adoc"):
         if rel not in listing:
             err(f"公共内容入口清单未列出 {rel}——"
                 "漏一个入口即半个公共内容不在覆盖面内"
                 "（自足检查漏的是它的死链）", "PUBLIC.adoc")
+        elif not any(_names_in_zone(b, rel) for b in list_bodies):
+            err(f"公共内容入口清单未把 {rel} 列进「入口清单」表——"
+                "只出现在正文/反向举例段不算在覆盖面内"
+                "（覆盖面界定失效后，它的死链与自足性都无人核对）", "PUBLIC.adoc")
     # **按节切表格/清单区**判定（不再全文 re.findall + 硬编码豁免）：
     #   ① 入口清单表所在节：其中以反引号点名的路径即"公共内容入口"，须真实存在；
     #   ② "不属公共内容"那一段的反向举例：它点名的文件同样须真实存在（是**真实存在的

@@ -1403,6 +1403,26 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
         cm.check_library_guard()
         self.assertIn("指向不存在的文件", self.error_texts())
 
+    def test_root_level_file_ref_dangling_reports(self):
+        # 反例：馆内以**根级文件名**写法引用（`PROMPTS.adoc`）而该文件不存在
+        # 依据：馆内引用一律按仓库根解析——根级文件名同样是引用写法，悬空即断链
+        # （此前正则只认"带目录前缀"的写法，`AGENTS.adoc`/`PROMPTS.adoc` 这类
+        #  引用被整体跳过，改成不存在的名字也不会被发现）
+        self._write_valid()
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc`\n")
+        cm.check_library_guard()
+        self.assertIn("指向不存在的文件", self.error_texts())
+
+    def test_root_level_file_ref_resolvable_passes(self):
+        # 正例：根级文件名写法命中真实文件 → 不报
+        self._write_valid()
+        self.write("PROMPTS.adoc", "= 提示词\n")
+        self.write("library/README.adoc",
+                   "= 图书馆\n\n| link:sources.adoc[] | 见 `PROMPTS.adoc` 与 `AGENTS.adoc`\n")
+        cm.check_library_guard()
+        self.assertEqual(cm.errors, [])
+
     def test_resolvable_refs_do_not_report(self):
         # 正例：馆内引用真实存在（`specs/...` 反引号 + `../` 相对 link 都命中）
         self._write_valid()
@@ -1499,6 +1519,20 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         os.remove(cm.PUBLIC_FILE)
         cm.check_public_content_coverage()
         self.assertIn("缺少公共内容入口索引", self.error_texts())
+
+    def test_entry_only_in_prose_reports(self):
+        # 反例：入口只在正文被提一句、未列进「入口清单」表——此前用 `rel in 全文`
+        # 判断，这种"被悄悄移出表格"的改动不会被发现（表格才是覆盖面的定义处）
+        self._write_valid()
+        self.write("PUBLIC.adoc",
+                   "= 公共内容入口索引\n\n== 公共内容入口清单\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `specs/` | 规范正文\n"
+                   "| `prompts/_common.txt` | 公共片段\n"
+                   "| `script/clean_tmp.py` | 随规范分发的工具\n\n"
+                   "== 组织与其边界\n\n引用方接入时读 `INSTALL.adoc`。\n")
+        cm.check_public_content_coverage()
+        self.assertIn("未把 INSTALL.adoc 列进", self.error_texts())
 
     def test_listing_not_registered_reports(self):
         # 反例：清单未在项目规范入口登记（维护方读不到它）
