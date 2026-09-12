@@ -12,7 +12,8 @@
      集合），防"只建文件不登记"导致规则实际失效。
   6. 私有约定误导入：禁止把项目私有强约束（C/IC 前缀、@Bean c 前缀等）当作通用规范。
   7. 历史来源声明：禁止指向旧文件/旧命名/旧位置的历史来源注记（会让引用悬空）。
-  8. INSTALL 模板：INSTALL.adoc 的 AGENTS.adoc 入口模板代码块须逐字保留（含换行空行）。
+  8. INSTALL 模板：INSTALL.adoc 的入口模板代码块须逐字保留（含换行空行），且入口文件名规则
+     须兼容 `AGENTS.md`、默认 `AGENTS.adoc`（含已存在 `AGENTS.md` 时就地融合、不重命名）。
   9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；
      "是否有价值、是否长篇大论"属语义判断，交人 review，不设字符数阈值以免误伤。
  10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
@@ -523,12 +524,19 @@ def check_historical_notes():
 
 
 def check_install_codeblock():
-    """校验 INSTALL.adoc 中 AGENTS.adoc 入口模板代码块逐字保留（机械抓手）。
+    """校验 INSTALL.adoc 的入口模板代码块逐字保留 + 入口文件名规则与 `AGENTS.md` 兼容。
 
-    背景：AI 读取 INSTALL.adoc 在目标项目创建 AGENTS.adoc 时，若模板代码块内的
+    背景一（模板逐字）：AI 读取 INSTALL.adoc 在目标项目创建入口文档时，若模板代码块内的
     换行/空行被折叠、行被合并，会导致生成文档样式改变。为让『逐字原样保留』成为
     可执行约束而非靠自觉，本检查扫描 INSTALL.adoc 的模板代码块，逐一确认每段必备
     行都各自独立成行（未被合并/折叠），且必备行之间的空行分隔完好。
+
+    背景二（兼容 `AGENTS.md`）：平台与生态对 agent 规范文档的**默认命名是 `AGENTS.md`**
+    （CodeBuddy、Cursor 等平台的固有约定），只认 `AGENTS.adoc` 会让安装规则在既有
+    `AGENTS.md` 的项目上落不了地（重命名会打断平台识别、删旧建新会丢内容），而安装文档
+    的体积上限又不允许把兼容说明写成大段（见本文件检查项 22）。故把"默认 `AGENTS.adoc`、
+    已存在 `AGENTS.md` 时就地融合且不重命名、不另建"钉成机械可核对的判据，防止这条兼容
+    规则在后续维护中被删掉或只说"兼容"却无做法。
     """
     phase("INSTALL 入口模板代码块检查")
     if not os.path.isfile(INSTALL_FILE):
@@ -565,6 +573,19 @@ def check_install_codeblock():
         if not ok:
             err(f"INSTALL.adoc 模板代码块缺失或行被合并/改写：未找到独立成行的『{s}』"
                 "（模板须逐字原样保留，不得折叠换行）",
+                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+
+    # 入口文件名规则：默认 AGENTS.adoc，且兼容已存在的 AGENTS.md（就地融合、不重命名/不另建）
+    with open(INSTALL_FILE, encoding="utf-8") as fh:
+        install_text = fh.read()
+    for key, desc in (
+            ("AGENTS.adoc", "默认入口文件名"),
+            ("AGENTS.md", "平台默认命名须被兼容（已存在时就地融合）"),
+            ("不重命名", "已存在 AGENTS.md 时不得重命名/迁移成 AGENTS.adoc（会打断平台识别）"),
+            ("不另建", "已存在 AGENTS.md 时不得再另建一个 AGENTS.adoc（双入口会分叉）")):
+        if key not in install_text:
+            err(f"INSTALL.adoc 入口文件名规则被破坏：缺失『{key}』（{desc}）——"
+                "只认单一扩展名会让安装规则在已有其他命名的项目上落不了地",
                 os.path.relpath(INSTALL_FILE, REPO_ROOT))
 
     # 必备行之间须有恰当的空行分隔，确保样式不变（防止空行被吞掉导致段落粘连）
