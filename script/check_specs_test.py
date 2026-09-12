@@ -863,7 +863,15 @@ class TestIntegration(CheckSpecsTestCase):
 # check_priority_guard（规范优先级防线：最高关注项不得被删/降级）
 # --------------------------------------------------------------------------- #
 class TestCheckPriorityGuard(CheckSpecsTestCase):
-    """钉住 L1/L2/L3 分级与最高关注项 P1/P2/P3/P4 的存在性与级别。"""
+    """钉住 L1/L2/L3 分级与最高关注项 P1-P6 的存在性、级别与正文口径。"""
+
+    # P6 的正文（口径）也须核对：本条曾出现"清单里列着、正文却是旧口径"——
+    # 公共侧已收紧为"强制同 Agent、不得点名外部 NPC"，P6 却停在"优先同源 + 外部来源
+    # 作备选"，按最高关注项读的维护方会照旧把复核派给不可核对的外部执行者。
+    P6 = ("=== P6. 协作执行者选择：子任务一律同 Agent，不得点名外部执行者\n\n"
+          "* **要求（L1，最高）**：一律由与执行者相同的 Agent（同 Agent 身份、同入口）承担，"
+          "不得点名外部 Agent / 外部 NPC；不可用时**降级**为由执行者本人串行承担，或如实标悬置。\n"
+          "* **依据**：IEEE 1028 软件评审。\n")
 
     def _write_valid(self):
         # 分级定义与最高关注项的**公共口径**在 specs/core/execution.adoc；
@@ -898,7 +906,8 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "* **依据**：Anthropic 工程博客《Effective context engineering for AI agents》。\n\n"
                    "=== P5. 不可逆操作先确认，不得编造事实与来源\n\n"
                    "* **要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。\n"
-                   "* **依据**：ISO 10007。\n")
+                   "* **依据**：ISO 10007。\n\n"
+                   + self.P6)
         self.write("AGENTS.adoc",
                    "登记 `specs-project-maintainer/priority.adoc`\n"
                    "登记 `specs-project-maintainer/spec-lifecycle.adoc`\n"
@@ -937,6 +946,48 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "git mv context.adoc 破坏性操作 source.adoc")
         cm.check_priority_guard()
         self.assertIn("P1", self.error_texts())
+
+    def test_dropped_p6_reports(self):
+        # 反例：最高关注项 P6（协作执行者选择）被删 —— 与公共侧"强制同 Agent"的
+        # 不可降级保护落点一起消失（清单里不再有这项，重构时会顺手清掉）
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace("=== P6. 协作执行者选择：子任务一律同 Agent，不得点名外部执行者", "=== 协作方式")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("P6", self.error_texts())
+
+    def test_p6_stale_wording_reports(self):
+        # 反例（**本轮实际发生的漏改**）：名字与级别还在、正文却是旧口径
+        # （"优先同源 + 外部来源作备选"）→ 按最高关注项读的维护方继续派外部执行者。
+        # 只核小标题/级别/依据行的旧防线对这种情形全绿，故此处必须报。
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                self.P6,
+                "=== P6. 协作执行者选择\n\n"
+                "* **要求（L1，最高）**：需要子 Agent 时优先用与执行者同源的执行者承担，"
+                "外部来源（外部 NPC/另一个产品）只是同源不可用后的备选。\n"
+                "* **依据**：IEEE 1028 软件评审。\n")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("旧口径", self.error_texts())
+
+    def test_p6_keyword_only_reports(self):
+        # 反例：只留新口径的关键词、整条要求被抽掉（防"关键词出现过一次"式假绿）
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read().replace(
+                self.P6,
+                "=== P6. 协作执行者选择\n\n"
+                "* **要求（L1，最高）**：不得点名外部 Agent。\n"
+                "* **依据**：IEEE 1028。\n")
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("同 Agent 身份", self.error_texts())
 
     def test_dropped_non_downgrade_declaration_reports(self):
         # 反例：去掉"不可降级"声明 = 允许最高关注项被降级（公共口径在 execution.adoc）
