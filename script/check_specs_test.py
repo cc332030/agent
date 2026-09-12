@@ -162,11 +162,16 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
 
 
 class TestCheckDelegationGuard(CheckSpecsTestCase):
-    """钉住从属者与能力自评两条机制（"定义了却不会执行"的高发盲点）。"""
+    """钉住从属者与能力自评、执行者来源选择（"定义了却不会执行"的高发盲点）。"""
 
     def _write_valid(self):
         self.write("AGENTS_COMMON.adoc", "= t\n\n从属者：加载由已加载入口驱动。\n")
         self.write("specs/general/self-check.adoc", "= t\n\n== 环境能力自评\n无机制走降级。\n")
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**\n\n* **优先一次性调用（L1）**\n")
+        self.write("specs/general/testing.adoc", "= t\n\n* **执行者选择：先同源、再降级（L1）**\n")
+        self.write("specs-project-maintainer/verify.adoc", "= t\n\n* **子 Agent 优先与执行者同源**\n")
 
     def test_valid_passes(self):
         self._write_valid()
@@ -186,6 +191,39 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
         self.write("specs/general/self-check.adoc", "= t\n\n（无能力自评）\n")
         cm.check_delegation_guard()
         self.assertIn("环境能力自评", self.error_texts())
+
+    def test_missing_same_source_executor_reports(self):
+        # 反例：删掉"优先用与执行者同源的 Agent"→ 缺复核时随手抓外部执行者（不可核对）
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n* **优先一次性调用（L1）**\n\n* **子 Agent 不可用时的降级路径（L1）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("优先由与执行者相同的 Agent 承担子任务", self.error_texts())
+
+    def test_missing_same_source_fallback_reports(self):
+        # 反例：删掉"同源不可用时的降级路径"→ 只剩"换外部来源"一条路
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
+                   "* **优先一次性调用（L1）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("降级路径（L1）", self.error_texts())
+
+    def test_missing_one_shot_call_reports(self):
+        # 反例：删掉"优先一次性调用"→ 又回到"交一个有自主探查权的执行者"（超时无法判定）
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= t\n\n**优先由与执行者相同的 Agent 承担子任务（L1）**\n\n"
+                   "* **子 Agent 不可用时的降级路径（L1）**\n")
+        cm.check_delegation_guard()
+        self.assertIn("优先一次性调用", self.error_texts())
+
+    def test_missing_maintainer_executor_source_reports(self):
+        # 反例：维护方落点丢掉"外部复核者不是第一手段"→ 又先去派外部 NPC
+        self._write_valid()
+        self.write("specs-project-maintainer/verify.adoc", "= t\n\n（无同源口径）\n")
+        cm.check_delegation_guard()
+        self.assertIn("子 Agent 优先与执行者同源", self.error_texts())
 
     def test_missing_file_reports(self):
         self.write("AGENTS_COMMON.adoc", "从属者")
