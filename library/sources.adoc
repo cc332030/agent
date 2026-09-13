@@ -257,6 +257,35 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 * 用途（**借用其定位、非引用其条文**）：该标准把**知识管理**确立为可被要求、可被审核的**管理体系**对象——本集合据此论证"**依据/知识要有明确的管理策略与可查的落点**，而非零散记录"（link:usage.adoc[]「为什么需要本协议」的"缺触发判据 → AI 不主动写"）。
 * **须注意的语义差异（同义性）**：本集合**未**声称要按 ISO 30401 建管理体系、也不做符合性评估；仅借用"知识管理是需要明确策略的体系"这一方向。
 
+== 依据的定位与取值（git / RFC 7233）
+
+=== 为什么这里收的是"机制"而不是"某产品的接口"
+
+依据图书馆可以很大（link:README.adoc[]「为什么还要有"定位协议"（馆可以无限大）」），故"引用方怎么在不全量下载的前提下定位到具体文件"本身需要依据——但它依据的是**通用的、稳定的机制**（Git 的内容寻址、HTTP 的分段取值），**不是本站站点某一页的接口**（页面会改版、接口不是标准）。故本节收机制原文与**实测取样状态**，**不收产品接口**（`specs/general/source.adoc`「不臆造行为」：描述某平台行为须有官方文档或实际验证）。
+
+=== git（内容寻址与按 blob 取回；官方文本已取回）
+
+* **官方材料**：git 的官方文档（`git-rev-parse`、`git-cat-file`、`git-grep`、`git-clone`；**官方文本已取回**）与 git 源码仓库自身的实践。
+* **逐字（`git-cat-file` 官方文档，Description 首句）**："In its first form, the command provides the content or the type of an object in the repository."
+* **逐字（`git-rev-parse` 官方文档，Specifying Revisions 一节）**："`<rev>:<path>`, e.g. `HEAD:README`, `master:./README`"；同处逐字："A suffix `:` followed by a path names the **blob or tree** at the given path in the tree-ish object named by the part before the colon."（即 `<commit>:<path>` 命名的是**该路径处的内容对象**，不是路径本身）。
+* **它支撑什么**：link:README.adoc[]「依据的定位协议（入口 + 索引 + 单点取值）」把"可靠性"落在**内容可校验**上（**内容主键是终态**，路径与 commit 都只是到达它的写法）、把 commit 降为**可选加固**——依据是"Git 按内容寻址、`<commit>:<path>` 给的是内容对象"。
+* **本项目实证（可复取，见下「取样方式」）**：`git rev-parse <commit>:<path>` 在同一内容处于不同路径时给出**同一个 blob sha**；文件改名/搬迁后**旧 blob 仍可 `git cat-file` 取回原文**。
+
+=== HTTP 分段取值（RFC 7233；官方文本已取回）
+
+* **标准名**：RFC 7233，*Hypertext Transfer Protocol (HTTP/1.1): Range Requests*（Standards Track，2014-06；**官方文本已取回**）。
+* **逐字（Abstract）**："This document defines range requests and the rules for constructing and combining responses to those requests."；**逐字（4.1 节首句）**："The 206 (Partial Content) status code indicates that the server is successfully fulfilling a range request for the target resource by transferring one or more parts of the selected representation that correspond to the satisfiable ranges found in the request's Range header field (Section 3.1)."
+* **它支撑什么**：link:README.adoc[] 的「分段取值（馆特别大时怎么只取一段）」一段与 link:usage.adoc[]「四、引用方怎么准确定位依据（不全量下载）」把"只取一段"写成**标准动作**（`Range` → `206`），依据即此（**当前不可用**，状态见下）。
+* **须注意的同义性（L1）**：RFC 7233 规定的是**协议侧的规则**（服务端**在可满足时**才回 `206`），**未**规定任何托管服务必须支持 Range。故本站**如实标注**：本仓库站点**未实测**到 Range 生效（见下「本项目实证」），文中**不得**把"支持 Range"当成既定事实或对引用方的要求。
+
+=== 取样方式（可复取，供日后复核）
+
+* **git（官方文本）**：`git help rev-parse` / `git help cat-file` / `git help clone`（本机 git 2.39.5），或 git 官方文档站点对应页（本次取回的命令：`curl -sL https://git-scm.com/docs/git-cat-file/2.38.0`；注意网页源码里引文所在行会**折行**，逐字比对时先归一化空白）。
+* **RFC 7233（官方文本）**：`curl -s https://www.rfc-editor.org/rfc/rfc7233.txt`（本次已取回，引文逐字比对）。
+* **本项目实证（git 行为，2026-09-14 实测、可复现）**：①在一个临时仓库里两次提交同一文件的不同内容，`git rev-parse HEAD:f.txt` 前后给出**不同 blob sha**；②旧 blob sha 在后续提交之后仍能 `git cat-file -p <旧 sha>` 取回**旧内容**（改名/覆盖不影响取回）；③对本站远程仓库 `git clone --filter=blob:none --no-checkout` 的克隆体积极小，`git ls-tree HEAD library/` 列出各主题文件的 **blob sha**，`git cat-file -p <blob>` 可按需取回**单个文件**内容（即"只取一份"的可行路径）。
+* **本项目实证（Range，2026-09-14 实测）**：对本站站点（`https://agent.c332030.com/library/README.adoc`）与平台原始文件视图（`https://cnb.cool/<仓库>/-/git/raw/main/library/README.adoc`）**两处**发 `Range: bytes=0-99`，**均**返回 `200` 与**整份**内容（未见 `206`；两份内容字节一致，`md5` 相同）——故 link:README.adoc[] 与 link:usage.adoc[] 均**如实写明"当前未实测到 Range 生效"**，取值以整份文件为准。
+* **本项目实证（取用侧的取值路径，2026-09-14 实测）**：①**站点直链**（`https://agent.c332030.com/library/README.adoc`、`.../library/usage.adoc`）→ `200`、`text/plain`、**纯文本**（content-length 与工作区文件字节一致），即**取用侧只需 https，不需要 git**；②**平台原始文件视图按分支名**（`https://cnb.cool/<仓库>/-/git/raw/main/library/README.adoc`）→ `200`、`text/plain`（`main`、`HEAD`、`refs/heads/main` 均可用；**短 commit sha、40 位 commit sha 亦可用**，不存在的 ref → `404`）；③**git 客户端**：`git ls-remote <仓库> refs/heads/main` → 返回 `372c143...` `refs/heads/main`（**这条只有具备 git 的一方走得到**，构成"取用侧与作者侧条件不同"的实证）；④**"页面里找入口"不成立**：站点首页（`index.html`）不暴露 commit、也不书写分支名，`index.html` 自身**按 `./<仓库根相对路径>` 直接 fetch**，仓库页面（平台）里嵌的 commit sha **属渲染产物**（改版即变，且站内不承载）——故入口**不得**靠解析页面结构取得，**只能**是常驻层里的**固定地址**。
+
 == 关于标准版本年份（引用的取舍）
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本（L2）」约束。
