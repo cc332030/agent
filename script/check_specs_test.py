@@ -3288,6 +3288,150 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         self.assertIn("缺少公开提示词入口", self.error_texts())
 
 
+class TestCheckSquashCommitGuard(CheckSpecsTestCase):
+    """钉住『压缩提交防线』：用户要求"压缩提交"时的判据、禁止形态与新旧 sha 对应关系。
+
+    这条容易被两边夹：一边是"AI 不许强推/不许改写历史"的一般口径（执行者据此**拒绝**用户
+    明确要求的压缩提交），另一边是"压缩就是重写历史"的含糊理解（执行者顺手把他人提交、
+    已合入的历史一并压掉，或夹带改动）。故本组用例除正例外，专门覆盖"条文被删""判据被抽"
+    "许可形态被删""与禁合并的接口被删""调度器/README 未同步"等反例。
+    """
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 合并请求的合并主体（NPC 禁合并）\n"
+        "* **CNB NPC 严禁合并（L1）**，**授权不免除**。\n\n"
+        "== 压缩提交（提交历史的整理）\n"
+        "* **压缩提交＝提交历史整理，不属禁止行为（L1）**：判定标准："
+        "①**压缩对象只有本次任务产生的、尚未合入目标分支的临时中间提交**；"
+        "②**内容零变化**——压缩前后**逐字节相同**；③**只作用于本次任务自己的 PR 源分支**，"
+        "**不动目标分支**、不动他人分支。\n"
+        "* **禁止的压缩形态（L1）**：①**他人（或其它任务）的提交**；②**已合入目标分支**的历史；"
+        "③压缩后**内容出现任何差异**；④**扩大范围**。\n"
+        "* **须先确认无人在用旧对象（L1）**：确认**无他人正基于该分支的旧 sha 工作**"
+        "（**已派发、正等待结论**）；确需执行时须**明确告知受影响方**新 sha、并把旧 sha 上的结论**标为过期**。\n"
+        "* **压缩后须声明新旧 sha 对应关系（L1）**：写明“**新 sha 为 X，旧 sha Y 作废**”，并如实列出**被压缩掉的中间 sha**；"
+        "**按旧 sha 复核的结论视为过期**。\n"
+        "* **推送口径（L1）**：用 `--force-with-lease`，**不得**用裸 `git push --force`；"
+        "“AI 不做强推”的一般口径**不适用于本条的压缩提交**；**授权范围仅限本次 PR 的源分支**。\n"
+        "* **与「NPC 禁合并」互不豁免（L1）**：**压缩提交**不是合并**，故要求压缩提交时照做；"
+        "但**不构成\"可以合并\"的依据**。\n\n"
+        "== 对象钉定与可追溯\n"
+        "* 压缩提交后强推——那是**合规动作、不是违规改写**；"
+        "**压缩提交/强推会替换对象，须声明对应关系**。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "* CNB 平台 → cnb（**压缩提交（提交历史整理的判据）**、**对象钉定与可追溯**）\n")
+        self.write(
+            "README.adoc",
+            "* `specs/platform/` — 平台层：cnb（**压缩提交（提交历史整理：判据与禁止形态）**、"
+            "**对象钉定与可追溯**）\n"
+            "* **压缩提交要照做、合并仍不做**：压缩提交不构成“可以合并”的依据。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_squash_commit_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：平台层规范文件被删 → 要求无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_squash_commit_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 用户要求"压缩提交"时无条文可依（只能在"用户要求"与
+        # "规范像是禁止"之间自行发挥）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 合并请求的合并主体（NPC 禁合并）\n"
+                   "* **严禁合并**，**授权不免除**。\n\n== 对象钉定与可追溯\n* 另议。\n")
+        cm.check_squash_commit_guard()
+        self.assertIn("压缩提交", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留节名与一句口号，判据被抽掉
+        self._write_valid()
+        cnb = self.CNB
+        cnb = cnb.replace("②**内容零变化**——压缩前后**逐字节相同**；", "")
+        cnb = cnb.replace("；③**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_squash_commit_guard()
+        self.assertIn("内容零变化", self.error_texts())
+
+    def test_forbidden_forms_removed_reports(self):
+        # 反例：禁止形态被删 → 顺手把他人提交/已合入历史一并压掉、或夹带改动，无判据可拦
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.split("* **禁止的压缩形态（L1）**")[0].replace(
+                       "③**只作用于本次任务自己的 PR 源分支**",
+                       "③**内容零变化**、**逐字节相同**、只动本次任务**自己的 PR 源分支**")
+                   .replace("尚未合入目标分支的临时中间提交", "尚未合入目标分支的临时中间提交")
+                   + "* **对象钉定与可追溯**\n")
+        cm.check_squash_commit_guard()
+        self.assertIn("禁止的压缩形态", self.error_texts())
+
+    def test_no_exemption_from_merge_ban_removed_reports(self):
+        # 反例：与「NPC 禁合并」的接口被删 → 出现"历史都整理干净了，顺手合了吧"式自我豁免
+        self._write_valid()
+        marker = "* **与「NPC 禁合并」互不豁免（L1）**：**压缩提交**不是合并**，故要求压缩提交时照做；"
+        cnb = self.CNB.replace(marker, "").replace("但**不构成“可以合并”的依据**。", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_squash_commit_guard()
+        self.assertIn("互不豁免", self.error_texts())
+
+    def test_force_push_clause_removed_reports(self):
+        # 反例：推送口径被删 → 执行者要么拒绝压缩（"AI 不做强推"）要么用裸 --force 覆盖
+        self._write_valid()
+        cnb = self.CNB.replace("用 `--force-with-lease`，**不得**用裸 `git push --force`；", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_squash_commit_guard()
+        self.assertIn("--force-with-lease", self.error_texts())
+
+    def test_sha_correspondence_removed_reports(self):
+        # 反例：对应关系声明被删 → 下游按已失效的 sha 复核，结论错位
+        self._write_valid()
+        cnb = self.CNB.replace("* **压缩后须声明新旧 sha 对应关系（L1）**：", "* **附注**：")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_squash_commit_guard()
+        self.assertIn("压缩后须声明新旧 sha 对应关系", self.error_texts())
+
+    def test_compliance_note_removed_reports(self):
+        # 反例：对象钉定侧的"合规动作"标注被删 → 下游把合规的 sha 变化当成违规改写
+        self._write_valid()
+        cnb = self.CNB.replace("那是**合规动作、不是违规改写**；", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_squash_commit_guard()
+        self.assertIn("合规动作", self.error_texts())
+
+    def test_existing_merge_ban_replaced_reports(self):
+        # 反例（本仓库实测犯过的同类回归）：新增节点把同文件既有的「NPC 禁合并」顶掉
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("== 合并请求的合并主体（NPC 禁合并）", "== 其它"))
+        cm.check_squash_commit_guard()
+        self.assertIn("NPC 禁合并", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例：调度器未同步 → 规则在、但没人会读到
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "* CNB 平台 → cnb（**对象钉定与可追溯**）\n")
+        cm.check_squash_commit_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：公开面只看得见"禁止"、看不到用户可要求的这条
+        self._write_valid()
+        self.write("README.adoc", "* `specs/platform/` — 平台层：cnb（**对象钉定与可追溯**）\n")
+        cm.check_squash_commit_guard()
+        self.assertIn("README", self.error_texts())
+
+
 class TestCheckConfigClassGuard(CheckSpecsTestCase):
     """钉住『配置类不写逻辑』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
 
@@ -3422,6 +3566,28 @@ class TestCheckConfigClassGuard(CheckSpecsTestCase):
         self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 配置\n* 配置项绑定。\n")
         cm.check_config_class_guard()
         self.assertIn("spring.adoc", self.error_texts())
+
+    def test_dispatcher_platform_entry_not_pointing_reports(self):
+        # 反例：调度器**第二处**识别特征（CNB 平台条目）被删 → 平台侧该节不会被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 多 agent 协作（含**派发入口（评论唤起新实例）**）"
+                   " → link:specs/general/collab.adoc[]\n"
+                   "  ** CNB 平台（任务开发与合并请求管理） → link:specs/platform/cnb.adoc[]\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行", self.error_texts())
+
+    def test_dispatcher_collab_entry_not_pointing_reports(self):
+        # 反例：调度器**第一处**识别特征（多 agent 协作条目）被删
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 多 agent 协作（含拆分、调用量控制） → link:specs/general/collab.adoc[]\n"
+                   "  ** CNB 平台（含**在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行**）"
+                   " → link:specs/platform/cnb.adoc[]\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("评论唤起新实例", self.error_texts())
 
     def test_readme_not_synced_reports(self):
         # 反例：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
@@ -3770,6 +3936,197 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
         self.assertIn("派发对象须钉定 commit sha", self.error_texts())
 
 
+class TestCheckScopeBoundaryGuard(CheckSpecsTestCase):
+    """钉住『改动范围边界防线』：未声明即拒绝越界改动的边界不得被删或降级。
+
+    背景（用户明确的收紧要求，且明确"适用于所有项目"）：执行者可能因"任务里引用了
+    工作空间以外的文件或其他项目"而把改动落到用户**并未授权**的位置上——**引用被误当
+    成授权**。本地/服务器上"文件都在"时，禁的是**改入口工作空间以外的文件**；在代码
+    托管平台上，可写范围被放大成"你有权限的全部仓库"，故禁的是**改其他仓库**。故机械
+    钉住**两层**：通用层（`specs/general/scope.adoc` 的两节）与平台层
+    （`specs/platform/cnb.adoc` 的当前项目口径）+ 提示词公共片段
+    （`prompts/_common.txt` 的 `scope-boundary`）+ 两个提示词代码块内的引入。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR,
+         cm.COMMON_PROMPT_FILE) = self._orig_prompts
+        super().tearDown()
+
+    SCOPE = ("= 改动范围边界规范（通用层）\n\n"
+             "== 工作空间边界（不依赖任何平台）\n"
+             "* **只改当前工作空间（L1）**：执行者**只允许修改本次任务的工作空间**——"
+             "下称**入口工作空间**；越出该工作空间的改动一律不得执行。\n"
+             "* **未声明即拒绝（L1）**：除非用户**主动声明**把某处纳入本次范围，否则"
+             "**不得改动任何工作空间以外的文件**；拒绝须说明依据（同「拒绝的形态」）。\n"
+             "* **引用 ≠ 授权（L1）**：引用了工作空间以外的文件只构成读取/对照许可，"
+             "**不构成改动**它的授权。\n"
+             "* **只读与对照照常做（L1）**：读取、比对**不在禁止之列**（失效目标是改动）。\n"
+             "* **判定标准**：①改动对象不在入口工作空间内；②以『引用过它』为由**自我豁免**；"
+             "③把越界改动**顶替**给他人完成。\n"
+             "== 已知例外（唯二的解禁情形，靠用户显式给出、不靠推断）\n"
+             "* ①**用户显式声明**把某处纳入本次范围；②用户声明某处\"只读\"时优先。\n"
+             "== 拒绝的形态（L1）\n"
+             "* 须写明依据与要补什么声明；**拒绝不等于任务失败**。\n"
+             "== 平台上的仓库边界（代码托管平台）\n"
+             "* **只改当前项目（L1）**：当前项目＝**入口项目**；**只改当前项目**，"
+             "不向其他仓库写入/提交/推送、不建分支建 PR。\n")
+
+    CNB = ("= CNB 规范（平台层）\n\n"
+           "== 变更范围只限当前项目（未声明即拒绝）\n"
+           "**通用口径（规则本体）在 link:../general/scope.adoc[]**。\n"
+           "* **只改当前项目（L1）**：执行者只允许修改当前项目——即本次任务的**入口项目**；"
+           "越出该项目（写入/创建/删除/移动/格式化/提交/推送）一律不得执行。\n"
+           "* **未声明即拒绝（L1）**：除非用户**显式声明**，否则不得修改任何其他项目；"
+           "用户引用了另一个项目**不构成授权**——**引用 ≠ 授权**；须拒绝并说明依据，"
+           "其余在当前项目内可做的部分照常完成。\n"
+           "* **例外（唯二解禁情形）**：①**用户显式声明**把某个其他项目纳入本次范围，"
+           "**未声明**一律不改；"
+           "②用户声明某项目**只读**/禁止改动（该声明优先）。\n"
+           "* **判定标准**：①改动对象不是入口项目；②以『用户引用了它』为由**自我豁免**；"
+           "③把越界改动**顶替**给他人完成。\n")
+
+    COMMON = ("提示词公共片段。\n"
+              "// tag::scope-boundary[]\n"
+              "**改动范围边界（L1）**：本次任务**只允许修改本次任务的工作空间**——"
+              "**入口工作空间**；在代码托管平台上按**只允许修改当前项目**（**入口项目**）"
+              "表达；**未声明**即不得改别处，越界改动**必须拒绝**并说明**依据**。"
+              "**引用 ≠ 授权**：引用了工作空间以外的文件/其他项目"
+              "**不构成改动它的授权**；要改它须用户**显式声明**纳入范围，"
+              "用户声明\"只读\"时优先。\n"
+              "// end::scope-boundary[]\n")
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/scope.adoc", self.SCOPE)
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write("prompts/_common.txt", self.COMMON)
+        self.write("prompts/review.adoc",
+                   "= 检查修复\n\n[listing]\n----\n"
+                   "include::_common.txt[tag=scope-boundary]\n----\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_scope_boundary_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_common_layer_file_reports(self):
+        # 反例：通用层规范文件被删 → 非平台场景（本地/服务器）下这条边界无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "scope.adoc"))
+        cm.check_scope_boundary_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_missing_workspace_section_reports(self):
+        # 反例：通用层的「工作空间边界」节被删（只剩平台口径 → 本地场景无人拦）
+        self._write_valid()
+        self.write("specs/general/scope.adoc",
+                   "= 改动范围边界规范（通用层）\n\n"
+                   "== 平台上的仓库边界（代码托管平台）\n"
+                   "* **只改当前项目（L1）**：当前项目＝**入口项目**。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("工作空间边界（不依赖任何平台）", self.error_texts())
+
+    def test_missing_platform_section_reports(self):
+        # 反例：通用层的「平台上的仓库边界」节被删（平台可写范围被放大、无人拦）
+        self._write_valid()
+        self.write("specs/general/scope.adoc",
+                   "= 改动范围边界规范（通用层）\n\n"
+                   "== 工作空间边界（不依赖任何平台）\n"
+                   "* 只允许修改本次任务的工作空间（**入口工作空间**）。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("平台上的仓库边界（代码托管平台）", self.error_texts())
+
+    def test_missing_cnb_file_reports(self):
+        # 反例：平台层规范文件被删 → 平台侧口径无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_scope_boundary_guard()
+        self.assertIn("平台侧口径无处承载", self.error_texts())
+
+    def test_missing_section_reports(self):
+        # 反例：平台层整节被删（越界改动重新无人拦）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc", "= CNB 规范\n\n== 冲突处理\n* 自动解决。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("变更范围只限当前项目", self.error_texts())
+
+    def test_cnb_not_pointing_to_general_layer_reports(self):
+        # 反例：平台层不再指向通用层规则本体（非平台场景读不到这条边界）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 变更范围只限当前项目（未声明即拒绝）\n"
+                   "* 只允许修改当前项目（**入口项目**）；**引用 ≠ 授权**、**不构成授权**，"
+                   "未声明即拒绝；**例外**：用户**显式声明**或声明**只读**。"
+                   "**判定标准**：不是入口项目 / **自我豁免** / **顶替**。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("../general/scope.adoc", self.error_texts())
+
+    def test_reference_is_not_authorization_removed_reports(self):
+        # 反例：把"引用 ≠ 授权"抽掉（回到"任务里提到了就能改"的口子）
+        self._write_valid()
+        self.write("specs/general/scope.adoc",
+                   "= 改动范围边界规范（通用层）\n\n"
+                   "== 工作空间边界（不依赖任何平台）\n"
+                   "* 只允许修改本次任务的工作空间（**入口工作空间**）；"
+                   "**未声明即拒绝**、须说明依据并拒绝，**拒绝不等于任务失败**。\n"
+                   "* **判定标准**：不在入口工作空间内 / **自我豁免** / **顶替**。\n"
+                   "== 已知例外（唯二的解禁情形）\n* **用户显式声明**；声明**只读**时优先。\n"
+                   "== 拒绝的形态\n* 说明依据。\n"
+                   "== 平台上的仓库边界（代码托管平台）\n"
+                   "* **只改当前项目**：**入口项目**。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("引用 ≠ 授权", self.error_texts())
+
+    def test_missing_exception_reports(self):
+        # 反例：例外被删（要么自相矛盾、要么给"看着办"留口子）
+        self._write_valid()
+        self.write("specs/general/scope.adoc",
+                   "= 改动范围边界规范（通用层）\n\n"
+                   "== 工作空间边界（不依赖任何平台）\n"
+                   "* 只允许修改本次任务的工作空间（**入口工作空间**）；**未声明即拒绝**；"
+                   "**引用 ≠ 授权**、**不构成改动**它的授权；须拒绝并说明依据，"
+                   "**拒绝不等于任务失败**。\n"
+                   "* **只读与对照照常做**：读取**不在禁止之列**。\n"
+                   "* **判定标准**：不在入口工作空间内 / **自我豁免** / **顶替**。\n"
+                   "== 拒绝的形态\n* 说明依据。\n"
+                   "== 平台上的仓库边界（代码托管平台）\n"
+                   "* **只改当前项目**：**入口项目**。\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("已知例外", self.error_texts())
+
+    def test_missing_prompt_fragment_reports(self):
+        # 反例：提示词公共片段缺 scope-boundary（复制到未知项目后没有这条边界）
+        self._write_valid()
+        self.write("prompts/_common.txt", "// tag::delivery[]\n交付。\n// end::delivery[]\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("scope-boundary", self.error_texts())
+
+    def test_prompt_fragment_without_workspace_clause_reports(self):
+        # 反例：提示词片段只剩平台口径（本地场景下复制出去的那份没有这条边界）
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::scope-boundary[]\n"
+                   "**只允许修改当前项目**（**入口项目**）；**未声明**即不得改别处，"
+                   "越界改动**必须拒绝**并说明**依据**；**引用 ≠ 授权**，"
+                   "**不构成改动它的授权**；**显式声明**、声明\"只读\"时优先。\n"
+                   "// end::scope-boundary[]\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("只允许修改本次任务的工作空间", self.error_texts())
+
+    def test_prompt_not_including_fragment_reports(self):
+        # 反例：提示词代码块未引入该片段
+        self._write_valid()
+        self.write("prompts/review.adoc", "= 检查修复\n\n[listing]\n----\n正文。\n----\n")
+        cm.check_scope_boundary_guard()
+        self.assertIn("未引入公共片段 `scope-boundary`", self.error_texts())
+
+
 class TestCheckRefScopeWordingGuard(CheckSpecsTestCase):
     """钉住『默认引用面口径防线』：不得再把本仓库内容写成"私有 / 不对外发布"。
 
@@ -4009,3 +4366,126 @@ class TestCheckDependencyViewGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs", "general", "doc-design.adoc"))
         cm.check_dependency_view_guard()
         self.assertIn("缺少文件", self.error_texts())
+
+
+class TestCheckCommentDispatchGuard(CheckSpecsTestCase):
+    """钉住『评论唤起新实例防线』：评论即派发入口的要点不得被删或降级。
+
+    背景（用户提出的机制）：CNB 平台下**在 Issue/PR 里新增一条评论、@ 某个 NPC、说清要求**
+    即发起一次执行，且**可以要求它使用干净的上下文**。高风险点在于被读成"@ 一下就能绕过
+    派发规则"——故机械钉住"入口形态 / 不放宽任何派发约束 / 一次评论 = 一次派发 / 干净上下文
+    须显式要求且不是保证 / 仅点名不构成派发"这几处要点，以及调度器识别特征与 README 同步。
+    """
+
+    CNB = ("= CNB 规范（平台层）\n\n"
+           "== 评论唤起新实例（平台侧的派发入口）\n"
+           "* **评论唤起是平台侧的派发方式，不改变派发判据（L1）**：在 Issue 或 PR 下"
+           "**新增一条评论**、@ 某个 NPC（如 `@CodeBuddy`）、并在评论里**说清要求**，"
+           "即新增一次执行；本条**只把『往哪派』说清楚，不放宽任何派发约束**"
+           "（一律按 link:../general/collab.adoc[] 执行，也不构成『可以点名外部 Agent』的例外）。\n"
+           "* **一次评论 = 一次派发，任务边界由评论正文界定（L1）**：要求须在**评论里写清**"
+           "（做什么、边界、产物形态、验证口径）；**未写清的不得自行假定后开工**。\n"
+           "* **要求『用干净上下文』是派发选项，须在评论里显式要求（L1）**：默认**沿用该 Issue/PR 的既有上下文**；"
+           "显式要求时当作全新任务、**规范仍须按入口重新加载**（『上下文干净』只清历史对话、**不清约束**）；"
+           "**该要求属降低风险的措施、要求不是保证**，须**如实说明本次实际读到的上下文范围**。\n"
+           "* **唤起不等于自动开工（L3）**：单条评论**只有寒暄**/只 @ 一下时不构成派发，不得自行开工。\n"
+           "* 正文里的具体实例名 `@CodeBuddy`（**仅作举例**）——其余口径见通用层。\n"
+           "* **缺项**时须回复拒绝并**列出缺失项**；该要求**不豁免任何派发判据**。\n")
+
+    COLLAB = ("= agent 协作规范（通用层）\n\n"
+              "== 派发入口（往哪派、派什么）\n"
+              "* **评论唤起是『评论即派发入口』的一种形态（L1）**：在 Issue / PR 下新增一条评论、"
+              "在评论里点名 `@` 起某个 NPC 并在评论里说清要求，即在该任务单下新增一次执行；"
+              "该入口**不豁免本文件的任何派发判据**。\n"
+              "* **一次评论 = 一次派发，任务边界由评论正文界定（L1）**：要求须在评论里写清、"
+              "**未写清的不得自行假定后开工**。\n"
+              "* **可要求『用干净上下文』，但这是要求不是保证（L1）**：须先自评**环境能力**；"
+              "**『上下文干净』只清历史对话、不清约束**；"
+              "**不豁免本文件任何派发判据**，也**不意味着**连本次对象钉定都要另取一套。\n"
+              "* **评论是『派发者』的入口，不是\"执行者\"的手段（L1）**：执行者"
+              "**不得自行发一条评论**去唤起另一个 Agent/NPC 接手自己的活。\n"
+              "* **要求未写清或判据不满足时的形态（L1）**：须在原评论下回复拒绝并列出**缺项**、"
+              "**不得开工**，也不得拿『他没写清』当擅自扩大范围的挡箭牌；"
+              "**留证落点**即该条**评论下的回复**。\n"
+              "* **计数口径（L2）**：**一条评论 = 一次派发**；一条评论点名多个对象按 **N 次派发**计。\n"
+              "* **本入口与文件操作的边界（L1）**：**评论不是交付**，改动仍按 link:../core/execution.adoc[]"
+              "「文件操作强制检查」判。\n")
+
+    GENERIC = ("= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+               "  ** 多 agent 协作（含**派发入口（评论唤起新实例：一次评论 = 一次派发）**）"
+               " → link:specs/general/collab.adoc[]\n"
+               "  ** CNB 平台（含**在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行**）"
+               " → link:specs/platform/cnb.adoc[]\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_readme = cm.README_FILE
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        cm.README_FILE = self._orig_readme
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write("specs/general/collab.adoc", self.COLLAB)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 平台层：cnb（含**评论唤起**口径）\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_comment_dispatch_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_cnb_section_reports(self):
+        # 反例：平台层该节被删 → 平台上的派发入口无人说清
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc", "= CNB 规范（平台层）\n\n== 冲突处理\n* 自动解决。\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("评论唤起新实例（平台侧的派发入口）", self.error_texts())
+
+    def test_relaxed_dispatch_rule_reports(self):
+        # 反例（最危险的一种）：把该入口写成"可以不按派发判据"（点名外部 Agent 的例外）
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc", self.CNB.replace(
+            "不放宽任何派发约束", "可按需放宽派发约束").replace(
+            "也不构成『可以点名外部 Agent』的例外", "必要时可点名外部 Agent 顶替"))
+        cm.check_comment_dispatch_guard()
+        self.assertIn("不放宽任何派发约束", self.error_texts())
+
+    def test_clean_context_as_default_reports(self):
+        # 反例：把"干净上下文"写成默认（不再需要评论里显式要求）→ 读者按错的默认预期派活
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc", self.CNB.replace(
+            "默认**沿用该 Issue/PR 的既有上下文**", "默认即为干净上下文"))
+        cm.check_comment_dispatch_guard()
+        self.assertIn("沿用该 Issue/PR 的既有上下文", self.error_texts())
+
+    def test_clean_context_carrying_constraints_reports(self):
+        # 反例："不清约束"被删 → 会被执行成"上下文干净了所以不用再读规范"
+        self._write_valid()
+        self.write("specs/general/collab.adoc", self.COLLAB.replace("、不清约束", ""))
+        cm.check_comment_dispatch_guard()
+        self.assertIn("不清约束", self.error_texts())
+
+    def test_missing_general_section_reports(self):
+        # 反例：通用层「派发入口」节被删 → 非 CNB 场景下该入口无人说清
+        self._write_valid()
+        self.write("specs/general/collab.adoc", "= agent 协作规范（通用层）\n\n== 资源限制与感知\n* 硬超时。\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("派发入口（往哪派、派什么）", self.error_texts())
+
+    def test_dispatcher_not_pointing_reports(self):
+        # 反例：调度器识别特征被删 → 该节永远不会被加载（写了等于没写）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                                          "  ** 多 agent 协作 → link:specs/general/collab.adoc[]\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("评论唤起新实例", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时不知道有这个入口
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 平台层：cnb\n")
+        cm.check_comment_dispatch_guard()
+        self.assertIn("评论唤起", self.error_texts())
