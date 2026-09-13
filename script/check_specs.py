@@ -101,7 +101,13 @@
  31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`），
      条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。
- 32. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+ 32. 引文段落防线：**仓库维护范围内的 `.adoc` 不得有行首 `> ` 的引文行**——该形态会被
+     AsciiDoc 解析成 **callout list**（旧式 `listdef-callout` 正则吃掉单 `>` 起头者、
+     `index` 取空串后 `List.calc_style()` 里 `assert False`，**整份文件编译失败**；实测
+     一次打死 6 个文件）。页面侧（`index.html` 用 Asciidoctor.js）把它渲染成引用块、
+     看不出问题，而 `check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑——
+     故这条**确定项**须有独立抓手。写引文用 `[quote]` + 正文行。
+ 33. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
      两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
      L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
      ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
@@ -123,6 +129,19 @@
      "只读"优先）、拒绝的形态；公共片段 `prompts/_common.txt` 的 `scope-boundary` 同口径
      且**两个提示词代码块内都引入**——防"引用被误当成授权"（用户明确的收紧要求：未声明
      直接改别处应当拒绝）、防提示词复制到未知项目后这条边界整条丢失。
+
+ 35. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
+     （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
+     按资源读取后执行／**加载时机按性能敏感度定性**：发布后不变的资源在性能敏感路径
+     须首次读取后缓存、需求要求内容会变的模板不缓存）、可逐条核对的判定标准、典型反例
+     与依据行齐备；`specs/stack/java.adoc`
+     须写 Java 落点（`sql`/`lua` 放 `src/main/resources/` 下、Redis 用 `DefaultRedisScript`
+     加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、`${}` 是拼接须白名单校验）与
+     **Java 侧的加载时机**（静态常量 `DefaultRedisScript`、不在方法内逐次读资源、可变模板不冻结）、
+     `specs/stack/spring.adoc` 须引用该条，加载调度器两处登记与 `README.adoc` 目录说明同步
+     ——防"脚本以字符串拼接/模板内联"与"热点路径每次读一次资源"重新变成默认做法
+     （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
+     **性能敏感路径每次读取本可只读一次的资源**）。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -238,6 +257,19 @@ CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
 # 各实现一遍，接入成本随使用点线性增长）。它是**抽象侧的对外契约**，与"配置类不写逻辑"
 # （类内部职责）不同，故单列一条防线；技术栈层的承接落在 `specs/stack/spring.adoc`「配置」（引用通用文件、不复制条文）。
 ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
+# 跨语言执行脚本的落点（`specs/general/coding.adoc`「跨语言执行脚本的落点（资源文件夹，
+# 不写字符串拼接/模板）」）：宿主语言里**要执行另一种语言的脚本**（SQL、Lua、JavaScript、
+# shell 片段等）时，脚本须独立成文件放在资源文件夹、扩展名取被调语言自身的扩展名（该技术
+# 无通用扩展名时取其明确支持的文件形式，如 MyBatis 的 `*.xml` 承载 SQL），并按资源读取后
+# 执行——不得用字符串拼接、字符串模板或字符串常量内联在宿主语言代码里。
+# 用户给出的直接动因：字符串拼接与字符串模板**没有高亮、也没有错误校验**，容易出错。
+# 该条跨语言，收在通用编码规范；技术栈层按"引用不复制"承接（Java 的 `sql`/`lua`）。
+# 用户其后就**加载时机**加了定性要求：classpath 资源发布后不变，第一个场景是**性能敏感**
+# 的（Redis 操作争分夺秒），故**不能每次使用都去读**——第一次使用时读取后缓存即可；
+# 反之**需求要求内容会变**的（如转 PDF 的 HTML 模板）不适用缓存、按是否需重读决定。
+# 两处必须都钉住：只钉"读取后缓存"会让可变模板被冻结在首读版本上（反方向误用）。
+EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）"
+JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
 JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
@@ -319,6 +351,68 @@ _LIBRARY_USAGE_ANCHORS = (
     "以下情形**不写**",
     "**入库必写项**",
     "**终止条件（L1）**",
+    "**只取一段（馆特别大时）**",
+)
+# 『依据的定位协议』（library/README.adoc）的要点锚点：
+# 图书馆**没有体量与范围上限**（link:README.adoc[]「放什么、不放什么」），将来可能特别大；
+# 于是引用方要在**不全量下载**的前提下准确定位"这条依据在哪个文件"。缺这几句，定位重新退化成
+# ①整馆下载、②按主题名猜文件名、③把图书馆当全文检索引擎——而**主键是内容（Git 对象）、
+# 不是路径**这一点若不写明，"文件改名即断档"会反复出现（本仓库的图书馆自身就搬过落点）。
+_LIBRARY_LOCATING_USAGE_ANCHORS = (
+    "== 四、引用方怎么准确定位依据（不全量下载）",
+    "**主键是内容、不是路径**",
+    "**协议不承载的东西（形态约束，L1）**",
+    "**终止条件（L1，同上）**",
+    "**取用侧是游客**",
+    "**只有 https、没有仓库、没有 git**",
+    "**文件名不承担定位（短、无语义，L1）**",
+)
+_LIBRARY_LOCATING_ANCHORS = (
+    '== 为什么还要有"定位协议"（馆可以无限大）',
+    "== 依据的定位协议（入口 + 索引 + 单点取值）",
+    "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
+    "**版本固化（可选加固，不得写成前置）**",
+    "**分段取值（馆特别大时怎么只取一段）**",
+    "**形态约束（L1）**",
+    "**文件名协议（短、无语义、不承担定位）**",
+    "**作者侧**",
+    "**取用侧**是**游客**",
+    "**不解析页面结构**",
+)
+# 图书馆主题**文件名**的上限（字符数，含扩展名）：图书馆的检索键是**依据名**
+# （经入口「主题登记」表解析），**文件名不是主键、也不承担语义**——它却被读进每一次链接与每一次
+# 目录列举，故"名字写成一句话"会让每个读者反复为它付上下文，且制造"改名即断档"的错觉。
+# 上限取 32 与本仓库模块文件名同口径；判据是"单个短词、小写 ASCII"，长度只是机械可判定的下界。
+LIBRARY_FILE_NAME_MAX = 32
+
+# 『依据的定位与取值』主题节（library/sources.adoc）——依据的定位协议本身也要有依据：
+# Git 的内容寻址（`<commit>:<path>` 命名的是内容对象）与 HTTP 分段取值（RFC 7233）。
+# 缺这两条，"主键是内容"与"只取一段"就只是本站的说法；同时**取样状态必须如实**——
+# 本站站点未实测到 Range 生效，故不得把"支持 Range"当成既定事实（source.adoc「不臆造行为」）。
+# 『取用前置』不得回退（用户报告的失效，2026-09-14）：图书馆的定位路径**先入为主把 commit
+# 写进了取值地址**，于是"游客（只有 https，没有仓库、没有 git）"走不通——它既取不到
+# commit，本仓库也不发布版本号。故把"要求取用侧先取 commit/版本号"的**表述形态**机械钉住：
+# 只拦"（先）取/拿到/读取 commit（再）拼/构造/写入地址（路径）"这类**先后关系明确**的写法，
+# 不拦 commit 的合法用途（版本固化、内容寻址说明、`<commit>:<path>` 取值示例、git ls-remote
+# 命令、词表里的"主机 + 仓库 + commit"等）。
+_LOCATING_COMMIT_PREREQ_PATTERNS = (
+    (re.compile(r"(先|须|必须|需要|要)[^。\n]{0,20}(取|拿|获取|读取)[^。\n]{0,10}commit[^。\n]{0,30}(拼|构造|写入|组装)"),
+     "不得要求取用侧先取 commit 再拼取值地址——取用侧是只有 https 的游客，取不到 commit"
+     "（本仓库不发布版本号；commit 只能用于可选的版本固化）"),
+    (re.compile(r"commit[^。\n]{0,20}(进入|拼进|写进|写进)[^。\n]{0,10}(文件名|地址|路径|URL)"),
+     "不得把 commit 写进入口/取值地址——地址必须是常驻层里不随提交滚动的固定地址"),
+)
+# 豁免：历史记录（`CHANGELOG.adoc` 记的是**当时口径**，不得改写）；以及**引用/否定该错误
+# 表述本身**的句子（含"不得/不要/走不通/取不到/失效/误区"等词）。
+_LOCATING_COMMIT_PREREQ_EXEMPT = ("不得", "不要", "不能", "走不通", "取不到", "失效", "误区",
+                                  "错误", "反例", "本站失效")
+
+_LIBRARY_LOCATING_SOURCE_MARKERS = (
+    "== 依据的定位与取值（git / RFC 7233）",
+    "In its first form, the command provides the content or the type of an object in the repository.",
+    "names the **blob or tree** at the given path",
+    "The 206 (Partial Content) status code indicates that the server is",
+    "**未实测**",
 )
 # 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
 # specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
@@ -2742,6 +2836,124 @@ def check_library_guard():
     phase_done()
 
 
+def check_library_locating_guard():
+    """『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
+
+    背景（用户报告的真实问题）：图书馆**没有限制内容的大小与长度、也没有限制要存的内容的
+    范围**（`library/README.adoc`「放什么、不放什么」），将来可能特别大；于是**其他项目引用
+    时**要在**不把整馆下载下来**的前提下，**准确找到"这条依据具体在哪个文件"**。缺这份协议
+    时，位置只有三种坏做法：①**整馆下载**（拉全量再 grep，馆一大就付不动）；②**按主题名猜
+    文件名**（命名会随重构变化——本仓库的图书馆自己就搬过落点，路径不是主键）；③**把图书馆
+    当全文检索引擎**（外部项目本来就不该遍历本仓库）。这三条都属"定义了却落不了地"。
+
+    故本条钉住**四件确定项**（都是机械可判定的）：
+      * **定位协议在**：`library/README.adoc` 有「为什么还要有"定位协议"」与「依据的定位协议」
+        两节，含**先分清作者侧/取用侧**（**取用侧是游客：只有 https、没有仓库、没有 git**）、
+        **入口 = 常驻层里的固定地址**（不经页面结构、不需版本号）、三步取值、**版本固化是可选
+        加固而非取用前置**（不得要求调用方先取 commit）、以及"不解析页面结构"（页面是产物）；
+      * **使用判据在**：`library/usage.adoc` 有「四、引用方怎么准确定位依据（不全量下载）」
+        节，含**取用侧只有 https**（作者侧/取用侧条件不同，不得以"先取 commit"为前置）、
+        "主键是内容、不是路径"与终止条件（定位到文件与段即止，不打包第二真源）；
+      * **依据侧有原文与如实取样状态**：`library/sources.adoc` 收 Git（内容寻址、按 blob 取回）
+        与 RFC 7233（206 Partial Content）的**逐字引文**，且**如实标"未实测"**本站站点 Range
+        是否生效——不得把"支持 Range"当成既定事实（`specs/general/source.adoc`「不臆造行为」）；
+      * **入口可发现**：项目规范入口 `AGENTS.adoc` 的图书馆段须含定位协议的落点（主键口径），
+        否则读者不知道有这份协议、定位重新靠猜；
+      * **文件名不承担定位**（用户报告的真实问题）：馆内 `.adoc` 的**文件名长度**须在
+        `LIBRARY_FILE_NAME_MAX` 以内——名字会被读进每一次链接与每一次目录列举，**"把主张写进
+        文件名"**（名字写成一句话）等于让每个读者反复为它付上下文，而名字**本来就不是检索键**
+        （检索键是依据名，经入口「主题登记」表解析）；馆一大，没人会靠文件结构或文件名找依据，
+        都是**从已有内容反查到馆**。
+
+    "该协议是否真的够用、主键取值是否合理"属语义判断，交人/子 agent 复核承担。
+    """
+    phase("依据定位防线检查（馆无限大时的定位协议）")
+    if not os.path.isfile(LIBRARY_INDEX):
+        err("缺少图书馆入口 library/README.adoc——『依据的定位协议』无处承载"
+            "（馆无体量上限时，引用方将退回整馆下载或按文件名猜）", "library/README.adoc")
+    else:
+        with open(LIBRARY_INDEX, encoding="utf-8") as fh:
+            index_text = fh.read()
+        miss = [q for q in _LIBRARY_LOCATING_ANCHORS if q not in index_text]
+        if miss:
+            err(f"图书馆入口缺失『依据定位』要点 {miss}——"
+                "馆无限大时定位要么退化成整馆下载/按文件名猜，要么要求取用者先说出 commit"
+                "（游客只有 https，取不到）；须写清作者侧/取用侧的区别、入口=常驻层的固定地址、"
+                "三步取值、版本固化只是可选加固、且不解析页面结构"
+                "（见 library/README.adoc「依据的定位协议」）", "library/README.adoc")
+
+    usage_path = os.path.join(LIBRARY_DIR, "usage.adoc")
+    if not os.path.isfile(usage_path):
+        err("缺少 library/usage.adoc——『引用方怎么准确定位依据』的使用判据无处承载",
+            "library/usage.adoc")
+    else:
+        with open(usage_path, encoding="utf-8") as fh:
+            usage_text = fh.read()
+        miss_u = [q for q in _LIBRARY_LOCATING_USAGE_ANCHORS if q not in usage_text]
+        if miss_u:
+            err(f"library/usage.adoc 缺失『依据定位』使用判据 {miss_u}——"
+                "定位协议缺了这条，引用方要么全量下载、要么按路径猜（改名即断档），"
+                "要么被要求先取一个它根本取不到的 commit："
+                "取用侧只有 https 的前提、主键口径（内容而非路径）、"
+                "不承载派生落点的形态约束与终止条件须成文", "library/usage.adoc")
+
+    sources_path = os.path.join(LIBRARY_DIR, "sources.adoc")
+    if not os.path.isfile(sources_path):
+        err("缺少 library/sources.adoc——定位协议所依赖的机制原文（git / RFC 7233）无处承载",
+            "library/sources.adoc")
+    else:
+        with open(sources_path, encoding="utf-8") as fh:
+            sources_text = fh.read()
+        miss_s = [q for q in _LIBRARY_LOCATING_SOURCE_MARKERS if q not in sources_text]
+        if miss_s:
+            err(f"library/sources.adoc 缺失『依据定位』的机制原文/取样状态 {miss_s}——"
+                "缺了逐字引文，'主键是内容'与'只取一段'只是本站说法；"
+                "缺了'未实测'的标注，会把'支持 Range'当成既定事实"
+                "（specs/general/source.adoc「不臆造行为」）", "library/sources.adoc")
+
+    # 『取用前置』回退：把"先取 commit 再拼地址"写回图书馆即命中——游客只有 https
+    for rel in (LIBRARY_INDEX, os.path.join(LIBRARY_DIR, "usage.adoc")):
+        if not os.path.isfile(rel):
+            continue
+        with open(rel, encoding="utf-8") as fh:
+            text = fh.read()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(word in line for word in _LOCATING_COMMIT_PREREQ_EXEMPT):
+                continue
+            for pat, desc in _LOCATING_COMMIT_PREREQ_PATTERNS:
+                if pat.search(line):
+                    err(f"{rel}:{lineno} 出现『取用前置』回退：{desc}", rel)
+
+    if not os.path.isfile(PROJECT_FILE):
+        err("缺少项目规范入口 AGENTS.adoc——图书馆的定位协议无从被读者发现", "AGENTS.adoc")
+    else:
+        with open(PROJECT_FILE, encoding="utf-8") as fh:
+            entry = fh.read()
+        if "馆无体量上限" not in entry or "固定地址" not in entry:
+            err("项目规范入口未含『依据定位』的口径（馆无体量上限 / 入口 = 常驻层的固定地址）——"
+                "读者不知道有这份协议，定位要么重新靠猜、要么退化成"
+                "「要求取用侧先取一个它取不到的 commit」（写文件与登记是同一个动作）",
+                "AGENTS.adoc")
+
+    # 『文件名』回退：馆内主题文件名过长（把主张写进名字）即命中——名字会被读进每一次链接与
+    # 每一次目录列举，且**名字本就不是检索键**（检索键是依据名，经入口主题表解析）。
+    lib_dir = os.path.join(REPO_ROOT, "library")
+    if os.path.isdir(lib_dir):
+        for name in sorted(os.listdir(lib_dir)):
+            path = os.path.join(lib_dir, name)
+            if not os.path.isfile(path) or not name.endswith(".adoc"):
+                continue
+            if len(name) > LIBRARY_FILE_NAME_MAX:
+                err(f"文件名过长：`library/{name}` 共 {len(name)} 字符，超出上限 "
+                    f"{LIBRARY_FILE_NAME_MAX}——图书馆的检索键是**依据名**（经入口「主题登记」表"
+                    "解析），**文件名不是主键、也不承担语义**；名字会被读进每一次链接与每一次目录"
+                    "列举，长名让每个读者反复白付上下文，且制造『改名即断档』的错觉。请取**单个"
+                    "短词、小写 ASCII**，把内容描述写进文件正文"
+                    "（见 library/README.adoc「文件名协议（短、无语义、不承担定位）」）",
+                    f"library/{name}")
+    phase_done()
+
+
 # 『默认引用面』口径（全仓库统一的表述判据）：**本仓库所有内容都会被发布出去**
 # （站点渲染本仓库文档），各内容之间的区别只在"**默认引用什么**"——被引用方按入口加载的
 # 是**公共规范**（`AGENTS_COMMON.adoc` + `specs/`），其余落点（图书馆、维护方自查层、
@@ -2993,6 +3205,56 @@ def check_changelog_entry_guard():
                 "条目须单行 `版本号 | 日期 | 变更摘要`、条目内不换行；"
                 "被续写的条目会与下一条粘连、渲染成一整段"
                 "（specs/general/changelog.adoc「条目书写」）", "CHANGELOG.adoc", j)
+    phase_done()
+
+
+def check_quote_line_guard():
+    """『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
+
+    背景（本项目实测的真实失效）：仓库文档里"引文/说明"段落长期写作 `> 说明：…`，
+    页面侧（`index.html` 用 Asciidoctor.js 渲染）一直显示成引用块、看不出问题；但
+    **命令行侧的解析器不是同一个**：
+
+      * 参考实现 Asciidoctor 把 `> x` 解析为**引用块**（measure：同一份文档在
+        `@asciidoctor/core@2.2.1` 下 `> x` → `<div class="quoteblock">`）；
+      * 旧式 AsciiDoc（Python `asciidoc` 系）的 `[listdef-callout]` 正则为
+        `^<?(?P<index>\d*)> +(?P<text>.+)$`——单 `>` 起头者也被它吃掉，`index` 取到
+        **空串**，随即在 `List.calc_style()` 里
+
+            assert False
+
+        → 整个文件 `FAILED`（实测：`library/README.adoc`、`AGENTS.adoc`、
+        `CHANGELOG.adoc`、`specs/general/git.adoc`、`specs/platform/cnb.adoc`、
+        `specs-project-maintainer/priority.adoc` 六个文件同时被打死）。
+
+    为什么必须在本仓库钉住：`index.html` 的站点渲染与 `specs/general/encoding.adoc`
+    的"命令一侧可能由 `asciidoc`（Python）实现"是同一件事的两面；而
+    `check_asciidoctor_syntax` 只在环境里真有 `asciidoctor` 时才跑（本仓库常常读不到），
+    于是"编译失败"这条**确定项**常年无人拦截——本防线不依赖外部命令，纯文本可判定。
+
+    判定标准（机械）：仓库维护范围内的 `.adoc` 里，**行首为 `> `**（即 `>` 后跟空白）
+    的行即命中——无论它本意是引文还是别的东西，该形态都会被至少一种解析器解释成
+    callout list；写引文用 `[quote]` + 正文行（两代解析器都渲染成引用块，见
+    `library/README.adoc` 的既有用法）。行内的 `>`（如 `a > b`、`<commit>:<path>`）
+    不在判定面内——本防线只判**行首**，不误伤比较运算符与 shell 重定向。
+    """
+    phase("引文段落防线检查（禁裸 > 起头的引文行）")
+    hits = []
+    for rel in collect_adoc_files():
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.read().split("\n"), 1):
+                if line.startswith("> "):
+                    hits.append((rel, j, line[:60]))
+    for rel, j, head in hits:
+        err("引文段落用裸 `>` 起头——该形态会被 AsciiDoc 解析成 **callout list**，"
+            "进而中断整份文档的编译（Python asciidoc 实测 `assert False`）；"
+            "写引文改用 `[quote]` + 正文行（两代解析器都渲染成引用块）："
+            f"{head}…", rel, j)
+    if not hits:
+        detail("  未发现裸 `>` 起头的引文行")
     phase_done()
 
 
@@ -3321,6 +3583,162 @@ def check_config_class_guard():
         err(f"{rel_readme} 的目录说明未同步『配置类不写逻辑』——"
             "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
             rel_readme)
+    phase_done()
+
+
+def check_external_script_guard():
+    """『跨语言执行脚本的落点防线』：被执行的另一语言脚本须放资源文件夹、扩展名取被调语言。
+
+    背景（用户报告的失效与要求）：宿主语言里**要执行另一种语言的脚本**时，常以**字符串拼接/
+    字符串模板/字符串常量**内联在代码里——编辑时**既没有高亮也没有错误校验**（语法错、字段名
+    错、参数个数不匹配都到运行期才暴露）。用户的要求是**所有语言**统一处理：**优先把执行脚本
+    放到资源文件夹、文件扩展名取目标语言的扩展名**（或该技术明确支持的文件形式，如 MyBatis
+    的 XML 承载 SQL），**lua 通过读取文件使用、其他文件也一样**。故本条**跨语言**收在通用编码
+    规范，技术栈层按"引用不复制"承接（Java 的 `.sql` / `.lua`）。
+
+    第二个要求（用户追加）：**加载时机按性能敏感度定性**——资源进 classpath 后发布即不变，
+    **性能敏感路径**（Redis 操作争分夺秒）**不得每次使用都去读**，**第一次使用时读取后缓存**即可；
+    **需求要求内容会变**的（如转 PDF 的 HTML 模板）**不适用缓存**、按是否需重读决定。
+    两个方向都要钉：只钉"读一次缓存"会把可变内容冻结在首读版本上。
+
+    本防线钉住**四处要点**（只钉"要求文本仍在且落在该落点"——"某次编码是否真的把脚本放进了
+    资源文件夹、是否真的只读一次"属引用方项目代码，本仓库看不到，交人/子 agent 复核承担）：
+      * **通用层条文**：`specs/general/coding.adoc` 须有该节，四段 L1（落点／扩展名／读取方式／
+        加载时机）齐全——缺"读取方式"则"放文件"会退化成"放文件但仍把内容读进字符串拼装"；
+        缺"加载时机"则热点路径每次都去读一遍资源（或反过来把可变内容读死）；
+      * **判定标准与反例可判定**：须给出可逐条核对的判定（宿主语言里出现被调语言语句文本 /
+        以拼接与模板组装 / 扩展名或目录不对）与典型反例（Java 拼 SQL、Lua 内联成字符串）；
+      * **技术栈承接**：`specs/stack/java.adoc` 须有 Java 落点（`sql`/`lua` 放
+        `src/main/resources/` 下、Redis 用 `DefaultRedisScript` 按资源加载、MyBatis 的 SQL 写
+        mapper `*.xml`、`${}` 是拼接须白名单）**与 Java 侧的加载时机**（静态常量、不每次读、
+        不敏感路径无妨、可变模板不缓存），`specs/stack/spring.adoc` 须引用该条与加载时机；
+      * **入口与公开说明同步**：加载调度器的 Java 技术栈登记与通用编码加载项须含识别特征，
+        `README.adoc` 的目录说明须让读者知道这条存在（装配体量见 `check_budget_guard`）。
+    """
+    phase("跨语言执行脚本的落点防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『跨语言执行脚本的落点』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        section = ""
+        # 节名以全角"）"结尾，不能用 `\b`（`\b` 要求前/后是单词字符，全角括号两侧
+        # 都不构成边界，会让匹配恒为空）——用"行尾或空白"收尾
+        m = re.search(r"^== " + re.escape(EXTERNAL_SCRIPT_SECTION) + r"(?:\s|$).*?(?=^== |\Z)",
+                      text, re.S | re.M)
+        if m is None:
+            err(f"跨语言执行脚本防线被破坏：{rel_coding} 缺少"
+                f"「{EXTERNAL_SCRIPT_SECTION}」节——SQL/Lua 等被调语言的脚本无处安放，"
+                "会重新以字符串拼接/模板内联在宿主语言代码里（无高亮、无错误校验）",
+                rel_coding)
+        else:
+            section = m.group(0)
+        if section:
+            for keys, desc in (
+                (("资源文件夹", "不得"),
+                 "L1（a）落点：跨语言脚本须独立成文件放在资源文件夹、不得内联在宿主语言"
+                 "代码里（字符串字面量/拼接/模板/多行字符串）"),
+                (("扩展名", "取被调语言自身的扩展名", "MyBatis"),
+                 "L1（b）扩展名：须取被调语言自身的扩展名，无通用扩展名时取该技术明确"
+                 "支持的文件形式（如 MyBatis 的 `*.xml` 承载 SQL）——缺则退回无语义扩展名"),
+                (("从资源读取后执行",),
+                 "L1（c）读取方式：须写明脚本是按资源读取后执行，否则'放文件'会退化成"
+                 "'放文件但把内容读进字符串再拼装'，高亮与错误校验的收益随之消失"),
+                (("加载时机", "性能敏感", "第一次使用", "classpath"),
+                 "L1（d）加载时机：须写明性能敏感路径不得每次使用都去读资源——资源进 "
+                 "classpath 后发布即不变，须第一次使用时读取一次并缓存；缺则'争分夺秒'"
+                 "的调用（如 Redis 操作）会每次都去读一遍资源（用户报告的第二个场景）"),
+                (("需求要求内容会变", "不适用缓存"),
+                 "L1（d）反面边界：须写明需求要求内容会变的（如转 PDF 的 HTML 模板）"
+                 "不适用缓存、按是否需重读决定——缺则被读成'一律读一次缓存'，"
+                 "把需求的可变内容冻结在首次读到的版本上"),
+                (("判定标准", "SELECT", "字符串拼接", "每次使用都重新读取"),
+                 "判定标准：须给出可逐条核对的判定（宿主语言里出现被调语言语句文本、"
+                 "以拼接/格式化/插值/模板组装、扩展名不对、性能敏感路径每次重新读取），"
+                 "否则只剩口号、无法判定"),
+                (("反例", "多行字符串"),
+                 "反例：须点出典型反例（Java 拼 SQL、Lua 内联成字符串、shell 片段写进 "
+                 "Python 字符串），否则判据不可判定"),
+                (("OWASP", "ISO/IEC 25010"),
+                 "依据行：须标注标准名/编号（OWASP 参数化查询、可维护性、需求须可验证"
+                 "与性能效率），否则后人无从判断它还成不成立"),
+            ):
+                missing = [k for k in keys if k not in section]
+                if missing:
+                    err(f"跨语言执行脚本防线被破坏：{rel_coding}「{EXTERNAL_SCRIPT_SECTION}」"
+                        f"缺失要点 {missing}——{desc}；该条是用户明确要求的跨语言约定，"
+                        "不得删除、不得降级为建议", rel_coding)
+    # 技术栈承接：Java 落点 + Spring 引用（规则被指向、不复制条文）
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少技术栈文件 {rel_java}——『跨语言执行脚本』的 Java 落点丢失"
+            "（Java 项目最常见 SQL/Lua，只改通用层等于 Java 项目读不到判据）", rel_java)
+    else:
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("跨语言执行脚本", "src/main/resources/", ".sql", ".lua",
+                               "DefaultRedisScript", "MyBatis", "#{}", "白名单")
+                   if k not in jt]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须写 'sql'/'lua' 放 `src/main/resources/` 下按资源加载、"
+                "Redis 用 `DefaultRedisScript` 加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、"
+                "`${}` 是拼接须白名单校验——缺了这层，Java 执行者仍会把脚本内联成字符串",
+                rel_java)
+        missing = [k for k in ("加载时机", "private static final", "不缓存", "EVALSHA",
+                               "不敏感路径")
+                   if k not in jt]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须给**加载时机**的落点：性能敏感路径（Redis 操作）按静态常量"
+                "声明 `DefaultRedisScript`（'private static final'）、不每次调用读资源、"
+                "热点路径按 `EVALSHA` 复用脚本、不敏感路径每次读取无妨、"
+                "需求要求内容会变的模板**不缓存**——缺则 Java 执行者要么每次读一遍资源、"
+                "要么把可变内容读死", rel_java)
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(SPRING_STACK_FILE):
+        st = open(SPRING_STACK_FILE, encoding="utf-8").read()
+        if JAVA_EXTERNAL_SCRIPT_SECTION not in st:
+            err(f"{rel_spring} 未引用「{JAVA_EXTERNAL_SCRIPT_SECTION}」——"
+                "Spring 项目按该文件学习时会漏掉跨语言脚本的落点判据（规则被指向，不复制）",
+                rel_spring)
+        missing = [k for k in ("加载时机", "不适用缓存", "静态常量")
+                   if k not in st]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_spring} 缺失要点 {missing}——"
+                "Spring 栈须承接**加载时机**（性能敏感路径按静态常量读一次、"
+                "需求要求内容会变的模板不适用缓存），否则 Spring 项目读到'放文件'"
+                "却仍每次都去读", rel_spring)
+    # 入口登记：调度器的通用编码加载项与 Java 技术栈登记须含识别特征
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        for keys, desc in (
+            (("跨语言执行脚本的落点", "SQL/Lua"),
+             "调度器的通用编码加载项须含该条识别特征（缺则永不加载）"),
+            (("跨语言脚本", "src/main/resources/"),
+             "调度器的 Java 技术栈登记须含跨语言脚本的识别特征（缺则 Java 项目不知道需加载）"),
+        ):
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"跨语言执行脚本防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    # 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rd = open(README_FILE, encoding="utf-8").read()
+        if "跨语言执行脚本的落点" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『跨语言执行脚本的落点』——"
+                "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+                rel_readme)
+        if "加载时机" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『加载时机』——"
+                "加载时机（首次读一次并缓存、可变内容不缓存）是该条的判据之一，"
+                "README 不写则读者按目录说明学习时不知道这条管到读取次数",
+                rel_readme)
     phase_done()
 
 
@@ -4035,6 +4453,64 @@ def check_squash_commit_guard():
     phase_done()
 
 
+def check_merge_relationship_guard():
+    """『合并关系防线』：压缩/解决冲突后，**目标分支仍须是本分支的祖先**。
+
+    背景（一次**工作树看不出、平台必拦**的真实失效）：本仓库某 PR 上用户要求"解决冲突、
+    压缩提交"，上一轮执行者把 main 的内容**照抄进工作树、另起了一个单亲提交**——
+    `git diff` 看起来与 main 一致、工作区也没有未提交改动，于是汇报"已含 main 全部改动、快进式并入"；
+    但**目标分支并未成为本分支的祖先**（`git rev-list --parents -n1` 只显示一个父提交、
+    `git merge-base --is-ancestor <目标分支> <本分支>` 为假）。**平台侧据合并关系（而非工作树
+    差异）判定**，故 PR 仍卡在 `code_conflict`、用户第三次追问"依旧有冲突"。
+
+    为什么必须成抓手：这类坏形态**没有任何一处本地可见的异常**——工作树一致、`git diff` 无输出、
+    单测全绿、甚至 `check_effective` 也照过；唯一的判据是**历史拓扑**（祖先关系 / 合并提交的双亲），
+    而这种判据最容易被顺手"整理掉"（用户要求压缩提交时，把合并提交一并压掉，凭据随之消失）。
+    故把"须保留合并关系"写成 L1 并用本防线钉住其**判据句与根因句**。
+
+    本防线钉住两处（缺一即报）：
+    (a) 平台层「压缩提交」节须有 **L1「压缩须保留与目标分支的合并关系」**，且写明可核对的判据
+        （`git merge-base` 等于目标分支最新提交 / `git merge --no-ff` 保留双亲=合并提交）；
+    (b) 须写明**根因形态**（"照抄目标分支文件内容后另起单亲提交"）与**压缩不吞掉合并提交**
+        （合并提交是"已并入"的凭据，不是可压掉的临时提交）——否则条文会被读成"只要工作树
+        一致即可"，正是本条要拦的失效。
+
+    只钉"要求文本仍在"——"某次合并是否真的建了双亲关系"属运行时事实（git 记录），机械无法
+    在静态文本上判定，交人/子 agent 用 `git merge-base --is-ancestor` 与 `git rev-list --parents`
+    复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("合并关系防线检查")
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『合并关系』要求无处承载（平台层规范缺失）", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("压缩须保留与目标分支的合并关系", "须仍以目标分支的最新提交为祖先"),
+             "L1 与判据：平台层「压缩提交」节须有『压缩须保留与目标分支的合并关系』一条，"
+             "并写明『须以目标分支最新提交为祖先』这一可核对判据"
+             "（删除或降级则『照抄内容后另起单亲提交』的失效复发、PR 卡 conflict）"),
+            (("git merge-base <分支> <目标分支>", "git rev-list --parents -n1"),
+             "可核对判据：须给出祖先关系与双亲的核对命令（`git merge-base` / `git rev-list --parents`），"
+             "让『已并入』这件事可被机械核对、而不是只靠工作树差异宣称"),
+            (("照抄目标分支的文件内容后另起一个单亲提交", "目标分支并未成为本分支的祖先"),
+             "根因形态：须写明真实失效（照抄目标分支文件内容后另起单亲提交→目标分支不是祖先→"
+             "平台仍报冲突），否则条文会被读成『工作树一致即可』——正是本条要拦的失效"),
+            (("git merge-base --is-ancestor <目标分支> <分支>"),
+             "假绿的判据：须写明 `--is-ancestor` 为假这一判据（工作树一致、`git diff` 无输出时"
+             "唯一能看出问题的信号，缺则防线看不到坏形态）"),
+            (("不吞掉合并提交", "合并提交是\"已并入\"的凭据"),
+             "与压缩的接口：须写明压缩**不吞掉合并提交**（合并提交是『已并入』的凭据、不是可压掉的"
+             "临时提交），否则『用户要求压缩』会把唯一凭据一并压掉"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"合并关系防线被破坏：{rel} 缺失要点 {missing}——{desc}；本条是"
+                    "『解决冲突/压缩后目标分支仍须是本分支的祖先』的底线，不得删除、"
+                    "不得降级为建议（L1）", rel)
+
+
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
 
@@ -4046,7 +4522,7 @@ def main(argv=None) -> int:
                     "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
                     "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作/"
-                    "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ AsciiDoc 语法）")
+                    "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -4082,8 +4558,10 @@ def main(argv=None) -> int:
     check_line_ending_guard()
     check_java_test_naming()
     check_library_guard()
+    check_library_locating_guard()
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
+    check_quote_line_guard()
     check_dependency_view_guard()
     check_index_page_guard()
     check_public_content_coverage()
@@ -4091,10 +4569,12 @@ def main(argv=None) -> int:
     check_env_marker_guard()
     check_npc_merge_guard()
     check_squash_commit_guard()
+    check_merge_relationship_guard()
     check_scope_boundary_guard()
     check_config_class_guard()
     check_abstraction_adoption_guard()
     check_reuse_precedent_guard()
+    check_external_script_guard()
     check_comment_dispatch_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()

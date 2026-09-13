@@ -28,6 +28,20 @@
 * 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
 * 日志打印（禁 println、统一 slf4j 见通用编码规范）：静态文本（无参）不属占位符参数化约束范围，合规；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（如 `log.error("msg: {}", arg, e)`）
 
+== 跨语言执行脚本（SQL / Lua 等）
+
+Java 里要执行**其他语言**的脚本时，须按通用编码规范「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」执行——**独立成文件放资源文件夹、扩展名取被调语言的扩展名、按资源读取后执行**，不得用字符串拼接、字符串模板或字符串常量内联在 Java 代码里。
+
+* **SQL（L1）**：执行 SQL 时**按资源加载 `.sql` 文件**（`src/main/resources/` 下，如 `src/main/resources/sql/order-query.sql`），用 `PreparedStatement` 参数化执行——SQL 本体不写在 Java 字符串里。**MyBatis 项目是已知例外**：SQL 写在 mapper 的 `*.xml` 映射文件里（MyBatis 支持的文件形式），**不再另建 `.sql`**；MyBatis 给出的 **`${}` 是字符串拼接**（直接替换进 SQL 文本），仅可用于不由用户输入决定的场景（如动态排序字段）、且须对取值做**白名单校验**，其余一律用 `#{}`（预编译参数）。
+* **Redis / Lua（L1）**：Lua 脚本**写成 `.lua` 文件**放 `src/main/resources/lua/` 下，用 `DefaultRedisScript`（或项目的等价封装）**按资源加载**后执行，**禁止**把 Lua 内联成 Java 字符串、也禁止在 Java 里拼 Lua 片段（依据：Redis 官方文档的 "EVAL" 与 "Redis Lua API reference"）。
+* **加载时机（L1，与通用编码规范「跨语言执行脚本的落点」的「加载时机」同条，此处给 Java 落点）**：classpath 资源打进产物后**发布即成常量**，**不得在每次调用时都读**——
+** 性能敏感路径（如 Redis 操作）：按"读一次、反复用"定性**——`.lua` 用 `DefaultRedisScript` 时**按静态常量声明**（`private static final DefaultRedisScript<...> SCRIPT = new DefaultRedisScript<>(...)`，在静态初始化块或静态构造方法里 `setLocation`/`setScriptSource` + 载入一次），**禁止在方法内 `new DefaultRedisScript` 后逐次读资源**；`.sql` 若属热点查询，同样把"读一次"与"执行多次"分开（读入后缓存 `String` 或缓存预编译 `PreparedStatement`/`DataSource` 侧对象，按框架能力与并发安全取舍）。Redis `EVAL` 反复把脚本正文送到服务端亦属重复开销，等价的复用手段是 `EVALSHA`/`SCRIPT LOAD`（是否适用按项目的客户端封装与部署形态定）
+** **不敏感路径**（启动装配、一次性任务、低频操作）：每次读取无妨
+** **需求要求内容会变**：如每次渲染前可编辑、需要热更新的 HTML 模板（转 PDF 等场景）——**不缓存**，按"是否需重读"决定（按变更重读或使用带失效策略的缓存），**不得**为省一次读取而让需求要求的可变内容被冻结在首次读到的版本上
+** **判定标准（任一命中即违规）**：①热点路径的调用体内出现 `getResourceAsStream`/`ClassPathResource` 读取（如 `new DefaultRedisScript` 在方法内、`ScriptUtils` 每次调用执行脚本读取）；②Redis 热点操作每次都把脚本正文重发服务端且不做 `EVALSHA` 复用；③反向误用——把需求要求可变的模板/脚本按静态常量一次性读死
+* **`@Sql` / `ScriptUtils`（L2）**：测试里的 `@Sql`、`ScriptUtils.executeSqlScript(...)` 等同样指向 `.sql` 资源，不内联 SQL。
+* 依据（标准名/编号）：OWASP SQL Injection Prevention Cheat Sheet、OWASP Query Parameterization Cheat Sheet、Redis 官方文档（EVAL / Redis Lua API reference）、MyBatis 官方文档（Dynamic SQL 的 `${}` 与 `#{}`）、ISO/IEC 25010 性能效率（资源重复读取的取舍）。
+
 == 健壮性
 
 * 公共方法对边界输入显式处理：null 入参、无匹配结果必须返回空集合/默认值或快速失败（requireNonNull/断言），不得让调用方遇到隐式 NPE

@@ -1569,10 +1569,13 @@ def _valid_usage_body() -> str:
     """生成一份含全部要点锚点的『依据的写入与关联』主题正文（正例基准）。
 
     与 `cm._LIBRARY_USAGE_ANCHORS` 同源：锚点即判据句/节名，缺一即"写入靠自觉、
-    关联凭印象"会被读回来（写入无触发判据、反查无算法）。
+    关联凭印象"会被读回来（写入无触发判据、反查无算法）。**定位协议的使用判据**
+    （第四节）由 `_LIBRARY_LOCATING_USAGE_ANCHORS` 承载，本函数一并写入——
+    两处合起来才是完整的"写入 + 关联 + 定位"协议。
     """
     head = "= 依据的写入与关联（图书馆使用协议）\n\n本文件是依据图书馆的主题之一。\n\n"
-    return head + "\n".join("- " + q for q in cm._LIBRARY_USAGE_ANCHORS) + "\n"
+    return (head + "\n".join("- " + q for q in cm._LIBRARY_USAGE_ANCHORS)
+            + "\n" + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_USAGE_ANCHORS) + "\n")
 
 
 def _valid_adoption_body() -> str:
@@ -1864,6 +1867,185 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
                    + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
         cm.check_library_guard()
         self.assertIn("不存在的目录", self.error_texts())
+
+
+def _valid_locating_index_body() -> str:
+    """含全部『依据定位』要点锚点的图书馆入口正文（正例基准）。
+
+    与 `cm._LIBRARY_LOCATING_ANCHORS` 同源：锚点即主键口径/三步取值/形态约束，
+    缺一即"馆无限大时定位退回整馆下载或按文件名猜"。
+    """
+    head = "= 图书馆\n\n本目录是本项目的图书馆。\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_ANCHORS) + "\n"
+
+
+def _valid_locating_source_body() -> str:
+    """含全部『依据定位』机制原文与取样状态的 sources 正文（正例基准）。
+
+    与 `cm._LIBRARY_LOCATING_SOURCE_MARKERS` 同源：缺逐字引文则"主键是内容""只取一段"
+    只是本站说法；缺"未实测"则把"支持 Range"当成既定事实。
+    """
+    head = "= 外部标准原文摘录\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_SOURCE_MARKERS) + "\n"
+
+
+class TestCheckLibraryLocatingGuard(CheckSpecsTestCase):
+    """钉住『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
+
+    背景（用户报告的真实问题）：图书馆**没有限制内容的大小与长度、也没有限制要存的范围**，
+    将来可能特别大；其他项目引用时要在**不全量下载**的前提下准确找到"这条依据在哪个文件"。
+    缺协议时只有几种坏做法：整馆下载、按主题名猜文件名（命名随重构变化）、把图书馆当全文
+    检索引擎，**以及要求取用侧先说出"commit/版本号"再拼地址**（用户报告的失效：游客只有
+    https，本仓库也不发布版本号，它根本不知道该取哪个 commit）。故本条钉住：入口侧协议要点
+    （含作者侧/取用侧的区别与"入口 = 常驻层的固定地址"）、usage 侧使用判据、sources 侧机制
+    原文与**如实**取样状态（本站与平台原始文件视图均未实测到 Range 生效，不得当成既定事实）、
+    项目入口的口径，以及**"先取 commit 再拼地址"这一表述形态不得回退**。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_lib = (cm.LIBRARY_DIR, cm.LIBRARY_INDEX)
+        self._orig_project = cm.PROJECT_FILE
+        cm.LIBRARY_DIR = os.path.join(self.root, "library")
+        cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
+        cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+
+    def tearDown(self) -> None:
+        (cm.LIBRARY_DIR, cm.LIBRARY_INDEX) = self._orig_lib
+        cm.PROJECT_FILE = self._orig_project
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("AGENTS.adoc",
+                   "= 项目规范\n\n依据图书馆：馆无体量上限，入口 = 常驻层的固定地址\n")
+        self.write("library/README.adoc", _valid_locating_index_body())
+        self.write("library/usage.adoc", _valid_usage_body())
+        self.write("library/adoption.adoc", _valid_adoption_body())
+        self.write("library/sources.adoc", _valid_locating_source_body())
+
+    def test_valid_locating_passes(self):
+        self._write_valid()
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_index_reports(self):
+        # 反例：图书馆入口整体被删（定位协议无处承载→退回整馆下载）
+        self._write_valid()
+        os.remove(cm.LIBRARY_INDEX)
+        cm.check_library_locating_guard()
+        self.assertIn("缺少图书馆入口", self.error_texts())
+
+    def test_index_anchor_deleted_reports(self):
+        # 反例：入口的主键/取值/形态约束被删（定位协议只剩名字）
+        self._write_valid()
+        self.write("library/README.adoc", "= 图书馆\n\n依据大时慢慢找即可\n")
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』要点", self.error_texts())
+
+    def test_usage_side_missing_section_reports(self):
+        # 反例：usage 侧缺"引用方怎么准确定位"节（使用判据无处可读）
+        self._write_valid()
+        body = _valid_usage_body().replace(
+            "== 四、引用方怎么准确定位依据（不全量下载）", "== 四、定位")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("引用方怎么准确定位依据", self.error_texts())
+
+    def test_usage_side_missing_primary_key_reports(self):
+        # 反例：去掉"主键是内容、不是路径"（改名即断档的根因被隐去）
+        self._write_valid()
+        body = _valid_usage_body().replace("**主键是内容、不是路径**", "主键")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("主键是内容、不是路径", self.error_texts())
+
+    def test_usage_side_missing_termination_reports(self):
+        # 反例：终止条件被删（定位又会向下展开成第二真源）
+        self._write_valid()
+        body = _valid_usage_body().replace("**终止条件（L1，同上）**", "终止")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("终止条件（L1，同上）", self.error_texts())
+
+    def test_source_marker_missing_reports(self):
+        # 反例：机制原文被删（"主键是内容""只取一段"变成本站说法）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 外部标准原文摘录\n\ngit 与 RFC 7233 见官方文档\n")
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』的机制原文", self.error_texts())
+
+    def test_source_range_not_marked_unverified_reports(self):
+        # 反例：把"支持 Range"当成既定事实（本地站点其实未实测）
+        self._write_valid()
+        body = _valid_locating_source_body().replace("**未实测**", "已实测生效")
+        self.write("library/sources.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』的机制原文", self.error_texts())
+
+    def test_project_entry_without_primary_key_reports(self):
+        # 反例：项目入口未登记定位协议口径（读者不知道有这份协议）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目规范\n\n依据图书馆见别处\n")
+        cm.check_library_locating_guard()
+        self.assertIn("未含『依据定位』的口径", self.error_texts())
+
+    def test_commit_as_client_prerequisite_reports(self):
+        # 反例（用户报告的失效）：把"先取 commit 再拼地址"写成取用路径——
+        # 游客只有 https、没有仓库与 git，取不到 commit
+        self._write_valid()
+        self.write("library/usage.adoc", _valid_usage_body()
+                   + "\n取用方须先取当前 commit，再拼出原始文件地址。\n")
+        cm.check_library_locating_guard()
+        self.assertIn("取用前置", self.error_texts())
+
+    def test_commit_in_address_exempt_when_negated(self):
+        # 正例豁免：把该错误表述**本身**写出来（否定/失效记录）不得误伤
+        self._write_valid()
+        self.write("library/usage.adoc", _valid_usage_body()
+                   + "\n不得把 commit 写进取值地址：取用侧取不到它。\n")
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_long_library_file_name_reports(self):
+        # 反例（用户报告的失效）：把主张写进文件名——名字写成一句话，
+        # 每次链接与每次目录列举都替它付上下文，而名字本就不是检索键
+        self._write_valid()
+        long_name = "sources-and-locating-protocol-for-evidence.adoc"
+        self.assertGreater(len(long_name), cm.LIBRARY_FILE_NAME_MAX)
+        self.write("library/" + long_name, "= 依据的来源与定位协议\n")
+        cm.check_library_locating_guard()
+        self.assertIn("文件名过长", self.error_texts())
+
+    def test_short_library_file_name_passes(self):
+        # 正例：短词命名（名字不是主键、也不承担语义）
+        self._write_valid()
+        self.write("library/evidence.adoc", "= 依据\n")
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_file_name_max_matches_module_file_limit(self):
+        # 常量口径：与通用层『模块文件名』上限同值（32 字符，含扩展名）
+        self.assertEqual(cm.LIBRARY_FILE_NAME_MAX, 32)
+
+    def test_locating_anchors_constant_nonempty(self):
+        # 常量完整性：锚点与取样标记须齐全（缺一即防线的判据面缩小）
+        for q in ("== 依据的定位协议（入口 + 索引 + 单点取值）",
+                  "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
+                  "**版本固化（可选加固，不得写成前置）**",
+                  "**分段取值（馆特别大时怎么只取一段）**",
+                  "**形态约束（L1）**", "**文件名协议（短、无语义、不承担定位）**",
+                  "**取用侧**是**游客**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_ANCHORS)
+        for q in ("== 四、引用方怎么准确定位依据（不全量下载）",
+                  "**主键是内容、不是路径**",
+                  "**协议不承载的东西（形态约束，L1）**",
+                  "**终止条件（L1，同上）**",
+                  "**取用侧是游客**", "**只有 https、没有仓库、没有 git**",
+                  "**文件名不承担定位（短、无语义，L1）**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_USAGE_ANCHORS)
+        for q in ("== 依据的定位与取值（git / RFC 7233）",
+                  "names the **blob or tree** at the given path", "**未实测**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_SOURCE_MARKERS)
 
 
 class TestCheckPublicContentCoverage(CheckSpecsTestCase):
@@ -3432,6 +3614,91 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
+    """钉住『合并关系防线』：解决冲突/压缩后**目标分支仍须是本分支的祖先**。
+
+    这条来自一次**工作树看不出、平台必拦**的真实失效：把"解决冲突"做成"照抄目标分支的
+    文件内容后另起一个单亲提交"，`git diff` 看不出毛病、单测也全绿，但目标分支并未成为
+    本分支的祖先，平台侧据合并关系判定，PR 仍卡在 `code_conflict`。坏形态**没有任何一处
+    本地可见的异常**，唯一判据是历史拓扑，而这种判据最容易被顺手"整理掉"（用户要求压缩时
+    把合并提交一并压掉）。故本组用例除正例外，专门覆盖"条文被删""判据被抽""根因形态被删"
+    "压缩不吞合并提交缺失""文件缺失"等反例。
+    """
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 压缩提交（提交历史的整理）\n"
+        "* **压缩须保留与目标分支的合并关系（L1）**：压缩后的提交**须仍以目标分支的最新提交为祖先**"
+        "（等价判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交；`git merge --no-ff <目标分支>`"
+        " 时**须保留双亲**、`git rev-list --parents -n1` 显示两个父提交）。**根因（真实失效）**："
+        "把\"解决冲突\"做成\"**照抄目标分支的文件内容后另起一个单亲提交**\"，工作树看起来一致，但"
+        "**目标分支并未成为本分支的祖先**，平台侧仍报冲突、PR 卡在 `code_conflict`"
+        "（判据：`git merge-base --is-ancestor <目标分支> <分支>` 为假）。**正确做法**：真做一次合并后"
+        "以合并提交落盘；压缩**不吞掉合并提交**（**合并提交是\"已并入\"的凭据**）。\n"
+        "* **禁止的压缩形态（L1）**：①他人提交；②已合入目标分支的历史。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_merge_relationship_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：平台层规范文件被删 → 要求无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_merge_relationship_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_rule_deleted_reports(self):
+        # 反例：整条 L1 被删 → "照抄内容后另起单亲提交"的失效复发
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩提交＝提交历史整理**。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("合并关系", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号，可核对判据被抽掉
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：压缩后仍以目标分支最新提交为祖先，"
+                   "**须仍以目标分支的最新提交为祖先**，务必谨慎。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("git merge-base", self.error_texts())
+
+    def test_root_cause_removed_reports(self):
+        # 反例：根因形态被删 → 条文会被读成"工作树一致即可"，正是要拦的失效
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**，"
+                   "判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交、"
+                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交；"
+                   "`git merge-base --is-ancestor <目标分支> <分支>` 为假即违规。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("根因", self.error_texts())
+
+    def test_squash_swallowing_merge_commit_reports(self):
+        # 反例：没有"压缩不吞掉合并提交"这一接口 → 用户要求压缩时会把唯一凭据一并压掉
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**"
+                   "（`git merge-base <分支> <目标分支>` 等于目标分支最新提交；"
+                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交）；"
+                   "根因：**照抄目标分支的文件内容后另起一个单亲提交**，"
+                   "**目标分支并未成为本分支的祖先**；"
+                   "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("不吞掉合并提交", self.error_texts())
+
+
 class TestCheckConfigClassGuard(CheckSpecsTestCase):
     """钉住『配置类不写逻辑』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
 
@@ -3850,6 +4117,210 @@ class TestCheckReusePrecedentGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+class TestCheckExternalScriptGuard(CheckSpecsTestCase):
+    """钉住『跨语言执行脚本的落点防线』：脚本独立成文件放资源文件夹、扩展名取被调语言。
+
+    该条对应用户报告的真实失效与要求：宿主语言里被执行的另一语言脚本用**字符串拼接/
+    字符串模板**内联——**没有高亮、也没有错误校验**，语法错/字段名错/参数个数不匹配都到
+    运行期才暴露。要求是**所有语言**统一：放资源文件夹、扩展名取目标语言的扩展名（或该
+    技术明确支持的文件形式，如 MyBatis 的 XML 承载 SQL），lua 通过读取文件使用。
+    最易被三件事冲掉：**条文被删**（退回内联）、**降级成建议**、**技术栈落点缺失或
+    优先级/结构被改**（Java 侧只写"建议用文件"而无 `src/main/resources/`、`DefaultRedisScript`、
+    MyBatis 的 `*.xml` 与 `${}` 白名单）。**加载时机**同理：删掉"性能敏感路径不每次读"
+    或删掉"需求要求内容会变的不缓存"都会让本条失真，故一并逐项覆盖。
+    """
+
+    CODING = (
+        "= 通用编码规范\n"
+        "\n"
+        "== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
+        "\n"
+        "被调语言的脚本不得以字符串拼接、字符串模板内联在宿主语言代码里，一律独立成文件"
+        "放在资源文件夹。\n"
+        "* **落点（L1）**：跨语言脚本须独立成文件，放在资源文件夹，**不得**内联在宿主语言代码里。\n"
+        "* **扩展名（L1）**：文件扩展名**取被调语言自身的扩展名**；无通用扩展名时取该技术"
+        "明确支持的文件形式（如 MyBatis 的 `*.xml` 承载 SQL）。\n"
+        "* **读取方式（L1）**：脚本**从资源读取后执行**。\n"
+        "* **判定标准（任一命中即违规）**：①宿主语言代码里出现被调语言的语句文本（`SELECT`）；"
+        "②以字符串拼接、格式化、插值、模板字面量组装该脚本；③性能敏感路径上\"每次使用都重新读取\"。\n"
+        "* **加载时机（L1）**：**性能敏感**路径不得每次使用都去读资源——资源进 "
+        "`classpath` 后发布即不变，须**第一次使用**时读取一次并缓存；"
+        "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。\n"
+        "* **反例（L2）**：Java 里拼 SQL、把一段 Lua 写成 Java 多行字符串再 `eval`。\n"
+        "* 依据（标准名/编号）：OWASP SQL Injection Prevention Cheat Sheet；ISO/IEC 25010。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.SPRING_STACK_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_spring,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* Lua 写成 `.lua` 文件、用 `DefaultRedisScript` 加载。\n"
+                   "* 加载时机：性能敏感路径按 `private static final` 声明脚本；"
+                   "不敏感路径每次读无妨；需求要求内容会变的模板**不缓存**；"
+                   "Redis 热点按 `EVALSHA` 复用。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 跨语言执行脚本（资源文件夹）\n"
+                   "* 见「跨语言执行脚本（SQL / Lua 等）」。\n"
+                   "* 加载时机：性能敏感路径按静态常量读一次；需求要求内容会变的模板"
+                   "不适用缓存。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "通用编码 `specs/general/coding.adoc`（含「跨语言执行脚本的落点（资源文件夹，"
+                   "不写字符串拼接/模板）」：SQL/Lua）；Java 登记 `specs/stack/java.adoc`"
+                   "（跨语言脚本 `src/main/resources/` 下）\n")
+        self.write("README.adoc",
+                   "目录结构：通用编码（含**跨语言执行脚本的落点**、**加载时机**）。\n")
+
+    def test_valid_external_script_guard_passes(self):
+        self._write_valid()
+        cm.check_external_script_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层该节被删 → SQL/Lua 无处安放、重新内联成字符串
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 表达式与调用写法\n* x。\n")
+        cm.check_external_script_guard()
+        self.assertIn("跨语言执行脚本的落点", self.error_texts())
+
+    def test_extension_clause_removed_reports(self):
+        # 反例：扩展名要求（含 MyBatis 例外）被抽掉 → 退回无语义扩展名
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("取被调语言自身的扩展名", "取合适扩展名")
+                              .replace("如 MyBatis 的 `*.xml` 承载 SQL", ""))
+        cm.check_external_script_guard()
+        self.assertIn("扩展名", self.error_texts())
+
+    def test_read_clause_removed_reports(self):
+        # 反例：'按资源读取后执行'被删 → '放文件'退化成'放文件但读进字符串再拼装'
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**读取方式（L1）**：脚本**从资源读取后执行**。", ""))
+        cm.check_external_script_guard()
+        self.assertIn("从资源读取后执行", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：判定标准被抽成一句总述 → 判据不可判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
+                   "* 落点：放资源文件夹。\n"
+                   "* 扩展名：取被调语言自身的扩展名（如 MyBatis 的 `*.xml` 承载 SQL）。\n"
+                   "* 读取方式：从资源读取后执行。\n"
+                   "* 反例：多行字符串。\n"
+                   "* 依据：OWASP SQL Injection Prevention Cheat Sheet。\n")
+        cm.check_external_script_guard()
+        self.assertIn("SELECT", self.error_texts())
+
+    def test_java_landing_missing_reports(self):
+        # 反例：Java 栈落点缺失（只改通用层 = Java 项目读不到判据）
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== 健壮性\n* null。\n")
+        cm.check_external_script_guard()
+        self.assertIn("java.adoc", self.error_texts())
+
+    def test_java_lua_clause_removed_reports(self):
+        # 反例：Java 侧 Redis/Lua 的做法被抽掉（用户明确点名的场景：lua 通过读取文件使用）
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        cm.check_external_script_guard()
+        self.assertIn(".lua", self.error_texts())
+
+    def test_spring_reference_missing_reports(self):
+        # 反例：Spring 栈未引用该条 → Spring 项目漏掉判据
+        self._write_valid()
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 事务\n* 事务。\n")
+        cm.check_external_script_guard()
+        self.assertIn("spring.adoc", self.error_texts())
+
+    def test_dispatcher_registration_missing_reports(self):
+        # 反例：调度器未登记识别特征 → 该节永不被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "通用编码 `specs/general/coding.adoc`\n")
+        cm.check_external_script_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
+        self._write_valid()
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_external_script_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_loading_time_clause_removed_reports(self):
+        # 反例：加载时机被删 → 争分夺秒的路径（Redis 操作）每次都去读一遍资源
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "* **加载时机（L1）**：**性能敏感**路径不得每次使用都去读资源——资源进 "
+                       "`classpath` 后发布即不变，须**第一次使用**时读取一次并缓存；"
+                       "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。\n", ""))
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
+
+    def test_mutable_content_boundary_removed_reports(self):
+        # 反例：反面边界被抽掉（只剩"读一次缓存"）→ 可变模板被冻结在首读版本上
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。",
+                       "读一次就缓存。"))
+        cm.check_external_script_guard()
+        self.assertIn("不适用缓存", self.error_texts())
+
+    def test_java_loading_time_removed_reports(self):
+        # 反例：Java 侧只写"放文件"、没有加载时机 → 方法内 new DefaultRedisScript 每次读
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* Lua 写成 `.lua` 文件、用 `DefaultRedisScript` 加载。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        cm.check_external_script_guard()
+        self.assertIn("private static final", self.error_texts())
+
+    def test_spring_loading_time_not_synced_reports(self):
+        # 反例：Spring 栈未承接加载时机 → Spring 项目读到"放文件"却仍每次都去读
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 跨语言执行脚本（资源文件夹）\n"
+                   "* 见「跨语言执行脚本（SQL / Lua 等）」。\n")
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
+
+    def test_readme_loading_time_not_synced_reports(self):
+        # 反例：README 未同步加载时机 → 读者不知道这条管到读取次数
+        self._write_valid()
+        self.write("README.adoc", "目录结构：通用编码（含**跨语言执行脚本的落点**）。\n")
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
+
+
 class TestCheckCiCdGuard(CheckSpecsTestCase):
     """钉住「CI/CD 与平台协作防线」：踩坑判据不得被删或降级。
 
@@ -4228,6 +4699,51 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
     def test_missing_changelog_reports(self):
         cm.check_changelog_entry_guard()
         self.assertIn("缺少统一变更日志", self.error_texts())
+
+
+class TestCheckQuoteLineGuard(CheckSpecsTestCase):
+    """钉住『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
+
+    真实失效（本项目实测）：文档里"引文/说明"段落长期写作 `> 说明：…`，页面侧
+    （`index.html` 用 Asciidoctor.js）渲染成引用块、看不出问题；但旧式 AsciiDoc
+    （Python `asciidoc`）的 `[listdef-callout]` 正则 `^<?(?P<index>\d*)> +(?P<text>.+)$`
+    把单 `>` 起头者吃掉后 `index` 取到空串，随即 `List.calc_style()` 里 `assert False`，
+    **整个文件编译失败**——实测一次性打死 6 个文件。该形态纯文本可判定，故须有抓手
+    （`check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑，拦不住）。
+    """
+
+    def test_quote_marker_passes(self):
+        # 正例：用 [quote] + 正文行（两代解析器都渲染成引用块）
+        self.write("A.adoc", "= A\n\n[quote]\n说明：正文\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_bare_gt_line_reports(self):
+        # 反例：裸 `>` 起头（本仓库此前的写法）——会被当成 callout list
+        self.write("A.adoc", "= A\n\n> 说明：正文\n")
+        cm.check_quote_line_guard()
+        self.assertIn("裸 `>` 起头", self.error_texts())
+
+    def test_bare_gt_reports_file_and_line(self):
+        # 反例：须报出**文件与行号**（否则一堆文档里无从下手）
+        self.write("library/README.adoc", "= 图书馆\n\n正文\n> 依据：RFC 2119\n")
+        cm.check_quote_line_guard()
+        self.assertIn("library/README.adoc", self.error_texts())
+        self.assertIn(":4", self.error_texts())
+
+    def test_inline_gt_not_reported(self):
+        # 正例：行内 `>`（比较运算符、shell 重定向、`<commit>:<path>`）不在判定面内
+        self.write("A.adoc",
+                   "= A\n\nshell 重定向用 `cmd > log`；比较写作 `a > b`；"
+                   "定位写作 `<commit>:<path>`\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_nested_list_marker_not_reported(self):
+        # 正例：列表里的 `** ` 与 `* ` 不误报（只判行首 `> `）
+        self.write("A.adoc", "= A\n\n* 一\n** 二\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
 
 
 class TestCheckDependencyViewGuard(CheckSpecsTestCase):

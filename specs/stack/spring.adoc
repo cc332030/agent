@@ -30,6 +30,11 @@
 * 事务方法须为 public 且由 Spring 代理调用：同类内部方法直接调用（`this.xxx()`）不走代理、事务失效，需注意规避
 * 事务范围尽量小：不在事务内做远程调用、耗时 IO 等操作，避免长事务占用连接
 
+== 跨语言执行脚本（资源文件夹）
+
+* **执行其他语言的脚本按资源加载，不内联字符串（L1）**：`@Sql`、`ScriptUtils`、Redis `DefaultRedisScript`、JDBC 语句等，一律**从资源文件夹加载 `.sql`/`.lua` 等文件**后执行，不用字符串拼接或字符串模板在 Java 里组装脚本；落点与判定标准见 link:../stack/java.adoc[]「跨语言执行脚本（SQL / Lua 等）」与通用规则 link:../general/coding.adoc[]「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」（本文件不复制条文）。
+* **加载时机按性能敏感度定性（L1）**：读进来的脚本**发布后不变**，性能敏感路径（Redis 操作、热点查询等）须"读一次、反复用"——静态常量声明 `DefaultRedisScript`、静态初始化块里 `setScriptSource` 载入一次，不每次调用读；**需求要求内容会变**的模板（如转 PDF 的 HTML 模板）**不适用缓存**、按重读决定。判据与 Java 落点见 link:../stack/java.adoc[]「跨语言执行脚本（SQL / Lua 等）」的「加载时机」（本文件不复制条文）。
+
 == 分层与职责
 
 * 分层职责清晰：Controller 只做参数校验与协议转换、Service 承载业务逻辑、Repository/Mapper 只做数据访问，不跨层调用、不在 Controller 写业务逻辑
