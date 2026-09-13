@@ -101,7 +101,13 @@
  31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`），
      条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。
- 32. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+ 32. 引文段落防线：**仓库维护范围内的 `.adoc` 不得有行首 `> ` 的引文行**——该形态会被
+     AsciiDoc 解析成 **callout list**（旧式 `listdef-callout` 正则吃掉单 `>` 起头者、
+     `index` 取空串后 `List.calc_style()` 里 `assert False`，**整份文件编译失败**；实测
+     一次打死 6 个文件）。页面侧（`index.html` 用 Asciidoctor.js）把它渲染成引用块、
+     看不出问题，而 `check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑——
+     故这条**确定项**须有独立抓手。写引文用 `[quote]` + 正文行。
+ 33. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
      两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
      L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
      ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
@@ -319,6 +325,68 @@ _LIBRARY_USAGE_ANCHORS = (
     "以下情形**不写**",
     "**入库必写项**",
     "**终止条件（L1）**",
+    "**只取一段（馆特别大时）**",
+)
+# 『依据的定位协议』（library/README.adoc）的要点锚点：
+# 图书馆**没有体量与范围上限**（link:README.adoc[]「放什么、不放什么」），将来可能特别大；
+# 于是引用方要在**不全量下载**的前提下准确定位"这条依据在哪个文件"。缺这几句，定位重新退化成
+# ①整馆下载、②按主题名猜文件名、③把图书馆当全文检索引擎——而**主键是内容（Git 对象）、
+# 不是路径**这一点若不写明，"文件改名即断档"会反复出现（本仓库的图书馆自身就搬过落点）。
+_LIBRARY_LOCATING_USAGE_ANCHORS = (
+    "== 四、引用方怎么准确定位依据（不全量下载）",
+    "**主键是内容、不是路径**",
+    "**协议不承载的东西（形态约束，L1）**",
+    "**终止条件（L1，同上）**",
+    "**取用侧是游客**",
+    "**只有 https、没有仓库、没有 git**",
+    "**文件名不承担定位（短、无语义，L1）**",
+)
+_LIBRARY_LOCATING_ANCHORS = (
+    '== 为什么还要有"定位协议"（馆可以无限大）',
+    "== 依据的定位协议（入口 + 索引 + 单点取值）",
+    "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
+    "**版本固化（可选加固，不得写成前置）**",
+    "**分段取值（馆特别大时怎么只取一段）**",
+    "**形态约束（L1）**",
+    "**文件名协议（短、无语义、不承担定位）**",
+    "**作者侧**",
+    "**取用侧**是**游客**",
+    "**不解析页面结构**",
+)
+# 图书馆主题**文件名**的上限（字符数，含扩展名）：图书馆的检索键是**依据名**
+# （经入口「主题登记」表解析），**文件名不是主键、也不承担语义**——它却被读进每一次链接与每一次
+# 目录列举，故"名字写成一句话"会让每个读者反复为它付上下文，且制造"改名即断档"的错觉。
+# 上限取 32 与本仓库模块文件名同口径；判据是"单个短词、小写 ASCII"，长度只是机械可判定的下界。
+LIBRARY_FILE_NAME_MAX = 32
+
+# 『依据的定位与取值』主题节（library/sources.adoc）——依据的定位协议本身也要有依据：
+# Git 的内容寻址（`<commit>:<path>` 命名的是内容对象）与 HTTP 分段取值（RFC 7233）。
+# 缺这两条，"主键是内容"与"只取一段"就只是本站的说法；同时**取样状态必须如实**——
+# 本站站点未实测到 Range 生效，故不得把"支持 Range"当成既定事实（source.adoc「不臆造行为」）。
+# 『取用前置』不得回退（用户报告的失效，2026-09-14）：图书馆的定位路径**先入为主把 commit
+# 写进了取值地址**，于是"游客（只有 https，没有仓库、没有 git）"走不通——它既取不到
+# commit，本仓库也不发布版本号。故把"要求取用侧先取 commit/版本号"的**表述形态**机械钉住：
+# 只拦"（先）取/拿到/读取 commit（再）拼/构造/写入地址（路径）"这类**先后关系明确**的写法，
+# 不拦 commit 的合法用途（版本固化、内容寻址说明、`<commit>:<path>` 取值示例、git ls-remote
+# 命令、词表里的"主机 + 仓库 + commit"等）。
+_LOCATING_COMMIT_PREREQ_PATTERNS = (
+    (re.compile(r"(先|须|必须|需要|要)[^。\n]{0,20}(取|拿|获取|读取)[^。\n]{0,10}commit[^。\n]{0,30}(拼|构造|写入|组装)"),
+     "不得要求取用侧先取 commit 再拼取值地址——取用侧是只有 https 的游客，取不到 commit"
+     "（本仓库不发布版本号；commit 只能用于可选的版本固化）"),
+    (re.compile(r"commit[^。\n]{0,20}(进入|拼进|写进|写进)[^。\n]{0,10}(文件名|地址|路径|URL)"),
+     "不得把 commit 写进入口/取值地址——地址必须是常驻层里不随提交滚动的固定地址"),
+)
+# 豁免：历史记录（`CHANGELOG.adoc` 记的是**当时口径**，不得改写）；以及**引用/否定该错误
+# 表述本身**的句子（含"不得/不要/走不通/取不到/失效/误区"等词）。
+_LOCATING_COMMIT_PREREQ_EXEMPT = ("不得", "不要", "不能", "走不通", "取不到", "失效", "误区",
+                                  "错误", "反例", "本站失效")
+
+_LIBRARY_LOCATING_SOURCE_MARKERS = (
+    "== 依据的定位与取值（git / RFC 7233）",
+    "In its first form, the command provides the content or the type of an object in the repository.",
+    "names the **blob or tree** at the given path",
+    "The 206 (Partial Content) status code indicates that the server is",
+    "**未实测**",
 )
 # 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
 # specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
@@ -2742,6 +2810,124 @@ def check_library_guard():
     phase_done()
 
 
+def check_library_locating_guard():
+    """『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
+
+    背景（用户报告的真实问题）：图书馆**没有限制内容的大小与长度、也没有限制要存的内容的
+    范围**（`library/README.adoc`「放什么、不放什么」），将来可能特别大；于是**其他项目引用
+    时**要在**不把整馆下载下来**的前提下，**准确找到"这条依据具体在哪个文件"**。缺这份协议
+    时，位置只有三种坏做法：①**整馆下载**（拉全量再 grep，馆一大就付不动）；②**按主题名猜
+    文件名**（命名会随重构变化——本仓库的图书馆自己就搬过落点，路径不是主键）；③**把图书馆
+    当全文检索引擎**（外部项目本来就不该遍历本仓库）。这三条都属"定义了却落不了地"。
+
+    故本条钉住**四件确定项**（都是机械可判定的）：
+      * **定位协议在**：`library/README.adoc` 有「为什么还要有"定位协议"」与「依据的定位协议」
+        两节，含**先分清作者侧/取用侧**（**取用侧是游客：只有 https、没有仓库、没有 git**）、
+        **入口 = 常驻层里的固定地址**（不经页面结构、不需版本号）、三步取值、**版本固化是可选
+        加固而非取用前置**（不得要求调用方先取 commit）、以及"不解析页面结构"（页面是产物）；
+      * **使用判据在**：`library/usage.adoc` 有「四、引用方怎么准确定位依据（不全量下载）」
+        节，含**取用侧只有 https**（作者侧/取用侧条件不同，不得以"先取 commit"为前置）、
+        "主键是内容、不是路径"与终止条件（定位到文件与段即止，不打包第二真源）；
+      * **依据侧有原文与如实取样状态**：`library/sources.adoc` 收 Git（内容寻址、按 blob 取回）
+        与 RFC 7233（206 Partial Content）的**逐字引文**，且**如实标"未实测"**本站站点 Range
+        是否生效——不得把"支持 Range"当成既定事实（`specs/general/source.adoc`「不臆造行为」）；
+      * **入口可发现**：项目规范入口 `AGENTS.adoc` 的图书馆段须含定位协议的落点（主键口径），
+        否则读者不知道有这份协议、定位重新靠猜；
+      * **文件名不承担定位**（用户报告的真实问题）：馆内 `.adoc` 的**文件名长度**须在
+        `LIBRARY_FILE_NAME_MAX` 以内——名字会被读进每一次链接与每一次目录列举，**"把主张写进
+        文件名"**（名字写成一句话）等于让每个读者反复为它付上下文，而名字**本来就不是检索键**
+        （检索键是依据名，经入口「主题登记」表解析）；馆一大，没人会靠文件结构或文件名找依据，
+        都是**从已有内容反查到馆**。
+
+    "该协议是否真的够用、主键取值是否合理"属语义判断，交人/子 agent 复核承担。
+    """
+    phase("依据定位防线检查（馆无限大时的定位协议）")
+    if not os.path.isfile(LIBRARY_INDEX):
+        err("缺少图书馆入口 library/README.adoc——『依据的定位协议』无处承载"
+            "（馆无体量上限时，引用方将退回整馆下载或按文件名猜）", "library/README.adoc")
+    else:
+        with open(LIBRARY_INDEX, encoding="utf-8") as fh:
+            index_text = fh.read()
+        miss = [q for q in _LIBRARY_LOCATING_ANCHORS if q not in index_text]
+        if miss:
+            err(f"图书馆入口缺失『依据定位』要点 {miss}——"
+                "馆无限大时定位要么退化成整馆下载/按文件名猜，要么要求取用者先说出 commit"
+                "（游客只有 https，取不到）；须写清作者侧/取用侧的区别、入口=常驻层的固定地址、"
+                "三步取值、版本固化只是可选加固、且不解析页面结构"
+                "（见 library/README.adoc「依据的定位协议」）", "library/README.adoc")
+
+    usage_path = os.path.join(LIBRARY_DIR, "usage.adoc")
+    if not os.path.isfile(usage_path):
+        err("缺少 library/usage.adoc——『引用方怎么准确定位依据』的使用判据无处承载",
+            "library/usage.adoc")
+    else:
+        with open(usage_path, encoding="utf-8") as fh:
+            usage_text = fh.read()
+        miss_u = [q for q in _LIBRARY_LOCATING_USAGE_ANCHORS if q not in usage_text]
+        if miss_u:
+            err(f"library/usage.adoc 缺失『依据定位』使用判据 {miss_u}——"
+                "定位协议缺了这条，引用方要么全量下载、要么按路径猜（改名即断档），"
+                "要么被要求先取一个它根本取不到的 commit："
+                "取用侧只有 https 的前提、主键口径（内容而非路径）、"
+                "不承载派生落点的形态约束与终止条件须成文", "library/usage.adoc")
+
+    sources_path = os.path.join(LIBRARY_DIR, "sources.adoc")
+    if not os.path.isfile(sources_path):
+        err("缺少 library/sources.adoc——定位协议所依赖的机制原文（git / RFC 7233）无处承载",
+            "library/sources.adoc")
+    else:
+        with open(sources_path, encoding="utf-8") as fh:
+            sources_text = fh.read()
+        miss_s = [q for q in _LIBRARY_LOCATING_SOURCE_MARKERS if q not in sources_text]
+        if miss_s:
+            err(f"library/sources.adoc 缺失『依据定位』的机制原文/取样状态 {miss_s}——"
+                "缺了逐字引文，'主键是内容'与'只取一段'只是本站说法；"
+                "缺了'未实测'的标注，会把'支持 Range'当成既定事实"
+                "（specs/general/source.adoc「不臆造行为」）", "library/sources.adoc")
+
+    # 『取用前置』回退：把"先取 commit 再拼地址"写回图书馆即命中——游客只有 https
+    for rel in (LIBRARY_INDEX, os.path.join(LIBRARY_DIR, "usage.adoc")):
+        if not os.path.isfile(rel):
+            continue
+        with open(rel, encoding="utf-8") as fh:
+            text = fh.read()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(word in line for word in _LOCATING_COMMIT_PREREQ_EXEMPT):
+                continue
+            for pat, desc in _LOCATING_COMMIT_PREREQ_PATTERNS:
+                if pat.search(line):
+                    err(f"{rel}:{lineno} 出现『取用前置』回退：{desc}", rel)
+
+    if not os.path.isfile(PROJECT_FILE):
+        err("缺少项目规范入口 AGENTS.adoc——图书馆的定位协议无从被读者发现", "AGENTS.adoc")
+    else:
+        with open(PROJECT_FILE, encoding="utf-8") as fh:
+            entry = fh.read()
+        if "馆无体量上限" not in entry or "固定地址" not in entry:
+            err("项目规范入口未含『依据定位』的口径（馆无体量上限 / 入口 = 常驻层的固定地址）——"
+                "读者不知道有这份协议，定位要么重新靠猜、要么退化成"
+                "「要求取用侧先取一个它取不到的 commit」（写文件与登记是同一个动作）",
+                "AGENTS.adoc")
+
+    # 『文件名』回退：馆内主题文件名过长（把主张写进名字）即命中——名字会被读进每一次链接与
+    # 每一次目录列举，且**名字本就不是检索键**（检索键是依据名，经入口主题表解析）。
+    lib_dir = os.path.join(REPO_ROOT, "library")
+    if os.path.isdir(lib_dir):
+        for name in sorted(os.listdir(lib_dir)):
+            path = os.path.join(lib_dir, name)
+            if not os.path.isfile(path) or not name.endswith(".adoc"):
+                continue
+            if len(name) > LIBRARY_FILE_NAME_MAX:
+                err(f"文件名过长：`library/{name}` 共 {len(name)} 字符，超出上限 "
+                    f"{LIBRARY_FILE_NAME_MAX}——图书馆的检索键是**依据名**（经入口「主题登记」表"
+                    "解析），**文件名不是主键、也不承担语义**；名字会被读进每一次链接与每一次目录"
+                    "列举，长名让每个读者反复白付上下文，且制造『改名即断档』的错觉。请取**单个"
+                    "短词、小写 ASCII**，把内容描述写进文件正文"
+                    "（见 library/README.adoc「文件名协议（短、无语义、不承担定位）」）",
+                    f"library/{name}")
+    phase_done()
+
+
 # 『默认引用面』口径（全仓库统一的表述判据）：**本仓库所有内容都会被发布出去**
 # （站点渲染本仓库文档），各内容之间的区别只在"**默认引用什么**"——被引用方按入口加载的
 # 是**公共规范**（`AGENTS_COMMON.adoc` + `specs/`），其余落点（图书馆、维护方自查层、
@@ -2993,6 +3179,56 @@ def check_changelog_entry_guard():
                 "条目须单行 `版本号 | 日期 | 变更摘要`、条目内不换行；"
                 "被续写的条目会与下一条粘连、渲染成一整段"
                 "（specs/general/changelog.adoc「条目书写」）", "CHANGELOG.adoc", j)
+    phase_done()
+
+
+def check_quote_line_guard():
+    """『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
+
+    背景（本项目实测的真实失效）：仓库文档里"引文/说明"段落长期写作 `> 说明：…`，
+    页面侧（`index.html` 用 Asciidoctor.js 渲染）一直显示成引用块、看不出问题；但
+    **命令行侧的解析器不是同一个**：
+
+      * 参考实现 Asciidoctor 把 `> x` 解析为**引用块**（measure：同一份文档在
+        `@asciidoctor/core@2.2.1` 下 `> x` → `<div class="quoteblock">`）；
+      * 旧式 AsciiDoc（Python `asciidoc` 系）的 `[listdef-callout]` 正则为
+        `^<?(?P<index>\d*)> +(?P<text>.+)$`——单 `>` 起头者也被它吃掉，`index` 取到
+        **空串**，随即在 `List.calc_style()` 里
+
+            assert False
+
+        → 整个文件 `FAILED`（实测：`library/README.adoc`、`AGENTS.adoc`、
+        `CHANGELOG.adoc`、`specs/general/git.adoc`、`specs/platform/cnb.adoc`、
+        `specs-project-maintainer/priority.adoc` 六个文件同时被打死）。
+
+    为什么必须在本仓库钉住：`index.html` 的站点渲染与 `specs/general/encoding.adoc`
+    的"命令一侧可能由 `asciidoc`（Python）实现"是同一件事的两面；而
+    `check_asciidoctor_syntax` 只在环境里真有 `asciidoctor` 时才跑（本仓库常常读不到），
+    于是"编译失败"这条**确定项**常年无人拦截——本防线不依赖外部命令，纯文本可判定。
+
+    判定标准（机械）：仓库维护范围内的 `.adoc` 里，**行首为 `> `**（即 `>` 后跟空白）
+    的行即命中——无论它本意是引文还是别的东西，该形态都会被至少一种解析器解释成
+    callout list；写引文用 `[quote]` + 正文行（两代解析器都渲染成引用块，见
+    `library/README.adoc` 的既有用法）。行内的 `>`（如 `a > b`、`<commit>:<path>`）
+    不在判定面内——本防线只判**行首**，不误伤比较运算符与 shell 重定向。
+    """
+    phase("引文段落防线检查（禁裸 > 起头的引文行）")
+    hits = []
+    for rel in collect_adoc_files():
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.read().split("\n"), 1):
+                if line.startswith("> "):
+                    hits.append((rel, j, line[:60]))
+    for rel, j, head in hits:
+        err("引文段落用裸 `>` 起头——该形态会被 AsciiDoc 解析成 **callout list**，"
+            "进而中断整份文档的编译（Python asciidoc 实测 `assert False`）；"
+            "写引文改用 `[quote]` + 正文行（两代解析器都渲染成引用块）："
+            f"{head}…", rel, j)
+    if not hits:
+        detail("  未发现裸 `>` 起头的引文行")
     phase_done()
 
 
@@ -4082,8 +4318,10 @@ def main(argv=None) -> int:
     check_line_ending_guard()
     check_java_test_naming()
     check_library_guard()
+    check_library_locating_guard()
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
+    check_quote_line_guard()
     check_dependency_view_guard()
     check_index_page_guard()
     check_public_content_coverage()

@@ -1569,10 +1569,13 @@ def _valid_usage_body() -> str:
     """生成一份含全部要点锚点的『依据的写入与关联』主题正文（正例基准）。
 
     与 `cm._LIBRARY_USAGE_ANCHORS` 同源：锚点即判据句/节名，缺一即"写入靠自觉、
-    关联凭印象"会被读回来（写入无触发判据、反查无算法）。
+    关联凭印象"会被读回来（写入无触发判据、反查无算法）。**定位协议的使用判据**
+    （第四节）由 `_LIBRARY_LOCATING_USAGE_ANCHORS` 承载，本函数一并写入——
+    两处合起来才是完整的"写入 + 关联 + 定位"协议。
     """
     head = "= 依据的写入与关联（图书馆使用协议）\n\n本文件是依据图书馆的主题之一。\n\n"
-    return head + "\n".join("- " + q for q in cm._LIBRARY_USAGE_ANCHORS) + "\n"
+    return (head + "\n".join("- " + q for q in cm._LIBRARY_USAGE_ANCHORS)
+            + "\n" + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_USAGE_ANCHORS) + "\n")
 
 
 def _valid_adoption_body() -> str:
@@ -1864,6 +1867,185 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
                    + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
         cm.check_library_guard()
         self.assertIn("不存在的目录", self.error_texts())
+
+
+def _valid_locating_index_body() -> str:
+    """含全部『依据定位』要点锚点的图书馆入口正文（正例基准）。
+
+    与 `cm._LIBRARY_LOCATING_ANCHORS` 同源：锚点即主键口径/三步取值/形态约束，
+    缺一即"馆无限大时定位退回整馆下载或按文件名猜"。
+    """
+    head = "= 图书馆\n\n本目录是本项目的图书馆。\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_ANCHORS) + "\n"
+
+
+def _valid_locating_source_body() -> str:
+    """含全部『依据定位』机制原文与取样状态的 sources 正文（正例基准）。
+
+    与 `cm._LIBRARY_LOCATING_SOURCE_MARKERS` 同源：缺逐字引文则"主键是内容""只取一段"
+    只是本站说法；缺"未实测"则把"支持 Range"当成既定事实。
+    """
+    head = "= 外部标准原文摘录\n\n"
+    return head + "\n".join("- " + q for q in cm._LIBRARY_LOCATING_SOURCE_MARKERS) + "\n"
+
+
+class TestCheckLibraryLocatingGuard(CheckSpecsTestCase):
+    """钉住『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
+
+    背景（用户报告的真实问题）：图书馆**没有限制内容的大小与长度、也没有限制要存的范围**，
+    将来可能特别大；其他项目引用时要在**不全量下载**的前提下准确找到"这条依据在哪个文件"。
+    缺协议时只有几种坏做法：整馆下载、按主题名猜文件名（命名随重构变化）、把图书馆当全文
+    检索引擎，**以及要求取用侧先说出"commit/版本号"再拼地址**（用户报告的失效：游客只有
+    https，本仓库也不发布版本号，它根本不知道该取哪个 commit）。故本条钉住：入口侧协议要点
+    （含作者侧/取用侧的区别与"入口 = 常驻层的固定地址"）、usage 侧使用判据、sources 侧机制
+    原文与**如实**取样状态（本站与平台原始文件视图均未实测到 Range 生效，不得当成既定事实）、
+    项目入口的口径，以及**"先取 commit 再拼地址"这一表述形态不得回退**。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_lib = (cm.LIBRARY_DIR, cm.LIBRARY_INDEX)
+        self._orig_project = cm.PROJECT_FILE
+        cm.LIBRARY_DIR = os.path.join(self.root, "library")
+        cm.LIBRARY_INDEX = os.path.join(cm.LIBRARY_DIR, "README.adoc")
+        cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
+
+    def tearDown(self) -> None:
+        (cm.LIBRARY_DIR, cm.LIBRARY_INDEX) = self._orig_lib
+        cm.PROJECT_FILE = self._orig_project
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("AGENTS.adoc",
+                   "= 项目规范\n\n依据图书馆：馆无体量上限，入口 = 常驻层的固定地址\n")
+        self.write("library/README.adoc", _valid_locating_index_body())
+        self.write("library/usage.adoc", _valid_usage_body())
+        self.write("library/adoption.adoc", _valid_adoption_body())
+        self.write("library/sources.adoc", _valid_locating_source_body())
+
+    def test_valid_locating_passes(self):
+        self._write_valid()
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_index_reports(self):
+        # 反例：图书馆入口整体被删（定位协议无处承载→退回整馆下载）
+        self._write_valid()
+        os.remove(cm.LIBRARY_INDEX)
+        cm.check_library_locating_guard()
+        self.assertIn("缺少图书馆入口", self.error_texts())
+
+    def test_index_anchor_deleted_reports(self):
+        # 反例：入口的主键/取值/形态约束被删（定位协议只剩名字）
+        self._write_valid()
+        self.write("library/README.adoc", "= 图书馆\n\n依据大时慢慢找即可\n")
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』要点", self.error_texts())
+
+    def test_usage_side_missing_section_reports(self):
+        # 反例：usage 侧缺"引用方怎么准确定位"节（使用判据无处可读）
+        self._write_valid()
+        body = _valid_usage_body().replace(
+            "== 四、引用方怎么准确定位依据（不全量下载）", "== 四、定位")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("引用方怎么准确定位依据", self.error_texts())
+
+    def test_usage_side_missing_primary_key_reports(self):
+        # 反例：去掉"主键是内容、不是路径"（改名即断档的根因被隐去）
+        self._write_valid()
+        body = _valid_usage_body().replace("**主键是内容、不是路径**", "主键")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("主键是内容、不是路径", self.error_texts())
+
+    def test_usage_side_missing_termination_reports(self):
+        # 反例：终止条件被删（定位又会向下展开成第二真源）
+        self._write_valid()
+        body = _valid_usage_body().replace("**终止条件（L1，同上）**", "终止")
+        self.write("library/usage.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("终止条件（L1，同上）", self.error_texts())
+
+    def test_source_marker_missing_reports(self):
+        # 反例：机制原文被删（"主键是内容""只取一段"变成本站说法）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 外部标准原文摘录\n\ngit 与 RFC 7233 见官方文档\n")
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』的机制原文", self.error_texts())
+
+    def test_source_range_not_marked_unverified_reports(self):
+        # 反例：把"支持 Range"当成既定事实（本地站点其实未实测）
+        self._write_valid()
+        body = _valid_locating_source_body().replace("**未实测**", "已实测生效")
+        self.write("library/sources.adoc", body)
+        cm.check_library_locating_guard()
+        self.assertIn("缺失『依据定位』的机制原文", self.error_texts())
+
+    def test_project_entry_without_primary_key_reports(self):
+        # 反例：项目入口未登记定位协议口径（读者不知道有这份协议）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目规范\n\n依据图书馆见别处\n")
+        cm.check_library_locating_guard()
+        self.assertIn("未含『依据定位』的口径", self.error_texts())
+
+    def test_commit_as_client_prerequisite_reports(self):
+        # 反例（用户报告的失效）：把"先取 commit 再拼地址"写成取用路径——
+        # 游客只有 https、没有仓库与 git，取不到 commit
+        self._write_valid()
+        self.write("library/usage.adoc", _valid_usage_body()
+                   + "\n取用方须先取当前 commit，再拼出原始文件地址。\n")
+        cm.check_library_locating_guard()
+        self.assertIn("取用前置", self.error_texts())
+
+    def test_commit_in_address_exempt_when_negated(self):
+        # 正例豁免：把该错误表述**本身**写出来（否定/失效记录）不得误伤
+        self._write_valid()
+        self.write("library/usage.adoc", _valid_usage_body()
+                   + "\n不得把 commit 写进取值地址：取用侧取不到它。\n")
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_long_library_file_name_reports(self):
+        # 反例（用户报告的失效）：把主张写进文件名——名字写成一句话，
+        # 每次链接与每次目录列举都替它付上下文，而名字本就不是检索键
+        self._write_valid()
+        long_name = "sources-and-locating-protocol-for-evidence.adoc"
+        self.assertGreater(len(long_name), cm.LIBRARY_FILE_NAME_MAX)
+        self.write("library/" + long_name, "= 依据的来源与定位协议\n")
+        cm.check_library_locating_guard()
+        self.assertIn("文件名过长", self.error_texts())
+
+    def test_short_library_file_name_passes(self):
+        # 正例：短词命名（名字不是主键、也不承担语义）
+        self._write_valid()
+        self.write("library/evidence.adoc", "= 依据\n")
+        cm.check_library_locating_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_file_name_max_matches_module_file_limit(self):
+        # 常量口径：与通用层『模块文件名』上限同值（32 字符，含扩展名）
+        self.assertEqual(cm.LIBRARY_FILE_NAME_MAX, 32)
+
+    def test_locating_anchors_constant_nonempty(self):
+        # 常量完整性：锚点与取样标记须齐全（缺一即防线的判据面缩小）
+        for q in ("== 依据的定位协议（入口 + 索引 + 单点取值）",
+                  "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
+                  "**版本固化（可选加固，不得写成前置）**",
+                  "**分段取值（馆特别大时怎么只取一段）**",
+                  "**形态约束（L1）**", "**文件名协议（短、无语义、不承担定位）**",
+                  "**取用侧**是**游客**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_ANCHORS)
+        for q in ("== 四、引用方怎么准确定位依据（不全量下载）",
+                  "**主键是内容、不是路径**",
+                  "**协议不承载的东西（形态约束，L1）**",
+                  "**终止条件（L1，同上）**",
+                  "**取用侧是游客**", "**只有 https、没有仓库、没有 git**",
+                  "**文件名不承担定位（短、无语义，L1）**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_USAGE_ANCHORS)
+        for q in ("== 依据的定位与取值（git / RFC 7233）",
+                  "names the **blob or tree** at the given path", "**未实测**"):
+            self.assertIn(q, cm._LIBRARY_LOCATING_SOURCE_MARKERS)
 
 
 class TestCheckPublicContentCoverage(CheckSpecsTestCase):
@@ -4228,6 +4410,51 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
     def test_missing_changelog_reports(self):
         cm.check_changelog_entry_guard()
         self.assertIn("缺少统一变更日志", self.error_texts())
+
+
+class TestCheckQuoteLineGuard(CheckSpecsTestCase):
+    """钉住『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
+
+    真实失效（本项目实测）：文档里"引文/说明"段落长期写作 `> 说明：…`，页面侧
+    （`index.html` 用 Asciidoctor.js）渲染成引用块、看不出问题；但旧式 AsciiDoc
+    （Python `asciidoc`）的 `[listdef-callout]` 正则 `^<?(?P<index>\d*)> +(?P<text>.+)$`
+    把单 `>` 起头者吃掉后 `index` 取到空串，随即 `List.calc_style()` 里 `assert False`，
+    **整个文件编译失败**——实测一次性打死 6 个文件。该形态纯文本可判定，故须有抓手
+    （`check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑，拦不住）。
+    """
+
+    def test_quote_marker_passes(self):
+        # 正例：用 [quote] + 正文行（两代解析器都渲染成引用块）
+        self.write("A.adoc", "= A\n\n[quote]\n说明：正文\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_bare_gt_line_reports(self):
+        # 反例：裸 `>` 起头（本仓库此前的写法）——会被当成 callout list
+        self.write("A.adoc", "= A\n\n> 说明：正文\n")
+        cm.check_quote_line_guard()
+        self.assertIn("裸 `>` 起头", self.error_texts())
+
+    def test_bare_gt_reports_file_and_line(self):
+        # 反例：须报出**文件与行号**（否则一堆文档里无从下手）
+        self.write("library/README.adoc", "= 图书馆\n\n正文\n> 依据：RFC 2119\n")
+        cm.check_quote_line_guard()
+        self.assertIn("library/README.adoc", self.error_texts())
+        self.assertIn(":4", self.error_texts())
+
+    def test_inline_gt_not_reported(self):
+        # 正例：行内 `>`（比较运算符、shell 重定向、`<commit>:<path>`）不在判定面内
+        self.write("A.adoc",
+                   "= A\n\nshell 重定向用 `cmd > log`；比较写作 `a > b`；"
+                   "定位写作 `<commit>:<path>`\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_nested_list_marker_not_reported(self):
+        # 正例：列表里的 `** ` 与 `* ` 不误报（只判行首 `> `）
+        self.write("A.adoc", "= A\n\n* 一\n** 二\n")
+        cm.check_quote_line_guard()
+        self.assertEqual(cm.errors, [])
 
 
 class TestCheckDependencyViewGuard(CheckSpecsTestCase):
