@@ -106,6 +106,12 @@
      L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
      ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
      "功能都实现了，却很难用"）。
+ 33. 索引页触发判据防线：`specs/general/doc.adoc`「索引页的触发判据」须仍在，且
+     四条要点（触发判据=目录已承载实质文档 / 空目录与仅有索引页自己的不建 / 索引只做导航
+     不得复制上一级内容 / 模块级导航由模块 README 承担）齐备，`specs/general/doc-module.adoc`
+     的模块 doc 索引条目须同写「按需」口径——防把"每级目录须有索引页"读宽成"每个模块都建
+     `doc/README.adoc`"（用户的真实失效：48 个模块被批量补上内容几乎逐字同构、不含本级自身
+     信息的空壳索引）。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -236,6 +242,16 @@ SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
 DEPENDENCY_VIEW_SECTION = "依赖关系文档（模块间依赖的唯一视图）"
 DEPENDENCY_VIEW_FILE = os.path.join(SPECS_DIR, "general", "doc-design.adoc")
 DEPENDENCY_DOC_PATH = "doc/dependency.adoc"
+# 索引页判据（`specs/general/doc.adoc`「索引页的触发判据」+ `specs/general/doc-module.adoc`
+# 的模块 doc 索引条目）：AI 曾把两条规范叠加后读宽——「每级目录须有索引页」+「模块 doc 下应放
+# README.adoc」被推成「有 doc/ 目录就得有 doc/README.adoc」，于是给 48 个模块批量补了内容
+# 几乎逐字同构的 `doc/README.adoc`（表里指的全是同一份模块 README 与同一份依赖视图，不含本级
+# 自身信息），属"为完整而存在"的空壳。根因是规范只写了"每级目录须有索引页"、**没写"该不该
+# 建索引页"的触发判据**。本防线钉住该判据（有实质文档才建 / 空壳不建 / 索引只做导航 / 模块级
+# 导航由模块 README 承担），防"精简/去重"时把判据压回一句"每级目录须有索引页"使失效复发。
+INDEX_PAGE_SECTION = "索引页的触发判据"
+DOC_FILE = os.path.join(SPECS_DIR, "general", "doc.adoc")
+DOC_MODULE_FILE = os.path.join(SPECS_DIR, "general", "doc-module.adoc")
 # 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
 # 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
 # 出现"做完了才发现方向理解错"或"流程走完了但没人回头看规则是否有问题"。被删则
@@ -2865,6 +2881,70 @@ def check_dependency_view_guard():
     phase_done()
 
 
+def check_index_page_guard():
+    """『索引页触发判据防线』：索引页只对"已承载实质文档"的目录要求，空壳不建、索引只做导航。
+
+    背景（用户报告的真实失效）：`specs/general/doc.adoc`「每级目录须有索引页」+
+    `specs/general/doc-module.adoc`「模块 doc 下应放 README.adoc」被叠加读宽，推成
+    "有 doc/ 目录就得有 doc/README.adoc"，于是给 48 个模块批量补了内容几乎逐字同构的
+    `doc/README.adoc`——表里指的全是同一份模块 README 与同一份依赖视图，**不含本级自身
+    信息**，属"为完整而存在"的空壳。根因是规范只写"每级目录须有索引页"、**没写"该不该
+    建索引页"的触发判据**。
+
+    本防线钉住该判据的可执行要点（防"精简/去重"时把判据压回一句"每级目录须有索引页"
+    使失效复发）：触发判据（已承载实质文档才建）、空壳不建（不为补索引先建目录）、
+    索引只做导航（不复制上一级内容）、模块级导航由模块 README 承担。
+    """
+    phase("索引页触发判据防线检查")
+    if not os.path.isfile(DOC_FILE):
+        err("缺少文件 specs/general/doc.adoc——『索引页触发判据』的落点丢失"
+            "（「每级目录须有索引页」会被重新读宽成「每个模块都建 doc/README.adoc」）",
+            "specs/general/doc.adoc")
+        phase_done()
+        return
+    text = open(DOC_FILE, encoding="utf-8").read()
+    if INDEX_PAGE_SECTION not in text:
+        err("索引页触发判据防线被破坏：specs/general/doc.adoc 缺少「索引页的触发判据」——"
+            "只说「每级目录须有索引页」而不说「该不该建」，AI 会把它读宽成"
+            "「每个模块都补一个 doc/README.adoc」并批量生成空壳索引（用户报告的真实失效）",
+            "specs/general/doc.adoc")
+    else:
+        for keys, desc in (
+            (("已承载实质文档", "已存在", "实质文档"),
+             "触发判据（L1）：索引页只在目录**已承载实质文档**时才需要——"
+             "判据是该目录是否已有本级或更深的实质 `.adoc`/`.md`，不得停在「每级目录须有索引页」"),
+            (("空目录", "仅有索引页", "不建"),
+             "空壳不建（L1）：空目录/仅有索引页「自己」的目录一律不建索引页，"
+             "不得为「补索引」先建 `doc/` 目录再放一个 `README.adoc`（这正是批量空壳的成因）"),
+            (("只做导航", "不得把上一级文档", "换个壳复制"),
+             "索引只做导航（L1）：索引页只指向下级/同级真实文档，"
+             "不得把上一级文档（如模块 README）的内容换个壳复制一份——"
+             "指向的目标全是别处同一份内容、不含本级自身信息即属空壳，发现即删"),
+            (("模块级导航由模块 `README` 承担", "不必", "另设一层索引"),
+             "模块级导航归属（L1）：模块总入口本就是模块 `README`，模块内若无独立功能文档，"
+             "不必再在 `doc/` 下另设一层索引——否则索引页只是把模块 README 的目录功能复制一份"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"索引页触发判据防线被破坏：specs/general/doc.adoc 缺失要点 {missing}——{desc}；"
+                    "该条对应用户报告的真实失效（48 个模块被批量补上同构空壳 `doc/README.adoc`），"
+                    "不得删除、不得降级为建议", "specs/general/doc.adoc")
+    # 模块级规范：模块 doc 索引条目须同样写明"按需"判据（否则按模块规范学习时会重新读宽）
+    if not os.path.isfile(DOC_MODULE_FILE):
+        err("缺少文件 specs/general/doc-module.adoc——模块 doc 索引的「按需」判据落点丢失",
+            "specs/general/doc-module.adoc")
+    else:
+        mtext = open(DOC_MODULE_FILE, encoding="utf-8").read()
+        missing = [k for k in ("按需", "无任何实质文档", "不建", "模块自身 `README`")
+                   if k not in mtext]
+        if missing:
+            err(f"索引页触发判据防线被破坏：specs/general/doc-module.adoc 缺失要点 {missing}——"
+                "模块 `doc/` 索引须写明「按需」（doc/ 下有实质文档才放 README，无则不建、"
+                "导航由模块 README 承担），否则「每个模块都该有 doc/README.adoc」会重新成立",
+                "specs/general/doc-module.adoc")
+    phase_done()
+
+
 def check_changelog_entry_guard():
     """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
 
@@ -3606,6 +3686,7 @@ def main(argv=None) -> int:
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
     check_dependency_view_guard()
+    check_index_page_guard()
     check_public_content_coverage()
     check_prompts_primary()
     check_env_marker_guard()

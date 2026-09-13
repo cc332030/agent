@@ -17,6 +17,8 @@
                              反：文件被删/节改名/第二问被删/P2 或本仓库口径未同步/未登记）
   * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
   * check_spec_admission_guard 另钉读法形态与重构后的有效性核对（反：两节被删）
+  * check_index_page_guard —— 索引页触发判据防线（正：触发判据/空壳不建/只做导航/模块 README 齐备；
+                             反：doc.adoc 判据被删、doc-module.adoc 按需口径被删、文件被删）
 
 范围：只校验本仓库维护的规范/模板文本，**不检查 git 工作区状态、不检查引用方项目**
 （引用方项目内部的 delete+create 等操作对本仓库校验不可见，详见 check_specs.py 文件头）。
@@ -884,6 +886,75 @@ class TestCheckFillerDocs(CheckSpecsTestCase):
         self.write("specs/general/doc.adoc", f"= t\n\n{dup}\n\n{dup}\n")
         cm.check_filler_docs()
         self.assertIn("完全重复", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
+# check_index_page_guard（『索引页触发判据防线』）
+# --------------------------------------------------------------------------- #
+class TestCheckIndexPageGuard(CheckSpecsTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_files = (cm.DOC_FILE, cm.DOC_MODULE_FILE)
+        cm.DOC_FILE = os.path.join(self.root, "specs", "general", "doc.adoc")
+        cm.DOC_MODULE_FILE = os.path.join(self.root, "specs", "general", "doc-module.adoc")
+
+    def tearDown(self) -> None:
+        cm.DOC_FILE, cm.DOC_MODULE_FILE = self._orig_files
+        super().tearDown()
+
+    DOC = (
+        "= 文档规范\n\n== 文档组织与导航\n\n"
+        "* 文档目录即站点导航：已承载文档的目录须有索引页。\n"
+        "* **索引页的触发判据（「该不该建索引页」）**：索引页是「有下级内容」时才需要——\n"
+        "  ** 目录下已存在实质文档（已承载实质文档） → 建索引页；**空目录/仅有索引页「自己」一律不建**；\n"
+        "  ** 索引页**只做导航**：不得把上一级文档（如模块 README）**换个壳复制**；\n"
+        "  ** 模块级导航由模块 `README` 承担**：模块内若无独立功能文档，**不必**另设一层索引。\n"
+    )
+    MODULE = (
+        "= 模块级文档规范\n\n"
+        "* 模块 `doc/` 下**按需**放 `README.adoc` 作模块文档索引——判据是模块 `doc/` 下是否已承载实质文档：\n"
+        "  ** 已承载模块内功能/组件文档 → 放 `README.adoc`；\n"
+        "  ** 模块 `doc/` 下无任何实质文档 → **不建**；导航由**模块自身 `README`** 承担。\n"
+    )
+
+    def _write_valid(self):
+        self.write("specs/general/doc.adoc", self.DOC)
+        self.write("specs/general/doc-module.adoc", self.MODULE)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_index_page_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_doc_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "doc.adoc"))
+        cm.check_index_page_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_trigger_clause_removed_reports(self):
+        # 反例：判据节被删 → 只剩「每级目录须有索引页」，失效复发
+        self._write_valid()
+        self.write("specs/general/doc.adoc", "= 文档规范\n\n== 文档组织与导航\n* 每级目录须有索引页。\n")
+        cm.check_index_page_guard()
+        self.assertIn("索引页的触发判据", self.error_texts())
+
+    def test_empty_shell_clause_removed_reports(self):
+        # 反例：「空目录不建索引页」被删 → 批量空壳索引重新被允许
+        self._write_valid()
+        bad = self.DOC.replace(
+            "**空目录/仅有索引页「自己」一律不建**", "**空目录也应补齐索引**")
+        self.write("specs/general/doc.adoc", bad)
+        cm.check_index_page_guard()
+        self.assertIn("空目录", self.error_texts())
+
+    def test_module_readme_clause_removed_reports(self):
+        # 反例：模块级导航归属被删 → 「每个模块都该有 doc/README.adoc」重新成立
+        self._write_valid()
+        self.write("specs/general/doc-module.adoc",
+                   "= 模块级文档规范\n\n* 模块 `doc/` 下**应放** `README.adoc`。\n")
+        cm.check_index_page_guard()
+        self.assertIn("doc-module.adoc", self.error_texts())
 
 
 # integration：完整合法样例全通过
