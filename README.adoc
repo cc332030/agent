@@ -72,4 +72,5 @@
 
 == 网站首页
 
-本站通过 `index.html` + Asciidoctor.js 动态解析本文件（`README.adoc`）并渲染为网页：https://agent.c332030.com/
+本站通过 `index.html` + Asciidoctor.js 动态解析仓库内的 `.adoc` 文档并渲染为网页：https://agent.c332030.com/
+默认加载本文件（`README.adoc`）；**点击站内文档链接（含文档正文里指向其他 `.adoc` 的 `link:`）不会离开本页**，只在本页重新加载并渲染目标文档——当前文档由地址栏 hash（`#./<仓库根相对路径>`）承载，故可直接分享、刷新与前进后退；文档正文里指向非 `.adoc` 文件（如 `script/clean_tmp.py`）的链接仍按原始文件打开。
