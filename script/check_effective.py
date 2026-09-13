@@ -99,6 +99,7 @@ MECHANISMS = [
     ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）", "CHANGELOG.adoc", "script/check_specs.py", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条不得超长（实证失效：日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连）；『条目是否记对了变更点、有没有漏记』属内容判断，交人/子 agent 复核"),
     ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定，交人/子 agent 复核"),
     ("多模块项目的模块间依赖须有完整依赖关系文档（UML 表述、查依赖先读它、缺失即新增、不重复声明）", "specs/general/doc-design.adoc", "script/check_specs.py", "check_dependency_view_guard 钉住「依赖关系文档（模块间依赖的唯一视图）」节的要点（完整 / UML 优先 / 固定路径可直达 / 先查本文档 / 缺失即新增 / 同提交同步 / 不重复声明 / 与构建工具边界）与两处指向（加载调度器、依赖规范）；『某个项目的依赖视图是否真的完整、有没有过期』属引用方项目产物（本仓库不可见），交人/子 agent 复核"),
+    ("索引页只在目录已承载实质文档时要求，空目录不建、索引只做导航", "specs/general/doc.adoc", "script/check_specs.py", "check_index_page_guard 钉住「索引页的触发判据」（已承载实质文档才建 / 空目录与仅有索引页自己的不建 / 索引只做导航不得复制上一级内容 / 模块级导航由模块 README 承担）与 specs/general/doc-module.adoc 的「按需」口径（doc/ 下有实质文档才放 README、无则不建）；实证失效：AI 把「每级目录须有索引页」读宽成「每个模块都建 doc/README.adoc」，批量生成 48 个同构空壳索引）；『某目录该不该有索引页』属语义判断，交人/子 agent 复核"),
     ("CNB NPC（CI/CD 执行者）严禁合并 PR、人工要求或直授也必须拒绝", "specs/platform/cnb.adoc", "script/check_specs.py", "check_npc_merge_guard 钉住六处要点（禁令本体 / 无豁免含『授权不免除』 / 可逐条核对的判定标准 / 与「冲突处理」不矛盾的边界 / 提示词公共片段 `delivery` 同口径 L1 条 / 公开提示词入口 PROMPTS.adoc 同步）；『某次是否真的执行了合并』属运行时行为（平台操作记录与评论实际内容），机械无法判定，交人/子 agent 复核"),
 ]
 
