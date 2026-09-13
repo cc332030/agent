@@ -3614,6 +3614,91 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
+    """钉住『合并关系防线』：解决冲突/压缩后**目标分支仍须是本分支的祖先**。
+
+    这条来自一次**工作树看不出、平台必拦**的真实失效：把"解决冲突"做成"照抄目标分支的
+    文件内容后另起一个单亲提交"，`git diff` 看不出毛病、单测也全绿，但目标分支并未成为
+    本分支的祖先，平台侧据合并关系判定，PR 仍卡在 `code_conflict`。坏形态**没有任何一处
+    本地可见的异常**，唯一判据是历史拓扑，而这种判据最容易被顺手"整理掉"（用户要求压缩时
+    把合并提交一并压掉）。故本组用例除正例外，专门覆盖"条文被删""判据被抽""根因形态被删"
+    "压缩不吞合并提交缺失""文件缺失"等反例。
+    """
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 压缩提交（提交历史的整理）\n"
+        "* **压缩须保留与目标分支的合并关系（L1）**：压缩后的提交**须仍以目标分支的最新提交为祖先**"
+        "（等价判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交；`git merge --no-ff <目标分支>`"
+        " 时**须保留双亲**、`git rev-list --parents -n1` 显示两个父提交）。**根因（真实失效）**："
+        "把\"解决冲突\"做成\"**照抄目标分支的文件内容后另起一个单亲提交**\"，工作树看起来一致，但"
+        "**目标分支并未成为本分支的祖先**，平台侧仍报冲突、PR 卡在 `code_conflict`"
+        "（判据：`git merge-base --is-ancestor <目标分支> <分支>` 为假）。**正确做法**：真做一次合并后"
+        "以合并提交落盘；压缩**不吞掉合并提交**（**合并提交是\"已并入\"的凭据**）。\n"
+        "* **禁止的压缩形态（L1）**：①他人提交；②已合入目标分支的历史。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_merge_relationship_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：平台层规范文件被删 → 要求无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_merge_relationship_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_rule_deleted_reports(self):
+        # 反例：整条 L1 被删 → "照抄内容后另起单亲提交"的失效复发
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩提交＝提交历史整理**。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("合并关系", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号，可核对判据被抽掉
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：压缩后仍以目标分支最新提交为祖先，"
+                   "**须仍以目标分支的最新提交为祖先**，务必谨慎。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("git merge-base", self.error_texts())
+
+    def test_root_cause_removed_reports(self):
+        # 反例：根因形态被删 → 条文会被读成"工作树一致即可"，正是要拦的失效
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**，"
+                   "判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交、"
+                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交；"
+                   "`git merge-base --is-ancestor <目标分支> <分支>` 为假即违规。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("根因", self.error_texts())
+
+    def test_squash_swallowing_merge_commit_reports(self):
+        # 反例：没有"压缩不吞掉合并提交"这一接口 → 用户要求压缩时会把唯一凭据一并压掉
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
+                   "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**"
+                   "（`git merge-base <分支> <目标分支>` 等于目标分支最新提交；"
+                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交）；"
+                   "根因：**照抄目标分支的文件内容后另起一个单亲提交**，"
+                   "**目标分支并未成为本分支的祖先**；"
+                   "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
+        cm.check_merge_relationship_guard()
+        self.assertIn("不吞掉合并提交", self.error_texts())
+
+
 class TestCheckConfigClassGuard(CheckSpecsTestCase):
     """钉住『配置类不写逻辑』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
 
@@ -4030,6 +4115,210 @@ class TestCheckReusePrecedentGuard(CheckSpecsTestCase):
         self.write("README.adoc", "目录结构：（未同步）。\n")
         cm.check_reuse_precedent_guard()
         self.assertIn("README", self.error_texts())
+
+
+class TestCheckExternalScriptGuard(CheckSpecsTestCase):
+    """钉住『跨语言执行脚本的落点防线』：脚本独立成文件放资源文件夹、扩展名取被调语言。
+
+    该条对应用户报告的真实失效与要求：宿主语言里被执行的另一语言脚本用**字符串拼接/
+    字符串模板**内联——**没有高亮、也没有错误校验**，语法错/字段名错/参数个数不匹配都到
+    运行期才暴露。要求是**所有语言**统一：放资源文件夹、扩展名取目标语言的扩展名（或该
+    技术明确支持的文件形式，如 MyBatis 的 XML 承载 SQL），lua 通过读取文件使用。
+    最易被三件事冲掉：**条文被删**（退回内联）、**降级成建议**、**技术栈落点缺失或
+    优先级/结构被改**（Java 侧只写"建议用文件"而无 `src/main/resources/`、`DefaultRedisScript`、
+    MyBatis 的 `*.xml` 与 `${}` 白名单）。**加载时机**同理：删掉"性能敏感路径不每次读"
+    或删掉"需求要求内容会变的不缓存"都会让本条失真，故一并逐项覆盖。
+    """
+
+    CODING = (
+        "= 通用编码规范\n"
+        "\n"
+        "== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
+        "\n"
+        "被调语言的脚本不得以字符串拼接、字符串模板内联在宿主语言代码里，一律独立成文件"
+        "放在资源文件夹。\n"
+        "* **落点（L1）**：跨语言脚本须独立成文件，放在资源文件夹，**不得**内联在宿主语言代码里。\n"
+        "* **扩展名（L1）**：文件扩展名**取被调语言自身的扩展名**；无通用扩展名时取该技术"
+        "明确支持的文件形式（如 MyBatis 的 `*.xml` 承载 SQL）。\n"
+        "* **读取方式（L1）**：脚本**从资源读取后执行**。\n"
+        "* **判定标准（任一命中即违规）**：①宿主语言代码里出现被调语言的语句文本（`SELECT`）；"
+        "②以字符串拼接、格式化、插值、模板字面量组装该脚本；③性能敏感路径上\"每次使用都重新读取\"。\n"
+        "* **加载时机（L1）**：**性能敏感**路径不得每次使用都去读资源——资源进 "
+        "`classpath` 后发布即不变，须**第一次使用**时读取一次并缓存；"
+        "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。\n"
+        "* **反例（L2）**：Java 里拼 SQL、把一段 Lua 写成 Java 多行字符串再 `eval`。\n"
+        "* 依据（标准名/编号）：OWASP SQL Injection Prevention Cheat Sheet；ISO/IEC 25010。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.SPRING_STACK_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_spring,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* Lua 写成 `.lua` 文件、用 `DefaultRedisScript` 加载。\n"
+                   "* 加载时机：性能敏感路径按 `private static final` 声明脚本；"
+                   "不敏感路径每次读无妨；需求要求内容会变的模板**不缓存**；"
+                   "Redis 热点按 `EVALSHA` 复用。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 跨语言执行脚本（资源文件夹）\n"
+                   "* 见「跨语言执行脚本（SQL / Lua 等）」。\n"
+                   "* 加载时机：性能敏感路径按静态常量读一次；需求要求内容会变的模板"
+                   "不适用缓存。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "通用编码 `specs/general/coding.adoc`（含「跨语言执行脚本的落点（资源文件夹，"
+                   "不写字符串拼接/模板）」：SQL/Lua）；Java 登记 `specs/stack/java.adoc`"
+                   "（跨语言脚本 `src/main/resources/` 下）\n")
+        self.write("README.adoc",
+                   "目录结构：通用编码（含**跨语言执行脚本的落点**、**加载时机**）。\n")
+
+    def test_valid_external_script_guard_passes(self):
+        self._write_valid()
+        cm.check_external_script_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层该节被删 → SQL/Lua 无处安放、重新内联成字符串
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 表达式与调用写法\n* x。\n")
+        cm.check_external_script_guard()
+        self.assertIn("跨语言执行脚本的落点", self.error_texts())
+
+    def test_extension_clause_removed_reports(self):
+        # 反例：扩展名要求（含 MyBatis 例外）被抽掉 → 退回无语义扩展名
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("取被调语言自身的扩展名", "取合适扩展名")
+                              .replace("如 MyBatis 的 `*.xml` 承载 SQL", ""))
+        cm.check_external_script_guard()
+        self.assertIn("扩展名", self.error_texts())
+
+    def test_read_clause_removed_reports(self):
+        # 反例：'按资源读取后执行'被删 → '放文件'退化成'放文件但读进字符串再拼装'
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**读取方式（L1）**：脚本**从资源读取后执行**。", ""))
+        cm.check_external_script_guard()
+        self.assertIn("从资源读取后执行", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：判定标准被抽成一句总述 → 判据不可判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
+                   "* 落点：放资源文件夹。\n"
+                   "* 扩展名：取被调语言自身的扩展名（如 MyBatis 的 `*.xml` 承载 SQL）。\n"
+                   "* 读取方式：从资源读取后执行。\n"
+                   "* 反例：多行字符串。\n"
+                   "* 依据：OWASP SQL Injection Prevention Cheat Sheet。\n")
+        cm.check_external_script_guard()
+        self.assertIn("SELECT", self.error_texts())
+
+    def test_java_landing_missing_reports(self):
+        # 反例：Java 栈落点缺失（只改通用层 = Java 项目读不到判据）
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== 健壮性\n* null。\n")
+        cm.check_external_script_guard()
+        self.assertIn("java.adoc", self.error_texts())
+
+    def test_java_lua_clause_removed_reports(self):
+        # 反例：Java 侧 Redis/Lua 的做法被抽掉（用户明确点名的场景：lua 通过读取文件使用）
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        cm.check_external_script_guard()
+        self.assertIn(".lua", self.error_texts())
+
+    def test_spring_reference_missing_reports(self):
+        # 反例：Spring 栈未引用该条 → Spring 项目漏掉判据
+        self._write_valid()
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 事务\n* 事务。\n")
+        cm.check_external_script_guard()
+        self.assertIn("spring.adoc", self.error_texts())
+
+    def test_dispatcher_registration_missing_reports(self):
+        # 反例：调度器未登记识别特征 → 该节永不被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "通用编码 `specs/general/coding.adoc`\n")
+        cm.check_external_script_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
+        self._write_valid()
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_external_script_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_loading_time_clause_removed_reports(self):
+        # 反例：加载时机被删 → 争分夺秒的路径（Redis 操作）每次都去读一遍资源
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "* **加载时机（L1）**：**性能敏感**路径不得每次使用都去读资源——资源进 "
+                       "`classpath` 后发布即不变，须**第一次使用**时读取一次并缓存；"
+                       "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。\n", ""))
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
+
+    def test_mutable_content_boundary_removed_reports(self):
+        # 反例：反面边界被抽掉（只剩"读一次缓存"）→ 可变模板被冻结在首读版本上
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "**需求要求内容会变**的（如 HTML 模板）**不适用缓存**。",
+                       "读一次就缓存。"))
+        cm.check_external_script_guard()
+        self.assertIn("不适用缓存", self.error_texts())
+
+    def test_java_loading_time_removed_reports(self):
+        # 反例：Java 侧只写"放文件"、没有加载时机 → 方法内 new DefaultRedisScript 每次读
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   "* SQL 按资源加载 `.sql`（`src/main/resources/` 下）。\n"
+                   "* Lua 写成 `.lua` 文件、用 `DefaultRedisScript` 加载。\n"
+                   "* MyBatis 的 SQL 写 mapper `*.xml`；`${}` 是拼接、须白名单校验，"
+                   "其余用 `#{}`。\n")
+        cm.check_external_script_guard()
+        self.assertIn("private static final", self.error_texts())
+
+    def test_spring_loading_time_not_synced_reports(self):
+        # 反例：Spring 栈未承接加载时机 → Spring 项目读到"放文件"却仍每次都去读
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范\n\n== 跨语言执行脚本（资源文件夹）\n"
+                   "* 见「跨语言执行脚本（SQL / Lua 等）」。\n")
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
+
+    def test_readme_loading_time_not_synced_reports(self):
+        # 反例：README 未同步加载时机 → 读者不知道这条管到读取次数
+        self._write_valid()
+        self.write("README.adoc", "目录结构：通用编码（含**跨语言执行脚本的落点**）。\n")
+        cm.check_external_script_guard()
+        self.assertIn("加载时机", self.error_texts())
 
 
 class TestCheckCiCdGuard(CheckSpecsTestCase):

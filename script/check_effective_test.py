@@ -135,6 +135,17 @@ class TestEvaluate(unittest.TestCase):
             statuses["配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）"],
             "has-grip")
 
+    def test_external_script_guard_has_mechanical_grip(self):
+        # "跨语言执行脚本须放资源文件夹、扩展名取被调语言，且按性能敏感度决定读取时机"
+        # 由 check_external_script_guard 钉住（通用层四条 L1 + 判定标准与反例 +
+        # Java/Spring 落点与加载时机 + 调度器登记与 README 同步）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["跨语言执行脚本须放资源文件夹、扩展名取被调语言的扩展名，"
+                     "且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）"],
+            "has-grip")
+
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")
