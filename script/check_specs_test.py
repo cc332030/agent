@@ -3800,3 +3800,141 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
     def test_missing_changelog_reports(self):
         cm.check_changelog_entry_guard()
         self.assertIn("缺少统一变更日志", self.error_texts())
+
+
+class TestCheckDependencyViewGuard(CheckSpecsTestCase):
+    """钉住『依赖关系文档』：模块间依赖的唯一视图（完整、UML、可直达、不过期、不重复声明）。
+
+    该条对应用户报告的真实失效：AI 编辑代码时**加重复依赖**——模块已经（直接或间接）
+    依赖了某库，却又在它的依赖清单里声明一次。根因不是"忘了"，而是**没有一份完整依赖
+    关系的视图**，只能临场重建依赖树。最易被两件事冲掉：
+      * **降级成一句口号** —— "要注意依赖关系"读起来无害，于是重复依赖照旧；
+      * **入口不指向它** —— 规则写在被引用的文件里、加载调度器/依赖规范都不指向它，
+        多模块项目与"增删依赖"场景根本不会加载到（写了等于没写）。
+    故本组用例覆盖"节被删""UML 优先被删""先查本文档被删""缺失即新增被删""不重复声明被删"
+    "调度器未指向""依赖规范未指向"。
+    """
+
+    SECTION = (
+        "== 依赖关系文档（模块间依赖的唯一视图）\n"
+        "\n"
+        "**识别特征**：多模块结构，或动手增删依赖。\n"
+        "\n"
+        "* **完整依赖关系文档即唯一视图（L1）**：多模块项目须维护一份**完整依赖关系文档**"
+        "（`<项目根>/doc/dependency.adoc`，单模块项目放 `<模块>/doc/dependency.adoc`）——"
+        "**完整**指列出**当前项目全部模块之间**的依赖关系（谁依赖谁、方向；**不列第三方库清单**）。\n"
+        "* **优先用 UML 表述（L1）**：依赖关系**以 UML 图为主**，模块用组件/包、依赖用依赖箭头；"
+        "**不得只写一段文字描述**。\n"
+        "* **位置须让 AI 直接处理（L1）**：文档须放在多模块项目的**文档根目录**"
+        "（项目根 `doc/dependency.adoc`）。\n"
+        "* **查依赖关系优先查本文档（L1）**：涉及依赖判断时**先读本视图**；"
+        "**回答完即止，不重启依赖树解析**。\n"
+        "* **文档缺失则新增，不跳过（L1）**：多模块项目**没有本视图时**，须在本次任务内"
+        "**新增**；**存在但不完整**时补全后再用。\n"
+        "* **依赖关系变更须与构建文件同一提交内同步（L1）**：**同一提交内**更新本视图。\n"
+        "* **模块内外部依赖不重复声明（L1）**：**不得再在它的依赖清单里重复声明同一依赖**；"
+        "**新增依赖前先读本视图**。\n"
+        "* **文档与工具各司其职（L2）**：不替代构建工具（依赖树只描述**第三方库**）。\n"
+        "* 依据（标准名/编号）：ISO/IEC/IEEE 42010、UML、ISO/IEC/IEEE 29148\n"
+    )
+    GENERIC = (
+        "= 入口\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 设计文档 → link:specs/general/doc-design.adoc[]"
+        "（**含模块间依赖关系文档**，见其「依赖关系文档（模块间依赖的唯一视图）」）\n"
+        "== 规范文件登记完整性\n"
+    )
+    DEPENDENCY = (
+        "= 依赖管理规范\n\n== 引入依赖\n"
+        "* **传递依赖不直接使用（L2）**：确需使用时须显式声明并说明理由。"
+        "**多模块项目的模块间依赖不在本条范围**——模块已被（直接或间接）依赖时"
+        "**不得重复声明同一依赖**，判定前先读模块间依赖的唯一视图"
+        "（见 link:../general/doc-design.adoc[]「依赖关系文档（模块间依赖的唯一视图）」）。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_view = cm.DEPENDENCY_VIEW_FILE
+        cm.DEPENDENCY_VIEW_FILE = os.path.join(
+            self.root, "specs", "general", "doc-design.adoc")
+
+    def tearDown(self) -> None:
+        cm.DEPENDENCY_VIEW_FILE = self._orig_view
+        CheckSpecsTestCase.tearDown(self)
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/doc-design.adoc", "= 设计文档规范\n\n" + self.SECTION)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("specs/general/dependency.adoc", self.DEPENDENCY)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_dependency_view_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 依赖视图无处承载，重复依赖照旧
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc", "= 设计文档规范\n\n== 设计文档\n")
+        cm.check_dependency_view_guard()
+        self.assertIn("依赖关系文档（模块间依赖的唯一视图）", self.error_texts())
+
+    def test_uml_priority_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：UML 优先被删、只剩"要有依赖文档" → 判据不可判定
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档规范\n\n" + self.SECTION.replace(
+                       "* **优先用 UML 表述（L1）**：依赖关系**以 UML 图为主**，模块用组件/包、"
+                       "依赖用依赖箭头；**不得只写一段文字描述**。\n", ""))
+        cm.check_dependency_view_guard()
+        self.assertIn("UML", self.error_texts())
+
+    def test_read_first_rule_removed_reports(self):
+        # 反例："先读本文档"被删 → 规则不会被使用（仍去解析依赖树）
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档规范\n\n" + self.SECTION.replace(
+                       "* **查依赖关系优先查本文档（L1）**：涉及依赖判断时**先读本视图**；"
+                       "**回答完即止，不重启依赖树解析**。\n", ""))
+        cm.check_dependency_view_guard()
+        self.assertIn("先读本视图", self.error_texts())
+
+    def test_missing_then_add_removed_reports(self):
+        # 反例："缺失则新增"被删 → 规则只对已合规项目生效
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档规范\n\n" + self.SECTION.replace(
+                       "* **文档缺失则新增，不跳过（L1）**：多模块项目**没有本视图时**，"
+                       "须在本次任务内**新增**；**存在但不完整**时补全后再用。\n", ""))
+        cm.check_dependency_view_guard()
+        self.assertIn("没有本视图时", self.error_texts())
+
+    def test_no_duplicate_declare_removed_reports(self):
+        # 反例："不重复声明"被删 → 本条要消灭的失效本身不再被约束
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档规范\n\n" + self.SECTION.replace(
+                       "* **模块内外部依赖不重复声明（L1）**：**不得再在它的依赖清单里重复声明同一依赖**；"
+                       "**新增依赖前先读本视图**。\n", ""))
+        cm.check_dependency_view_guard()
+        self.assertIn("不得再在它的依赖清单里重复声明", self.error_texts())
+
+    def test_dispatcher_not_pointing_reports(self):
+        # 反例：加载调度器未指向该节 → 多模块/增删依赖场景不会加载到它
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.GENERIC.replace(
+            "（**含模块间依赖关系文档**，见其「依赖关系文档（模块间依赖的唯一视图）」）", ""))
+        cm.check_dependency_view_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dependency_spec_not_pointing_reports(self):
+        # 反例：依赖规范未指向该视图 → 按依赖规范学习时漏掉这条
+        self._write_valid()
+        self.write("specs/general/dependency.adoc", "= 依赖管理规范\n\n== 引入依赖\n* 先查再用。\n")
+        cm.check_dependency_view_guard()
+        self.assertIn("dependency.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "doc-design.adoc"))
+        cm.check_dependency_view_guard()
+        self.assertIn("缺少文件", self.error_texts())
