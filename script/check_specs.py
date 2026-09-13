@@ -224,6 +224,18 @@ ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
 JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
+# 依赖关系文档（模块间依赖的唯一视图，跨语言）：其价值全在"读得到、看得懂、不过期"——
+# 多模块项目若没有一份完整模块依赖关系视图，每加一个依赖都要先重建依赖树，于是出现
+# "模块已经（间接）依赖了某库却又加一次"这类**重复声明**（依赖图变脏：版本收敛与统一升
+# 级失去唯一入口、可重现性变差、体积与启动开销悄然增加）。故落点为 `specs/general/doc-design.adoc`
+# 的「依赖关系文档（模块间依赖的唯一视图）」节（含 UML 表述规范与边界），并由加载调度器
+# 与依赖规范两处指向它（**涉及多模块/增删依赖即加载**；只写在被引用的文件里、入口不指向它，
+# 执行者就不会知道有这份视图该先读）。本防线钉住该节的**可执行要点**（完整、UML 优先、
+# 位置可直达、先查本文档、缺失即新增、同提交同步、不重复声明、与工具边界），
+# 防"精简/去重"时把判据压成一句"要注意依赖关系"（那样本条就只剩口号）。
+DEPENDENCY_VIEW_SECTION = "依赖关系文档（模块间依赖的唯一视图）"
+DEPENDENCY_VIEW_FILE = os.path.join(SPECS_DIR, "general", "doc-design.adoc")
+DEPENDENCY_DOC_PATH = "doc/dependency.adoc"
 # 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
 # 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
 # 出现"做完了才发现方向理解错"或"流程走完了但没人回头看规则是否有问题"。被删则
@@ -2763,6 +2775,96 @@ def check_ref_scope_wording_guard():
     phase_done()
 
 
+def check_dependency_view_guard():
+    """『依赖关系文档防线』：模块间依赖的唯一视图（完整、UML、可直达、不过期）不得被删或降级。
+
+    背景（用户报告的真实失效）：AI 编辑代码时**加重复依赖**——模块**已经（直接或间接）依赖**
+    了某库，却又在它的依赖清单里声明一次。根因不是"忘了"，而是**项目里没有一份完整依赖关系
+    的视图**：只能临场重建，于是每次都要先把依赖树捋一遍。后果是依赖图变脏——版本收敛与统一
+    升级失去唯一入口、可重现性变差、体积与启动开销悄然增加。
+
+    本条是**跨语言**的（依赖关系与语言无关），落点在 `specs/general/doc-design.adoc`
+    的「依赖关系文档（模块间依赖的唯一视图）」节 + 「UML 表述规范」子节，并由加载调度器
+    （`AGENTS_COMMON.adoc` 的设计文档条目，否则多模块项目不知道有这份视图）与依赖规范
+    （`specs/general/dependency.adoc` 的「引入依赖」，否则按依赖规范学习时漏掉）两处指向。
+
+    本防线钉住该节的**可执行要点**（钉"要求文本仍在且落在该落点"；"某个项目的依赖视图是否
+    真的完整、有没有过期"属引用方项目产物，本仓库看不到，交人/子 agent 复核）：
+    完整（模块之间、不列第三方库）、UML 优先（不得只写一段文字）、位置可直达（AI 按固定路径
+    读取）、先查本文档（不重启依赖树解析）、缺失即新增、同提交同步、不重复声明、与构建工具
+    的边界（不替代依赖树）。
+    """
+    phase("依赖关系文档防线检查")
+    rel = os.path.relpath(DEPENDENCY_VIEW_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(DEPENDENCY_VIEW_FILE):
+        err(f"缺少文件 {rel}——『依赖关系文档』的落点丢失"
+            "（多模块项目将没有模块间依赖的唯一视图，重复依赖只能靠临场重建依赖树发现）", rel)
+        phase_done()
+        return
+    text = open(DEPENDENCY_VIEW_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(DEPENDENCY_VIEW_SECTION) + r".*?(?=^== |\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"依赖关系文档防线被破坏：{rel} 缺少「{DEPENDENCY_VIEW_SECTION}」节——"
+            "模块间依赖的唯一视图（完整依赖关系、UML 表述、先查本文档、缺失即新增）无处承载，"
+            "『模块已间接依赖却又加一次』的失效会重新出现", rel)
+        section = ""
+    else:
+        section = m.group(0)
+    if section:
+        for keys, desc in (
+            ((DEPENDENCY_DOC_PATH, "多模块", "文档根目录"),
+             "落点与位置：多模块项目须有固定路径 `doc/dependency.adoc`，且写明它放在文档根目录"
+             "（使站点导航与 AI 可按固定路径直达）——路径不固定则『先查本文档』无从执行"),
+            (("完整", "全部模块", "模块之间"),
+             "完整（L1）：须列出**当前项目全部模块之间**的依赖关系，"
+             "且写明『完整』的含义是模块之间、而非第三方库清单（否则读者仍要去读构建文件）"),
+            (("UML", "依赖箭头"),
+             "UML 优先（L1）：依赖关系须以 UML 图为主（模块用组件/包、依赖用依赖箭头），"
+             "**不得只写一段文字描述**——文字无法枚举全部模块对"),
+            (("先读本视图", "不重启依赖树解析"),
+             "先说清『查依赖关系优先查本文档』：涉及依赖判断时先读本视图、回答完即止，"
+             "不得每次重新解析依赖树（否则本条等于没写）"),
+            (("没有本视图时", "本次任务内", "补全后再用"),
+             "文档缺失则新增（L1）：多模块项目没有本视图时须在本次任务内新增/补全，"
+             "不得以『存量还没有』为由跳过（否则规则只对已合规的项目生效）"),
+            (("同一提交内", "更新本视图"),
+             "同提交同步（L1）：模块之间增删依赖、新增/拆分模块后须在同一提交内更新本视图——"
+             "视图过期比没有更坏（读者会按它得出错误结论）"),
+            (("不得再在它的依赖清单里重复声明", "新增依赖前先读本视图"),
+             "不重复声明（L1）：模块已被（直接或间接）依赖时不得重复声明同一依赖，"
+             "且须写明新增依赖前先读本视图（这是本条要消灭的那个失效本身）"),
+            (("不替代构建工具", "第三方库"),
+             "文档与工具各司其职（L2）：本视图不替代构建工具的依赖树"
+             "（依赖树只描述第三方库的传递关系、与模块间依赖不是一回事），冲突时以构建文件为准"),
+            (("依据", "ISO/IEC/IEEE 42010", "UML"),
+             "依据行：须标注标准名/编号（架构描述与 UML 记法、可追溯性、显式声明依赖），"
+             "否则后人无从判断它还成不成立"),
+        ):
+            missing = [k for k in keys if k not in section]
+            if missing:
+                err(f"依赖关系文档防线被破坏：{rel}「{DEPENDENCY_VIEW_SECTION}」"
+                    f"缺失要点 {missing}——{desc}；该条对应用户报告的真实失效"
+                    "（模块已间接依赖却又加一次），不得删除、不得降级为建议", rel)
+    # 加载调度器：设计文档条目须指向它（多模块项目不知道有这份视图 = 规则不会被触发）
+    generic = open(GENERIC_FILE, encoding="utf-8").read()
+    if DEPENDENCY_VIEW_SECTION not in generic:
+        err("依赖关系文档防线被破坏：AGENTS_COMMON.adoc 的设计文档加载条目未指向"
+            f"「{DEPENDENCY_VIEW_SECTION}」——多模块项目与『增删依赖』场景不会加载到它"
+            "（规则写了但不会被触发）", "AGENTS_COMMON.adoc")
+    # 依赖规范：『引入依赖』须指向本视图（按依赖规范学习时也要能读到）
+    dep_file = os.path.join(SPECS_DIR, "general", "dependency.adoc")
+    if os.path.isfile(dep_file):
+        dtext = open(dep_file, encoding="utf-8").read()
+        missing = [k for k in (DEPENDENCY_VIEW_SECTION, "不得重复声明同一依赖",
+                               "doc-design.adoc") if k not in dtext]
+        if missing:
+            err(f"依赖关系文档防线被破坏：specs/general/dependency.adoc 缺失要点 {missing}——"
+                "按依赖规范学习时会漏掉『模块间依赖不重复声明、先读依赖视图』这条"
+                "（规则被指向，不复制）", "specs/general/dependency.adoc")
+    phase_done()
+
+
 def check_changelog_entry_guard():
     """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
 
@@ -3503,6 +3605,7 @@ def main(argv=None) -> int:
     check_library_guard()
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
+    check_dependency_view_guard()
     check_public_content_coverage()
     check_prompts_primary()
     check_env_marker_guard()

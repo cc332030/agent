@@ -45,7 +45,7 @@
   ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF，判据见下文编码条目）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
   ** 写/更新变更记录（changelog，识别特征：存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]
-  ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]
+  ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]（**含模块间依赖关系文档**：多模块项目须有 `doc/dependency.adoc` 以 UML 表述完整模块依赖关系，是查依赖关系的**第一落点**，见其「依赖关系文档（模块间依赖的唯一视图）」）
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
   ** 模块级文档组织（存在**多模块结构**，或涉及"模块文档放哪、根 `doc/` 放什么"的归属判定） → link:specs/general/doc-module.adoc[]
   ** git/版本控制操作（含**文件移动/重命名的 rename 识别**、行尾与检出归一、暂存与提交检查） → link:specs/general/git.adoc[]（**rename 未被识别的两类非操作类根因（合并/基点错位、一拆二/内容再分配）与核对**见「文件移动与重命名」）
