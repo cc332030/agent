@@ -146,6 +146,12 @@ class TestEvaluate(unittest.TestCase):
                      "且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）"],
             "has-grip")
 
+    def test_delivery_guard_has_mechanical_grip(self):
+        # 交付形态与报告落点（不得只冒一句、不得只交付不汇报）由 check_delivery_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["交付形态与报告落点：不得只冒一句过程性叙述、不得只交付不汇报"], "has-grip")
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")

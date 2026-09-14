@@ -2202,7 +2202,133 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
 
+
+class TestCheckDeliveryGuard(CheckSpecsTestCase):
+    """钉住『交付形态与报告落点』：不得只冒一句过程性叙述、不得只交付不汇报。
+
+    本轮实测失效（用户直接问责）：一轮 NPC 任务唯一对外的输出是一句过程性叙述
+    （"Now let me check whether there's a …"）——既不是汇报、也没有任何提交。
+    旧版 `delivery` 片段只写"有改动必须提交推送"，恰漏了"当次无改动也算完成态"
+    与"过程性叙述不得外发"，故本组用例把这两条连同登记处同步一并钉住。
+    """
+
+    DELIVERY = ("// tag::delivery[]\n"
+                "8. 交付：\n"
+                "   - **CI/CD 等自动化场景**：必须提交并推送；**有改动**时**必须**把改动"
+                "**提交并推送到 PR 分支**、**创建 PR**（只提交不推送/只推送不提交都不算）；"
+                "**没有提交即等于没有交付**（**有改动却没提交也没推送**、**没有改动却没说明**"
+                "都属交付失败）。\n"
+                "   - **报告落点（L1）**：**过程性叙述**（现在去读 X、先看有没有 Z）"
+                "**不得作为独立的一条评论**发出去（**答非所问**）；"
+                "**结果与结论**须**汇总成一次完整汇报**（平台上即**一条评论**）。\n"
+                "// end::delivery[]\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE,
+                              cm.README_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE,
+         cm.README_FILE) = self._orig_prompts
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("prompts/_common.txt", self.DELIVERY)
+        self.write("prompts/review.adoc",
+                   "= 检查修复\n\n[listing]\n----\n"
+                   "9. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**）\n"
+                   "include::_common.txt[tag=delivery]\n----\n")
+        self.write("prompts/refactor.adoc",
+                   "= 重构\n\n[listing]\n----\n"
+                   "9. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**）\n"
+                   "include::_common.txt[tag=delivery]\n----\n")
+        self.write("PROMPTS.adoc",
+                   "* 公共约定：**交付即汇报**——**过程性叙述**不得作为评论发出；"
+                   "**没有改动却没说明**亦属交付失败。\n"
+                   "* **题目与片段的改动边界**：补片段缺口**不扩大题面**、"
+                   "**不得在两个提示词里各写一遍**。\n")
+        self.write("README.adoc",
+                   "# README\n\n**过程性叙述**不得作为独立评论发出去；"
+                   "\"报告说完成了**却没有任何提交**\"属交付失败。\n")
+
+    def test_valid_delivery_passes(self):
+        self._write_valid()
+        cm.check_delivery_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_fragment_reports(self):
+        # 反例：公共片段被删 → 两处提示词同时失去这条边界
+        self._write_valid()
+        self.write("prompts/_common.txt", "普通片段\n")
+        cm.check_delivery_guard()
+        self.assertIn("delivery", self.error_texts())
+
+    def test_process_narrative_clause_removed_reports(self):
+        # 反例（本轮实测失效的形态）：抽掉"过程性叙述不得作为独立评论发出"
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::delivery[]\n"
+                   "8. 交付：**有改动**须**提交并推送到 PR 分支**、**创建 PR**；"
+                   "**没有提交即等于没有交付**；**有改动却没提交也没推送**；"
+                   "**没有改动却没说明**；**结果与结论**须**汇总成一次完整汇报**"
+                   "（**一条评论**）。\n// end::delivery[]\n")
+        cm.check_delivery_guard()
+        self.assertIn("过程性叙述", self.error_texts())
+
+    def test_zero_change_state_removed_reports(self):
+        # 反例：抽掉"没有改动却没说明"这一态 → 回到"无改动时不知道要不要交付"
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::delivery[]\n"
+                   "8. 交付：**有改动**须**提交并推送到 PR 分支**、**创建 PR**（只提交不推送）；"
+                   "**没有提交即等于没有交付**；**有改动却没提交也没推送**；"
+                   "**报告落点**：**过程性叙述**不得作为**独立的一条评论**（**答非所问**）；"
+                   "**结果与结论**须**汇总成一次完整汇报**（**一条评论**）。\n"
+                   "// end::delivery[]\n")
+        cm.check_delivery_guard()
+        self.assertIn("没有改动却没说明", self.error_texts())
+
+    def test_prompt_missing_report_step_reports(self):
+        # 反例：题面侧步骤被删（片段在、流程里却没有"交付即汇报"）
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "= 重构\n\ninclude::_common.txt[tag=delivery]\n")
+        cm.check_delivery_guard()
+        self.assertIn("交付即汇报", self.error_texts())
+
+    def test_registry_not_synced_reports(self):
+        # 反例：登记处未同步 → 提示词被复制到未知项目后公开面看不到这条边界
+        self._write_valid()
+        self.write("PROMPTS.adoc", "* 公共约定：改动范围边界。\n")
+        cm.check_delivery_guard()
+        self.assertIn("交付即汇报", self.error_texts())
+
+    def test_edit_boundary_removed_reports(self):
+        # 反例：抽掉"改题面 vs 补片段缺口"的改动边界 → 缺口只能等下一轮（旧任务继续按旧版执行）
+        self._write_valid()
+        self.write("PROMPTS.adoc",
+                   "* 公共约定：**交付即汇报**——**过程性叙述**不得作为评论发出；"
+                   "**没有改动却没说明**亦属交付失败。\n")
+        cm.check_delivery_guard()
+        self.assertIn("题目与片段的改动边界", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 使用要点未同步 → 公开面只看得见"禁止"、看不到这条边界
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n普通说明。\n")
+        cm.check_delivery_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+
 if __name__ == "__main__":
+
 
     unittest.main(verbosity=2)
 

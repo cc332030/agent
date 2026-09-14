@@ -129,6 +129,32 @@
      "只读"优先）、拒绝的形态；公共片段 `prompts/_common.txt` 的 `scope-boundary` 同口径
      且**两个提示词代码块内都引入**——防"引用被误当成授权"（用户明确的收紧要求：未声明
      直接改别处应当拒绝）、防提示词复制到未知项目后这条边界整条丢失。
+ 35. 交付形态与报告落点防线（**本轮实测失效的直接抓手**）：公共片段 `prompts/_common.txt`
+     的 `delivery` 片段须仍在且齐备四处要点——①**报告落点**（过程性叙述不得作为**独立的
+     一条评论**发出去、结论须**汇总成一次完整汇报**）；②**交付形态两态**（"有改动却没提交
+     也没推送"与"没有改动却没说明"都属交付失败，自动化场景下**没有提交即等于没有交付**）；
+     ③**提交并推送到 PR 分支 + 创建 PR**（只提交不推送 / 只推送不提交都不算交付）；
+     两个提示词代码块内须各有一条**「9. 交付即汇报」步骤**；登记处（`PROMPTS.adoc` 公共约定
+     与「题目与片段的改动边界」、`README.adoc` 使用要点）须同步——提示词会被**未知项目复制
+     执行**，公开面漏了这层则复制出去的那份没有这条边界。**本仓库实证**：一轮 NPC 任务
+     唯一对外的输出是一句过程性叙述（"Now let me check whether there's a …"）、**既无汇报
+     也无任何提交**，发起人只看到一句莫名其妙的话——旧版 `delivery` 只写"有改动必须提交
+     推送"、**恰恰漏了"当次无改动也算完成态"**与"过程性叙述不得外发"两条。只钉"要求文本
+     仍在"——"某次是否真的只冒了一句、是否真的漏了提交"属运行时行为（评论内容与推送记录），
+     机械无法判定，交人/子 agent 复核。
+
+ 35. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
+     （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
+     按资源读取后执行／**加载时机按性能敏感度定性**：发布后不变的资源在性能敏感路径
+     须首次读取后缓存、需求要求内容会变的模板不缓存）、可逐条核对的判定标准、典型反例
+     与依据行齐备；`specs/stack/java.adoc`
+     须写 Java 落点（`sql`/`lua` 放 `src/main/resources/` 下、Redis 用 `DefaultRedisScript`
+     加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、`${}` 是拼接须白名单校验）与
+     **Java 侧的加载时机**（静态常量 `DefaultRedisScript`、不在方法内逐次读资源、可变模板不冻结）、
+     `specs/stack/spring.adoc` 须引用该条，加载调度器两处登记与 `README.adoc` 目录说明同步
+     ——防"脚本以字符串拼接/模板内联"与"热点路径每次读一次资源"重新变成默认做法
+     （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
+     **性能敏感路径每次读取本可只读一次的资源**）。
 
  35. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
      （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
@@ -4510,6 +4536,98 @@ def check_merge_relationship_guard():
                     "『解决冲突/压缩后目标分支仍须是本分支的祖先』的底线，不得删除、"
                     "不得降级为建议（L1）", rel)
 
+DELIVERY_GUARD_KEYS = (
+    (("报告落点", "过程性叙述", "不得作为独立的一条评论", "答非所问"),
+     "报告落点：过程性叙述不得作为独立评论发出（本轮实测失效：唯一对外的输出就是一条过程性废话）"),
+    (("结果与结论", "汇总成一次完整汇报", "一条评论"),
+     "结论须汇总成一次完整汇报（平台上即一条评论），不得用零散评论代替"),
+    (("没有提交即等于没有交付", "有改动却没提交也没推送", "没有改动却没说明"),
+     "交付形态两态都要有判据：有改动却没交付、无改动却没说明，两者都属交付失败"),
+    (("提交并推送到 PR 分支", "创建 PR", "只提交不推送"),
+     "自动化场景的交付形态须写明『提交并推送到 PR 分支 + 创建 PR』（两者缺一不可）"),
+)
+
+
+def check_delivery_guard():
+    """『交付形态与报告落点防线』：不得中途冒过程性叙述、不得只交付不汇报。
+
+    背景（本项目实测失效，用户直接问责）：一轮 NPC 任务（CNB 评论唤起）**唯一对外的
+    输出是一句过程性叙述**——"Now let me check whether there's a … check … and validate
+    my findings with actual experiments."——**既不是汇报、也没有任何提交**，发起人只看到
+    一句莫名其妙的话。这类失效在提示词层面**拦不住**：旧版 `delivery` 片段只写"有改动
+    必须提交推送"，**没写"当次无改动也算完成态"**，恰恰漏掉它要治的那一种（有改动却
+    没交付）；也**没有任何一条**规定"过程性叙述不得作为评论发出去"。而提示词会被未知
+    项目复制执行，失效面比本仓库大得多，故把这两条钉进**公共片段**（一处维护、两处生效）
+    并加机械防线：
+
+      * **报告落点**（过程性叙述不得作为独立评论发出；结论汇总成一次完整汇报）；
+      * **交付形态两态**（有改动却没交付 / 无改动却没说明，两者都属交付失败）；
+      * **自动化场景的交付形态**（提交并推送到 PR 分支 + 创建 PR 缺一不可）；
+      * 两个任务提示词代码块内**各有一条"交付即汇报"步骤**（`prompts/*.adoc`，题面侧）；
+      * 登记处同步（`PROMPTS.adoc` 的公共约定、`README.adoc` 的使用要点）——提示词会被
+        未知项目复制执行，登记处漏了这层，公开面就看不到这条边界。
+
+    只钉"要求文本仍在"——"某次是否真的只发了一句废话、是否真的漏了提交"属运行时行为
+    （评论内容与推送记录），机械无法判定，交人/子 agent 复核；但"要求被抽掉"必须拦住。
+    """
+    phase("交付形态与报告落点防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『交付形态与报告落点』无处承载", rel_common)
+        phase_done()
+        return
+    common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+    block = common.split("tag::delivery[]", 1)[-1].split("end::delivery[]", 1)[0] \
+        if "tag::delivery[]" in common else ""
+    if not block:
+        err(f"{rel_common} 缺少 `delivery` 片段——交付形态与报告落点失去落点", rel_common)
+    else:
+        for keys, desc in DELIVERY_GUARD_KEYS:
+            missing = [k for k in keys if k not in block]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 "
+                    f"{missing}——{desc}；本条对应用户报告的真实失效（一轮任务只冒了一句"
+                    "过程性废话、没有任何提交），不得删除、不得降级为建议", rel_common)
+    # 题面侧：两个提示词各须有"交付即汇报"步骤（片段证不了题面）
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        text = open(f, encoding="utf-8").read()
+        for keys, desc in ((("9. 交付即汇报", "有改动", "没有交付"),
+                            "代码块内须有一条『交付即汇报』步骤（否则题面侧仍允许"
+                            "『只交付不汇报』『只冒一句、没有交付』）"),):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # 登记处：公开面（提示词入口与 README 使用要点）
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
+    else:
+        ptext = open(PROMPTS_FILE, encoding="utf-8").read()
+        for keys, desc in ((("交付即汇报", "过程性叙述", "没有改动却没说明"),
+                            "公共约定须同步『交付即汇报 + 过程性叙述不得作为评论发出 + "
+                            "无改动须显式说明』（提示词会被未知项目复制执行，漏了这层"
+                            "则复制出去的那份没有这条边界）"),
+                           (("题目与片段的改动边界", "不扩大题面",
+                             "不得在两个提示词里各写一遍"),
+                            "维护约定须写明改动的边界：改题面属新版本，而『补片段缺口/补 "
+                            "include』只补片段与引用、不扩大题面、对已在执行的任务同样成立")):
+            missing = [k for k in keys if k not in ptext]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
+                    rel_prompts)
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rtext = open(README_FILE, encoding="utf-8").read()
+        missing = [k for k in ("过程性叙述", "不得作为独立评论发出去", "却没有任何提交")
+                   if k not in rtext]
+        if missing:
+            err(f"交付形态与报告落点防线被破坏：{rel_readme} 的使用要点缺失 {missing}——"
+                "公开面看不到『不得只冒一句话、不得只交付不汇报』这条边界", rel_readme)
+    phase_done()
 
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
@@ -4576,6 +4694,7 @@ def main(argv=None) -> int:
     check_reuse_precedent_guard()
     check_external_script_guard()
     check_comment_dispatch_guard()
+    check_delivery_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 
