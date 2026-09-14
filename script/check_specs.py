@@ -51,16 +51,16 @@
      每次会话无条件加载的常驻物）；且加载调度器"涉及即加载"条目数不得超过
      DISPATCHER_ITEMS_MAX（三者都是"越写越多、每次会话都付上下文"的机械抓手；
      体量与层级的语义判断仍由人复核）。
- 21. 规范验证防线：specs/general/testing.adoc「验证与运行契约」的「验证总纲」「规范验证」
+ 21. 规范验证防线：specs/general/verify.adoc 的「验证总纲」「规范验证」
      （验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面；每视角的判定标准与标准出处、
      ②的判据/依据/形态/性能四维、③的逐维判据、三视角由同一个干净子 agent 一并回答与
      各自留证），且 specs-project-maintainer/priority.adoc 的 P2 须仍声明三视角并指向这两节、
      AGENTS.adoc 的完整性校验落点须同步——防"改完规范只跑机械校验就算验证过"、把标准
      出处删掉（验证退化成"把脚本跑绿"）或把三视角拆成多次子 agent 派发。
- 22. 接纳面防线：specs/general/testing.adoc 须仍含「运行契约」（公共内容被**未知项目加载**
-     时的可控性：影响面/成本/可控性三维）且仍在调度器登记；verify.adoc 须引用它——
+ 22. 接纳面防线：specs/general/verify.adoc 须仍含「运行契约」（公共内容被**未知项目加载**
+     时的可控性：影响面/成本/可控性三维）且仍在调度器登记；维护方清单 context.adoc 须引用它——
      公共内容会被未知项目加载，加得越多越易忘掉这个初衷（引用方出现不可控或未知效果）。
- 23. 验证效力防线：specs/general/testing.adoc 的「验证的效力等级」须仍在——验证对象按
+ 23. 验证效力防线：specs/general/verify.adoc 的「验证的效力等级」须仍在——验证对象按
      "有没有确定性判据"分两档：确定项走机械校验（按判据本体验证、结论可判对错），概念项
      只能启发式复核（结论只到"未发现问题"、须标未确证/悬置、**不得当作阻断交付的条件**），
      且 priority.adoc / AGENTS.adoc / execution.adoc 三处口径须同源。防"把复核结论当依据、
@@ -68,7 +68,7 @@
      复核假装推进）。
  24. 任务生命周期防线：specs/core/execution.adoc 的「任务生命周期与节点自查」须仍在且
      七节点**以表格行**存在、并含"哪些节点不设"的独立声明（代码类改动不设复盘、不做
-     三视角与全局核对）；specs/general/testing.adoc 的「验证的适用边界」须仍在且判据/两类
+     三视角与全局核对）；specs/general/verify.adoc 的「验证的适用边界」须仍在且判据/两类
      改动/不得互串/更严一侧/每次换干净上下文齐备；specs-project-maintainer/spec-lifecycle.adoc 的
      「一条规范何时该拆分」「拆分后的自洽核对」须仍在且三条硬条件齐备；AGENTS.adoc 须有
      本仓库落点并指向这两处——防"到哪个节点查什么"重新无人负责、防概念性验证外溢到
@@ -1464,8 +1464,8 @@ def check_lifecycle_guard():
       * **验证没有边界**：验证机制本身也是会被加载执行的规则——用错对象就是把不可控的
         验证义务强加给不需要它的任务。**代码类改动**只应按机械判据判过不过（能过就能过），
         **规范类改动**才做三视角与全局核对；无此边界就会两头落空（改一行代码要求三视角、
-        改一条规范只跑机械校验）。判据定式化在公共 `specs/general/testing.adoc`「验证与运行契约」
-        「验证的适用边界」。
+        改一条规范只跑机械校验）。判据定式化在公共 `specs/general/verify.adoc`
+        「验证的适用边界」（`testing.adoc` 同名节只留一跳入口）。
       * **拆分无判据**：拆分会多出一个没人维护、判据空转的东西（比不拆更坏），
         故须有"何时该拆"的硬条件与"拆完是否自洽"的核对，定式化在
         `specs-project-maintainer/spec-lifecycle.adoc`「一条规范何时该拆分」「拆分后的自洽核对」。
@@ -1501,8 +1501,9 @@ def check_lifecycle_guard():
             err(f"任务生命周期防线被破坏：{rel_exec} 未写明哪些节点**不设**（代码类改动"
                 "不设复盘、不做三视角与全局验证）——概念性验证会外溢成所有任务的流程",
                 rel_exec)
-    # 验证边界：公共口径在 specs/general/testing.adoc「验证与运行契约」，须与节点清单同源
-    rel_verify = os.path.join("specs", "general", "testing.adoc").replace(os.sep, "/")
+    # 验证边界：公共口径的**单一落点**是 specs/general/verify.adoc；testing.adoc 同名节
+    # 只留一跳入口（两处各写一份会各自漂移——已实测漂移过一次）
+    rel_verify = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
     v_path = os.path.join(REPO_ROOT, *rel_verify.split("/"))
     if not os.path.isfile(v_path):
         err(f"缺少验证规范文件 {rel_verify}——验证的适用边界失去集中落点", rel_verify)
@@ -1836,7 +1837,8 @@ def check_delegation_guard():
          "同 Agent 不可用也不得换外部来源，须降级为执行者本人串行或如实标悬置"),
         ("specs/general/collab.adoc", ("优先一次性调用",),
          "派发优先一次性、边界明确、可超时，不交有自主探查权的执行者"),
-        ("specs/general/testing.adoc", ("强制同 Agent", "不得点名外部 Agent"),
+        # 三视角复核口径的单一落点是 verify.adoc（testing.adoc 同名节只留一跳入口）
+        ("specs/general/verify.adoc", ("强制同 Agent", "不得点名外部 Agent"),
          "三视角复核口径须与协作规范同口径（强制同 Agent、不得点名外部 NPC）"),
         ("specs-project-maintainer/verify.adoc", ("子 Agent 强制与执行者同 Agent",),
          "维护方落点：强制同 Agent、外部复核者不作为备选"),
@@ -1883,7 +1885,7 @@ def check_delegation_guard():
     NEGATION = ("不得", "禁止", "不可", "不允许", "不予", "不属", "不换", "不作",
                 "不因", "不是", "勿", "忌", "反例", "误", "违规", "旧口径")
     CLAUSE_BREAK = "，；：（）()【】\n"
-    for rel in ("specs/general/collab.adoc", "specs/general/testing.adoc",
+    for rel in ("specs/general/collab.adoc", "specs/general/verify.adoc",
                 "specs/general/self-check.adoc",
                 "specs-project-maintainer/priority.adoc",
                 "specs-project-maintainer/verify.adoc"):
@@ -1924,14 +1926,15 @@ def check_adoption_guard():
     背景：本仓库最有价值的初衷是——**这套规范会被未知项目加载**。规范加得越多、优化
     越多，越容易只对着"本仓库自己"看，忘掉引用方看不到本仓库的脚本、结构与取舍，于是
     出现"引用方加载后产生不可控或未知效果"。故"运行契约"（影响面 / 成本 / 可控性三维）
-    **随公共内容**落在 `specs/general/testing.adoc`「验证与运行契约」（引用方也需要它：
+    **随公共内容**落在 `specs/general/verify.adoc`「运行契约」（引用方也需要它：
     项目自己维护规范/共享资产时同样要问"落到未知项目会怎样"）；维护方自己的清单落在
     `specs-project-maintainer/context.adoc`。被删则该维度在验证中重新无人负责。
 
     只钉"节与三维要点仍在、两处口径同源"，语义是否被削弱仍由人/子 agent 复核承担。
     """
     phase("接纳面防线检查（未知项目加载）")
-    rel_pub = os.path.join("specs", "general", "testing.adoc").replace(os.sep, "/")
+    # 运行契约的**单一落点**是 verify.adoc（testing.adoc / context.adoc 同名节只留一跳入口）
+    rel_pub = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
     pub_path = os.path.join(REPO_ROOT, *rel_pub.split("/"))
     if not os.path.isfile(pub_path):
         err(f"缺少验证与运行契约文件 {rel_pub}——公共内容被未知项目加载时的可控性"
@@ -2103,8 +2106,11 @@ def check_verify_guard():
     背景：规范改动的验收有两层——**机械校验**（确定性项）与**语义复核**（确定性脚本
     覆盖不到的概念判断）。语义复核的**规则**（三视角：①完整性 + ②有效性与认知质量 +
     ③接纳面；效力等级：确定项 / 概念项；判准：严格执行 / 尽力而为）属**公共内容**，
-    落点为 `specs/general/testing.adoc`「验证与运行契约」（对任何项目成立，且引用方也
-    确实需要"改完规范怎么验"）。本仓库侧的落点（维护方要做什么、要钉住哪些抓手）落在
+    落点为 `specs/general/verify.adoc`（对任何项目成立，且引用方也确实需要"改完规范
+    怎么验"）。**该口径的单一落点即 `specs/general/verify.adoc`**——
+    `testing.adoc` 的同名节只留一跳入口（两处各写一份会各自漂移，已实测漂移过一次：
+    同一节的『执行者选择：强制同 Agent』曾只存在于 testing.adoc 一侧）。本仓库侧的落点
+    （维护方要做什么、要钉住哪些抓手）落在
     `specs-project-maintainer/verify.adoc` 与根目录 `AGENTS.adoc`。
 
     被删则"改完规范只跑机械校验就算验证过"、"验证了什么/依据哪个标准"无从枚举、或把
@@ -2114,7 +2120,7 @@ def check_verify_guard():
     agent 复核承担。
     """
     phase("规范验证防线检查")
-    rel_public = os.path.join("specs", "general", "testing.adoc").replace(os.sep, "/")
+    rel_public = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
     path_public = os.path.join(REPO_ROOT, *rel_public.split("/"))
     if not os.path.isfile(path_public):
         err(f"缺少公共验证规范文件 {rel_public}——验证三视角、效力等级与运行契约失去落点",
