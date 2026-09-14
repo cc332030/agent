@@ -2220,7 +2220,10 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
                 "都属交付失败）。\n"
                 "   - **报告落点（L1）**：**过程性叙述**（现在去读 X、先看有没有 Z）"
                 "**不得作为独立的一条评论**发出去（**答非所问**）；"
-                "**结果与结论**须**汇总成一次完整汇报**（平台上即**一条评论**）。\n"
+                "**结果与结论**须**汇总成一次完整汇报**（平台上即**一条评论**）；"
+                "**输出通道只有两条**（最终汇报 / 必须停下确认），"
+                "**除这两条之外的任何中间话一律不发**（自己认定的\"必要说明\"不构成"
+                "**第三条通道**）。\n"
                 "// end::delivery[]\n")
 
     def setUp(self) -> None:
@@ -2242,20 +2245,24 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
         self.write("prompts/review.adoc",
                    "= 检查修复\n\n[listing]\n----\n"
                    "9. 交付即汇报（**有改动**须提交推送并建 PR，"
-                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**）\n"
+                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
+                   "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
         self.write("prompts/refactor.adoc",
                    "= 重构\n\n[listing]\n----\n"
                    "9. 交付即汇报（**有改动**须提交推送并建 PR，"
-                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**）\n"
+                   "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
+                   "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
         self.write("PROMPTS.adoc",
                    "* 公共约定：**交付即汇报**——**过程性叙述**不得作为评论发出；"
+                   "**输出通道只有两条**、**除这两条之外的任何中间话一律不发**；"
                    "**没有改动却没说明**亦属交付失败。\n"
                    "* **题目与片段的改动边界**：补片段缺口**不扩大题面**、"
                    "**不得在两个提示词里各写一遍**。\n")
         self.write("README.adoc",
                    "# README\n\n**过程性叙述**不得作为独立评论发出去；"
+                   "**输出通道只有两条**、**除这两条之外的任何中间话一律不发**；"
                    "\"报告说完成了**却没有任何提交**\"属交付失败。\n")
 
     def test_valid_delivery_passes(self):
@@ -2318,6 +2325,23 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
                    "**没有改动却没说明**亦属交付失败。\n")
         cm.check_delivery_guard()
         self.assertIn("题目与片段的改动边界", self.error_texts())
+
+    def test_output_channels_clause_removed_reports(self):
+        # 反例（本轮识别出的第二个成因）：例外只写"必须停下确认这一种"、
+        # 没写"除这两条之外的任何中间话一律不发" → 执行者自行认定"这属于必要的说明"
+        # 就能再发一条，判据回到执行者手里，防线形同虚设
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "// tag::delivery[]\n"
+                   "8. 交付：**有改动**须**提交并推送到 PR 分支**、**创建 PR**（只提交不推送）；"
+                   "**没有提交即等于没有交付**；**有改动却没提交也没推送**；"
+                   "**没有改动却没说明**；"
+                   "**报告落点**：**过程性叙述**不得作为**独立的一条评论**（**答非所问**）；"
+                   "**结果与结论**须**汇总成一次完整汇报**（**一条评论**）；"
+                   "需中途说明的例外只有\"必须停下确认\"这一种。\n"
+                   "// end::delivery[]\n")
+        cm.check_delivery_guard()
+        self.assertIn("输出通道只有两条", self.error_texts())
 
     def test_readme_not_synced_reports(self):
         # 反例：README 使用要点未同步 → 公开面只看得见"禁止"、看不到这条边界
@@ -4857,6 +4881,8 @@ class TestCheckPromptDeliverySurfaceGuard(CheckSpecsTestCase):
                 "| 取值路径 | 已装配？ |\n"
                 "| IDE 预览 / 站点页面内渲染 | 是 |\n"
                 "| 远程原始文件地址（**未装配**） | 否 |\n"
+                "- **站点直链 = 仓库字节**：非 HTML 文件**直出原文**、与站点发布分支的同名文件逐字节一致；"
+                "站点上存在装配形态的只有 `index.html` 自己的正文区。\n"
                 "- **配图与判据一致**：三类是**不同取值路径**，**不是三种**版本的提示词。\n"
                 "- **实证与话术（L1）**：**不得**留下与路径绑不上的笼统说法；"
                 "须与实际抽样一致。\n")
@@ -4867,10 +4893,19 @@ class TestCheckPromptDeliverySurfaceGuard(CheckSpecsTestCase):
         cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
         cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
         cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+        self._repo_root_orig = cm.REPO_ROOT
+        cm.REPO_ROOT = self.root
 
     def tearDown(self) -> None:
         (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE) = self._prompts_orig
+        cm.REPO_ROOT = self._repo_root_orig
         super().tearDown()
+
+    LIB_README = ("图书馆入口的取值形态：站点直链取到的是**未经处理器装配的仓库字节**——"
+                  "站点对非 HTML 文件直出原文，页面内装配只发生在 `index.html` 自己的**正文区**。\n")
+    LIB_USAGE = ("入口：`https` 直接可达（实测返回纯文本，即**未经装配的仓库字节**）。\n")
+    LIB_SOURCES = ("取用侧实测：站点直链 → `text/plain`、**未经处理器装配的仓库字节**、"
+                   "与站点发布分支的同名文件**逐字节一致**。\n")
 
     def _write_valid(self) -> None:
         self.write("prompts/_common.txt", self.COMMON)
@@ -4879,6 +4914,9 @@ class TestCheckPromptDeliverySurfaceGuard(CheckSpecsTestCase):
         self.write("PROMPTS.adoc", self.REGISTRY)
         self.write("AGENTS.adoc", "提示词条的**取值路径**须与实际一致；"
                                   "由 `check_prompt_delivery_surface_guard` 钉住。\n")
+        self.write("library/README.adoc", self.LIB_README)
+        self.write("library/usage.adoc", self.LIB_USAGE)
+        self.write("library/sources.adoc", self.LIB_SOURCES)
 
     def test_valid_surface_passes(self):
         self._write_valid()

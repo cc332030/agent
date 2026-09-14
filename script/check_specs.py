@@ -4541,6 +4541,11 @@ DELIVERY_GUARD_KEYS = (
      "交付形态两态都要有判据：有改动却没交付、无改动却没说明，两者都属交付失败"),
     (("提交并推送到 PR 分支", "创建 PR", "只提交不推送"),
      "自动化场景的交付形态须写明『提交并推送到 PR 分支 + 创建 PR』（两者缺一不可）"),
+    (("输出通道只有两条", "除这两条之外的任何中间话一律不发", "第三条通道"),
+     "报告落点须写死**输出通道数**（两条：最终汇报 / 必须停下确认）并写明"
+     "『除这两条之外的任何中间话一律不发』——旧文只说『例外只有必须停下确认这一种』、"
+     "**没说其余一律不发**，执行者就把『我认定这属于必要的说明』当成第三条通道、"
+     "判据回到执行者手里，与本条要防的失效同形（L1）"),
 )
 
 
@@ -4591,9 +4596,12 @@ def check_delivery_guard():
     for f in files:
         rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
         text = open(f, encoding="utf-8").read()
-        for keys, desc in ((("9. 交付即汇报", "有改动", "没有交付"),
-                            "代码块内须有一条『交付即汇报』步骤（否则题面侧仍允许"
-                            "『只交付不汇报』『只冒一句、没有交付』）"),):
+        for keys, desc in ((("9. 交付即汇报", "有改动", "没有交付",
+                             "输出通道只有两条", "任何中间话一律不发"),
+                            "代码块内须有一条『交付即汇报』步骤、且写明**输出通道只有两条**"
+                            "（最终汇报 / 必须停下确认）与『此外任何中间话一律不发』"
+                            "（否则题面侧仍允许『只交付不汇报』『只冒一句、没有交付』，"
+                            "以及执行者自行认定『这属于必要的说明』的第三条通道）"),):
             missing = [k for k in keys if k not in text]
             if missing:
                 err(f"交付形态与报告落点防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
@@ -4603,9 +4611,11 @@ def check_delivery_guard():
         err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
     else:
         ptext = open(PROMPTS_FILE, encoding="utf-8").read()
-        for keys, desc in ((("交付即汇报", "过程性叙述", "没有改动却没说明"),
-                            "公共约定须同步『交付即汇报 + 过程性叙述不得作为评论发出 + "
-                            "无改动须显式说明』（提示词会被未知项目复制执行，漏了这层"
+        for keys, desc in ((("交付即汇报", "过程性叙述", "没有改动却没说明",
+                             "输出通道只有两条", "除这两条之外的任何中间话一律不发"),
+                            "公共约定须同步『交付即汇报 + 输出通道只有两条 + "
+                            "过程性叙述不得作为评论发出 + 无改动须显式说明』"
+                            "（提示词会被未知项目复制执行，漏了这层"
                             "则复制出去的那份没有这条边界）"),
                            (("题目与片段的改动边界", "不扩大题面",
                              "不得在两个提示词里各写一遍"),
@@ -4618,7 +4628,8 @@ def check_delivery_guard():
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
         rtext = open(README_FILE, encoding="utf-8").read()
-        missing = [k for k in ("过程性叙述", "不得作为独立评论发出去", "却没有任何提交")
+        missing = [k for k in ("过程性叙述", "不得作为独立评论发出去", "却没有任何提交",
+                               "输出通道只有两条", "除这两条之外的任何中间话一律不发")
                    if k not in rtext]
         if missing:
             err(f"交付形态与报告落点防线被破坏：{rel_readme} 的使用要点缺失 {missing}——"
@@ -4645,6 +4656,20 @@ PROMPT_SURFACE_GUARD_KEYS = (
      "一份没装配的』"),
 )
 
+# 图书馆侧的同一判据（本轮用户确认一并修复）：站点直链同为未装配的仓库字节，
+# 不得让读者按「站点 = 渲染视图」推断图书馆被装配过。
+PROMPT_SURFACE_LIBRARY_FILES = ("library/README.adoc", "library/usage.adoc", "library/sources.adoc")
+
+PROMPT_SURFACE_LIBRARY_KEYS = (
+    (("未经处理器装配的仓库字节", "index.html", "正文区"),
+     "图书馆入口的取值形态须写明『站点直链是未经处理器装配的仓库字节、页面内装配只发生在 "
+     "index.html 正文区』，并指向提示词侧的同一判据（不得按『站点 = 渲染视图』推断）"),
+    (("未经装配的仓库字节",),
+     "图书馆用法文档的「入口」一步须写明直链取到的是未经装配的仓库字节"),
+    (("未经处理器装配的仓库字节", "逐字节一致"),
+     "图书馆依据文档的取用侧实测记录须写明直链取到的是未经处理器装配的仓库字节、且逐字节一致"),
+)
+
 PROMPT_SURFACE_PROMPT_KEYS = (
     (("给 AI 的读取说明", "内容有没有被 AsciiDoc 处理器装配过"),
      "各提示词的读取说明须按『内容是否被处理器装配过』判定（不得按『像不像渲染过的页面』）"),
@@ -4662,8 +4687,8 @@ def check_prompt_delivery_surface_guard():
     "以渲染视图查看时 `include::` 已展开、内容完整"。但这句**与两条实际取值路径都不吻合**：
 
       * 站点**原始文件地址**（`https://agent.c332030.com/prompts/review.adoc`）直出的是
-        **仓库字节**、`include::` 仍在（实测与工作区**逐字节一致**，review 10 条、`_common.txt`
-        4 处字样）；站点上真正装配过的只有 `index.html` **页面内**由 Asciidoctor.js 解析后
+        **仓库字节**、`include::` 仍在（实测与工作区**逐字节一致**，review 的 `include::` 字样 10 处、
+        其中代码块内真正的引用指令 9 条（1 处是读取说明里作字面示例的写法）；`_common.txt` 4 处字样）；站点上真正装配过的只有 `index.html` **页面内**由 Asciidoctor.js 解析后
         写进正文区的 HTML；
       * 本地/工作区直接读文件同理不会装配。
 
@@ -4718,6 +4743,9 @@ def check_prompt_delivery_surface_guard():
             (("不是三种", "不同取值路径"),
              "须写明三类是同一份文件的不同取值路径、不是三种『版本的提示词』"
              "（防把未展开读成内容缺失/旧版）"),
+            (("站点直链 = 仓库字节", "index.html"),
+             "须有 L1 条：站点直链（非 HTML 文件）直出原文、与站点发布分支的同名文件逐字节一致，"
+             "站点上存在装配形态的只有 index.html 自己的正文区（『站点』不等于『已装配』）"),
             (("实证与话术", "不得", "与路径绑不上"),
              "须有 L1 条：描述取值路径须与实际抽样一致、不得留下『渲染视图下已展开』这类"
              "与路径绑不上的笼统说法"),
@@ -4726,6 +4754,24 @@ def check_prompt_delivery_surface_guard():
             if missing:
                 err(f"提示词取值路径防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
                     rel_prompts)
+    # 图书馆侧：同一判据（本轮用户确认一并修复）
+    for rel_lib, keys, desc in (
+        (PROMPT_SURFACE_LIBRARY_FILES[0], PROMPT_SURFACE_LIBRARY_KEYS[0][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[0][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[1], PROMPT_SURFACE_LIBRARY_KEYS[1][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[1][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[2], PROMPT_SURFACE_LIBRARY_KEYS[2][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[2][1]),
+    ):
+        lib_path = os.path.join(REPO_ROOT, rel_lib)
+        if not os.path.isfile(lib_path):
+            err(f"缺少图书馆文件 {rel_lib}——图书馆侧的取值路径口径无处承载", rel_lib)
+            continue
+        ltext = open(lib_path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in ltext]
+        if missing:
+            err(f"提示词取值路径防线被破坏：{rel_lib} 缺失要点 {missing}——{desc}", rel_lib)
+
     # 维护方入口：AGENTS.adoc 的提示词条须带上取值路径与抓手名
     rel_agents = os.path.relpath(PROJECT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(PROJECT_FILE):
