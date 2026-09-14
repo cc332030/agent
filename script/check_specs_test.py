@@ -184,7 +184,8 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
                    "* **子 Agent 不可用时的降级路径（L1）**：**不换任何外部来源**，"
                    "①**由执行者本人（主 agent）串行承担**。\n\n"
                    "* **优先一次性调用（L1）**\n")
-        self.write("specs/general/testing.adoc",
+        # 三视角复核口径的单一落点是 verify.adoc（testing.adoc 同名节只留一跳入口）
+        self.write("specs/general/verify.adoc",
                    "= t\n\n* **执行者选择：强制同 Agent（L1）**：三视角复核一律由与执行者"
                    "相同的 Agent 承担，**不得点名外部 Agent / 外部 NPC**。\n")
         self.write("specs-project-maintainer/verify.adoc",
@@ -2527,7 +2528,8 @@ class TestCheckSourceGuard(CheckSpecsTestCase):
 class TestCheckVerifyGuard(CheckSpecsTestCase):
     """钉住「规范验证防线」：验证口径（三视角/效力等级/总纲）与其维护方落点须一致。
 
-    验证的**规则**属公共内容（落 `specs/general/testing.adoc`「验证与运行契约」）——
+    验证的**规则**属公共内容（单一落点 `specs/general/verify.adoc`；`testing.adoc` 的
+    同名节只留一跳入口——两处各写一份已实测漂移过一次）——
     任何项目改自己的规范/共享资产时都要问"改完怎么验"，且引用方确实需要三视角、效力
     等级与运行契约（否则"加得越多越忘掉初衷"）。维护方**自己的**动作落
     `specs-project-maintainer/verify.adoc` 与 `AGENTS.adoc`。故作防线：公共节与标准出处
@@ -2542,10 +2544,10 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         super().tearDown()
 
     def _pub(self):
-        return os.path.join(self.root, "specs", "general", "testing.adoc")
+        return os.path.join(self.root, "specs", "general", "verify.adoc")
 
     def _write_valid(self):
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    "= 测试规范（通用层，跨语言）\n\n"
                    "== 验证与运行契约\n\n"
                    "* 以真实结果为准。\n\n"
@@ -2601,7 +2603,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    t.replace("=== 验证总纲（回答\"验证什么、怎么算过\"）", "=== 随便什么节"))
         cm.check_verify_guard()
         self.assertIn("验证总纲", self.error_texts())
@@ -2611,7 +2613,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc", t.replace("③接纳面", "某某面"))
+        self.write("specs/general/verify.adoc", t.replace("③接纳面", "某某面"))
         cm.check_verify_guard()
         self.assertIn("③接纳面", self.error_texts())
 
@@ -2620,7 +2622,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    t.replace("=== 验证的效力等级", "=== 随便什么节"))
         cm.check_verify_guard()
         self.assertIn("效力等级", self.error_texts())
@@ -2630,7 +2632,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc", t.replace("不得当作阻断交付的条件", "另说"))
+        self.write("specs/general/verify.adoc", t.replace("不得当作阻断交付的条件", "另说"))
         cm.check_verify_guard()
         self.assertIn("不得当作阻断交付的条件", self.error_texts())
 
@@ -2639,7 +2641,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc", t.replace("ISO/IEC Directives Part 2", "某标准"))
+        self.write("specs/general/verify.adoc", t.replace("ISO/IEC Directives Part 2", "某标准"))
         cm.check_verify_guard()
         self.assertIn("ISO/IEC Directives Part 2", self.error_texts())
 
@@ -2648,7 +2650,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    t.replace("=== 运行契约（公共内容被未知项目加载时的可控性）", "=== 别的节"))
         cm.check_verify_guard()
         self.assertIn("运行契约", self.error_texts())
@@ -2658,7 +2660,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         self._write_valid()
         p = self._pub()
         t = open(p, encoding="utf-8").read()
-        self.write("specs/general/testing.adoc", t.replace("读的形态", "某某形态"))
+        self.write("specs/general/verify.adoc", t.replace("读的形态", "某某形态"))
         cm.check_verify_guard()
         self.assertIn("读的形态", self.error_texts())
 
@@ -2693,13 +2695,13 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
 
     def test_adoption_guard_missing_section_reports(self):
         # 反例：「运行契约」节被删（未知项目加载的可控性重新无人负责）
-        self.write("specs/general/testing.adoc", "= 测试规范\n\n== 单元测试\n\n只测必要。\n")
+        self.write("specs/general/verify.adoc", "= 测试规范\n\n== 单元测试\n\n只测必要。\n")
         cm.check_adoption_guard()
         self.assertIn("运行契约", self.error_texts())
 
     def test_adoption_guard_missing_dimension_reports(self):
         # 反例：三维中少一维（如可控性被删）= 判据不完整
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    "= 测试规范\n\n== 运行契约（未知项目加载）\n\n"
                    "① 影响面；② 成本；降级路径；不得让引用方依赖本仓库私有物；"
                    "依据 ISO 9241-110；接纳面须留证。\n")
@@ -2710,7 +2712,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
 
     def test_adoption_guard_missing_maintainer_list_reports(self):
         # 反例：维护方承接清单被删（维护方在新增公共内容时的核对职责无人承载）
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    "= 测试规范\n\n== 运行契约\n\n① 影响面；② 成本；③ 可控性；降级路径；"
                    "不得让引用方依赖本仓库私有物；依据 ISO 9241-110；接纳面须留证。\n")
         cm.check_adoption_guard()
@@ -2889,7 +2891,7 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
     @staticmethod
     def _own_text():
         """本仓库落点：须指向通用层的边界节与拆分判据节。"""
-        return ("== 验证的适用范围\n\n见 `specs/general/testing.adoc`「验证与运行契约」之"
+        return ("== 验证的适用范围\n\n见 `specs/general/verify.adoc`「验证与运行契约」之"
                 + "「验证的适用边界」；结论强度见「验证的效力等级」；"
                 + "拆分判据见「一条规范何时该拆分」；"
                 + "维护方验证义务见 `specs-project-maintainer/verify.adoc`。\n")
@@ -2905,7 +2907,7 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
 
     def _write_valid(self):
         self.write("specs/core/execution.adoc", self._nodes_text())
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    "= 测试规范\n\n== 验证与运行契约\n\n=== 验证的适用边界\n\n"
                    "先判改动性质：代码类改动按机械判据判过不过、规范类改动做三视角；"
                    "判据是「会不会被未知项目加载」；不得互串；取**更严的一侧**；"
@@ -2951,8 +2953,8 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
     def test_missing_boundary_section_reports(self):
         # 反例：验证边界节被删（不先判改动性质，验证范围无处取值）
         self._write_valid()
-        self.write("specs/general/testing.adoc", "= 测试规范\n\n== 单元测试\n\n跑。\n")
-        self.write("AGENTS.adoc", "== 验证的适用范围\n\n见 `specs/general/testing.adoc`"
+        self.write("specs/general/verify.adoc", "= 测试规范\n\n== 单元测试\n\n跑。\n")
+        self.write("AGENTS.adoc", "== 验证的适用范围\n\n见 `specs/general/verify.adoc`"
                    + "「验证与运行契约」；拆分判据见「一条规范何时该拆分」。\n")
         cm.check_lifecycle_guard()
         self.assertIn("验证的适用边界", self.error_texts())
@@ -2960,7 +2962,7 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
     def test_missing_fresh_context_requirement_reports(self):
         # 反例：删掉"每次验证换一个干净上下文"（复用上下文等于自己复核自己）
         self._write_valid()
-        self.write("specs/general/testing.adoc",
+        self.write("specs/general/verify.adoc",
                    "= 测试规范\n\n== 验证与运行契约\n\n=== 验证的适用边界\n\n"
                    "先判改动性质：代码类改动按机械判据判过不过、规范类改动做三视角；"
                    "判据是「会不会被未知项目加载」；不得互串；取**更严的一侧**。\n")
