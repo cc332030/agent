@@ -1,0 +1,16 @@
+# 行尾策略（权威判据见 specs/general/encoding.adoc「换行符」「跨平台检出」）：
+# 仓库内容以 LF 为基准；Windows 批处理与 PowerShell 必须 CRLF（LF-only 的 .bat 在
+# cmd.exe 下直接执行失败）。由本文件固定，不靠人工逐个文件手动调整。
+* text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制（不参与行尾归一）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.jar binary

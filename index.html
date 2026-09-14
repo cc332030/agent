@@ -49,6 +49,7 @@
     .topbar .links { display: flex; gap: 16px; font-size: 14px; }
     .topbar a { color: #fff; text-decoration: none; opacity: 0.95; }
     .topbar a:hover { text-decoration: underline; opacity: 1; }
+    .topbar a.active { font-weight: 600; opacity: 1; }
     .container {
       max-width: 900px;
       margin: 24px auto;
@@ -71,8 +72,16 @@
     .card pre { background: #f6f8fa; padding: 14px; border-radius: 6px; overflow-x: auto; }
     .card h1, .card h2, .card h3 { border-bottom: none; }
     .card h2 { padding-top: 0.4em; margin-top: 1.2em; }
+    .card h1 + h2, .card h2:first-child { margin-top: 0.4em; }
     .loading { color: var(--muted); text-align: center; padding: 40px 0; }
     .error { color: #cf222e; }
+    .doc-source {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
     footer {
       max-width: 900px;
       margin: 0 auto;
@@ -99,20 +108,30 @@
   <div class="container">
     <div class="card">
       <div id="output">
-        <div class="loading">正在加载并解析 README.adoc…</div>
+        <div class="loading">正在加载并解析文档…</div>
       </div>
     </div>
   </div>
 
   <footer>
-    <span>本页面由 Asciidoctor.js 动态解析仓库内的 README.adoc 生成。</span>
+    <span>本页面由 Asciidoctor.js 动态解析仓库内的 .adoc 文档生成。</span>
   </footer>
 
   <script>
-    // 浏览器端动态解析 README.adoc 并渲染为 HTML
+    // 站点单页渲染：点击站内文档（含文档正文里的 link:）时**不离开本页**，只在本页
+    // 加载并渲染对应 .adoc；页面地址用 hash（`#./README.adoc`）表达当前文档，便于分享。
     (function () {
+      var REPO_ROOT = './';
+      var DEFAULT_DOC = 'README.adoc';
+      var COPY_ICON_RE = /[⬆⮐↑]/;   // 从站点复制 AsciiDoc 时可能被带上的"回到顶部"图标字符
+
       var output = document.getElementById('output');
+      var currentDoc = null;      // 当前文档的仓库根相对路径（如 specs/general/git.adoc）
+      var docDir = '';            // 当前文档的目录（如 specs/general/），link: 目标按其解析
+      var navLinks = Array.prototype.slice.call(document.querySelectorAll('.topbar a'));
       var asciidoctor;
+
+      if (!output) return;   // 页面结构被改动时直接退出，避免后续空指针
 
       // 检查 asciidoctor 是否加载成功（CDN 引入的 UMD 应暴露全局 Asciidoctor）
       if (typeof Asciidoctor !== 'function') {
@@ -129,24 +148,247 @@
         return;
       }
 
-      fetch('./README.adoc')
-        .then(function (resp) {
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          return resp.text();
-        })
-        .then(function (content) {
-          output.innerHTML = asciidoctor.convert(content, {
-            standalone: false,
-            safe: 'safe',
-            attributes: { 'showtitle': '', 'icons': 'font' }
-          });
-        })
-        .catch(function (err) {
-          console.error('解析 README.adoc 失败:', err);
-          output.innerHTML =
-            '<p class="error">解析 README.adoc 失败：' + err.message +
-            '。<br>可 <a href="./README.adoc" target="_blank">直接打开原始文件</a> 查看。</p>';
+      // ---- 路径工具 ----------------------------------------------------
+
+      // 解码 hash 里的文档路径（如 `#./specs/general/git.adoc`）
+      function decodePath(hash) {
+        var raw = (hash || '').replace(/^#/, '');
+        if (!raw) return '';
+        try { return decodeURIComponent(raw); } catch (e) { return raw; }
+      }
+
+      // 归一化仓库根相对路径（去掉 `./`、解析 `../`、统一分隔符、合并重复斜杠）
+      function normalize(path) {
+        var segments = String(path).replace(/\\/g, '/').split('/');
+        var stack = [];
+        for (var i = 0; i < segments.length; i++) {
+          var s = segments[i];
+          if (!s || s === '.') continue;
+          if (s === '..') {
+            if (stack.length === 0) return null;   // 越出仓库根：当作站外链接处理
+            stack.pop();
+            continue;
+          }
+          stack.push(s);
+        }
+        return stack.join('/');
+      }
+
+      // 把文档里的链接目标解析成仓库根相对路径（保留 `#fragment` 与 `?query`）
+      function resolveTarget(target) {
+        var t = (target || '').trim();
+        if (!t) return null;
+        if (/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(t)) return null;   // 外部 scheme（http:/https:/mailto:…）
+        if (t.charAt(0) === '#') return null;                    // 页内锚点
+        var hash = '';
+        var query = '';
+        var qi = t.indexOf('?');
+        if (qi >= 0) { query = t.slice(qi); t = t.slice(0, qi); }
+        var hi = t.indexOf('#');
+        if (hi >= 0) { hash = t.slice(hi); t = t.slice(0, hi); }
+        var path = normalize(docDir + t);
+        if (path === null) return null;
+        return { path: path, hash: hash + query };
+      }
+
+      // 仓库根相对路径 → 站内可用的相对 URL（本页在站点根）
+      function toUrl(path) {
+        return REPO_ROOT + encodeURI(path);
+      }
+
+      function isDocPath(path) {
+        return /\.adoc$/i.test(path);
+      }
+
+      // ---- 页面渲染 ----------------------------------------------------
+
+      function showLoading(path) {
+        output.innerHTML = '<div class="loading">正在加载并解析 ' + escapeHtml(path) + '…</div>';
+      }
+
+      function showError(message) {
+        output.innerHTML = '<p class="error">' + message + '</p>';
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function syncNav() {
+        navLinks.forEach(function (a) {
+          var resolved = resolveTarget(a.getAttribute('href'));
+          var on = !!resolved && normalize(currentDoc) === resolved.path;
+          a.classList.toggle('active', on);
+          if (on) {
+            a.setAttribute('aria-current', 'page');
+          } else {
+            a.removeAttribute('aria-current');
+          }
         });
+      }
+
+      // 渲染一份文档：fetch → Asciidoctor 转换 → 写入页面（不跳转、不新建页面）
+      function renderDoc(path, fragment) {
+        var normalized = normalize(path);
+        if (!normalized) { showError('文档路径无效：' + escapeHtml(path)); return; }
+        if (!isDocPath(normalized)) {  // 非 .adoc：按原始文件跳转（站内没有它的渲染视图）
+          window.location.href = toUrl(normalized);
+          return;
+        }
+        showLoading(normalized);
+        var url = toUrl(normalized);
+        fetch(url, { cache: 'no-cache' })
+          .then(function (resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.text();
+          })
+          .then(function (content) {
+            var html = asciidoctor.convert(content, {
+              standalone: false,
+              safe: 'safe',
+              attributes: { 'showtitle': '', 'icons': 'font' }
+            });
+            // 域名根部署的链接（`link:/AGENTS_COMMON.adoc[]`，见 README「引用方式」）改写为
+            // 本页的 hash 形态，使站点上的这些链接同样留在本页、不跳走
+            if (REPO_ROOT === '/') {
+              html = html.replace(/href="\/([^"#]+)\.adoc"/g, 'href="#./$1.adoc"');
+            }
+            currentDoc = normalized;
+            docDir = normalized.indexOf('/') >= 0 ? normalized.slice(0, normalized.lastIndexOf('/') + 1) : '';
+            output.innerHTML = '<div class="doc-body">' + html + '</div>' +
+              '<div class="doc-source">源文件：<a href="' + url + '" target="_blank" rel="noopener">' +
+              escapeHtml(normalized) + '</a></div>';
+            bindDocLinks();
+            syncNav();
+            applyFragment(fragment);
+          })
+          .catch(function (err) {
+            console.error('解析 ' + normalized + ' 失败:', err);
+            var hint = (/HTTP 404/.test(err.message))
+              ? '。该文件可能不在本仓库。'
+              : '。';
+            showError('解析 ' + escapeHtml(normalized) + ' 失败：' + escapeHtml(err.message) + hint +
+              '<br>可 <a href="' + url + '" target="_blank" rel="noopener">直接打开原始文件</a> 查看。');
+          });
+      }
+
+      // 顶层标题栏：文档名（不含目录） / 页面标题 / 浏览器标签标题
+      function updateTitles(doc) {
+        var name = doc.split('/').pop();
+        document.title = name + ' · agent 规范';
+        var h1 = document.querySelector('.topbar h1');
+        if (h1) h1.textContent = name;
+      }
+
+      // 文档内的节标题（如 `=== 任务生命周期与节点自查`）生成的锚点，支持跨文档定位
+      function slugifyTitle(text) {
+        return String(text).trim().toLowerCase()
+          .replace(/[\s\u3000]+/g, '_')
+          .replace(/[^\w\u4e00-\u9fff_\-.]/g, '')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '');
+      }
+
+      function setActiveHeading(heading, fallbackToTop) {
+        Array.prototype.forEach.call(output.querySelectorAll('h1,h2,h3,h4,h5,h6'), function (h) {
+          h.classList.remove('section-active');
+        });
+        if (heading) {
+          heading.classList.add('section-active');
+          heading.scrollIntoView({ block: 'start' });
+        } else if (fallbackToTop) {
+          window.scrollTo(0, 0);   // 换文档且没有目标锚点：回到顶部
+        }
+      }
+
+      // 按 `#fragment` 定位：先按 Asciidoctor 生成的锚点 id，再按节标题名匹配
+      function applyFragment(fragment) {
+        var id = (fragment || '').replace(/^#/, '');
+        if (!id) { setActiveHeading(null, true); return; }
+        var decoded = id;
+        try { decoded = decodeURIComponent(id); } catch (e) { /* 保持原样 */ }
+        var heading = null;
+        var direct = document.getElementById(decoded) || document.getElementById(id);
+        if (direct) {
+          heading = direct.closest('h1,h2,h3,h4,h5,h6') || direct;
+        } else {
+          var slug = slugifyTitle(decoded);
+          var candidates = output.querySelectorAll('h1,h2,h3,h4,h5,h6');
+          for (var i = 0; i < candidates.length; i++) {
+            if (slugifyTitle(candidates[i].textContent) === slug) { heading = candidates[i]; break; }
+          }
+        }
+        // 目标锚点找不到时（如节名对不上）只放弃定位，不再改滚动位置
+        setActiveHeading(heading, false);
+      }
+
+      // 站内文档链接：拦截默认跳转，改为在本页加载（这是本次需求的核心行为）
+      function bindDocLinks() {
+        Array.prototype.forEach.call(output.querySelectorAll('a[href]'), function (a) {
+          var href = a.getAttribute('href');
+          if (a.target === '_blank' || href === null || href === '') return;
+          var resolved = resolveTarget(href);
+          if (!resolved) return;                       // 外链 / 页内锚点 / 越界：保持浏览器默认行为
+          if (!isDocPath(resolved.path)) return;       // 非 .adoc：按原始文件打开
+          a.addEventListener('click', function (event) {
+            if (event.defaultPrevented || event.button !== 0 ||
+                event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            navigate(resolved.path, resolved.hash);
+          });
+        });
+      }
+
+      // ---- 导航与 hash 同步 --------------------------------------------
+
+      // 在本页切换文档：更新 hash（同页 hash 变化不触发 hashchange），再渲染
+      // hash 形态统一为 `#./<仓库根相对路径>`（带 `./` 前缀、刷新与分享都稳定）
+      function navigate(path, fragment) {
+        var normalized = normalize(path);
+        if (!normalized) return;
+        var target = '#./' + encodeURI(normalized) + (fragment || '');
+        if (window.location.hash !== target) {
+          if (window.history && typeof window.history.replaceState === 'function') {
+            window.history.replaceState(null, '', target);
+          } else {
+            window.location.hash = target;
+            return;                                   // 由 hashchange 驱动渲染
+          }
+        }
+        render(normalized, fragment);
+      }
+
+      // 按当前 hash 渲染（直接打开带 hash 的地址、前进后退都走这里）
+      function render(path, fragment) {
+        updateTitles(path);
+        if (path === currentDoc && output.querySelector('.doc-body')) {
+          applyFragment(fragment);                    // 同一文档：只滚动定位，不重新请求
+          return;
+        }
+        renderDoc(path, fragment);
+      }
+
+      // 顶层文档链接：同样留在本页
+      navLinks.forEach(function (a) {
+        var resolved = resolveTarget(a.getAttribute('href'));
+        if (!resolved) return;
+        a.addEventListener('click', function (event) {
+          if (event.defaultPrevented || event.button !== 0 ||
+              event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          navigate(resolved.path, '');
+        });
+      });
+
+      // 入口：无 hash 时加载默认文档并补上 hash，有 hash 时按 hash 渲染（可分享、可刷新）
+      var initial = decodePath(window.location.hash).replace(COPY_ICON_RE, '');
+      if (!initial) {
+        navigate(DEFAULT_DOC, '');
+      } else {
+        render(initial, '');
+      }
     })();
   </script>
 </body>

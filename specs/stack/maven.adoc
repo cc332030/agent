@@ -4,10 +4,10 @@
 
 == 依赖
 
-* 严禁私自调整依赖
+* 严禁私自调整依赖（依赖声明与传递依赖解析规则见 Maven 官方文档的依赖机制一章）
 * 除非有必要（如避免传递依赖版本漂移、传递路径可能失效），否则不重复声明依赖；传递依赖已满足时不显式声明
 
 == 构建与验证
 
 * 同一 Maven 模块禁止并行构建（通用规则见 link:../general/testing.adoc[]「执行与验证」）；多 agent 协作时同一模块分阶段执行（先写测试文件，再串行执行验证），避免构建冲突
-* 验证以 Maven 结果为准：Windows cmd 下编译失败 exit code 可能为 0，不得仅凭 exit code 判断，必须依据 surefire 的 Tests run/Failures/Errors/Skipped 统计判断是否通过；输出重定向到文件见验证规范 link:../general/verify.adoc[]「编译/运行验证」，"获取统计一步到位"等通用验证规则见 link:../general/verify.adoc[]
+* 验证以 Maven 结果为准：Windows cmd 下编译失败 exit code 可能为 0，不得仅凭 exit code 判断，必须依据 surefire 的 Tests run/Failures/Errors/Skipped 统计判断是否通过；输出重定向到文件、"获取统计一步到位"等通用验证规则见 link:../general/verify.adoc[]「编译/运行验证」

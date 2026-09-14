@@ -2,29 +2,191 @@
 """
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
-检查项：
-  1. AsciiDoc 基础语法（块级结构、反引号路径）通过 asciidoctor 验证（若已安装）。
-  2. 所有 spec 文件（含 AGENTS_COMMON.adoc）中的每个 `specs/...` 引用文件必须真实存在
-     （既校验 AGENTS_COMMON.adoc 加载调度器登记/引用的文件，也校验各 spec 文件之间互相
-     引用的文件，避免 spec 间交叉引用悬空）。
-  3. AGENTS_COMMON.adoc 技术栈层登记的栈文件，必须与 specs/stack/ 实际文件双向一致
-     （既不能登记不存在的栈，也不能漏登记已存在的栈）。
-  4. 禁止误导入私有强约束约定（如 ctool4j 的 C/IC 前缀、@Bean c 前缀等被当作
-     强制规范的表述；中性示例允许保留）。
-  5. 调度器登记完整性：凡被其他规范文件引用的 `specs/...` 规范文件，必须同时在
-     AGENTS_COMMON.adoc 加载调度器中登记（登记集合 ⊇ 被引用集合），避免"只建
-     文件不登记"导致该规范永远不会被加载、其中规则实际失效。
+检查项（每项对应一个 check_ 函数，逐条见各函数 docstring 的判定口径）：
+  1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
+     当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
+  2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
+  3. 节名引用存在性：`link:x.adoc[]「节名」` 引用的节必须真实存在，防改名后静默悬空。
+  4. 技术栈一致：AGENTS_COMMON.adoc 技术栈层登记与 specs/stack/ 实际文件双向一致。
+  5. 调度器登记完整性：被引用的规范文件必须都在加载调度器中登记（登记集合 ⊇ 被引用
+     集合），防"只建文件不登记"导致规则实际失效。
+  6. 私有约定误导入：禁止把项目私有强约束（C/IC 前缀、@Bean c 前缀等）当作通用规范。
+  7. 历史来源声明：禁止指向旧文件/旧命名/旧位置的历史来源注记（会让引用悬空）。
+  8. INSTALL 模板：INSTALL.adoc 的入口模板代码块须逐字保留（含换行空行），且入口文件名规则
+     须兼容 `AGENTS.md`、默认 `AGENTS.adoc`（含已存在 `AGENTS.md` 时就地融合、不重命名）。
+  9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；
+     "是否有价值、是否长篇大论"属语义判断，交人 review，不设字符数阈值以免误伤。
+ 10. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
+ 11. 规范优先级防线：specs/core/execution.adoc 必须有 L1/L2/L3 分级与最高关注项、
+     （P1 git mv / P2 完整性校验 / P3 内容不减少 / P4 读取与上下文纪律 / P5 不可逆操作
+     先确认）仍存在，且各项各自保持级别与"不可降级"定性，防被删/静默降级。
+ 12. 规范准入防线：specs-project-maintainer/spec-lifecycle.adoc 必须仍在，且分类归属（公共/项目）、
+     分层判定、准入判定、提案校验、**定级口径（四问 + 条款类型判定表 + 归属对象 +
+     归类举证 + 级别变更与复盘）、**读法形态（执行侧只给'怎么走'、依据归决策侧）与
+     重构后的有效性核对**仍存在，并在加载调度器登记、
+     AGENTS.adoc 有落点（定级口径与重构顺序被删，条目级别会重新混乱、规范会重新膨胀）。
+ 13. 提示词主侧重与优先级防线：PROMPTS.adoc 登记表 + 各提示词代码块的 `primary` +
+     公共片段 `priority-rules` 的 L1/L2/L3 必须一致存在，防侧重/方向被删或降级。
+ 14. 自检防线：specs/general/self-check.adoc 必须仍在，且执行前自检清单、适用范围与
+     知识边界要点不得被删；specs/core/execution.adoc 须保留其必加载层落点。
+ 15. 来源防线：specs/general/source.adoc 必须仍在，且"引用指向当前真实存在的目标"
+     "外部标准只写名称/编号""不得编造""宁可不引"要点不得被删。
+ 16. Java 测试类命名防线：AGENTS_COMMON.adoc 的 Java 技术栈登记与 specs/stack/java-testing.adoc
+     必须同时含四类后缀判据（`Tests`/`BootTests`/`PerfTests`/`IT`），防四类命名契约的口径在
+     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）。
+ 17. 换行符防线：specs/general/encoding.adoc 必须仍按解释器分流行尾——`LF` 基准、`.bat`/`.cmd`
+     必须 `CRLF`，且保留检出归一（`core.autocrlf`）与 `.gitattributes` 落盘约定；脚本技术栈
+     文件（bash/python/powershell）也须各自写明行尾要求，防"Windows 批处理被写成 LF"这类
+     跨平台失效的规则被删或只剩一句"统一行尾符"。
+ 18. 本仓库 git mv 自查：暂存区不得出现"删除 + 新增（未识别为 rename）"的疑似
+     delete+create 形态（P1 在本仓库自身侧的那一半抓手；引用方侧仍靠其自检）。
+ 19. 从属者与能力自评防线：子 agent/被引用方"入口驱动加载、不靠自报"与"执行环境
+     能力自评（无机制按降级路径、不空自评）"两条要点不得被删（两者都是"定义写了
+     却不会被执行"的高发盲点）；执行者来源选择（强制同 Agent）另须**双向**设防——
+     新口径的要素须在（同 Agent / 不得点名外部 NPC / 判定标准 / 降级路径 / 一次性调用），
+     且把外部来源重新放宽的**旧口径措辞不得复活**（含清单概览行与公共侧各落地处；
+     禁止式表述与反例引用不误报）。
+ 20. 常驻层体积上限：必加载层（AGENTS_COMMON.adoc + specs/core/）总字节数不得超过
+     RESIDENT_BUDGET；项目自身入口 AGENTS.adoc 不得超过 PROJECT_ENTRY_BUDGET（它同为
+     每次会话无条件加载的常驻物）；且加载调度器"涉及即加载"条目数不得超过
+     DISPATCHER_ITEMS_MAX（三者都是"越写越多、每次会话都付上下文"的机械抓手；
+     体量与层级的语义判断仍由人复核）。
+ 21. 规范验证防线：specs/general/verify.adoc 的「验证总纲」「规范验证」
+     （验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面；每视角的判定标准与标准出处、
+     ②的判据/依据/形态/性能四维、③的逐维判据、三视角由同一个干净子 agent 一并回答与
+     各自留证），且 specs-project-maintainer/priority.adoc 的 P2 须仍声明三视角并指向这两节、
+     AGENTS.adoc 的完整性校验落点须同步——防"改完规范只跑机械校验就算验证过"、把标准
+     出处删掉（验证退化成"把脚本跑绿"）或把三视角拆成多次子 agent 派发。
+ 22. 接纳面防线：specs/general/verify.adoc 须仍含「运行契约」（公共内容被**未知项目加载**
+     时的可控性：影响面/成本/可控性三维）且仍在调度器登记；维护方清单 context.adoc 须引用它——
+     公共内容会被未知项目加载，加得越多越易忘掉这个初衷（引用方出现不可控或未知效果）。
+ 23. 验证效力防线：specs/general/verify.adoc 的「验证的效力等级」须仍在——验证对象按
+     "有没有确定性判据"分两档：确定项走机械校验（按判据本体验证、结论可判对错），概念项
+     只能启发式复核（结论只到"未发现问题"、须标未确证/悬置、**不得当作阻断交付的条件**），
+     且 priority.adoc / AGENTS.adoc / execution.adoc 三处口径须同源。防"把复核结论当依据、
+     把'找不到问题'当成交付前置条件"（复核查不出不等于没有，卡在无判据的事上只能靠反复
+     复核假装推进）。
+ 24. 任务生命周期防线：specs/core/execution.adoc 的「任务生命周期与节点自查」须仍在且
+     七节点**以表格行**存在、并含"哪些节点不设"的独立声明（代码类改动不设复盘、不做
+     三视角与全局核对）；specs/general/verify.adoc 的「验证的适用边界」须仍在且判据/两类
+     改动/不得互串/更严一侧/每次换干净上下文齐备；specs-project-maintainer/spec-lifecycle.adoc 的
+     「一条规范何时该拆分」「拆分后的自洽核对」须仍在且三条硬条件齐备；AGENTS.adoc 须有
+     本仓库落点并指向这两处——防"到哪个节点查什么"重新无人负责、防概念性验证外溢到
+     不需要它的任务（改一行代码被要求三视角）、防拆分成为新的失控源。
+ 25. 清单逐项与文档-脚本一致性：①准入判定自称"I 问"须与实际条目数一致（清单被增删
+     而声明未同步）；②任务生命周期七节点须逐行在表中（节点被删则该节点要求失效）；
+     ③`AGENTS.adoc`/`README.adoc` 点名的 `check_*` 与脚本名须在 `script/` 真实存在
+     （防"声称有防线而防线已改名/删除"）；④子 agent 复核的**硬超时**与留证**三态台账**
+     须仍在（防"卡死无人负责"与"查不出/没做无法分辨"退化成口号）。
+ 26. 公开面文档自足：README.adoc（公开站点首页由其渲染）/ PROMPTS.adoc / INSTALL.adoc
+     不得出现维护方自查层『specs-project-maintainer/』的路径——引用方按同样方式解析，
+     指向该层即死链（该层不是公共入口的加载项：引用方按公共输入加载时取不到、其项目里
+     也没有本仓库的文件）；要说明"本仓库另有一层只对维护方成立"
+     用文字描述即可，不给可点开的私有路径。
+ 27. 图书馆防线：仓库根 `library/`（**不在默认引用面内**：本仓库内容全部会发布，
+     区别只在"默认引用什么"——它没有公共加载项、引用方项目里也没有本仓库的文件）须存在，入口
+     `library/README.adoc` 被项目规范入口 `AGENTS.adoc` 登记；入口主题登记与实际主题
+     文件**双向一致**；外部标准的**逐字引文锚点**仍在（依据不得被压成名称）；馆内引用
+     **按仓库根可解析**（悬空引用等于依据链断在这里）。
+ 28. 公共内容覆盖面：`PUBLIC.adoc`（公共内容入口索引，维护方内容）须存在且被
+     `AGENTS.adoc` 登记；两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）须都在
+     清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
+     安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
+     并把"自足"要求误加到只对维护方成立的文件上。
+ 30. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
+     （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
+     `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
+     也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
+     纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
+ 31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`），
+     条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
+     （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。
+ 32. 引文段落防线：**仓库维护范围内的 `.adoc` 不得有行首 `> ` 的引文行**——该形态会被
+     AsciiDoc 解析成 **callout list**（旧式 `listdef-callout` 正则吃掉单 `>` 起头者、
+     `index` 取空串后 `List.calc_style()` 里 `assert False`，**整份文件编译失败**；实测
+     一次打死 6 个文件）。页面侧（`index.html` 用 Asciidoctor.js）把它渲染成引用块、
+     看不出问题，而 `check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑——
+     故这条**确定项**须有独立抓手。写引文用 `[quote]` + 正文行。
+ 33. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+     两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
+     L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
+     ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
+     "功能都实现了，却很难用"）。
+ 33. 索引页触发判据防线：`specs/general/doc.adoc`「索引页的触发判据」须仍在，且
+     四条要点（触发判据=目录已承载实质文档 / 空目录与仅有索引页自己的不建 / 索引只做导航
+     不得复制上一级内容 / 模块级导航由模块 README 承担）齐备，`specs/general/doc-module.adoc`
+     的模块 doc 索引条目须同写「按需」口径——防把"每级目录须有索引页"读宽成"每个模块都建
+     `doc/README.adoc`"（用户的真实失效：48 个模块被批量补上内容几乎逐字同构、不含本级自身
+     信息的空壳索引）。
+
+ 34. 改动范围边界防线：**两层同口径**——通用层 `specs/general/scope.adoc`「工作空间边界
+     （不依赖任何平台）」+「平台上的仓库边界（代码托管平台）」两节须仍在（本地/服务器
+     "文件都在"时禁的是**改入口工作空间以外的文件**；平台上可写范围被放大成"有权访问的
+     全部仓库"，故按**只改当前项目/入口项目**表达），平台层 `specs/platform/cnb.adoc`
+     「变更范围只限当前项目（未声明即拒绝）」须仍在且指向通用层规则本体；两处都须齐备
+     主体禁令、**未声明即拒绝 + 引用不等于授权**、判定标准（改动对象不在入口工作空间内
+     / 以"引用过它"自我豁免 / 转交他人顶替）、已知例外（用户显式声明纳入范围、声明
+     "只读"优先）、拒绝的形态；公共片段 `prompts/_common.txt` 的 `scope-boundary` 同口径
+     且**两个提示词代码块内都引入**——防"引用被误当成授权"（用户明确的收紧要求：未声明
+     直接改别处应当拒绝）、防提示词复制到未知项目后这条边界整条丢失。
+ 35. 交付形态与报告落点防线（**本轮实测失效的直接抓手**）：公共片段 `prompts/_common.txt`
+     的 `delivery` 片段须仍在且齐备四处要点——①**报告落点**（过程性叙述不得作为**独立的
+     一条评论**发出去、结论须**汇总成一次完整汇报**）；②**交付形态两态**（"有改动却没提交
+     也没推送"与"没有改动却没说明"都属交付失败，自动化场景下**没有提交即等于没有交付**）；
+     ③**提交并推送到 PR 分支 + 创建 PR**（只提交不推送 / 只推送不提交都不算交付）；
+     两个提示词代码块内须各有一条**「9. 交付即汇报」步骤**；登记处（`PROMPTS.adoc` 公共约定
+     与「题目与片段的改动边界」、`README.adoc` 使用要点）须同步——提示词会被**未知项目复制
+     执行**，公开面漏了这层则复制出去的那份没有这条边界。**本仓库实证**：一轮 NPC 任务
+     唯一对外的输出是一句过程性叙述（"Now let me check whether there's a …"）、**既无汇报
+     也无任何提交**，发起人只看到一句莫名其妙的话——旧版 `delivery` 只写"有改动必须提交
+     推送"、**恰恰漏了"当次无改动也算完成态"**与"过程性叙述不得外发"两条。只钉"要求文本
+     仍在"——"某次是否真的只冒了一句、是否真的漏了提交"属运行时行为（评论内容与推送记录），
+     机械无法判定，交人/子 agent 复核。
+
+ 35. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
+     （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
+     按资源读取后执行／**加载时机按性能敏感度定性**：发布后不变的资源在性能敏感路径
+     须首次读取后缓存、需求要求内容会变的模板不缓存）、可逐条核对的判定标准、典型反例
+     与依据行齐备；`specs/stack/java.adoc`
+     须写 Java 落点（`sql`/`lua` 放 `src/main/resources/` 下、Redis 用 `DefaultRedisScript`
+     加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、`${}` 是拼接须白名单校验）与
+     **Java 侧的加载时机**（静态常量 `DefaultRedisScript`、不在方法内逐次读资源、可变模板不冻结）、
+     `specs/stack/spring.adoc` 须引用该条，加载调度器两处登记与 `README.adoc` 目录说明同步
+     ——防"脚本以字符串拼接/模板内联"与"热点路径每次读一次资源"重新变成默认做法
+     （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
+     **性能敏感路径每次读取本可只读一次的资源**）。
+
+ 36. 提示词取值路径与装配状态防线（**用户指出的既有偏差**）：提示词会被**未知项目**按不同
+     路径取用，`include::` 的装配状态随路径而变，而**推断"这是渲染视图所以已展开"正是本仓库
+     实测过的失效**（曾把站点**原始文件地址**当渲染视图、据此以为内容完整）。本防线钉住：
+     公共片段 `prompts/_common.txt` 的「查看与复制方式」须按**取值路径**判断（装配过的：
+     IDE 预览 / `asciidoctor` / 站点**页面内**渲染；未装配的：远程**原始文件地址** / 本地读取
+     ——直出仓库字节、**逐字节一致**）、并含禁止式表述；各提示词的「给 AI 的读取说明」须按
+     "内容有没有被处理器装配过"判定；`PROMPTS.adoc` 须有「取值路径与装配状态」节（三行判据表
+     + "不是三种版本的提示词" + L1 实证话术条）；`AGENTS.adoc` 的提示词条须登记该口径与抓手名。
+
+范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
+**本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
+只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
+**不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（入口见 `PUBLIC.adoc`：
+`AGENTS_COMMON.adoc` + `specs/`、安装时读的 `INSTALL.adoc`、公共片段 `prompts/_common.txt`、
+随规范分发的 `script/clean_tmp.py`），其内部操作在本仓库的校验中不可见。
+
+用法：
+  python3 script/check_specs.py             # 阶段级进度 + 错误清单（默认）
+  python3 script/check_specs.py --verbose   # 追加逐文件进度（排查某文件时用）
+  python3 script/check_specs.py --help
 
 退出码：0 通过，1 存在不规范项。
 """
 
+import argparse
 import os
 import posixpath
 import re
 import shutil
 import sys
 import subprocess
-import time
 
 # 兼容 Windows GBK 等非 UTF-8 终端，统一按 UTF-8 输出
 try:
@@ -33,13 +195,251 @@ try:
 except AttributeError:
     pass
 
+# 必加载层体积预算（字节）：AGENTS_COMMON.adoc + specs/core/ 的**上限**（不是目标）。
+# 常驻层每次会话无条件加载，故须有机械天花板；当前约 47 KB，留约 17% 余量，超限即要求
+# 先归位（判归属/层级）、再新增，见 specs-project-maintainer/spec-lifecycle.adoc「规范集合的自身重构」。
+RESIDENT_BUDGET = 56000
+# 项目自身入口 AGENTS.adoc 的体积上限（字节）：它**同为每次会话无条件加载的常驻物**
+# （项目根入口，先于 AGENTS_COMMON.adoc 被读），故须与本仓库自己的必加载层一并设限。
+# 它是项目自身规范、不是公共内容（引用方不使用），故单列一个上限、不与 RESIDENT_BUDGET 合并。
+PROJECT_ENTRY_BUDGET = 24000
+# 加载调度器「涉及即加载」条目数上限（通用层/技术栈层/项目类型层/平台层合计）。
+# 条目过多会让"该加载哪些"难以判全；当前约 30，留余量到 40。
+DISPATCHER_ITEMS_MAX = 40
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # AGENTS_COMMON.adoc 是通用规范入口，位于仓库根目录（引用方以仓库根为基准解析
 # 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
 GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
+# 项目自身维护层目录：只对"维护规范集合（或同类共享资产）的项目"生效的规范——
+# 元规范（分类准入/定级/自身重构）、规范优先级与最高关注项、读取范围与长会话治理、
+# 执行前自检、验证。它们由规范集合入口登记、随集合分发给维护同类集合的项目加载，
+# **不在普通引用方项目加载**；与面向任意项目的公共内容（`specs/`）分目录隔离，
+# 避免被误当公共规则执行或在精简中被顺手删掉。
+PROJECT_SPECS_DIR = os.path.join(REPO_ROOT, "specs-project-maintainer")
 # 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
 INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
+# 分类与准入规范（公共内容）：回答"一条规则属公共规范还是项目规范、属哪一层、
+# 该不该收、新增提案如何校验"——它是规范集合的准入口径，被删则后续新增失去判定
+# 依据，故与最高关注项、提示词方向一样加机械防线（见 check_spec_admission_guard）。
+ADMISSION_FILE = os.path.join(PROJECT_SPECS_DIR, "spec-lifecycle.adoc")
+# 执行前自检规范（公共内容）：把"动手前的自检"从自觉要求变成可核对动作（指令是否
+# 逐字落实、触发的规范是否已实际加载、规划是否落盘、读取是否最小必要、证据是否已核实）。
+# 它是"规范加载了却没被执行"这一风险的兜底关口，被删则加载防线失去自检环节。
+SELF_CHECK_FILE = os.path.join(SPECS_DIR, "general", "self-check.adoc")
+# 依据与来源真实性规范（公共内容）：内部引用须指向当前真实存在的目标、外部标准只写
+# 名称/编号且不得编造、数据须有来源。来源一旦不实会污染整条下游引用链，故加机械防线。
+SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
+# Java 测试规范（技术栈层）：其「测试类命名」是**全项目统一的命名契约**（后缀与构建工具的
+# 执行边界绑定：`PerfTests`/`IT` 不得混入常规 test 阶段）。该契约由两处共同承载——调度器的
+# Java 技术栈登记（检测到 Java 项目即加载）与规范正文；任一处漏掉某类后缀，引用方按另一处
+# 学习就会漏掉该类测试。故机械钉住两侧的四类后缀判据。
+JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
+# 四类测试后缀（全项目统一命名契约，不得自创变体）
+JAVA_TEST_SUFFIXES = ("Tests", "BootTests", "PerfTests", "IT")
+# 验证规范（通用层）：其「验证总纲」「规范验证」两节是**改完规范后的语义复核定式**——
+# 验证三视角（①完整性 / ②有效性与认知质量 / ③接纳面）、每视角的判定标准与标准出处、
+# ②的判据/依据/形态/性能四维、③的逐维判据，并定式化"三视角由同一个干净子 agent 一并
+# 回答、结论分栏、各自留证"。被删则"改完规范只跑机械校验就算验证过"、"验证了什么/依据
+# 哪个标准"无从枚举（验证退化成"把脚本跑绿"、规则慢慢脱离初衷）、或三视角被拆成多次
+# 子 agent 派发（重复读取与重复计费）都会重新出现。另有「验证的效力等级」节区分
+# **确定项**（机械校验、结论可判对错）与**概念项**（启发式复核、只到"未发现问题"、
+# 不得阻断交付）——防止把复核结论当依据、把"找不到问题"变成交付的隐性前置条件。
+VERIFY_FILE = os.path.join(PROJECT_SPECS_DIR, "verify.adoc")
+# 上下文规范（通用层）：其「运行契约」节是**公共内容被未知项目加载时的可控性**定式——
+# 公共内容（AGENTS_COMMON.adoc + specs/ + prompts/ + 随规范分发的工具）会被**未知项目**
+# 加载，本仓库看不到对方的项目结构、既有项目规范、依赖与工具链。它回答"加得越多、优化
+# 越多"时最易忘掉的初衷：影响面（不静默推翻引用方约定）、成本（体积/时延/依赖可控）、
+# 可控性（不默认改对方工作区、不依赖本仓库私有物、不阻断）。被删则该维度在验证中无人
+# 负责，引用方出现"不可控或未知效果"时无判据可依。
+CONTEXT_FILE = os.path.join(PROJECT_SPECS_DIR, "context.adoc")
+# 编码与语言无关规范（通用层）：其「换行符（行尾）」是**跨平台行尾的权威口径**——
+# 基准 LF、Windows 批处理（`.bat`/`.cmd`）必须 CRLF、CRLF 由 `.gitattributes` 声明而非
+# 人工手动调整。行尾错配属"跨平台直接执行失败"（LF-only 的批处理在 Windows 上不可用），
+# 且最易在"统一换行符"的精简中被压成一句空话，故机械钉住其判据与配套文件。
+ENCODING_FILE = os.path.join(SPECS_DIR, "general", "encoding.adoc")
+# 须各自写明行尾要求的脚本技术栈文件（引用方按各自栈文件学习，漏一处即学不全）
+LINE_ENDING_STACK_FILES = (
+    os.path.join(SPECS_DIR, "stack", "bash.adoc"),
+    os.path.join(SPECS_DIR, "stack", "python.adoc"),
+    os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
+)
+
+# 配置类不写逻辑（跨语言，落点 specs/general/coding.adoc「类设计」）：与各家 Java 规范
+# 一致的硬性约定——承载配置的类只保持 POJO 的基本功能，逻辑下沉到工具类/服务。它由
+# 通用层条文（跨语言）+ Java/Spring 识别特征（`@ConfigurationProperties`）+ 公开说明
+# （README）三处共同承载；漏任一处，读者按另一处学习就会漏掉该条，故机械钉住三处判据。
+# （依据：Spring Boot 官方文档 Externalized Configuration；Google Java Style Guide 3.4.2
+# 对 POJO 的定义；阿里巴巴 Java 开发手册的 POJO 类约定。）
+CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
+# 接入成本（`specs/general/coding.adoc`「抽象与接入成本」）：对外提供能力时的**接入成本判据**——
+# 可替换点须有唯一装配点（同一实现/配置不得按使用点各写一遍）、须有可用默认或显式必填声明。
+# 该条来自用户的真实设计失效报告："要求都实现了、功能都实现了，却很难用"（某接口在 N 个使用点
+# 各实现一遍，接入成本随使用点线性增长）。它是**抽象侧的对外契约**，与"配置类不写逻辑"
+# （类内部职责）不同，故单列一条防线；技术栈层的承接落在 `specs/stack/spring.adoc`「配置」（引用通用文件、不复制条文）。
+ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
+# 跨语言执行脚本的落点（`specs/general/coding.adoc`「跨语言执行脚本的落点（资源文件夹，
+# 不写字符串拼接/模板）」）：宿主语言里**要执行另一种语言的脚本**（SQL、Lua、JavaScript、
+# shell 片段等）时，脚本须独立成文件放在资源文件夹、扩展名取被调语言自身的扩展名（该技术
+# 无通用扩展名时取其明确支持的文件形式，如 MyBatis 的 `*.xml` 承载 SQL），并按资源读取后
+# 执行——不得用字符串拼接、字符串模板或字符串常量内联在宿主语言代码里。
+# 用户给出的直接动因：字符串拼接与字符串模板**没有高亮、也没有错误校验**，容易出错。
+# 该条跨语言，收在通用编码规范；技术栈层按"引用不复制"承接（Java 的 `sql`/`lua`）。
+# 用户其后就**加载时机**加了定性要求：classpath 资源发布后不变，第一个场景是**性能敏感**
+# 的（Redis 操作争分夺秒），故**不能每次使用都去读**——第一次使用时读取后缓存即可；
+# 反之**需求要求内容会变**的（如转 PDF 的 HTML 模板）不适用缓存、按是否需重读决定。
+# 两处必须都钉住：只钉"读取后缓存"会让可变模板被冻结在首读版本上（反方向误用）。
+EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）"
+JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
+JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
+JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
+SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
+# 依赖关系文档（模块间依赖的唯一视图，跨语言）：其价值全在"读得到、看得懂、不过期"——
+# 多模块项目若没有一份完整模块依赖关系视图，每加一个依赖都要先重建依赖树，于是出现
+# "模块已经（间接）依赖了某库却又加一次"这类**重复声明**（依赖图变脏：版本收敛与统一升
+# 级失去唯一入口、可重现性变差、体积与启动开销悄然增加）。故落点为 `specs/general/doc-design.adoc`
+# 的「依赖关系文档（模块间依赖的唯一视图）」节（含 UML 表述规范与边界），并由加载调度器
+# 与依赖规范两处指向它（**涉及多模块/增删依赖即加载**；只写在被引用的文件里、入口不指向它，
+# 执行者就不会知道有这份视图该先读）。本防线钉住该节的**可执行要点**（完整、UML 优先、
+# 位置可直达、先查本文档、缺失即新增、同提交同步、不重复声明、与工具边界），
+# 防"精简/去重"时把判据压成一句"要注意依赖关系"（那样本条就只剩口号）。
+DEPENDENCY_VIEW_SECTION = "依赖关系文档（模块间依赖的唯一视图）"
+DEPENDENCY_VIEW_FILE = os.path.join(SPECS_DIR, "general", "doc-design.adoc")
+DEPENDENCY_DOC_PATH = "doc/dependency.adoc"
+# 索引页判据（`specs/general/doc.adoc`「索引页的触发判据」+ `specs/general/doc-module.adoc`
+# 的模块 doc 索引条目）：AI 曾把两条规范叠加后读宽——「每级目录须有索引页」+「模块 doc 下应放
+# README.adoc」被推成「有 doc/ 目录就得有 doc/README.adoc」，于是给 48 个模块批量补了内容
+# 几乎逐字同构的 `doc/README.adoc`（表里指的全是同一份模块 README 与同一份依赖视图，不含本级
+# 自身信息），属"为完整而存在"的空壳。根因是规范只写了"每级目录须有索引页"、**没写"该不该
+# 建索引页"的触发判据**。本防线钉住该判据（有实质文档才建 / 空壳不建 / 索引只做导航 / 模块级
+# 导航由模块 README 承担），防"精简/去重"时把判据压回一句"每级目录须有索引页"使失效复发。
+INDEX_PAGE_SECTION = "索引页的触发判据"
+DOC_FILE = os.path.join(SPECS_DIR, "general", "doc.adoc")
+DOC_MODULE_FILE = os.path.join(SPECS_DIR, "general", "doc-module.adoc")
+# 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
+# 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
+# 出现"做完了才发现方向理解错"或"流程走完了但没人回头看规则是否有问题"。被删则
+# "到哪个节点查什么"重新无人负责；同时它必须写明哪些节点**不设**（否则概念性验证会外溢
+# 成所有任务的流程）。
+EXECUTION_FILE = os.path.join(SPECS_DIR, "core", "execution.adoc")
+# 本仓库自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围）
+PROJECT_FILE = os.path.join(REPO_ROOT, "AGENTS.adoc")
+
+# 公共任务提示词（非规范本体，但属本仓库维护范围）：登记入口、正文目录与公共片段。
+# 提示词侧重点错即方向错（后续操作全做错），故对「主侧重 + 优先级」加机械防线，
+# 防止调整/去重时把方向性内容删掉或降级；语义是否被削弱仍由人/子 agent 复核承担。
+# 公共内容说明文档（介绍公共内容的范围与形态）：README.adoc。
+README_FILE = os.path.join(REPO_ROOT, "README.adoc")
+PROMPTS_FILE = os.path.join(REPO_ROOT, "PROMPTS.adoc")
+PROMPTS_DIR = os.path.join(REPO_ROOT, "prompts")
+COMMON_PROMPT_FILE = os.path.join(PROMPTS_DIR, "_common.txt")
+
+# 图书馆（仓库根 `library/`，**不在默认引用面内**：本仓库内容全部会发布，区别只在
+# "默认引用什么"——它没有公共加载项、引用方项目里也没有本仓库的文件）：规范条目与项目决策
+# 背后的依据落点——外部标准原文摘录、"标准确实支持该条"的映射、当初的失效与实证。
+# 它**不在默认引用面内**（`specs/**` 由引用方按入口加载、即引用方的输入，而图书馆天然含只对本项目
+# 成立的内容：当初的失效、取舍、实证、选型理由），故落在仓库根、与 `prompts/` 同性质；
+# 详见 AGENTS.adoc「依据图书馆」与 check_library_guard。
+LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
+LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
+# 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
+# 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
+LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc")
+# 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
+# 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
+# ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
+# 当成外部标准原文，从而误判其可引用性（`specs/general/source.adoc`「外部引用」）。
+# 锚点分两组：①承认同义性差异的句式；②每条取舍的判据句（标准说了什么 / 本站加严了什么）。
+_LIBRARY_ADOPTION_ANCHORS = (
+    "== 同义性差异与覆盖点（本集合自己承认的）",
+    "本文件是依据图书馆的主题之一",
+    "**借用其原则**",
+    '**未**规定"配置类中任何逻辑一律禁止"',
+    "**未**规定此优先级顺序",
+    '**均未**规定"某一类执行者绝对不得合并"',
+    "是本项目自身的组织约定",
+)
+# 『依据的写入与关联』主题（library/usage.adoc）的要点锚点：
+# 该主题回答图书馆此前没有判据的两件事——**何时该写、写什么**（触发特征与不写判据）与
+# **依据与规则怎么关联、怎么反查**（两侧各写一半、只取一份不遍历的解析算法）。
+# 缺这几句，"写依据"重新变成靠自觉：AI 不主动写、写什么全凭发挥，或把规则本体抄进馆（第二真源）。
+_LIBRARY_USAGE_ANCHORS = (
+    "== 一、什么时候该把依据写进图书馆（触发特征）",
+    "== 二、依据与规则怎么关联（关联协议）",
+    "=== 反查解析算法（只取一份，不遍历）",
+    "== 三、默认引用面与非引用面（外部项目怎么处理）",
+    "判据是问句，不是印象",
+    "以下情形**不写**",
+    "**入库必写项**",
+    "**终止条件（L1）**",
+    "**只取一段（馆特别大时）**",
+)
+# 『依据的定位协议』（library/README.adoc）的要点锚点：
+# 图书馆**没有体量与范围上限**（link:README.adoc[]「放什么、不放什么」），将来可能特别大；
+# 于是引用方要在**不全量下载**的前提下准确定位"这条依据在哪个文件"。缺这几句，定位重新退化成
+# ①整馆下载、②按主题名猜文件名、③把图书馆当全文检索引擎——而**主键是内容（Git 对象）、
+# 不是路径**这一点若不写明，"文件改名即断档"会反复出现（本仓库的图书馆自身就搬过落点）。
+_LIBRARY_LOCATING_USAGE_ANCHORS = (
+    "== 四、引用方怎么准确定位依据（不全量下载）",
+    "**主键是内容、不是路径**",
+    "**协议不承载的东西（形态约束，L1）**",
+    "**终止条件（L1，同上）**",
+    "**取用侧是游客**",
+    "**只有 https、没有仓库、没有 git**",
+    "**文件名不承担定位（短、无语义，L1）**",
+)
+_LIBRARY_LOCATING_ANCHORS = (
+    '== 为什么还要有"定位协议"（馆可以无限大）',
+    "== 依据的定位协议（入口 + 索引 + 单点取值）",
+    "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
+    "**版本固化（可选加固，不得写成前置）**",
+    "**分段取值（馆特别大时怎么只取一段）**",
+    "**形态约束（L1）**",
+    "**文件名协议（短、无语义、不承担定位）**",
+    "**作者侧**",
+    "**取用侧**是**游客**",
+    "**不解析页面结构**",
+)
+# 图书馆主题**文件名**的上限（字符数，含扩展名）：图书馆的检索键是**依据名**
+# （经入口「主题登记」表解析），**文件名不是主键、也不承担语义**——它却被读进每一次链接与每一次
+# 目录列举，故"名字写成一句话"会让每个读者反复为它付上下文，且制造"改名即断档"的错觉。
+# 上限取 32 与本仓库模块文件名同口径；判据是"单个短词、小写 ASCII"，长度只是机械可判定的下界。
+LIBRARY_FILE_NAME_MAX = 32
+
+# 『依据的定位与取值』主题节（library/sources.adoc）——依据的定位协议本身也要有依据：
+# Git 的内容寻址（`<commit>:<path>` 命名的是内容对象）与 HTTP 分段取值（RFC 7233）。
+# 缺这两条，"主键是内容"与"只取一段"就只是本站的说法；同时**取样状态必须如实**——
+# 本站站点未实测到 Range 生效，故不得把"支持 Range"当成既定事实（source.adoc「不臆造行为」）。
+# 『取用前置』不得回退（用户报告的失效，2026-09-14）：图书馆的定位路径**先入为主把 commit
+# 写进了取值地址**，于是"游客（只有 https，没有仓库、没有 git）"走不通——它既取不到
+# commit，本仓库也不发布版本号。故把"要求取用侧先取 commit/版本号"的**表述形态**机械钉住：
+# 只拦"（先）取/拿到/读取 commit（再）拼/构造/写入地址（路径）"这类**先后关系明确**的写法，
+# 不拦 commit 的合法用途（版本固化、内容寻址说明、`<commit>:<path>` 取值示例、git ls-remote
+# 命令、词表里的"主机 + 仓库 + commit"等）。
+_LOCATING_COMMIT_PREREQ_PATTERNS = (
+    (re.compile(r"(先|须|必须|需要|要)[^。\n]{0,20}(取|拿|获取|读取)[^。\n]{0,10}commit[^。\n]{0,30}(拼|构造|写入|组装)"),
+     "不得要求取用侧先取 commit 再拼取值地址——取用侧是只有 https 的游客，取不到 commit"
+     "（本仓库不发布版本号；commit 只能用于可选的版本固化）"),
+    (re.compile(r"commit[^。\n]{0,20}(进入|拼进|写进|写进)[^。\n]{0,10}(文件名|地址|路径|URL)"),
+     "不得把 commit 写进入口/取值地址——地址必须是常驻层里不随提交滚动的固定地址"),
+)
+# 豁免：历史记录（`CHANGELOG.adoc` 记的是**当时口径**，不得改写）；以及**引用/否定该错误
+# 表述本身**的句子（含"不得/不要/走不通/取不到/失效/误区"等词）。
+_LOCATING_COMMIT_PREREQ_EXEMPT = ("不得", "不要", "不能", "走不通", "取不到", "失效", "误区",
+                                  "错误", "反例", "本站失效")
+
+_LIBRARY_LOCATING_SOURCE_MARKERS = (
+    "== 依据的定位与取值（git / RFC 7233）",
+    "In its first form, the command provides the content or the type of an object in the repository.",
+    "names the **blob or tree** at the given path",
+    "The 206 (Partial Content) status code indicates that the server is",
+    "**未实测**",
+)
+# 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
+# specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
+# 本文件是那份清单，也是 check_public_content_coverage 的核对对象。
+PUBLIC_FILE = os.path.join(REPO_ROOT, "PUBLIC.adoc")
 
 # 误导入的私有约定特征（中性化后应消除）。
 # 注意：只针对"被当作强制规范"的强约束表述，中性示例（如 `CList.of(...)` 作为
@@ -57,32 +457,45 @@ FORBIDDEN_PATTERNS = [
 # 以免误伤 git 规范中"重命名必须用 git mv"等中性合理表述。
 HISTORICAL_NOTE_PATTERNS = [
     (r"真正的 agents\.md", "指向旧 agents.md 命名的历史来源注记"),
-    (r"早期版本", "疑似'早期版本…'历史来源声明"),
+    (r"(?:早期版本|之前的版本|原先)", "疑似'早期版本…'历史来源声明"),
     (r"原位于[^，。]*迁移至此", "疑似'原位于…迁移至此'变更来源声明"),
     (r"从通用规范中移除", "疑似规范迁移来源声明"),
     (r"原通用规范内的引用", "疑似旧规范引用迁移来源声明"),
 ]
 
 errors = []
-_phase_start = 0.0
+
+
+VERBOSE = False
 
 
 def log(msg: str) -> None:
-    """带时间戳的进度日志，立即 flush 避免被缓冲吞掉。"""
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    """阶段级进度日志（始终输出）。立即 flush：既要给人看，也可能被 CI 与测试实时捕获。
+
+    不打时间戳：本脚本是纯本地毫秒级校验，时间戳只会淹没真正重要的进度与结论
+    （在单元测试输出中尤其明显），对排查没帮助。
+    """
+    print(msg, flush=True)
+
+
+def detail(msg: str) -> None:
+    """逐文件级进度日志（默认**不输出**，`--verbose` 时输出）。
+
+    默认静默：全量检查会对每个文件逐条打印（26 个文件 × 多项检查），在 CI 日志与
+    单元测试输出里数百行噪音会盖住真正有用的信息（进度小结与错误清单）。
+    """
+    if VERBOSE:
+        print(msg, flush=True)
 
 
 def phase(name: str) -> None:
     """标记一个检查阶段的开始。"""
-    global _phase_start
-    _phase_start = time.time()
     log(f"▶ {name}...")
 
 
 def phase_done() -> None:
-    """标记当前阶段结束，打印耗时。"""
-    elapsed = time.time() - _phase_start
-    log(f"  ✓ 完成 ({elapsed:.1f}s)")
+    """标记当前阶段结束。"""
+    log("  ✓ 完成")
 
 
 def err(msg: str, path: str = "", line: int = 0) -> None:
@@ -93,20 +506,76 @@ def err(msg: str, path: str = "", line: int = 0) -> None:
 
 
 def collect_adoc_files():
+    """收集纳入检查的 .adoc 文件。
+
+    口径：**本仓库维护范围内的全部 .adoc** = `specs/` 下全部规范文件（含
+    `specs-project-maintainer/`）+ 仓库根的全部 .adoc（通用规范入口
+    `AGENTS_COMMON.adoc`、项目自身规范 `AGENTS.adoc`、安装文档 `INSTALL.adoc`、
+    公共内容入口索引 `PUBLIC.adoc`、说明文档 `README.adoc`/`PROMPTS.adoc`、
+    变更记录 `CHANGELOG.adoc`）+ 图书馆 `library/` 下的全部 .adoc + 任务提示词
+    `prompts/` 下的全部 .adoc（会被复制给未知项目执行，见 `PUBLIC.adoc`）——即
+    "随规范集合维护的全部文档"，**不止 specs/ 一个目录**。
+    （下文各检查的 docstring 一律以本口径为准。）
+
+    为什么必须收全：本集合是**语法编译、引用存在性、节名引用、链接格式**等检查的
+    覆盖范围，漏收一个目录即该目录下全部文档脱离这些口径（悬空引用/悬空节名/错格式
+    链接都无人发现）。历史缺陷正是如此：`library/**` 与根 `PUBLIC.adoc`/`README.adoc`/
+    `PROMPTS.adoc` 曾同时不在本集合内，三口径对它们整体失效（实测 `library/README.adoc`
+    就有 3 处悬空节名无人拦）；`prompts/**` 同样漏收过——而它是要复制给未知项目执行的
+    产物，其自身的死链/悬空引用会随分发一起流出。故此处以"仓库根全部 .adoc + 各目录
+    递归"一次收全，新增目录/新文件自动纳入，不再靠逐项登记（漏登记即漏检查）。
+    """
     result = []
-    for root, _, files in os.walk(SPECS_DIR):
-        for f in files:
+    # 目录一律**由 REPO_ROOT 现场推导**（不直接引用可能被重定向的模块常量）：
+    # 各检查/单测会把 REPO_ROOT 指向临时根，现场推导才能保证"只收本仓库内的文件"，
+    # 不会把真实仓库的目录（如真实 library/）漏收进来。
+    root_dir = os.path.abspath(REPO_ROOT)
+    for sub in ("specs", "specs-project-maintainer", "library", "prompts"):
+        d = os.path.join(root_dir, sub)
+        for dirpath, _, files in os.walk(d):
+            for f in files:
+                if f.endswith(".adoc"):
+                    result.append(os.path.join(dirpath, f))
+    # 仓库根：全部 .adoc（含 AGENTS.adoc / INSTALL.adoc / PUBLIC.adoc / README.adoc /
+    # PROMPTS.adoc / CHANGELOG.adoc / AGENTS_COMMON.adoc；library/、prompts/ 已由上面收，不重复）
+    if os.path.isdir(root_dir):
+        for f in sorted(os.listdir(root_dir)):
             if f.endswith(".adoc"):
-                result.append(os.path.join(root, f))
-    result.append(GENERIC_FILE)
-    # Agent 项目自身规范入口（根目录 AGENTS.adoc，非通用规范，但属本仓库维护范围，一并校验）
-    project = os.path.join(REPO_ROOT, "AGENTS.adoc")
-    if os.path.isfile(project):
-        result.append(project)
-    # 安装文档（其内代码块模板逐字保留，纳入机械校验，避免模板被折叠/丢失换行）
-    if os.path.isfile(INSTALL_FILE):
-        result.append(INSTALL_FILE)
-    return result
+                result.append(os.path.join(root_dir, f))
+    # 统一归一化为**仓库根相对 POSIX 路径**（如 `library/README.adoc`、`specs/…`）：
+    # 这是全仓库通用的规范写法，也让"某文件在不在检查集合里"可被直接核验。
+    return [os.path.relpath(f, root_dir).replace("\\", "/") for f in result]
+
+
+def _rel_of(path: str) -> str:
+    """把任意（绝对或仓库根相对的）文件路径归一化为**仓库根相对 POSIX 路径**。
+
+    检查集合里的元素一律是仓库根相对形式（见 collect_adoc_files），而常量
+    （GENERIC_FILE、PROMPTS_FILE 等）是绝对路径；两处混用时先经本函数归一化，
+    再比较/打开，避免绝对/相对两种写法互相认不出。
+    """
+    if os.path.isabs(path):
+        return os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+    return path.replace("\\", "/")
+
+
+# **历史记录文件**：`CHANGELOG.adoc` 是**只追加的变更历史**，按定义会保留旧路径、旧文件名
+# 与"原位于…迁移至…"这类历史陈述（见 specs/general/changelog.adoc）。故它虽有语法形态、
+# 须纳入语法编译（防模板/换行被破坏），但**引用存在性、节名引用、链接格式、历史来源声明**
+# 四类检查对它一律不适用——历史条目里的旧路径"查不到"是记录本身，不是悬空/违规。
+HISTORICAL_FILES = ("CHANGELOG.adoc",)
+# 『变更日志条目形态』（`specs/general/changelog.adoc`「条目书写」）：主格式为**单行**
+# ——`版本号 | 日期 | 变更摘要`，条目内不得换行、不得写成多段。真实失效（本项目实测）：
+# 变更日志被当成追加区，同一条目被**多行续写**（heredoc / 多次 append），
+# 结果形态看不出来，还容易与下一条粘连。单行是**机械可判定**的（行首 `- 版本 | 日期 |`
+# 之后不得出现续行），故在此钉住，不靠人工抽查。
+CHANGELOG_ENTRY_RE = re.compile(r"^-\s+[0-9][^|\n]*\|\s*\d{4}-\d{2}-\d{2}\s*\|")
+CHANGELOG_ENTRY_MAX = 2000
+
+
+def _is_historical(rel: str) -> bool:
+    """该仓库根相对路径是否属"历史记录文件"（不参与引用/节名/历史来源检查）。"""
+    return rel in HISTORICAL_FILES
 
 
 def check_asciidoctor_syntax():
@@ -115,32 +584,103 @@ def check_asciidoctor_syntax():
     用 shutil.which 跨平台检测（Windows `where` / Linux `command -v` 通用），
     避免因命令不存在而误判为"跳过"。CI 中应在运行本脚本前安装 asciidoctor，
     使语法验证真正执行。
+
+    **必须带 `--failure-level=WARN`**：asciidoctor 默认对 WARNING/ERROR **仍返回 0**
+    （只把问题打到 stderr），故只看 `returncode != 0` 会漏报这类问题——最典型的是
+    `include::` 目标缺失、`image::` 找不到：它们只发 WARNING，语法"通过"但内容实际
+    缺块。加此开关后 WARNING 及以上即返回非 0，防线才真正生效（判据：asciidoctor 的
+    `--failure-level`，取值域 INFO/WARN/ERROR/FATAL，默认 FATAL=不因告警失败）。
+    老版本 asciidoctor 不支持该开关（会以非 0 退出并打印 unknown option）时，**降级
+    为显式告警**而不是静默通过——降级路径本身要被看见。
     """
     phase("AsciiDoc 语法编译验证")
     if shutil.which("asciidoctor") is None:
         log("  提示: 未检测到 asciidoctor，跳过语法编译验证"
             "（CI 中请先在运行本脚本前安装，见 workflow）。")
         return
+    # 固定口径：WARNING 及以上即视为失败（含 include 目标缺失、image 找不到）
+    failure_level = "--failure-level=WARN"
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        log(f"  [{i}/{len(files)}] 检查 {rel}")
+    unsupported = False   # 一旦确认本机 asciidoctor 不认 --failure-level，后续一律降级
+    for i, rel in enumerate(files, 1):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
+        base_cmd = ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", path]
+        cmd = base_cmd if unsupported else [base_cmd[0], failure_level] + base_cmd[1:]
         try:
-            r = subprocess.run(
-                ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", f],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode != 0:
-                err(f"asciidoctor 语法错误: {r.stderr.strip()}", f)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
-            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {os.path.relpath(f, REPO_ROOT)}")
+            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
+            continue
+        # 老版本 asciidoctor 不认 --failure-level：显式降级（只告警一次），不静默通过
+        if not unsupported and r.returncode != 0 \
+                and "unrecognized option" in (r.stderr or ""):
+            unsupported = True
+            log("  警告: 本机 asciidoctor 不支持 --failure-level，"
+                "WARNING 级问题（含 include 目标缺失）本次无法拦截；"
+                "请升级 asciidoctor（>= 1.5.7）")
+            try:
+                r = subprocess.run(base_cmd, capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
+                continue
+        if r.returncode != 0:
+            err(f"asciidoctor 语法/告警: {r.stderr.strip()}", rel)
     phase_done()
 
 
+def _is_dir_ref(ref: str) -> bool:
+    """判断一个引用是否为**目录型引用**（以 `/` 结尾，如 `specs/`、`script/`）。
+
+    目录型引用**不再整体跳过**——它有确定的判据（该目录是否存在），跳过会让
+    "目录被改名/删除后引用悬空"完全无人发现（原实现把目录型与占位符混为一类跳过，
+    等于把"可能误报"换成了"必然漏报"）。存在性由 check_refs_exist / check_library_guard
+    按 os.path.isdir 核对。
+    """
+    return ref.endswith("/")
+
+
 def _is_placeholder_ref(ref: str) -> bool:
-    """判断一个引用是否指向目录 / 占位符 / 尚不存在的示例（非真实具体文件）。"""
-    return (ref.endswith("/")
-            or ref.endswith("...")
+    """判断一个引用是否为**占位符/示例**（非真实具体文件，无法核对存在性）。
+
+    只含真正的占位形态：`...` 省略、`**` 整目录通配（如 `specs/**`）、`<...>` 尖括号
+    占位。**目录型引用（`specs/`）不在此列**——见 _is_dir_ref（它有确定的判据）。
+    """
+    return (ref.endswith("...")
+            or ref.endswith("**")          # 整目录通配（如 `specs/**`），非具体文件
             or "<" in ref or ">" in ref)
+
+
+def _ref_base(f: str) -> str:
+    """某规范文件内 `link:` 引用的解析基准（相对仓库根目录，根文件为空串）。
+
+    **基准口径与渲染者一致（单一说明，不留第二套说法）**：本仓库的 `.adoc` 由站点
+    `index.html` 用 **Asciidoctor.js（浏览器端现渲染）** 渲染，其 `link:` 目标按
+    **文档源所在目录**解析。站点渲染的文档在**仓库根**，故 `link:` 相对仓库根解析——
+    即 `link:INSTALL.adoc[]` 在站点上解析为 `/INSTALL.adoc`（仓库根的 `INSTALL.adoc`）。
+    本函数对**仓库根文件**返回空串（基准=仓库根）正是为与之一致。
+
+    为何"根文件约定按仓库根书写"：AsciiDoc 的 `link:` 没有"仓库根"概念，只有"文档
+    所在目录"；对位于仓库根的文件两者恰好等价（`../` 会越出仓库根、无法表达"根级
+    相对"），故根级跨文件引用统一按仓库根基准书写。**其余文件**（`specs/`、`library/`
+    等）按其所在目录解析（与 IDE/浏览器相对语义一致）；图书馆内的引用由
+    `_lib_resolve` 按"仓库根优先、再本文件目录"解析，与本节同为**仓库根基准**。
+
+    记录性风险（已随本节说明消解）：若有人把此处的基准“修正”成"一律按本文件目录"，
+    会去把 `README.adoc` 里的根级 `link:` 改成 `../` 形态——那反而把**站点上的链接**
+    弄死（站点渲染的文档就在仓库根，`../` 会越出站点根）。故改动基准前须先改渲染者。
+    """
+    if os.path.isabs(f):
+        rel = _rel_of(f)  # 绝对路径 → 仓库根相对
+    elif os.path.dirname(f) == "":
+        rel = f  # 已是仓库根相对形式（collect_adoc_files 的返回值）
+    else:
+        # 既非绝对、也非仓库根相对：按"相对 REPO_ROOT"解释（调用方偶有这种写法）
+        rel = _rel_of(os.path.join(REPO_ROOT, f))
+    d = os.path.dirname(rel)
+    if d in ("", "."):
+        return ""  # 仓库根文件：引用按从仓库根开始的路径解析
+    return d.replace("\\", "/")
 
 
 def extract_specs_refs(text: str, base_dir: str = ""):
@@ -149,16 +689,18 @@ def extract_specs_refs(text: str, base_dir: str = ""):
     `base_dir` 为当前文件所在目录（相对仓库根，POSIX 分隔，根文件为空串），用于
     解析 link: 的相对目标。兼容两类写法：
 
-      * 反引号包裹：`` `specs/general/coding.adoc` ``——按**从仓库根开始**的相对
-        路径解析（AGENTS_COMMON.adoc 加载调度 / 正文里惯例用这种写法）。
+      * 反引号包裹：`` `specs/general/coding.adoc` `` / `` `specs-project-maintainer/priority.adoc` ``
+        ——按**从仓库根开始**的相对路径解析（AGENTS_COMMON.adoc 加载调度 / 正文里惯例用这种写法）。
       * AsciiDoc 超链接：`link:xxx[]`——按**相对当前文件所在目录**解析（IDE 与
         浏览器相对语义一致），目标可能是 `../general/x.adoc` 等含 `../` 的形式。
 
-    排除：目录、占位符、外部 scheme 链接、页内锚点、根绝对路径及越出仓库根的相对路径。
+    排除：占位符、外部 scheme 链接、页内锚点、根绝对路径及越出仓库根的相对路径。
+    **目录型引用（以 `/` 结尾）保留**（不是"排除"）：它由调用方按 os.path.isdir 核对
+    存在性——原实现把目录型一并跳过，导致 `link:../script/[]` 这类目录被改名后无人发现。
     """
     refs = []
-    # 反引号：根目录相对
-    for r in re.findall(r"`(specs/[^`\s]+)`", text):
+    # 反引号：根目录相对（含目录型 `specs/`、`script/`；占位形态除外）
+    for r in re.findall(r"`((?:specs(?:-project)?|library|script|prompts)/[^`\s]*)`", text):
         if _is_placeholder_ref(r):
             continue
         refs.append(r)
@@ -171,11 +713,14 @@ def extract_specs_refs(text: str, base_dir: str = ""):
             continue
         if t.startswith("/"):  # 根绝对路径，格式检查单独报告，此处不参与存在性
             continue
+        is_dir = t.endswith("/")
         resolved = posixpath.normpath(posixpath.join(base_dir, t))
         if resolved == ".." or resolved.startswith("../"):
             continue  # 越出仓库根，格式检查单独报告
         if _is_placeholder_ref(resolved):
             continue
+        if is_dir and not resolved.endswith("/"):
+            resolved += "/"  # 保留目录型标记，供调用方按目录核对
         refs.append(resolved)
     # 去重并保持顺序
     seen, out = set(), []
@@ -197,18 +742,36 @@ def check_refs_exist():
     """
     phase("引用文件存在性检查")
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
-        log(f"  [{i}/{len(files)}] 扫描 {rel}")
-        with open(f, encoding="utf-8") as fh:
+    for i, rel in enumerate(files, 1):
+        base = _ref_base(rel)
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧路径，存在性检查对它不适用
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             text = fh.read()
         refs = extract_specs_refs(text, base)
         for ref in refs:
+            # 维护方自查层（specs-project-maintainer/）不是公共入口的加载项：
+            # 其中指向 `specs/` 的引用在引用方可能不存在（引用方并未引入这些文件），
+            # 属设计预期而非悬空；故只校验其指向本层自身的引用（见 check_dispatcher_registry
+            # 的登记口径）。这些文件**在本仓库内**的引用仍由 check_link_refs /
+            # check_section_refs 逐条核对。
+            if rel.startswith("specs-project-maintainer" + os.sep) \
+                    and not ref.startswith("specs-project-maintainer/"):
+                continue
+            # 图书馆（仓库根 library/，不在默认引用面内）引用公共内容/维护方落点属正常，
+            # 反向引用（公共内容引用图书馆）已由 check_public_content_is_self_contained
+            # 拦下；故图书馆自身的非 library 引用不在此重复报错。
+            if rel.startswith("library" + os.sep) \
+                    and not ref.startswith("library/"):
+                continue
+            if _is_dir_ref(ref):
+                # 目录型引用：核对**目录**是否存在（不再整体跳过——目录被改名/删除
+                # 同样是引用悬空，且原实现正因跳过而对它完全无覆盖）
+                d = os.path.join(REPO_ROOT, *ref.rstrip("/").split("/"))
+                if not os.path.isdir(d):
+                    err(f"引用了不存在的目录: {ref}", rel)
+                continue
             target = os.path.join(REPO_ROOT, *ref.split("/"))
             if not os.path.isfile(target):
                 err(f"引用了不存在的文件: {ref}", rel)
@@ -228,7 +791,8 @@ def check_stack_consistency():
         text = fh.read()
     # 提取登记的技术栈文件：specs/stack/xxx.adoc（AGENTS_COMMON.adoc 内部 specs/... 从仓库根解析，base_dir=""）
     registered = set(extract_specs_refs(text, ""))
-    registered_stack = {r for r in registered if r.startswith("specs/stack/")}
+    registered_stack = {r for r in registered
+                        if r.startswith("specs/stack/") and not r.endswith("/")}
 
     actual = set()
     stack_dir = os.path.join(SPECS_DIR, "stack")
@@ -261,14 +825,25 @@ def check_dispatcher_registry():
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         registered = set(extract_specs_refs(fh.read(), ""))
     referenced = set()
-    for f in collect_adoc_files():
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
-        with open(f, encoding="utf-8") as fh:
+    for rel in collect_adoc_files():
+        # 只统计**公共规范内容**（`AGENTS_COMMON.adoc` + `specs/`）内部文件的引用：
+        # 调度器是公共规范内容的登记处。非公共入口登记的落点（`specs-project-maintainer/`、
+        # 根 `library/`、`PUBLIC.adoc`、根 `README.adoc`/`PROMPTS.adoc`/`CHANGELOG.adoc`、
+        # `prompts/`）**不在公共内容里、也不由公共调度器登记**（各由 `AGENTS.adoc` 登记），
+        # 把它们的引用算进来即为误报。
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
+            continue
+        base = _ref_base(rel)
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             referenced |= set(extract_specs_refs(fh.read(), base))
-    missing = sorted(referenced - registered)
+    # 只核对**公共规范内容**（`specs/`）的目标：非 `specs/` 的引用（根文档、`prompts/`、
+    # `library/` 等）不由公共调度器登记，报"未登记"即为误报。`specs-project-maintainer/`
+    # 虽在 `specs-project/…` 命名空间之外，但其 §登记由 AGENTS.adoc 单独承担，此处一并排除。
+    non_public = ("specs-project-maintainer/", "library/")
+    missing = sorted(r for r in referenced - registered
+                     if r.startswith("specs/")
+                     and not r.endswith("/")   # 目录型引用不是"待登记文件"
+                     and not r.startswith(non_public))
     log(f"  调度器登记 {len(registered)} 个, 被引用 {len(referenced)} 个")
     for m in missing:
         err(f"规范文件被引用但未在加载调度器登记（不会被加载、其中规则实际失效）: {m}",
@@ -282,10 +857,9 @@ def check_forbidden_patterns():
     files = collect_adoc_files()
     checked = 0
     total_lines = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    for i, rel in enumerate(files, 1):
         # AGENTS_COMMON.adoc 作为加载器允许出现中性示例路径，跳过其私有约定命中
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             lines = fh.readlines()
         total_lines += len(lines)
         found_in_file = False
@@ -293,7 +867,7 @@ def check_forbidden_patterns():
             for pat, desc in FORBIDDEN_PATTERNS:
                 if re.search(pat, line):
                     if not found_in_file:
-                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        detail(f"  [{i}/{len(files)}] 检查 {rel}")
                         found_in_file = True
                     err(f"{desc}", rel, j)
         checked += 1
@@ -312,15 +886,16 @@ def check_historical_notes():
     phase("历史来源声明检查")
     files = collect_adoc_files()
     checked = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史本身就是历史陈述，本检查对它不适用
         found_in_file = False
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 for pat, desc in HISTORICAL_NOTE_PATTERNS:
                     if re.search(pat, line):
                         if not found_in_file:
-                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            detail(f"  [{i}/{len(files)}] 检查 {rel}")
                             found_in_file = True
                         err(f"{desc}（『不保留无用的历史来源声明』），应删除或改为直接指向当前有效表述", rel, j)
         checked += 1
@@ -329,12 +904,19 @@ def check_historical_notes():
 
 
 def check_install_codeblock():
-    """校验 INSTALL.adoc 中 AGENTS.adoc 入口模板代码块逐字保留（机械抓手）。
+    """校验 INSTALL.adoc 的入口模板代码块逐字保留 + 入口文件名规则与 `AGENTS.md` 兼容。
 
-    背景：AI 读取 INSTALL.adoc 在目标项目创建 AGENTS.adoc 时，若模板代码块内的
+    背景一（模板逐字）：AI 读取 INSTALL.adoc 在目标项目创建入口文档时，若模板代码块内的
     换行/空行被折叠、行被合并，会导致生成文档样式改变。为让『逐字原样保留』成为
     可执行约束而非靠自觉，本检查扫描 INSTALL.adoc 的模板代码块，逐一确认每段必备
     行都各自独立成行（未被合并/折叠），且必备行之间的空行分隔完好。
+
+    背景二（兼容 `AGENTS.md`）：平台与生态对 agent 规范文档的**默认命名是 `AGENTS.md`**
+    （CodeBuddy、Cursor 等平台的固有约定），只认 `AGENTS.adoc` 会让安装规则在既有
+    `AGENTS.md` 的项目上落不了地（重命名会打断平台识别、删旧建新会丢内容），而安装文档
+    的体积上限又不允许把兼容说明写成大段（见本文件检查项 22）。故把"默认 `AGENTS.adoc`、
+    已存在 `AGENTS.md` 时就地融合且不重命名、不另建"钉成机械可核对的判据，防止这条兼容
+    规则在后续维护中被删掉或只说"兼容"却无做法。
     """
     phase("INSTALL 入口模板代码块检查")
     if not os.path.isfile(INSTALL_FILE):
@@ -373,6 +955,19 @@ def check_install_codeblock():
                 "（模板须逐字原样保留，不得折叠换行）",
                 os.path.relpath(INSTALL_FILE, REPO_ROOT))
 
+    # 入口文件名规则：默认 AGENTS.adoc，且兼容已存在的 AGENTS.md（就地融合、不重命名/不另建）
+    with open(INSTALL_FILE, encoding="utf-8") as fh:
+        install_text = fh.read()
+    for key, desc in (
+            ("AGENTS.adoc", "默认入口文件名"),
+            ("AGENTS.md", "平台默认命名须被兼容（已存在时就地融合）"),
+            ("不重命名", "已存在 AGENTS.md 时不得重命名/迁移成 AGENTS.adoc（会打断平台识别）"),
+            ("不另建", "已存在 AGENTS.md 时不得再另建一个 AGENTS.adoc（双入口会分叉）")):
+        if key not in install_text:
+            err(f"INSTALL.adoc 入口文件名规则被破坏：缺失『{key}』（{desc}）——"
+                "只认单一扩展名会让安装规则在已有其他命名的项目上落不了地",
+                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+
     # 必备行之间须有恰当的空行分隔，确保样式不变（防止空行被吞掉导致段落粘连）
     indices = [i for i, raw in enumerate(body) if raw.rstrip("\n\r") in found]
     for a, b in zip(indices, indices[1:]):
@@ -397,15 +992,12 @@ def check_link_refs():
     """
     phase("文档链接格式检查")
     files = collect_adoc_files()
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        # AGENTS_COMMON.adoc 内部 specs/... 约定从仓库根解析（与其实际位于仓库根目录一致）
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧路径与旧写法，链接格式检查对它不适用
+        base = _ref_base(rel)
         found_in_file = False
-        with open(f, encoding="utf-8") as fh:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 for m in re.finditer(r"\blink:([^\[]+)\[", line):
                     target = m.group(1).strip()
@@ -413,7 +1005,7 @@ def check_link_refs():
                     if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target) or target.startswith("#"):
                         continue
                     if not found_in_file:
-                        log(f"  [{i}/{len(files)}] 检查 {rel}")
+                        detail(f"  [{i}/{len(files)}] 检查 {rel}")
                         found_in_file = True
                     if target.startswith("/"):
                         err("内部链接禁止用根绝对路径（link:/specs/... 在 IDE 中会按文件系统根解析、无法跳转），"
@@ -473,14 +1065,14 @@ def check_section_refs():
     phase("节名引用存在性检查")
     files = collect_adoc_files()
     checked = 0
-    for i, f in enumerate(files, 1):
-        rel = os.path.relpath(f, REPO_ROOT)
-        if f == GENERIC_FILE:
-            base = ""
-        else:
-            base = os.path.relpath(os.path.dirname(f), REPO_ROOT).replace("\\", "/")
+    intra_checked = 0
+    for i, rel in enumerate(files, 1):
+        if _is_historical(rel):
+            continue  # 变更历史按定义保留旧节名引用，节名检查对它不适用
+        base = _ref_base(rel)
         found_in_file = False
-        with open(f, encoding="utf-8") as fh:
+        own_names = _collect_section_names(os.path.join(REPO_ROOT, *rel.split("/")))
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
                 # 匹配 `link:目标[]` 及其后连续出现的「节名」（同一行内，可并列多个）
                 for m in re.finditer(r"\blink:([^\[]+)\[\]((?:\s*「[^」]+」)+)", line):
@@ -499,14 +1091,151 @@ def check_section_refs():
                     for sec in re.findall(r"「([^」]+)」", m.group(2)):
                         section = sec.strip()
                         if not found_in_file:
-                            log(f"  [{i}/{len(files)}] 检查 {rel}")
+                            detail(f"  [{i}/{len(files)}] 检查 {rel}")
                             found_in_file = True
                         checked += 1
                         simple = re.sub(r"[（(].*$", "", section).strip()
                         if section not in names and simple not in names:
                             err(f"引用了不存在的节名: {resolved}「{section}」"
                                 f"（该节可能已改名/删除，须同步更新引用）", rel, j)
-    log(f"  校验 {checked} 处节名引用")
+                # 补充：『同文件「节名」』式自然语言指向——写"同文件"即声明该节在
+                # 本文件内，若本文件无此节则指向悬空（check_section_refs 原先只认
+                # `link:x.adoc[]「节」` 写法，拦不住这类指向；曾出现实测悬空引用）。
+                for m2 in re.finditer(r"同文件「([^」]+)」", line):
+                    section = m2.group(1).strip()
+                    simple = re.sub(r"[（(].*$", "", section).strip()
+                    intra_checked += 1
+                    if section not in own_names and simple not in own_names:
+                        err(f"「同文件「{section}」」指向的节在本文件不存在"
+                            f"（该节可能在其他文件，须改写成 link:<文件>[]「{section}」"
+                            "或就地补节）", rel, j)
+    log(f"  校验 {checked} 处节名引用（含 {intra_checked} 处同文件指向）")
+    phase_done()
+
+
+# 『文档不得注水』的机械可判定形态（保守口径，只拦"必然成立"的形态，避免误伤
+# 简短但有实质内容的条目——语义判断不在机械检查范围，由人 review 承担）。
+# 占位词：整段除它之外没有任何实质内容时，才算"无实质内容的占位段"。
+# 判定刻意**不含字符数阈值**——"参考：""内容为：" 这类短引导句是正常文档写法，
+# 按字数判注水必然误伤；短不等于水，篇幅问题属语义判断、交人 review。
+FILLER_PLACEHOLDER_WORDS = ("此处", "本段", "待补", "待完善", "待补充", "后续补充",
+                            "内容同上", "详见上文", "TODO", "略")
+FILLER_DUP_MIN_CHARS = 12       # 判重段落的实质字符下限（只滤掉"重复标点/符号行"，短而真实的重复条目仍应报）
+FILLER_MIN_SUBSTANCE_CHARS = 4  # 段落"实质字符"下限：低于此值视为格式分隔行（如 `：`、`——`），不判注水
+# 承载实质内容的行结构：列表条目、表格行、链接、块属性、注释行
+MEANINGFUL_LINE_PAT = re.compile(r"^\s*(?:\*|\d+\.|\||\[|<|link:|include::)")
+# 判"是否只剩占位词"时需忽略的标点与格式符
+FILLER_NOISE_PAT = re.compile(r"[\s*`\-—、。，,：:；;（）()\[\]\"\'“”~…]")
+
+
+def _iter_blocks(path: str):
+    """按 AsciiDoc 块结构切分正文，逐块产出 (起始行号, 行列表, 是否含承载行)。
+
+    代码块（`----` 定界）内容、节标题与块属性行不计入段落；空行分段。列表/表格等
+    结构行归入所在段，并标记该段是否"含承载实质内容的行"——只有**整段都没有承载行**
+    时才可能是注水段（避免把正常规则条目误判为注水）。
+    """
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.readlines()
+    in_block = False
+    para, start, meaningful = [], 0, False
+    for i, raw in enumerate(lines, 1):
+        line = raw.rstrip("\n").rstrip("\r")
+        if line.strip() == "----":
+            in_block = not in_block
+            continue
+        if in_block:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            if para:
+                yield start, para, meaningful
+                para, start, meaningful = [], 0, False
+            continue
+        if re.match(r"^=+\s+", stripped) or stripped.startswith(":") or stripped.startswith("["):
+            if para:
+                yield start, para, meaningful
+                para, start, meaningful = [], 0, False
+            continue
+        if not para:
+            start = i
+        para.append(line)
+        if MEANINGFUL_LINE_PAT.match(line):
+            meaningful = True
+    if para:
+        yield start, para, meaningful
+
+
+def _para_metrics(para: list) -> tuple:
+    """统计段落：去格式符后的实质字符数、条目数、是否含列表标记。"""
+    texts, items, has_bullet = set(), 0, False
+    for line in para:
+        s = line.strip()
+        if re.match(r"^\s*(?:[*]|\d+\.)\s+", line):
+            has_bullet = True
+            items += 1
+        norm = FILLER_NOISE_PAT.sub("", s)
+        if norm:
+            texts.add(norm)
+    return len("".join(sorted(texts))), items, has_bullet
+
+
+def _placeholder_only(text: str) -> bool:
+    """整段是否"只剩占位词、没有别的实质内容"。
+
+    去掉占位词与标点、格式符后若不再剩任何字符，即判为占位段（如"此处待补充""（略）"）；
+    只要还留有别的字词（"参考：""内容为：""第 3 步：略"）就不算——短引导句与
+    "标题词 + 后接内容"都是正常文档写法，机械检查不得误伤。按词长从长到短去除，
+    避免先去掉短词（"待补"）导致长词（"待补充"）只被去掉前缀、残留无关字符。
+    """
+    rest = text
+    for word in sorted(FILLER_PLACEHOLDER_WORDS, key=len, reverse=True):
+        rest = rest.replace(word, "")
+    return FILLER_NOISE_PAT.sub("", rest) == ""
+
+
+def _substance_chars(text: str) -> int:
+    """段落的"实质字符"数（去掉标点/格式符后剩下的字数）。
+
+    用于滤掉纯格式行（如 `：`、`——`、`***`）——它们既非占位也非内容，
+    判注水属误报，故低于下限时不参与占位段/重复段判定。
+    """
+    return len(FILLER_NOISE_PAT.sub("", text))
+
+
+def check_filler_docs():
+    """『文档不得注水』机械兜底（只拦机械可判定、必然成立的形态）。
+
+    背景：规范要求"禁止无意义、划水、凑字数"，若只停留在文档里的要求、无任何抓手，
+    则属"定义未执行"。本检查保守地钉住两类必然成立、且不误伤正常内容的形态：
+      1) 纯占位段：整段除占位词外无任何实质内容（"此处待补充"这类占位）；
+      2) 同段重复：同一文件内出现**完全逐字相同且承载实质内容**的段落（凑数堆砌）。
+    "内容是否有价值、是否长篇大论、是否流水账"属语义判断，不作机械判定——交人
+    review 承担；机械检查只盯"必然成立"的形态，避免把简短但真实的条目判成注水。
+    """
+    phase("文档注水检查")
+    files = collect_adoc_files()
+    for i, rel in enumerate(files, 1):
+        detail(f"  [{i}/{len(files)}] 检查 {rel}")
+        seen_paras = set()
+        for lineno, para, meaningful in _iter_blocks(os.path.join(REPO_ROOT, *rel.split("/"))):
+            text = " ".join(p.strip() for p in para).strip()
+            # 0) 纯格式行（`：`、`——`、`***` 等）：无实质字符，不判注水（防误报）
+            if _substance_chars(text) < FILLER_MIN_SUBSTANCE_CHARS:
+                continue
+            # 1) 纯占位段：整段无承载行，且除占位词外没有实质内容
+            if not meaningful and _placeholder_only(text):
+                err(f"疑似注水：无实质内容的占位段『{text[:30]}』"
+                    "（『文档不得注水』），补上可核对的实质内容或删除", rel, lineno)
+                continue
+            # 2) 同段重复：逐字相同且承载实质内容的段落（凑数堆砌）——**对全部段落判重**，
+            #    不只判"含列表/表格行"的段落：否则同段重复出现在节标题分隔的两处时会被漏掉
+            if _substance_chars(text) >= FILLER_DUP_MIN_CHARS:
+                if text in seen_paras:
+                    err(f"疑似注水：与上文完全重复的段落『{text[:30]}』"
+                        "（『文档不得注水』），合并去重", rel, lineno)
+                    continue
+                seen_paras.add(text)
     phase_done()
 
 
@@ -534,7 +1263,3551 @@ def check_principle_guard():
     phase_done()
 
 
-def main():
+def check_priority_guard():
+    """『规范优先级防线』：最高关注项、分级定义与落点必须仍在、且级别未被改动。
+
+    背景：规范按业界做法（RFC 2119 / ISO shall-should-may / 关键性分级）分 **L1 强制 /
+    L2 建议 / L3 允许** 三级，并单列"最高关注项"（不可降级）。最大的风险是**重构/去重时
+    把最高关注项删掉或降级**——这正是本仓库发生过的问题（同一最高关注项在多处出现被
+    AI 判为"重复"而合并）。本检查机械钉住：
+
+      * **公共侧**（`specs/core/execution.adoc`）：分级定义（L1/L2/L3）与最高关注项
+        （含"一处完整定义 + 其余一行引用"的保留形态、"强调用升级别+引用"的做法）仍在；
+      * **维护方侧**（`specs-project-maintainer/priority.adoc`）：P1-P6 清单仍在，且各自
+        保持原级别（P1/P2/P3/P5/P6 条款本身为 L1、P4 条款本身为 L2 且同列最高关注项）、
+        『依据』行仍在；
+      * `specs/core/execution.adoc` 仍保留 `git mv` 铁律、读取范围、破坏性操作与来源
+        真实性的落点。
+
+    只钉"存在性与级别"，不改写内容——语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("规范优先级防线检查")
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
+    if not os.path.isfile(exec_path):
+        err(f"缺少 {rel_exec}——分级定义与最高关注项的公共落点丢失", rel_exec)
+        phase_done()
+        return
+    with open(exec_path, encoding="utf-8") as fh:
+        exec_text = fh.read()
+    # 公共侧：分级定义与最高关注项（含保留形态）必须仍在
+    for key, desc in (("L1 强制", "分级定义之一（违反即视为未完成、不可豁免）"),
+                      ("L2 建议", "分级定义之一（有正当理由可偏离、须留痕）"),
+                      ("L3 允许", "分级定义之一（可选做法）"),
+                      ("最高关注项", "最高关注项的公共落点（不可降级、重构首保）"),
+                      ("不可降级", "最高关注项只能加强不得削弱的声明"),
+                      ("一行引用", "保留形态：一处完整定义 + 其余一行引用（防复制正文）"),
+                      ("强调", "强调的正确做法（升级别 + 单一定义 + 显式引用）")):
+        if key not in exec_text:
+            err(f"规范优先级防线被破坏：{rel_exec} 缺失『{key}』（{desc}）——"
+                "分级与最高关注项的公共口径不得被删或降级", rel_exec)
+    # 最高关注项 P1/P5 的必加载层落点仍须保留
+    if "git mv" not in exec_text:
+        err(f"规范优先级防线被破坏：{rel_exec} 缺失 `git mv` 铁律——"
+            "最高关注项 P1 的必加载层落点被删除/改写", rel_exec)
+    if "破坏性操作" not in exec_text:
+        err(f"规范优先级防线被破坏：{rel_exec} 缺失「破坏性操作」——"
+            "最高关注项（不可逆操作先确认）的必加载层落点被删除/改写", rel_exec)
+    if "不得顺口编造" not in exec_text:
+        err(f"规范优先级防线被破坏：{rel_exec} 缺失来源真实性（不得编造事实与来源）——"
+            "最高关注项的必加载层落点被删除/改写", rel_exec)
+    if "范围控制" not in exec_text:
+        err(f"规范优先级防线被破坏：{rel_exec} 缺失读取范围与长会话治理（「范围控制」）——"
+            "最高关注项的必加载层落点被删除/改写", rel_exec)
+
+    # 维护方侧：P1-P6 清单与级别
+    rel_priority = "specs-project-maintainer/priority.adoc"
+    path = os.path.join(REPO_ROOT, *rel_priority.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少维护方最高关注项清单 {rel_priority}——不可降级清单无处承载", rel_priority)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    for pid, name, level in (("P1", "git mv", "L1，最高"), ("P2", "完整性", "L1，最高"),
+                             ("P3", "内容不得减少", "L1，最高"),
+                             ("P4", "读取与上下文纪律", "L2 建议"),
+                             ("P5", "不可逆操作与来源真实性", "L1，最高"),
+                             ("P6", "协作执行者选择", "L1，最高")):
+        if pid not in text:
+            err(f"规范优先级防线被破坏：{rel_priority} 缺失最高关注项 {pid}（{name}）——"
+                "最高关注项不得被删除或降级", rel_priority)
+        else:
+            m = re.search(rf"^===\s*{pid}\.", text, re.M)
+            if m is None:
+                err(f"规范优先级防线被破坏：{rel_priority} 未找到最高关注项 {pid}"
+                    f"（{name}）的小标题『=== {pid}. 』——结构被改写会导致级别核对失效",
+                    rel_priority)
+                continue
+            seg = text[m.start():].split("\n===")[0]
+            if f"要求（{level}" not in seg:
+                err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
+                    f"须标明『要求（{level}』——级别不得被静默改动"
+                    "（P1/P2/P3/P5/P6 为 L1 铁律，P4 条款本身为 L2 建议）", rel_priority)
+            if "**依据**" not in seg:
+                err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
+                    "缺失『**依据**』行——依据可压缩为标准名/编号，但不得整段删除"
+                    "（检索不到依据，就无从判断它是『拍脑袋』还是『有出处』）", rel_priority)
+        if "不可降级" not in text:
+            err(f"规范优先级防线被破坏：{rel_priority} 缺失『不可降级』声明——"
+                "最高关注项须明确只能加强、不得削弱", rel_priority)
+    # P6 的**内容**（不只看名字还在）：本条是"清单里列着、正文却是旧口径"的实证——
+    # 出处选择曾被收紧为"强制同 Agent、不得点名外部 NPC"，这一段却停在"优先同源 +
+    # 外部来源作备选"，于是按最高关注项读的维护方会照旧把复核派给外部执行者；而当时的
+    # 防线只核 `**要求（L1，最高` 与 `**依据**`，两句旧字样照样全绿（防"关键词堆砌假绿"
+    # 的反面：只核格式、不核口径）。故此处同时钉**新口径须在**与**旧口径不得复活**。
+    p6_m = re.search(r"^===\s*P6\..*?(?=\n=== |\Z)", text, re.M | re.S)
+    if p6_m is None:
+        err(f"{rel_priority} 未找到 P6 条目正文——协作执行者选择的口径失去落点", rel_priority)
+    else:
+        p6 = p6_m.group(0)
+        for keys, desc in ((("不得点名外部 Agent", "同 Agent 身份", "降级"),
+                            "P6 须与公共侧同口径写『强制同 Agent、不得点名外部 NPC、"
+                            "不可用时降级为本人串行或如实标悬置而不换外部来源』"),
+                           (("要求（L1，最高", "依据"),
+                            "P6 的级别与依据行仍须保留（级别不得被静默改动、依据不得整段删除）")):
+            missing = [k for k in keys if k not in p6]
+            if missing:
+                err(f"规范优先级防线被破坏：{rel_priority} 的 P6（协作执行者选择）缺失 "
+                    f"{missing}——{desc}", rel_priority)
+        if "备选" in p6 or "同源不可用" in p6:
+            err(f"规范优先级防线被破坏：{rel_priority} 的 P6 正文出现旧口径字样"
+                "（『外部来源作备选』/『同源不可用』）——该口径已被公共侧收紧为"
+                "『强制同 Agent、不得点名外部 Agent/NPC』；此处不同步即"
+                "『清单更高更显眼、正文却是旧路』，按最高关注项读的维护方会继续派外部执行者",
+                rel_priority)
+    # 维护方层须由维护方的项目规范入口登记（否则不会被加载、其中规则实际失效）
+    if not os.path.isfile(PROJECT_FILE):
+        err("缺少 AGENTS.adoc——维护方自查层的登记入口丢失", "AGENTS.adoc")
+    else:
+        with open(PROJECT_FILE, encoding="utf-8") as fh:
+            own = fh.read()
+        for rel in ("specs-project-maintainer/priority.adoc",
+                    "specs-project-maintainer/spec-lifecycle.adoc",
+                    "specs-project-maintainer/verify.adoc",
+                    "specs-project-maintainer/context.adoc"):
+            if rel not in own:
+                err(f"{rel} 未在维护方项目规范入口 AGENTS.adoc 登记"
+                    "（不会被加载、其中规则实际失效）", "AGENTS.adoc")
+
+
+def check_spec_admission_guard():
+    """『规范准入防线』：分类/准入规范、其调度器登记与提案校验要点不得被删或降级。
+
+    背景：规范集合的增删改须有完整口径——一条规则属公共规范还是项目规范、属哪一层、
+    该不该收（准入判定）、**该定哪一级（定级四问与条款类型判定表）**、新增提案如何校验
+    与升级，以及**规范集合自身如何重构瘦身（先判归属 → 再判层级 → 再判重复 → 压缩表述）**。
+    该口径集中在 specs-project-maintainer/spec-lifecycle.adoc（维护方自查层，写规范时才加载），一旦被
+    "精简/去重"顺手删掉，后续新增规范就失去判定依据、级别重新混乱、集合重新膨胀。
+    故用机械方式钉住其**存在性与关键要点**，并确认它真的在加载调度器登记（登记才可能被
+    加载）、在 `AGENTS.adoc` 留下维护落点。
+
+    只钉"存在性与登记"，不改写内容——口径是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("规范准入防线检查")
+    rel_admission = os.path.relpath(ADMISSION_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(ADMISSION_FILE):
+        err(f"缺少规范分类与准入文件 {rel_admission}——"
+            "新增/调整规范条目将失去分类、分层与准入判定的依据", rel_admission)
+        phase_done()
+        return
+    with open(ADMISSION_FILE, encoding="utf-8") as fh:
+        text = fh.read()
+    # 要点须仍在：公共/项目归属判定、准入判定、提案校验（是否已有标准/已有条目/升级举一反三）
+    for key, desc in (
+            ("归属判定", "公共/项目归属判定（对谁成立 + 自足性判据）"),
+            ("准入判定", "该不该收进规范集合的准入判定"),
+            ("已有标准", "提案校验之「检查是否已有标准」"),
+            ("已有本项目条目", "提案校验之「检查是否已有条目（不重复收）」"),
+            ("举一反三", "提案校验之「升级与举一反三」"),
+            ("规范集合的自身重构", "规范自身的瘦身与归位（重构顺序与删/移/留速查）"),
+            ("同一条规则有两种读法", "执行侧只给『怎么走』、依据与取舍归思考/决策侧（读的形态判据）"),
+            ("归属判定", "公共/项目归属判定（对谁成立 + 自足性判据）"),
+            ("重构后须核对规范有效性", "重构不丢内容之外还须保证有效性（两形态分离/可执行性不降级/可见性不丢）")):
+        if key not in text:
+            err(f"规范准入防线被破坏：{rel_admission} 缺失『{key}』（{desc}）——"
+                "准入与提案校验口径不得被删或降级", rel_admission)
+    # 定级口径须以**节标题**存在（条目"该定哪一级"的判定依据；被删或降为正文一句，
+    # 条目级别就再无判定依据、会重新回到"凭感觉/看关键词"，正是本仓库出现过的混乱来源）。
+    for sec, desc in (("如何给一条规范定级", "定级口径四问"),
+                      ("与条款类型一一对应", "条款类型与级别的判定表"),
+                      ("归属谁", "分级与强制对象的正交判定"),
+                      ("归类举证", "定级结论的对象/依据/类型/结论留痕"),
+                      ("级别变更与复盘", "级别变更须说明理由 + 定期复盘六查")):
+        if not re.search(rf"^==+\s*{re.escape(sec)}", text, re.M):
+            err(f"规范准入防线被破坏：{rel_admission} 缺失节『{sec}』（{desc}）——"
+                "定级口径被删后条目级别再无判定依据、级别会重新混乱", rel_admission)
+    # 重构顺序（先判归属 → 再判层级 → 再判重复）不得被删或颠倒：顺序颠倒会把
+    # "放错位置的内容"直接删掉（本该移走却被当冗余删除）。
+    for key in ("先判归属", "再判层级", "再判重复"):
+        if key not in text:
+            err(f"规范准入防线被破坏：{rel_admission} 缺失重构顺序要点『{key}』——"
+                "规范自身重构的判断顺序不得被删或改写", rel_admission)
+    # 维护方层须由维护方项目规范入口登记（未登记则永不被加载、其中规则实际失效）
+    with open(PROJECT_FILE, encoding="utf-8") as fh:
+        if rel_admission not in fh.read():
+            err(f"规范准入文件 {rel_admission} 未在 {os.path.relpath(PROJECT_FILE, REPO_ROOT)} "
+                "登记（不会被加载、其中规则实际失效）",
+                os.path.relpath(PROJECT_FILE, REPO_ROOT))
+    phase_done()
+
+def check_lifecycle_guard():
+    """『任务生命周期防线』：节点自查、验证边界与拆分判据不得被删或降级。
+
+    背景（三处"只在文本上成立、执行时不会真的发生"的机制缺口）：
+
+      * **节点自查无清单**：任务从提出到收尾会经过若干节点（提出/理解/方案/执行/验证/
+        交付/复盘），此前这些节点散落在各规范里、**没有统一清单**，于是"做完了才发现
+        方向理解错"，或"流程走完了但没人回头看规则本身是否有问题"（规则因此慢慢脱离
+        初衷）。节点与"到点该查什么"定式化在 `specs/core/execution.adoc`
+        「任务生命周期与节点自查」。
+      * **验证没有边界**：验证机制本身也是会被加载执行的规则——用错对象就是把不可控的
+        验证义务强加给不需要它的任务。**代码类改动**只应按机械判据判过不过（能过就能过），
+        **规范类改动**才做三视角与全局核对；无此边界就会两头落空（改一行代码要求三视角、
+        改一条规范只跑机械校验）。判据定式化在公共 `specs/general/verify.adoc`
+        「验证的适用边界」（`testing.adoc` 同名节只留一跳入口）。
+      * **拆分无判据**：拆分会多出一个没人维护、判据空转的东西（比不拆更坏），
+        故须有"何时该拆"的硬条件与"拆完是否自洽"的核对，定式化在
+        `specs-project-maintainer/spec-lifecycle.adoc`「一条规范何时该拆分」「拆分后的自洽核对」。
+
+    只钉"节与要点仍在、且各处口径指向一致"，判据是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("任务生命周期防线检查")
+    rel_exec = os.path.relpath(EXECUTION_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(EXECUTION_FILE):
+        err(f"缺少必加载层文件 {rel_exec}——任务节点的自查清单失去集中落点", rel_exec)
+    else:
+        with open(EXECUTION_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        if not re.search(r"^==+\s*任务生命周期与节点自查", text, re.M):
+            err(f"任务生命周期防线被破坏：{rel_exec} 缺失「任务生命周期与节点自查」节——"
+                "各节点该查什么必须可枚举，否则任务只能靠'做完才发现读错方向'", rel_exec)
+        # 节点须以**表格行**形态存在（`| **节点**（L1）`）：只匹配关键词会被
+        # "方案改/验证项"之类的改写蒙混过去——节点清单是本节的核心，必须行级钉住。
+        for node, desc in (
+                ("提出", "用户表述不清先澄清，不自行假设后开工"),
+                ("理解", "规范是否已实际加载 + 最小必要信息集 + 主侧重"),
+                ("方案", "规划落盘 + 去重删减前先核覆盖完整性"),
+                ("执行", "加载由入口驱动 + 环境能力先自评 + 读取不越界"),
+                ("验证", "按改动性质选范围 + 严格执行/尽力而为 + 全局核对"),
+                ("交付", "交付形态按执行环境区分 + 落盘同步"),
+                ("复盘", "三视角评有效性 + 核规则初衷 + 核是否该拆分")):
+            if not re.search(rf"^\|\s*\*\*{node}\*\*", text, re.M):
+                err(f"任务生命周期防线被破坏：{rel_exec} 缺失节点行『{node}』（{desc}）——"
+                    "节点清单被删/改写后'到哪个节点查什么'重新无人负责", rel_exec)
+        # 节点清单必须含"哪些节点不设"的**独立声明**（否则概念性验证会外溢到代码类任务）：
+        # 只匹配"代码类改动"会被验证节点行里的同一措辞蒙混过去，须按声明行钉住。
+        if not re.search(r"^\*\s*\*\*哪些节点不设", text, re.M) or "代码类改动" not in text:
+            err(f"任务生命周期防线被破坏：{rel_exec} 未写明哪些节点**不设**（代码类改动"
+                "不设复盘、不做三视角与全局验证）——概念性验证会外溢成所有任务的流程",
+                rel_exec)
+    # 验证边界：公共口径的**单一落点**是 specs/general/verify.adoc；testing.adoc 同名节
+    # 只留一跳入口（两处各写一份会各自漂移——已实测漂移过一次）
+    rel_verify = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
+    v_path = os.path.join(REPO_ROOT, *rel_verify.split("/"))
+    if not os.path.isfile(v_path):
+        err(f"缺少验证规范文件 {rel_verify}——验证的适用边界失去集中落点", rel_verify)
+    else:
+        with open(v_path, encoding="utf-8") as fh:
+            vtext = fh.read()
+        if not re.search(r"^==+\s*验证的适用边界", vtext, re.M):
+            err(f"任务生命周期防线被破坏：{rel_verify} 缺失「验证的适用边界」节——"
+                "不先判改动性质，验证范围就无处取值（规范类改动只跑机械校验、"
+                "代码类改动被要求三视角），两头失效会重新出现", rel_verify)
+        for key, desc in (
+                ("效力等级", "验证结论须按对象标效力（确定项可判对错、概念项只到未发现）"),
+                ("代码类改动", "A 类：按机械判据判过不过（能过就能过）"),
+                ("规范类改动", "B 类：三视角深度验证 + 全局核对"),
+                ("会不会被未知项目加载", "唯一判据：改动是否会被未知项目加载/改变别人行为"),
+                ("先判改动性质", "先判性质、再选范围（不得因改动小就降级）"),
+                ("不得互串", "过度验证与跳过验证都禁止"),
+                ("取**更严的一侧**", "两类改动同批时取更严一侧，代码部分仍按机械判据")):
+            if key not in vtext:
+                err(f"任务生命周期防线被破坏：{rel_verify} 缺失『{key}』（{desc}）——"
+                    "验证边界不得被删或降级", rel_verify)
+        if "每次验证都换一个干净上下文" not in vtext:
+            err(f"任务生命周期防线被破坏：{rel_verify} 未要求**每次验证换一个干净上下文**——"
+                "复用发起改动/上一轮验证的上下文等于自己复核自己，会只找'是否已改'",
+                rel_verify)
+    # 拆分判据：拆是加载面的膨胀源，判据不得被删
+    rel_adm = os.path.relpath(ADMISSION_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(ADMISSION_FILE):
+        with open(ADMISSION_FILE, encoding="utf-8") as fh:
+            atext = fh.read()
+        for sec, desc in (("一条规范何时该拆分", "拆分硬条件（默认不拆、三条同时成立）"),
+                          ("拆分后的自洽核对", "拆完逐项核对（引用可达/无矛盾/不失完整性/登记同步）")):
+            if not re.search(rf"^==+\s*{re.escape(sec)}", atext, re.M):
+                err(f"任务生命周期防线被破坏：{rel_adm} 缺失节『{sec}』（{desc}）——"
+                    "拆分若无判据，就会为'看起来更整齐'多出一个没人维护的东西", rel_adm)
+        for key, desc in (
+                ("判据与用处不同", "硬条件一：判据形态或加载时机不同（同类条目不得拆）"),
+                ("不拆就真的坏", "硬条件二：须能指出实害，'更整齐'不构成理由"),
+                ("拆后每一半都自足", "硬条件三：每半都有判据、落点、加载方式"),
+                ("默认不拆", "取向：按需才拆，不为对称、不为好看而拆"),
+                ("单独过准入九问", "拆分不豁免准入判定（有落点/成本可接受尤其）")):
+            if key not in atext:
+                err(f"任务生命周期防线被破坏：{rel_adm} 缺失『{key}』（{desc}）", rel_adm)
+    # 三处口径同源：执行原则（节点清单）→ AGENTS.adoc（本仓库落点）→ verify.adoc（边界判据）
+    if not os.path.isfile(PROJECT_FILE):
+        err("缺少 AGENTS.adoc：任务生命周期的本仓库落点无处承载", "AGENTS.adoc")
+        phase_done()
+        return
+    with open(PROJECT_FILE, encoding="utf-8") as fh:
+        own = fh.read()
+    for key, desc in (("验证的适用边界", "本仓库落点须指向公共边界节的判据"),
+                      ("验证的效力等级", "本仓库落点须指向效力等级口径"),
+                      ("一条规范何时该拆分", "本仓库落点须指向拆分判据"),
+                      ("specs-project-maintainer/verify.adoc", "维护方的验证义务落点")):
+        if key not in own:
+            err(f"任务生命周期防线被破坏：AGENTS.adoc 缺失『{key}』（{desc}）——"
+                "本仓库维护口径须与公共口径一致", "AGENTS.adoc")
+    phase_done()
+
+
+def check_line_ending_guard():
+    """『换行符防线』：跨平台行尾规则（LF 基准 + Windows 批处理 CRLF）不得被删或弱化。
+
+    背景：行尾错配是**跨平台直接失效**的一类问题——`.bat`/`.cmd` 被写成 LF 在 Windows 上
+    会直接执行失败（`goto`/标签、`if`/`for` 复合语句、行尾注释与续行都可能失效），而
+    "在 Unix 上编辑 Windows 批处理"又极常见，故这类规则最容易被"统一换行符、不用管平台"
+    式的精简删成一句空话。故机械钉住 encoding.adoc 中的**分流判据**（LF 基准、`.bat`/`.cmd`
+    必须 CRLF、`core.autocrlf`/`.gitattributes` 检出归一），并要求 bash/python/powershell
+    三个脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即学不全）。
+
+    只钉"判据存在"，不改写内容——行尾规则是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("换行符防线检查")
+    rel = os.path.relpath(ENCODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(ENCODING_FILE):
+        err(f"缺少编码与语言无关规范文件 {rel}——"
+            "跨平台换行符（LF 基准与 Windows 批处理 CRLF）失去集中落点", rel)
+    else:
+        with open(ENCODING_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("换行符", "行尾规则的权威小节"),
+                ("以 LF 为基准", "仓库基准行尾（防被改成 CRLF 基准）"),
+                (".bat", "Windows 批处理必须 CRLF 的对象"),
+                ("CRLF", "Windows 批处理的行尾要求"),
+                ("core.autocrlf", "检出归一化依据（不靠人工手动调整）"),
+                (".gitattributes", "行尾策略的权威落盘口")):
+            if key not in text:
+                err(f"换行符防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "跨平台行尾规则不得被删或弱化", rel)
+    # 脚本技术栈文件各自须写明行尾要求（引用方按各自栈文件加载）
+    for stack_file in LINE_ENDING_STACK_FILES:
+        srel = os.path.relpath(stack_file, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(stack_file):
+            err(f"缺少脚本技术栈文件 {srel}——其行尾要求无处承载", srel)
+            continue
+        with open(stack_file, encoding="utf-8") as fh:
+            stext = fh.read()
+        if "行尾" not in stext and "CRLF" not in stext:
+            err(f"换行符防线被破坏：{srel} 未写明行尾要求——"
+                "引用方按该栈文件学习时学不到行尾规则", srel)
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"编码与语言无关规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_java_test_naming():
+    """『Java 测试类命名防线』：四类测试后缀的判据不得在任一处被删或漂移。
+
+    背景：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的执行边界绑定**——
+    `Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行（`IT` 还须与 Maven
+    Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：调度器的 Java 技术栈登记
+    （检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc` 正文；任一处漏掉某类后缀，
+    引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/误跳过）。故机械钉住**两侧都
+    含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据），防"精简/去重"时口径漂移。
+
+    只钉"四类后缀判据在两侧都存在"，后缀的语义与取舍是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("Java 测试类命名防线检查")
+    rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_TEST_FILE):
+        err(f"缺少 Java 测试规范文件 {rel}——"
+            "测试类命名契约（Tests/BootTests/PerfTests/IT 四类后缀）失去落点", rel)
+    else:
+        with open(JAVA_TEST_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for suffix in JAVA_TEST_SUFFIXES:
+            if suffix not in text:
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失测试类型后缀『{suffix}』——"
+                    "四类命名契约不得被删或降级", rel)
+        for key, desc in (("测试类命名", "四类后缀的权威定义节"),
+                          ("被测类名", "『被测类名 + 测试类型后缀』的命名口径"),
+                          ("常规", "类别与执行阶段的绑定口径")):
+            if key not in text:
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失『{key}』（{desc}）", rel)
+    # 调度器的 Java 技术栈登记须与该契约一致（只说一半会让引用方学不全）
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        generic = fh.read()
+    java_line = next((ln for ln in generic.splitlines() if "stack/java-testing.adoc" in ln), "")
+    if not java_line:
+        err(f"Java 测试规范 {rel} 未在加载调度器登记（不会被加载、其中命名契约实际失效）",
+            "AGENTS_COMMON.adoc")
+    else:
+        missing = [s for s in JAVA_TEST_SUFFIXES if f"`{s}`" not in java_line]
+        if missing:
+            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
+                f"『{'/'.join(missing)}』后缀——调度器与该命名契约口径漂移"
+                "（引用方照调度器学习会漏掉该类测试）", "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_git_mv_selfcheck():
+    """『本仓库自身侧 git mv 自查』：把最高关注项 P1 从"口号"变成本仓库可机械核对的一项。
+
+    背景：最高关注项 P1（文件移动/重命名必须 `git mv`）此前被登记为**无机械抓手**——
+    因为铁律作用于**引用方项目的工作区**，本仓库看不到。但这只对"引用方"成立：
+    **本仓库自己也有工作区**，其暂存内容可以核对。故在本仓库侧补上这一半：核对暂存区
+    （`git diff --cached -M --name-status --diff-filter=AD`）是否同时出现删除与新增——
+    那是 delete+create 误用的典型形态（历史会断链，且事后无法恢复）。
+
+    实现边界（防止把校验扩到引用方，违反 `AGENTS.adoc`「校验范围」）：
+
+      * 只查 **git 暂存区**（`git diff --cached`，不读工作区文件内容、不做逐文件比较）；
+      * 无 git 仓库、无暂存内容、git 不可用 → 一律**跳过、不报错**（保持确定性与幂等）；
+      * 发现疑似形态只提示并给出复核命令，**不自动改工作区**（修复由人工/agent 按 git
+        规范执行，规范集合不代改引用方与自己的工作区）；
+      * 真删真增（非移动）属合法改动，故本条给出的是"须复核"提示。
+
+    **改写式移动（本仓库实证）**：把 `specs/library/` 搬到仓库根 `library/` 时，入口
+    文件同时被整篇重写（去掉"分发给引用方/可关闭"口径、换登记处）——**内容相似度实测
+    11%**（命令 `git diff --cached -M10% --summary` 输出 `rename ... (11%)`）、低于 git
+    默认 50% 阈值，索引里就只剩"删除 + 新增"，看起来像违规的 delete+create，其实正是
+    `git mv` 后正常改写。
+
+    **阈值取值理由（说明它不是个案反推）**：`-M` 判据是 **"临时相似度索引"**——git 用
+    一个近似算法（默认按 blob 大小建索引、对候选只做逐块指纹比对，故 2~3 行的短文
+    **返回 0% 相似度属正常**，见 git 官方文档 `git-diff` 的 `--find-renames` 与
+    `diff.renames`）；再叠加"移动后又被大幅改写"（**重写与移动常常同时发生**，本仓库即
+    一例），默认阈值下**必然**漏检真移动。故所取阈值只需落在"真移动的下界"之下，不必
+    精确：**真 delete+create 是"两个文件内容无关"，相似度接近 0；而 `git mv` + 改写
+    实测仍有 11%**。取 10% 属保守取值（比实测低、给常见重写留余量），且本检查**只对
+    "暂存区同时存在删除与新增"这一形态发声**——它是**提示须人工复核**（见下第 3 条），
+    不是"判违规"，故阈值不是 P1 的效力边界：P1 的判定标准仍在规范文本（`git mv` 铁律
+    + `git diff --cached -M --summary` 复核），本阈值只决定"要不要提醒人来看一眼"。
+    """
+    phase("本仓库 git mv 自查（P1 自身侧抓手）")
+    if not os.path.isdir(os.path.join(REPO_ROOT, ".git")):
+        phase_done()
+        return
+    try:
+        out = subprocess.run(
+            # -M10%：改写式移动（内容大幅重写）也能被识别为 rename，避免把合规的
+            # `git mv` + 改写误判成 delete+create（默认阈值 50% 会漏掉这类）
+            ["git", "diff", "--cached", "-M10%", "--name-status", "--diff-filter=AD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        phase_done()
+        return
+    if out.returncode != 0:
+        phase_done()
+        return
+    deleted, added = set(), set()
+    for line in out.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0][0]
+        if status == "D":
+            deleted.add(parts[-1])
+        elif status == "A":
+            added.add(parts[-1])
+    if deleted and added:
+        err("暂存区同时存在删除与新增（未识别为 rename）——这些改动若是文件移动/重命名，"
+            "须改用 `git mv`（最高关注项 P1：delete+create 会使历史永久断链）；"
+            "若确为真删真增（非移动），用 `git diff --cached -M10% --summary` 复核后可忽略本提示",
+            "git 暂存区")
+    phase_done()
+
+
+def check_budget_guard():
+    """『常驻层体积上限』：必加载层体积与调度器条目数不得无声膨胀。
+
+    背景：必加载层（`AGENTS_COMMON.adoc` + `specs/core/`）**每次会话无条件加载**，是
+    最直接的"注意力预算"消耗者；规范自己写着"常驻层只放底线""篇幅越大越易挤爆上下文"，
+    但此前**只有方向、没有机械抓手**——每次新增都"礼貌地"往常驻层加一点，几十次之后
+    体量翻倍而无人发现（本仓库已发生过一次，靠人 review 才拦下）。故把预算写成机械上限：
+    超限即报错，须"先归位、再新增"。
+
+    上限不是目标、是**天花板**：只在明显膨胀时报警，正常增删不误伤（数值留有余量）。
+    """
+    phase("常驻层体积上限检查")
+    total = 0
+    for rel in ("AGENTS_COMMON.adoc", "specs/core/execution.adoc"):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少必加载层文件 {rel}", rel)
+            continue
+        total += os.path.getsize(path)
+    if total > RESIDENT_BUDGET:
+        err(f"常驻层体积超限：必加载层（AGENTS_COMMON.adoc + specs/core/）共 {total} 字节，"
+            f"超出上限 {RESIDENT_BUDGET} 字节——常驻层只放 L1 底线、最高关注项与其引用落点，"
+            "方法论/依据论证/示例/元规范须移到通用层（用到才加载）；请先按 "
+            "specs-project-maintainer/spec-lifecycle.adoc「规范集合的自身重构」判归属与层级，"
+            "再决定该项是否真该常驻", "AGENTS_COMMON.adoc + specs/core/")
+    # 项目自身入口 AGENTS.adoc 同为每次会话无条件加载的常驻物，单列上限（不并入
+    # RESIDENT_BUDGET——它是项目自身规范、引用方不使用，口径不同）。
+    entry_path = os.path.join(REPO_ROOT, "AGENTS.adoc")
+    if os.path.isfile(entry_path):
+        entry_size = os.path.getsize(entry_path)
+        if entry_size > PROJECT_ENTRY_BUDGET:
+            err(f"项目入口 AGENTS.adoc 体积超限：{entry_size} 字节，超出上限 "
+                f"{PROJECT_ENTRY_BUDGET} 字节——它同为每次会话无条件加载的常驻物，"
+                "只放本项目的加载说明与校验范围；方法论/依据论证/示例须移到 specs/ 用到才加载",
+                "AGENTS.adoc")
+    rel_common = "AGENTS_COMMON.adoc"
+    with open(os.path.join(REPO_ROOT, rel_common), encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"== 分类与懒加载（加载调度器）(.*?)== 规范文件登记完整性", text, re.S)
+    if m is None:
+        err(f"{rel_common} 未找到「分类与懒加载（加载调度器）」节——调度器结构被改写，"
+            "条目数上限失去抓手", rel_common)
+    else:
+        count = m.group(1).count("\n  ** ")
+        if count > DISPATCHER_ITEMS_MAX:
+            err(f"加载调度器条目数超限：「涉及即加载」条目共 {count} 个，"
+                f"超出上限 {DISPATCHER_ITEMS_MAX}——条目过多会让每次执行都难以判全"
+                "『该加载哪些』；请先归并同类条目（一条覆盖一个主题族），再新增", rel_common)
+    phase_done()
+
+
+def check_delegation_guard():
+    """『从属者与能力自评防线』：两类"定义了却不会被执行"的机制要点必须仍在。
+
+    背景（AI 执行侧的两处盲点，均源自"规范只对直接执行者说话"的假设）：
+
+      * **从属者盲区**：规范一直被"直接执行者"读取，但实际加载者常是**子 agent、
+        被主 agent 派发的分步任务、由任务原文引用规范的引用方**——它们若以"我没被
+        派发这份规范"为由跳过加载，规范整体形同不存在。故须有"加载由已加载入口驱动、
+        不靠自报；上级已读不构成下级免责"的机制（`AGENTS_COMMON.adoc`）。
+      * **无机制自欺**：自检与长会话治理大量依赖执行环境能力（能否清空上下文、能否
+        派发子 agent），环境不提供时若无"先判能力、缺失走降级路径、不空自评"的机制，
+        就会出现"照抄'已清洁上下文'/'已委派'"的假自检（`specs/general/self-check.adoc`）。
+      * **执行者来源失控**："缺独立复核"时最容易抓来的是**外部来源的执行者**（外部 NPC、
+        另一个产品）——它看不到本执行者已加载的规范，判据是否一致、耗时多久都不可核对
+        （本项目实证：镜像不存在致派发即 error、另一次 1 h+ 未回传）。故须有"**子任务一律
+        由与执行者相同的 Agent 承担（不得点名外部 Agent/NPC）；同 Agent 不可用时降级为
+        执行者本人串行 + 如实标悬置，且优先一次性调用**"的机制（`specs/general/collab.adoc`，
+        维护方侧落点 `specs-project-maintainer/verify.adoc`）。
+
+    **本检查双向设防**：既核"新口径的要素仍在"，也核"旧口径措辞不得复活"——后者针对的是
+    "要素仍在、但把许可范围悄悄放宽"的破坏（如**清单概览行**写成"优先同源、外部来源作备选"，
+    或另起一句"拿不到同 Agent 时也可以换外部 Agent 顶替"）。这类写法里"不得点名外部
+    Agent / 外部 NPC"等字样往往还在，只核要素的检查会全绿放过，而按它读的人会重新把外部
+    执行者当成合法路径（本项目实证：外部评审 NPC 两次分别派发即失败、1 h+ 未回传）。
+    旧口径按**放宽形态的正则**判定（备选/次选、(也)可换外部、优先同源、外部也可…），
+    **禁止式表述与反例引用不误报**（"不得用外部 Agent 顶替""不得改回『外部来源可以顶替』
+    的宽松写法"）；否定词只认命中片段紧邻的那一小段，防"前半句禁止、后半句放宽"被误放行。
+    """
+    phase("从属者与能力自评防线检查")
+    for rel, key, desc in (
+        ("AGENTS_COMMON.adoc", "从属者", "入口驱动加载（子 agent/被引用方不靠自报）"),
+        ("specs/general/self-check.adoc", "环境能力自评", "无机制时按降级路径、不得空自评"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少文件 {rel}——{desc} 无处承载", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        if key not in text:
+            err(f"从属者与能力自评防线被破坏：{rel} 缺失『{key}』机制——{desc}；"
+                "该类要点属'定义了却不会执行'的高发盲点，不得删除或并入他处而失去痕迹", rel)
+    # 执行者来源选择：『**强制同 Agent**』的五处要点——(a) 子任务必须与执行者同 Agent、
+    # (b) **不得点名外部 Agent/NPC**（含判定标准）、(c) 同 Agent 不可用时的降级路径（本
+    # 地串行/标悬置、不换外部来源）、(d) 优先一次性调用、(e) 三视角与维护方落点同口径。
+    # 此处只钉"要求文本仍在"——"本次是否真按同 Agent 派发、有没有点名外部 NPC"属运行时
+    # 行为（评论/派发的实际内容），机械无法判定，交人/子 agent 复核；但"要求被抽掉"必须
+    # 拦住（本项目已有两次外部 NPC 实证：派发即失败、1 h+ 未回传）。**每条要求须同时命中
+    # 多处要素**，否则别处一句同名字样即可让检查假绿（与 check_checklist_guard 同口径）。
+    for rel, keys, desc in (
+        ("specs/general/collab.adoc", ("子任务必须由与执行者相同的 Agent 承担",
+                                       "不得点名外部 Agent / 外部 NPC",
+                                       "同一 Agent 身份"),
+         "子任务一律同 Agent（同 Agent 身份 + 同入口/调度器），不得点名外部 Agent/NPC"),
+        ("specs/general/collab.adoc", ("判定标准", "派发目标", "交换面", "回传面"),
+         "『不得点名外部 NPC』须给出可核对的判定标准，否则只剩一句口号"),
+        ("specs/general/collab.adoc", ("降级路径（L1）", "不换任何外部来源",
+                                       "由执行者本人（主 agent）串行承担"),
+         "同 Agent 不可用也不得换外部来源，须降级为执行者本人串行或如实标悬置"),
+        ("specs/general/collab.adoc", ("优先一次性调用",),
+         "派发优先一次性、边界明确、可超时，不交有自主探查权的执行者"),
+        # 三视角复核口径的单一落点是 verify.adoc（testing.adoc 同名节只留一跳入口）
+        ("specs/general/verify.adoc", ("强制同 Agent", "不得点名外部 Agent"),
+         "三视角复核口径须与协作规范同口径（强制同 Agent、不得点名外部 NPC）"),
+        ("specs-project-maintainer/verify.adoc", ("子 Agent 强制与执行者同 Agent",),
+         "维护方落点：强制同 Agent、外部复核者不作为备选"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少文件 {rel}——{desc} 无处承载", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"执行者来源选择防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
+                "该要点防的是'缺复核时随手抓一个不可核对的外部执行者'，"
+                "不得删除或并入他处而失去痕迹", rel)
+    # 『旧口径不得复活』：上面只核"新口径的要素仍在"，会漏掉一种同样致命的破坏——
+    # 把**许可范围悄悄放宽**（写成"优先同源、外部作备选"或"拿不到同 Agent 时也可换外部
+    # 顶替"）。此时"不得点名外部 Agent / 外部 NPC"等字样往往仍在，检查全绿，而按它读的人
+    # 会重新把外部执行者当成合法路径（本项目实证：外部评审 NPC 两次分别派发即失败、
+    # 1 h+ 未回传）。故按**旧口径措辞**设防。
+    #
+    # 判定口径（命中即报，均可逐字核对）——**只拦"放宽形态"，不拦"禁止形态"**：
+    #   * 旧口径整句：`<来源替换词> + <备选/次选类词>` 的**明确搭配**，如"外部来源…备选"、
+    #     "外部复核者作备选"、"也可以换外部…顶替"；
+    #   * 每条命中都能定位到**具体短语**，不做"整文共现即报"（那会把
+    #     "不得换任何外部来源的 Agent 顶替"这类**正当禁止式**写法误判为违规）。
+    # 正当写法（**不得误报**，均为本仓库现行文本）："不得点名外部 Agent / 外部 NPC"、
+    # "不得用外部 Agent 顶替"、"不换任何外部来源的 Agent 顶替"、
+    # "不得改回『外部来源可以顶替』的宽松写法"（反例引用）、"外部复核者不作为备选"。
+    STALE_PATTERNS = (
+        # (正则, 说明) —— 只描述"放宽/许可"形态
+        (r"外部(?:来源|NPC|Agent|复核者)?[^。；\n]{0,12}?(?:备选|次选)",
+         "把外部来源写成可选/次选（旧口径）"),
+        (r"(?:也可换|也可以换|可换|允许换)[^。；\n]{0,10}?外部",
+         "以『(也)可换外部』放宽来源（旧口径）"),
+        (r"外部[^。；\n]{0,10}?(?:也可|也可以|亦可|同样可)",
+         "以『外部也可』放宽来源（旧口径）"),
+        (r"同源[^。；\n]{0,12}?(?:备选|次选)",
+         "以『同源不可用时作备选』放宽来源（旧口径）"),
+        (r"优先[^。；\n]{0,8}?(?:同源|外部来源)",
+         "以『优先同源/优先外部来源』表达非强制（旧口径）"),
+    )
+    # 否定式排除：命中片段所在**分句**含任一禁止词时视为正当写法（禁止式 / 反例引用）
+    NEGATION = ("不得", "禁止", "不可", "不允许", "不予", "不属", "不换", "不作",
+                "不因", "不是", "勿", "忌", "反例", "误", "违规", "旧口径")
+    CLAUSE_BREAK = "，；：（）()【】\n"
+    for rel in ("specs/general/collab.adoc", "specs/general/verify.adoc",
+                "specs/general/self-check.adoc",
+                "specs-project-maintainer/priority.adoc",
+                "specs-project-maintainer/verify.adoc"):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for pat, desc in STALE_PATTERNS:
+            for m in re.finditer(pat, text):
+                # 取命中片段所在分句（以中英文标点/换行切分），再判定有无否定词。
+                # **否定词只认紧邻命中片段的那一层**：若把整个长分句都算进来，
+                # "不得点名外部 Agent / 外部 NPC、也允许换外部复核者当备选" 这类
+                # **前半句禁止、后半句放宽**的句子会被误判为正当（本项目真实形态）。
+                starts = [text.rfind(x, 0, m.start()) for x in CLAUSE_BREAK]
+                st = max(starts) if starts else -1
+                ends = [text.find(x, m.end()) for x in CLAUSE_BREAK]
+                en = min([i for i in ends if i != -1] or [len(text)])
+                clause = text[st + 1:en]
+                # 以顿号/逗号再切一层，只取**命中片段紧邻的那一小段**判否定
+                for seg in re.split(r"[、,]", clause):
+                    if m.group(0) in seg and seg.strip():
+                        clause = seg
+                        break
+                if any(w in clause for w in NEGATION):
+                    continue
+                err(f"执行者来源选择防线被破坏：{rel} 出现把外部来源**重新放宽**的写法"
+                    f"（{desc}）：…{clause.strip()[:70]}…；公共侧已收紧为"
+                    "『强制同 Agent、不得点名外部 Agent/NPC、不可用时降级为执行者本人串行"
+                    "或如实标悬置』，任何写法都不得让外部来源重新成为合法路径"
+                    "（禁止式表述与反例引用除外）", rel)
+    phase_done()
+
+
+def check_adoption_guard():
+    """『接纳面防线』：公共内容被未知项目加载时的可控性（运行契约）不得被删。
+
+    背景：本仓库最有价值的初衷是——**这套规范会被未知项目加载**。规范加得越多、优化
+    越多，越容易只对着"本仓库自己"看，忘掉引用方看不到本仓库的脚本、结构与取舍，于是
+    出现"引用方加载后产生不可控或未知效果"。故"运行契约"（影响面 / 成本 / 可控性三维）
+    **随公共内容**落在 `specs/general/verify.adoc`「运行契约」（引用方也需要它：
+    项目自己维护规范/共享资产时同样要问"落到未知项目会怎样"）；维护方自己的清单落在
+    `specs-project-maintainer/context.adoc`。被删则该维度在验证中重新无人负责。
+
+    只钉"节与三维要点仍在、两处口径同源"，语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("接纳面防线检查（未知项目加载）")
+    # 运行契约的**单一落点**是 verify.adoc（testing.adoc / context.adoc 同名节只留一跳入口）
+    rel_pub = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
+    pub_path = os.path.join(REPO_ROOT, *rel_pub.split("/"))
+    if not os.path.isfile(pub_path):
+        err(f"缺少验证与运行契约文件 {rel_pub}——公共内容被未知项目加载时的可控性"
+            "（运行契约）失去集中落点", rel_pub)
+    else:
+        with open(pub_path, encoding="utf-8") as fh:
+            text = fh.read()
+        if not re.search(r"^==+\s*运行契约", text, re.M):
+            err(f"接纳面防线被破坏：{rel_pub} 缺失「运行契约」节——"
+                "公共内容被未知项目加载时的可控性不得无人负责", rel_pub)
+        for key, desc in (
+                ("① 影响面", "不静默推翻引用方既有约定、冲突次序写明"),
+                ("② 成本", "加载体积/时延开销/依赖要求可控且可说清"),
+                ("③ 可控性", "不默认改动引用方工作区、不依赖引用方看不到的私有物、不阻断正常路径"),
+                ("降级路径", "引入的机制/依赖须有不可用时的降级路径"),
+                ("不得让引用方依赖本仓库私有物", "条目不得引用引用方看不到的私有脚本名/结构"),
+                ("ISO 9241-110", "标准出处：可控、可预期、不阻断"),
+                ("接纳面须留证", "新增/调整公共内容时逐维留证，未核对不得计入验证通过")):
+            if key not in text:
+                err(f"接纳面防线被破坏：{rel_pub} 缺失『{key}』（{desc}）——"
+                    "未知项目加载的可控性判据不得被删或降级", rel_pub)
+    # 维护方自己的承接清单：不得缺、且须指向公共判据
+    rel_m = "specs-project-maintainer/context.adoc"
+    m_path = os.path.join(REPO_ROOT, *rel_m.split("/"))
+    if not os.path.isfile(m_path):
+        err(f"缺少维护方接纳面清单 {rel_m}——维护方在新增公共内容时的核对职责无人承载", rel_m)
+    else:
+        with open(m_path, encoding="utf-8") as fh:
+            mtext = fh.read()
+        for key, desc in (("运行契约", "维护方的核对落点"),
+                          ("影响面", "三维之一"),
+                          ("成本", "三维之一"),
+                          ("可控性", "三维之一")):
+            if key not in mtext:
+                err(f"接纳面防线被破坏：{rel_m} 缺失『{key}』（{desc}）", rel_m)
+        if not os.path.isfile(PROJECT_FILE) or rel_m not in open(
+                PROJECT_FILE, encoding="utf-8").read():
+            err(f"{rel_m} 未在维护方项目规范入口 AGENTS.adoc 登记"
+                "（不会被加载、其中规则实际失效）", "AGENTS.adoc")
+    check_public_content_has_no_private_refs()
+    check_public_content_is_self_contained()
+    phase_done()
+
+
+
+def check_ci_cd_guard():
+    """『CI/CD 与平台协作防线』：CICD 校验链完整性与 CNB 对象钉定要点不得被删或降级。
+
+    背景：来自 CI 内 agent 的踩坑报告——①CI 只跑主校验脚本、**配套测试从未在 CI 执行**
+    （其中一个测试文件因命名无法被自动发现、用例长期零执行）；②触发路径与校验对象不一致；
+    ③流水线引用**不存在的镜像/制品**，在 Prepare 阶段即失败；④任务长期停在 pending、
+    **无可判定超时**；⑤同一分支多次推送 / 压缩提交强推后，复核按分支名取到**过期对象**、
+    结论错位；⑥派发对象未钉定 commit sha。这些失效在"编写/调优流水线"与"在平台上协作"
+    时反复出现，属**可机械钉住的关键判据**，故设本防线。
+
+    只钉"节与要点仍在"，语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("CI/CD 与平台协作防线检查")
+    # ① CI/CD 规范：校验链完整 / 触发范围 / 依赖可用 / 超时
+    rel_ci = "specs/general/ci-cd.adoc"
+    ci_path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(ci_path):
+        err(f"缺少 CI/CD 规范文件 {rel_ci}——"
+            "流水线校验链完整性与超时等判据失去集中落点", rel_ci)
+    else:
+        with open(ci_path, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("校验链完整", "流水线须跑全既定校验（含配套测试），防‘定义未执行’"),
+                ("只跑主校验脚本", "把‘只跑主脚本’显式判为验证不完整"),
+                ("须能被测试框架自动发现", "测试文件命名/位置须落在框架发现规则内"),
+                ("触发路径须覆盖校验对象", "改了却不跑＝漏检"),
+                ("须先确认实际可用", "上游镜像/制品/工具须实测可用，不得凭名称假设"),
+                ("须有可判定的超时", "不得让流水线无限挂在 pending"),
+                ("不在 CI 中调用会给出非确定性结论的外部 AI", "非确定性不得阻塞构建")):
+            if key not in text:
+                err(f"CI/CD 防线被破坏：{rel_ci} 缺失『{key}』（{desc}）——"
+                    "踩坑判据不得被删或降级", rel_ci)
+    # ② CNB 平台规范：对象钉定与可追溯 / 执行者可用性
+    rel_cnb = "specs/platform/cnb.adoc"
+    cnb_path = os.path.join(REPO_ROOT, *rel_cnb.split("/"))
+    if not os.path.isfile(cnb_path):
+        err(f"缺少 CNB 平台规范文件 {rel_cnb}——"
+            "平台上的对象钉定与协作判据失去集中落点", rel_cnb)
+    else:
+        with open(cnb_path, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("派发与复核须钉定 commit sha", "分支名不是稳定标识，须钉 sha"),
+                ("压缩提交/强推会替换对象", "旧 sha 作废、结论须在新 sha 上重核"),
+                ("git fetch -f", "取对象前须强刷 ref，防本地缓存旧 sha"),
+                ("派发前确认执行者实际可用", "镜像/制品 not found 时任务从未真正开始"),
+                ("流水线不无界挂起", "平台 job/step 须可判定超时")):
+            if key not in text:
+                err(f"CNB 平台防线被破坏：{rel_cnb} 缺失『{key}』（{desc}）——"
+                    "平台协作的踩坑判据不得被删或降级", rel_cnb)
+    # ③ 相应的通用侧落点：验证须覆盖全部校验手段、验证对象钉定 sha（verify.adoc）
+    rel_v = "specs/general/verify.adoc"
+    v_path = os.path.join(REPO_ROOT, *rel_v.split("/"))
+    if os.path.isfile(v_path):
+        with open(v_path, encoding="utf-8") as fh:
+            vtext = fh.read()
+        for key, desc in (
+                ("验证须覆盖项目的全部既定校验手段", "‘存在测试’≠‘测试被执行’"),
+                ("验证对象须钉定 commit sha", "验证/复核前须先取定 sha")):
+            if key not in vtext:
+                err(f"CI/CD 防线被破坏：{rel_v} 缺失『{key}』（{desc}）", rel_v)
+    # ④ 协作侧落点：派发对象钉定与执行者可用性（collab.adoc）
+    rel_c = "specs/general/collab.adoc"
+    c_path = os.path.join(REPO_ROOT, *rel_c.split("/"))
+    if os.path.isfile(c_path):
+        with open(c_path, encoding="utf-8") as fh:
+            ctext = fh.read()
+        for key, desc in (
+                ("派发对象须钉定 commit sha", "派发指令须写明具体 sha"),
+                ("派发前确认执行者可执行", "确认镜像/制品实际可取")):
+            if key not in ctext:
+                err(f"CI/CD 防线被破坏：{rel_c} 缺失『{key}』（{desc}）", rel_c)
+    phase_done()
+
+def check_self_check_guard():
+    """『自检防线』：执行前自检规范与其必加载层落点不得被删或降级。
+
+    背景：规范按"懒加载"设计，**加载是规则生效的前提**——"文件里写了某条必须"不等于
+    本次执行加载并遵守了它。self-check.adoc 把"动手前的自检"从一句无判定标准的自觉
+    要求，变成可逐项核对的动作（指令、规范加载、规划落盘、读取范围、证据、收尾），
+    是加载防线的兜底关口。"精简/去重"时它最容易被当成"软要求"删掉，故机械钉住其
+    **存在性与关键要点**，并确认 specs/core/execution.adoc（必加载层）留有落点。
+
+    只钉"存在性与关键词"，不改写内容——清单是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("自检防线检查")
+    rel = os.path.relpath(SELF_CHECK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SELF_CHECK_FILE):
+        err(f"缺少执行前自检规范文件 {rel}——"
+            "动手前的自检关口丢失（规范是否被实际加载与遵守将无兜底）", rel)
+    else:
+        with open(SELF_CHECK_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("执行前自检清单", "动手前逐项自检的清单"),
+                ("非平凡任务", "自检适用范围界定（防被'只对大任务'架空）"),
+                ("不得顺口编造", "知识边界（不知道就说不知道、去查证）"),
+                ("完成前自检", "交付前的对照核验")):
+            if key not in text:
+                err(f"自检防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "自检要点不得被删或降级", rel)
+    # 公共层（`specs/general/`）的规范文件由调度器登记；自检机制同时须有必加载层落点
+    # （执行原则里的一行引用），否则"动手前自检"不会被任何入口触发。
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"自检规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, rel_exec)
+    if not os.path.isfile(exec_path):
+        err(f"缺少 {rel_exec}，自检的必加载层落点丢失", rel_exec)
+    else:
+        with open(exec_path, encoding="utf-8") as fh:
+            if "自检" not in fh.read():
+                err(f"自检防线被破坏：{rel_exec} 缺失对「执行前自检」的落点——"
+                    "自检要求未挂到必加载层，实际不会被触发", rel_exec)
+    phase_done()
+
+
+def check_verify_guard():
+    """『规范验证防线』：验证口径（三视角/效力等级/总纲/规范验证）与其维护方落点不得被删。
+
+    背景：规范改动的验收有两层——**机械校验**（确定性项）与**语义复核**（确定性脚本
+    覆盖不到的概念判断）。语义复核的**规则**（三视角：①完整性 + ②有效性与认知质量 +
+    ③接纳面；效力等级：确定项 / 概念项；判准：严格执行 / 尽力而为）属**公共内容**，
+    落点为 `specs/general/verify.adoc`（对任何项目成立，且引用方也确实需要"改完规范
+    怎么验"）。**该口径的单一落点即 `specs/general/verify.adoc`**——
+    `testing.adoc` 的同名节只留一跳入口（两处各写一份会各自漂移，已实测漂移过一次：
+    同一节的『执行者选择：强制同 Agent』曾只存在于 testing.adoc 一侧）。本仓库侧的落点
+    （维护方要做什么、要钉住哪些抓手）落在
+    `specs-project-maintainer/verify.adoc` 与根目录 `AGENTS.adoc`。
+
+    被删则"改完规范只跑机械校验就算验证过"、"验证了什么/依据哪个标准"无从枚举、或把
+    三视角拆成多次子 agent 派发都会重新出现。
+
+    只钉"节与要点仍在、标准出处仍在、三处口径指向一致"，判据是否被实质削弱仍由人/子
+    agent 复核承担。
+    """
+    phase("规范验证防线检查")
+    rel_public = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
+    path_public = os.path.join(REPO_ROOT, *rel_public.split("/"))
+    if not os.path.isfile(path_public):
+        err(f"缺少公共验证规范文件 {rel_public}——验证三视角、效力等级与运行契约失去落点",
+            rel_public)
+    else:
+        with open(path_public, encoding="utf-8") as fh:
+            pub = fh.read()
+        for pat, desc in ((r"^==+\s*验证与运行契约", "「验证与运行契约」节（验证的公共口径）"),
+                          (r"^==+\s*规范验证", "「规范验证」节（改完规范后的语义复核定式）"),
+                          (r"^==+\s*验证总纲", "「验证总纲」节（验证什么、怎么算过、标准出自哪里）"),
+                          (r"^==+\s*验证的效力等级", "「验证的效力等级」节（确定项/概念项与结论强度）"),
+                          (r"^==+\s*验证的适用边界", "「验证的适用边界」节（先判改动性质）"),
+                          (r"^==+\s*运行契约", "「运行契约」节（未知项目加载的可控性）")):
+            if not re.search(pat, pub, re.M):
+                err(f"规范验证防线被破坏：{rel_public} 缺失{desc}——验证的公共定式不得被删或降级",
+                    rel_public)
+        for key, desc in (
+                ("判据本体验证", "确定项：机械校验按**判据本身**核对，不按引用形式近似"),
+                ("概念项", "概念项：无确定性判据，只能启发式复核"),
+                ("只能启发式复核", "概念项的可用手段：换角度/换机器/换样本增加独立核对"),
+                ("未发现问题", "概念项的结论强度：只到'未发现问题'，不写成'通过'"),
+                ("悬置", "未确证部分须逐项标悬置并写明已复核角度"),
+                ("不得当作阻断交付的条件", "概念项不得作为交付的隐性前置条件"),
+                ("①完整性", "视角一：对象在改动前后是否等价（核对未丢规则）"),
+                ("②有效性与认知质量", "视角二：规范本体是否说得对、说得清、跑得动、判得了"),
+                ("③接纳面", "视角三：被未知项目加载后的影响面/成本/可控性"),
+                ("同一个干净子 agent", "三视角合用一个子 agent 一并回答（一次读取、结论分栏）"),
+                ("每次验证都换一个干净上下文", "不复用发起改动/上一轮验证的上下文"),
+                ("三态台账", "留证形态：通过 / 未发现问题 / 悬置三态分列、不得合并"),
+                ("严格执行", "判准维度：严格执行（须逐次达成并给证据）"),
+                ("尽力而为", "判准维度：尽力而为（须尝试、须说明、不记通过）"),
+                ("如何验证", "验证对象不止规范文件（会被执行的产物同样要验）"),
+                ("读的形态", "②的形态项：执行侧只给怎么走（重构最易丢的一条）"),
+                ("ISO/IEC Directives Part 2", "标准出处：要求须可验证（防自造一套说法）"),
+                ("RFC 2119", "标准出处：用语强度（要求与建议不得混用）"),
+                ("ISO 10007", "标准出处：配置管理与变更控制"),
+                ("ISO/IEC/IEEE 25010", "标准出处：质量特性（含性能效率）"),
+                ("IEEE 1028", "标准出处：软件评审")):
+            if key not in pub:
+                err(f"规范验证防线被破坏：{rel_public} 缺失『{key}』（{desc}）——"
+                    "验证的判定标准与标准出处不得被删或降级", rel_public)
+    # 维护方落点：specs-project-maintainer/verify.adoc 须存在且含"三视角/悬置/超时"三要点
+    rel_m = "specs-project-maintainer/verify.adoc"
+    path_m = os.path.join(REPO_ROOT, *rel_m.split("/"))
+    if not os.path.isfile(path_m):
+        err(f"缺少维护方验证落点 {rel_m}——维护方自己的验证义务（三视角动作、硬超时、"
+            "三态台账）失去集中落点", rel_m)
+    else:
+        with open(path_m, encoding="utf-8") as fh:
+            mtext = fh.read()
+        for key, desc in (("硬超时", "派发子 agent 必须自带可判定的时限"),
+                          ("悬置", "查不出的部分如实标悬置、写明已复核角度"),
+                          ("三态台账", "留证按三态分列、不得合并"),
+                          ("完整性校验", "改完规范必做的完整性校验动作"),
+                          ("check_checklist_guard", "维护方侧的具名抓手（文档↔脚本一致）")):
+            if key not in mtext:
+                err(f"规范验证防线被破坏：{rel_m} 缺失『{key}』（{desc}）——"
+                    "维护方的验证义务不得被删或降级", rel_m)
+    # 最高关注项 P2 的落点须指向公共验证口径
+    rel_p2 = "specs-project-maintainer/priority.adoc"
+    p2_path = os.path.join(REPO_ROOT, *rel_p2.split("/"))
+    if not os.path.isfile(p2_path):
+        err(f"缺少 {rel_p2}——最高关注项 P2 的落点丢失", rel_p2)
+    else:
+        with open(p2_path, encoding="utf-8") as fh:
+            p2_text = fh.read()
+        for key, desc in (("②有效性与认知质量", "P2 须声明语义复核的第二视角"),
+                          ("③接纳面", "P2 须声明语义复核的第三视角（未知项目加载）"),
+                          ("同一个干净子 agent", "P2 须声明三视角合用一个子 agent"),
+                          ("验证的效力等级", "P2 须指向效力等级口径（结论强度按对象分档）"),
+                          ("未发现问题", "P2 须声明复核结论只到'未发现问题'"),
+                          ("悬置", "P2 须声明未确证部分标悬置（写明已复核角度）"),
+                          ("不得当作阻断交付的条件", "P2 须声明概念项不得阻断交付")):
+            if key not in p2_text:
+                err(f"规范验证防线被破坏：{rel_p2} 的 P2 缺失『{key}』（{desc}）——"
+                    "最高关注项 P2 的语义复核退化为只查完整性", rel_p2)
+    # 本仓库落点：AGENTS.adoc 的完整性校验动作须与公共口径同源
+    rel_own = "AGENTS.adoc"
+    own_path = os.path.join(REPO_ROOT, *rel_own.split("/"))
+    if os.path.isfile(own_path):
+        with open(own_path, encoding="utf-8") as fh:
+            own_text = fh.read()
+        for key, desc in (("②有效性与认知质量", "本仓库的完整性校验动作须含第二视角"),
+                          ("③接纳面", "本仓库的完整性校验动作须含第三视角"),
+                          ("三视角合用一个子 agent", "本仓库须声明三视角合一次派发"),
+                          ("未发现问题", "本仓库落点须区分'未发现问题'与'通过'")):
+            if key not in own_text:
+                err(f"规范验证防线被破坏：{rel_own} 的完整性校验动作缺失『{key}』（{desc}）——"
+                    "本仓库维护口径须与公共口径一致", rel_own)
+
+
+def check_public_content_has_no_private_refs():
+    """公共内容不得把**本仓库私有物当成可执行抓手/可读文档**引用（③可控性的机械抓手）。
+
+    背景（接纳面失效的机械可判定形态）：公共内容（`AGENTS_COMMON.adoc` + `specs/`）
+    会被**未知项目**加载，而引用方**看不到本仓库的维护入口与工具**——本仓库根
+    `AGENTS.adoc`、`PROMPTS.adoc`、`script/check_*.py` 等。公共内容一旦把"检查由
+    `script/check_specs.py` 钉住""见根目录 `AGENTS.adoc`"这类话写进去，引用方读到的
+    就是**死链**：既加载不到、也无法据此执行（属 `specs-project-maintainer/spec-lifecycle.adoc`
+    「规范集合的自身重构」"删"所禁的形态）。
+
+    判定只认**"被当成本仓库私有物引用"**这一机械可判定的形态，两条同时成立才算命中：
+
+      * 命中点出现在**维护动作/抓手声明**语境（同一行含"本仓库/本项目自身/校验脚本/
+        check_specs/check_effective/工具声明"等词），且
+      * 点名了本仓库私有物（`script/check_*.py`、`script/clean_tmp.py`、`PROMPTS.adoc`，
+        或根目录 `AGENTS.adoc`）。
+
+    **刻意不拦**的合法用法（避免误伤，均为规范有意为之）：
+      * `AGENTS.adoc` 作为"**引用方项目自己的**项目规范"被提及（`AGENTS_COMMON.adoc`
+        「访问与解析」与 `spec-lifecycle.adoc`「公共规范还是项目规范」正需这样写）；
+      * `CHANGELOG.adoc`/`CHANGELOG.md` 作为**通用默认文件名**被列举（doc-design 的
+        "变更日志统一集中一处"正是给任意项目定的默认名）；
+      * 根 `AGENTS.adoc` 与 `script/`、`README.adoc` 等**项目自身内容**本身（不属公共内容，
+        可以自由引用私有物）。
+
+    只拦"名字与语境同时命中"的形态，"该表述是否真在引它"仍由人/子 agent 复核承担。
+    """
+    phase("公共内容私有引用检查（③可控性）")
+    # 私有物名 → 说明；匹配时要求同行出现"维护语境"词，避免把合法提及误判为引用
+    private_names = ("script/check_specs.py", "script/check_effective.py",
+                     "script/clean_tmp.py", "PROMPTS.adoc", "AGENTS.adoc")
+    context_words = ("本仓库", "本项目自身", "校验脚本", "机械校验", "工具声明",
+                     "check_specs", "check_effective", "check_priority_guard",
+                     "check_principle_guard", "check_verify_guard",
+                     "check_adoption_guard", "check_source_guard",
+                     "check_filler_docs", "CI 拦下")
+    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
+            continue  # 根 AGENTS.adoc 是项目自身内容，允许引用私有物
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/"):
+            continue  # 只检查公共内容（AGENTS_COMMON.adoc + specs/）；specs-project-maintainer/ 属维护方自有
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if not any(w in line for w in context_words):
+                    continue
+                for name in private_names:
+                    if f"`{name}" in line or f"link:{name}" in line:
+                        err(f"公共内容不得把本仓库私有物『{name}』当作抓手/文档引用——"
+                            "引用方看不到它、读到的只是死链；请改成自足的通用表述"
+                            "（'维护规范集合的项目须自行设机械防线'一类）", rel, j)
+    phase_done()
+
+
+def check_public_content_is_self_contained():
+    """『公共内容自足性防线』：公共内容（`AGENTS_COMMON.adoc` + `specs/`）不得引用私有落点。
+
+    背景（本次重构暴露的真实缺陷）：**一个文件可以同时装着公共规则与项目自身规则**，
+    而当它躺在公共侧（`specs/`）时，其中的项目自身落点就成了**引用方读不到的死链**——
+    "本仓库的优先级见 `specs-project/priority.adoc`"这类话，引用方既没有该文件、
+    也没有加载它的入口，读到的规范"只成立一半"。故把"公共内容自足"变成机械可判定的形态：
+
+      * 公共内容里出现的路径引用，只能指向 `AGENTS_COMMON.adoc` 与 `specs/` 下的文件；
+      * **不得出现指向维护方自查层（`specs-project-maintainer/`）的引用**——该层不随公共
+        内容分发，引用方拿不到；公共内容里的规则必须在本文件与 `specs/` 内自足表达。
+
+    覆盖对象是"自足受限集合"的两类（见 `PUBLIC.adoc`「自足要求的适用范围」）：
+      * ①**会被入口取到的**——`AGENTS_COMMON.adoc` 与 `specs/**`；
+      * ②**会被复制到未知项目执行的**——`prompts/*.adoc`。它们同样在未知项目里执行，
+        其中指向本仓库私有落点的路径同样是引用方读不到的死链（`PUBLIC.adoc` 明写
+        "机械检查按『公共内容』口径覆盖它们"——此前该承诺不成立：`prompts/` 既不在
+        检查集合、也不在本条过滤范围内）。
+    边界：`prompts/_common.txt` 亦属②类（公共片段），但它不是 `.adoc`、不进
+    `collect_adoc_files`，故不在本条覆盖内——其自足性目前无机械抓手，属已知缺口。
+
+    与 check_public_content_has_no_private_refs 的分工：那条拦"把本仓库私有物（脚本名、
+    工具声明）当抓手引用"，本条拦"把私有**规范文件**当规则正文引用"（悬空引用）。
+
+    只钉"引用指向的位置是否随公共内容分发"，该表述是否真需自足仍由人/子 agent 复核承担。
+    """
+    phase("公共内容自足性检查（不引用私有落点）")
+    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
+            continue  # 根 AGENTS.adoc 是项目自身内容，可引用任意私有落点
+        # 自足受限集合 = ①会被入口取到的（AGENTS_COMMON.adoc + specs/**）
+        #              ∪ ②会被复制到未知项目执行的（prompts/**，见 PUBLIC.adoc）
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
+                and not rel.startswith("prompts/"):
+            continue  # 其余（library/、README 等）不属本条的约束对象
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if "specs-project-maintainer/" in line:
+                    err("公共内容不得引用维护方自查层『specs-project-maintainer/』——"
+                        "该层不是公共入口的加载项，引用方按公共输入加载时看不到该文件"
+                        "（读到的规则只成立一半）；"
+                        "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
+    phase_done()
+
+
+def check_public_facing_docs_stay_self_contained():
+    """『公开面文档自足性防线』：会被**分发给引用方/在公开站点渲染**的文档不得指向维护方自查层。
+
+    背景（本轮重构暴露的真实缺陷）：`specs/` 被刚性地拦住了指向 `specs-project-maintainer/`
+    的引用，但 `README.adoc`（公开站点首页由它渲染）、`PROMPTS.adoc`（公开提示词入口）与
+    `INSTALL.adoc`（引用方安装文档）**同样会被未知项目看到**——它们里的 `link:` 与仓库相对
+    路径，引用方按同样方式解析，指向维护方自查层就是**死链**（该层不是公共入口的加载项、
+    也没有引用方侧入口；引用方项目里更没有本仓库的文件）；而它们又最能"顺手"把维护类元规范写进去（本轮就发生过：README 新增了
+    8 处指向维护方层的链接）。
+
+    判定：这几份公开面文档中**不得出现**维护方自查层的目录名（`specs-project-maintainer/`）。
+    规则正文要在公开文档里说明"本仓库另有一层只对维护方成立"是允许的，用**文字描述**即可，
+    但**不得给出该层文件的可点开路径**。
+
+    只钉"公开面文档有没有指向该层的路径"，这些文档其余内容的取舍仍由人/子 agent 复核承担。
+    """
+    phase("公开面文档自足性检查（README/PROMPTS/INSTALL 不指向维护方层）")
+    for rel in ("README.adoc", "PROMPTS.adoc", "INSTALL.adoc"):
+        path = os.path.join(REPO_ROOT, rel)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if "specs-project-maintainer/" in line:
+                    err("公开面文档不得给出维护方自查层『specs-project-maintainer/』的路径——"
+                        "本文件会被引用方阅读/在公开站点渲染，该层不是公共入口的加载项，"
+                        "引用方读到的是死链；请改为文字描述（'本仓库另有一层只对维护方成立'）"
+                        "或删掉该链接", rel, j)
+    phase_done()
+
+
+def check_no_mechanism_claims_in_public():
+    """公共内容不得**声明机械防线的存在**（防"机械防线随规范分发"的错觉）。
+
+    背景：机械防线（校验脚本、防线名、项目自身的检查流程）是**维护规范集合的那一方**
+    才有的东西：公共内容会被**未知项目**加载，那个项目里既没有本仓库的脚本、也没有
+    本仓库的"防线"，更无从执行。故公共内容里凡**声明"存在某道防线 / 由某道防线钉住"**
+    的句子，都是**没有承载价值的元信息**——引用方既拿不到它、也不该依赖它，属
+    `specs-project-maintainer/spec-lifecycle.adoc`「规范集合的自身重构」"删"所指的"本仓库工具名、
+    脚本名、仓库结构写进公共内容"，与**宣称与实际不符**（规范文本说"已由机械防线钉住"，
+    而引用方没有任何抓手）。
+
+    与"要求"的边界（**不得误伤**）：公共内容里**要求**维护规范集合的项目"设机械防线"
+    是**通用规则**（任何维护规范集合的项目都成立），保留不动；被拦的是**声明防线已存在**
+    的句子与**裸防线名**，机制是两条同时成立的形态判定：
+
+      * **① 有限期限定词**（"当前/目前/已由/另有/本仓库/本项目的"）**且**含"防线"
+        （不含"应/须/要求"这类要求语气）；
+      * **② 裸防线名**：出现 `check_<小写动词>` 形式的脚本函数名（即本仓库 `script/`
+        里实际定义的那些 `check_*`），公共内容一律不得写——它是私有抓手名，
+        引用方看不到、也无法据此执行。
+
+    同时检查 `AGENTS_COMMON.adoc` 之外的**公共内容说明文档**（`README.adoc` 介绍公共
+    内容的范围与形态、`PROMPTS.adoc` 是公开入口）：它们面向的读者与公共内容相同，
+    声称"某防线钉住公共内容"同样与实际不符。
+    只拦"形态同时成立"的句子，"该表述是否真在宣称防线"仍由人/子 agent 复核承担。
+    """
+    phase("公共内容不得声明机械防线检查（元信息）")
+    claim_words = ("当前", "目前", "已由", "另有", "本仓库", "本项目")
+    for f in [_rel_of(GENERIC_FILE), _rel_of(PROMPTS_FILE), _rel_of(README_FILE)] \
+            + collect_adoc_files():
+        rel = _rel_of(f)
+        if rel == "AGENTS.adoc":
+            continue  # 根 AGENTS.adoc 是项目自身内容，可以声明本仓库防线
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
+                and rel not in ("README.adoc", "PROMPTS.adoc"):
+            continue  # 只检查公共内容与其说明文档；specs-project-maintainer/ 属维护方自有，可点名自家防线
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if "防线" in line and any(w in line for w in claim_words) \
+                        and not any(w in line for w in ("应", "须", "要求")):
+                    err("公共内容不得声明机械防线的存在（如'当前由某防线钉住''本仓库另有防线'）——"
+                        "机械防线属维护规范集合的那一方，引用方既拿不到也不该依赖它；"
+                        "请删掉该声明的元信息，或改成自足的通用表述"
+                        "（'维护规范集合的项目应自行设机械防线'一类）", rel, j)
+                m = re.search(r"check_[a-z]+_[a-z_]+", line)
+                if m:
+                    err(f"公共内容不得出现裸防线名『{m.group(0)}』——"
+                        "它是私有抓手名，引用方看不到、也无法据此执行；"
+                        "请删掉或改为通用表述（'机械防线'/'机械校验'）", rel, j)
+    phase_done()
+
+
+def check_source_guard():
+    """『来源防线』：依据与来源真实性规范及其要点不得被删或降级。
+
+    背景：给出来源是为让读者"知其所以然"，但**来源一旦不实，危害大于不给**——一个
+    虚构的标准号或已删除的文件引用会污染整条下游引用链。source.adoc 把"引用与事实"
+    的要求集中成可核对条款，故机械钉住其**存在性与关键要点**，防"精简/去重"时被顺手删掉。
+
+    只钉"存在性与关键词"，不改写内容——条款是否被实质削弱仍由人/子 agent 复核承担。
+    """
+    phase("来源防线检查")
+    rel = os.path.relpath(SOURCE_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SOURCE_FILE):
+        err(f"缺少依据与来源真实性规范文件 {rel}——"
+            "引用真实性与『不得编造』失去集中落点", rel)
+    else:
+        with open(SOURCE_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("真实存在", "内部引用须指向当前真实存在的目标"),
+                ("不得编造", "标准编号/名称与事实不得凭印象生成"),
+                ("宁可不引", "无法确证时的正确做法（不给不错）"),
+                ("不附链接", "外部标准只写名称/编号、不附链接")):
+            if key not in text:
+                err(f"来源防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "来源真实性要点不得被删或降级", rel)
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        if rel not in set(extract_specs_refs(fh.read(), "")):
+            err(f"来源真实性规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
+                "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+# 提示词「主侧重（方向前提）」与「优先级规则」的机械防线口径：
+
+#   * 每个提示词的侧重点用一段**块级短语**承载，形如 `**主侧重（…）**：**检查修复问题**——…`；
+#     两侧分别锚定「主侧重」标签与「方向」标签，中间即侧重内容本身。
+PRIMARY_LABEL = "主侧重"
+PRIMARY_LINE = re.compile(
+    r"\*\*主侧重[^*]*\*\*\s*[:：]\s*\*\*([^*]+)\*\*[^\n]*方向")
+# 登记表侧重列：`| **<侧重>** | 主侧重片段 \`primary\``；侧重内容两侧的引号/星号
+# 只为排版强调，比对时统一剥掉，避免"同一侧重、写法不同"被误判为未登记。
+PRIMARY_ADOC = re.compile(
+    r"\|\s*\*\*([^*|]+?)\*\*\s*\|\s*主侧重片段 `primary`")
+# 提示词正文的「主侧重（方向性前提，先读）」段：`**主侧重（…）**：**<侧重>**——…`。
+# 用更宽的行内锚点扫描，确保侧重值出现在正文说明段（而非仅在片段占位符里）。
+PRIMARY_ANY = re.compile(
+    r"\*\*主侧重[^*\n]*\*\*\s*[:：]\s*\*\*([^*|\n]+?)\*\*")
+
+
+def _normalize_primary(text: str) -> str:
+    """归一化侧重方向文本：去掉排版用的引号/星号/空白，便于登记表与正文比对。"""
+    return text.strip().strip('"\'“”*').strip()
+#   优先级规则归并用语（RFC 2119 / ISO shall-should-may 的对应关系），三级定义缺一即防线被破坏。
+PRIORITY_TERMS = {
+    "L1": ("必须", "严禁"),
+    "L2": ("应当",),
+    "L3": ("可以",),
+}
+
+
+def _iter_prompt_files():
+    """列出公共任务提示词文档（`prompts/` 下非 `_` 前缀的 .adoc）。"""
+    if not os.path.isdir(PROMPTS_DIR):
+        return []
+    return sorted(os.path.join(PROMPTS_DIR, f)
+                  for f in os.listdir(PROMPTS_DIR)
+                  if f.endswith(".adoc") and not f.startswith("_"))
+
+
+
+def check_checklist_guard():
+    """『清单逐项与文档-脚本一致性防线』：把"可机械核对却被漏掉"的判定点补成抓手。
+
+    背景：独立复核指出当前防线只钉"集合级关键短语存在性"，两类失效因此漏过——
+    ①**清单被少列一项**（如准入判定号称"八问"、实际条目已增删；七节点表少一行）；
+    ②**文档声称的抓手与脚本实际实现不一致**（`AGENTS.adoc`/`README.adoc` 号称某
+    `check_*` 存在，而脚本里已改名/删除 —— 属"定义了却不执行"的另一面：
+    声称有防线而防线不存在）。
+
+    故本防线做两件确定性核对（均只看本仓库维护的文本，不触碰引用方工作区）：
+      * **清单逐项**：准入判定的条目数须与其自称的"九问"一致；任务生命周期的七节点
+        须逐个在表中出现；两张复核表的三视角/三维标签须齐全；
+      * **文档↔脚本一致性**：`AGENTS.adoc`、`README.adoc` 里以反引号给出的
+        `check_*` / 脚本名，须在 `script/` 下真实存在（改脚本名即须同步文档）。
+
+    只钉"项数与名字对不对得上"，条文强弱仍由人/子 agent 复核承担。
+    """
+    phase("清单逐项与文档-脚本一致性防线检查")
+
+    # 1) 准入判定：自称"九问"则条目须为 9 条
+    rel_sl = "specs-project-maintainer/spec-lifecycle.adoc"
+    sl_path = os.path.join(REPO_ROOT, *rel_sl.split("/"))
+    if os.path.isfile(sl_path):
+        with open(sl_path, encoding="utf-8") as fh:
+            sl = fh.read()
+        m = re.search(r"== 准入判定.*?(?=\n== )", sl, re.S)
+        if m is None:
+            err(f"{rel_sl} 未找到「准入判定」节——准入清单的项数失去抓手", rel_sl)
+        else:
+            items = re.findall(r"^\. \*\*", m.group(0), re.M)
+            claim = re.search(r"准入判定\*\*（([一二三四五六七八九十]+)问", m.group(0))
+            if claim is None:
+                err(f"{rel_sl} 的「准入判定」未声明项数（形如『九问』）——"
+                    "项数不写就无法核对该收的条目有没有被少列", rel_sl)
+            else:
+                num_map = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+                           "七": 7, "八": 8, "九": 9, "十": 10}
+                want = num_map.get(claim.group(1))
+                if want is not None and len(items) != want:
+                    err(f"{rel_sl}「准入判定」自称 {claim.group(1)}问、实际列出 "
+                        f"{len(items)} 条——清单被增删而声明未同步（读者按声明核对会漏项）",
+                        rel_sl)
+
+    # 2) 任务生命周期：七节点须逐个在表中出现
+    rel_ex = "specs/core/execution.adoc"
+    ex_path = os.path.join(REPO_ROOT, *rel_ex.split("/"))
+    if os.path.isfile(ex_path):
+        with open(ex_path, encoding="utf-8") as fh:
+            ex = fh.read()
+        m = re.search(r"== 任务生命周期与节点自查.*?(?=\n== )", ex, re.S)
+        if m is None:
+            err(f"{rel_ex} 未找到「任务生命周期与节点自查」节", rel_ex)
+        else:
+            for node in ("提出", "理解", "方案", "执行", "验证", "交付", "复盘"):
+                if f"| **{node}**" not in m.group(0):
+                    err(f"{rel_ex}「任务生命周期与节点自查」表中缺少节点『{node}』——"
+                        "节点被删则该节点的自查要求实际失效", rel_ex)
+            # 效力标法须写明（防"哪些节点 L1、哪些仅公共内容改动"再次含混）
+            for key in ("仅公共内容改动", "哪些节点不设"):
+                if key not in m.group(0):
+                    err(f"{rel_ex}「任务生命周期与节点自查」缺少『{key}』——"
+                        "节点效力标法（哪些节点对任何任务成立、哪些仅公共内容改动）"
+                        "不得被含糊掉", rel_ex)
+
+    # 3) 复核机制的可执行性：硬超时与三态留证须仍在（防"防卡死"与"留证"退化回口号）
+    rel_v = "specs-project-maintainer/verify.adoc"
+    v_path = os.path.join(REPO_ROOT, *rel_v.split("/"))
+    if os.path.isfile(v_path):
+        with open(v_path, encoding="utf-8") as fh:
+            vtext = fh.read()
+        # 钉"整条要求仍在"而非"关键词出现过一次"——须同时命中该条的多处要素，
+        # 否则别处一句"三态"字样即可让检查假绿（这正是本防线要防的失效模式）。
+        for keys, desc in ((("三态台账", "悬置", "未发现问题", "不得合并"),
+                            "留证须按三态台账（通过/未发现问题/悬置）分列、不得合并"),
+                           (("通过**（附判据与取值）", "悬置**（附"),
+                            "三态各自的附带信息（判据取值 / 未确证原因与剩余风险）")):
+            missing = [k for k in keys if k not in vtext]
+            if missing:
+                err(f"{rel_v} 缺失三态台账要素 {missing}——{desc}，留证会退化成散文结论"
+                    "（\"查不出\"与\"没做\"无法分辨）", rel_v)
+    rel_c = "specs/general/collab.adoc"
+    c_path = os.path.join(REPO_ROOT, *rel_c.split("/"))
+    if os.path.isfile(c_path):
+        with open(c_path, encoding="utf-8") as fh:
+            ctext = fh.read()
+        for keys, desc in ((("硬超时", "到点即视为失联", "不得无限等待"),
+                            "派发子 agent 须自带可判定的时限，到点视为失联（防任务永久挂起）"),
+                           (("超时的处置", "放弃该子 agent", "如实"),
+                            "超时后须放弃 + 如实标悬置，不得无限等待、不得写成已通过"),
+                           (("时限取值须有判据", "一次性、边界明确、可超时"),
+                            "时限取值须有判据、优先选可超时的一次性派发形式")):
+            missing = [k for k in keys if k not in ctext]
+            if missing:
+                err(f"{rel_c} 缺失硬超时要素 {missing}——{desc}；语义复核会再次卡死且无人负责",
+                    rel_c)
+
+    # 4) 文档↔脚本一致性：文档里点名的 check_* / 脚本名须真实存在
+    script_names = set()
+    script_dir = os.path.join(REPO_ROOT, "script")
+    if os.path.isdir(script_dir):
+        script_names = set(os.listdir(script_dir))
+    with open(os.path.join(REPO_ROOT, "script", "check_specs.py"), encoding="utf-8") as fh:
+        self_src = fh.read()
+    defined = set(re.findall(r"^def (check_[a-z_]+)\(", self_src, re.M))
+    # 校验范围含**维护方内容**（AGENTS.adoc、PUBLIC.adoc）：它们同样会点名 `check_*` 与
+    # 脚本名，改名/删除后不同步即"声称有防线而防线不存在"。
+    for rel in ("AGENTS.adoc", "PUBLIC.adoc", "README.adoc"):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for name in sorted(set(re.findall(r"`(check_[a-z_]+|clean_tmp\.py|check_specs\.py|"
+                                          r"check_effective\.py)`", text))):
+            if name.endswith(".py"):
+                if name not in script_names:
+                    err(f"{rel} 点名了不存在的脚本 `{name}`——"
+                        "文档声称的抓手与 script/ 实际不一致", rel)
+            elif name not in defined:
+                err(f"{rel} 点名了脚本中未定义的 `{name}`——"
+                    "防线的声称与实现不一致（改名/删除后未同步文档）", rel)
+    phase_done()
+
+
+# 图书馆（仓库根 `library/`，**不在默认引用面内**）：其价值全在"依据真的
+# 能查到、真的对得上"——入口登记的主题文件必须真实存在，外部标准的**逐字引文**必须仍在
+# （少一句就意味着"依据被压成名称"）。图书馆不在默认引用面内（本仓库内容全部会发布，
+# 但引用方按公共输入加载时取不到它、其项目里也没有本仓库的文件），故"内容会被分发"一类
+# 约束不按公共内容口径适用；剩下的是**本仓库自己的完整性**：有没有、登记是否双向一致、
+# 引文还在不在、文件里的引用是否真能解析（引用方看不到这里，引用悬空只有本仓库自己能发现）。
+# 判定只认机械可判定的形态：文件/片段存在性与引用可解析性；"该依据是否真的支持该条、
+# 依据找得全不全"属语义判断，交人/子 agent 复核承担（见 specs/general/verify.adoc「验证总纲」）。
+# **取样来源标记**：图书馆的每条外部依据都须带"它是怎么被取回的"标记——这是"不划水、
+# 不造假"的判据落点。三类标记缺任一类，就意味着某类依据的**可信度边界**无从判断
+# （"官方文本已取回"可复取比对 vs "官方网页已取回"仅题名可对 vs "未逐字取回"不引其字句）。
+# 常量化后由 check_library_guard 机械钉住：标记整体被删（依据被悄悄压成"看起来很权威的
+# 名称"）即报错——grep 在 sources.adoc 命中只说明文档正文举例还在，不等于防线覆盖到它。
+LIBRARY_SOURCE_MARKERS = (
+    "官方文本已取回",
+    "官方网页已取回",
+    "未逐字取回",
+)
+
+
+def _lib_resolve(target: str):
+    """把馆内引用的写法解析为**仓库根相对路径**（单一基准），无法解析/越界则返回 None。
+
+    基准口径（与反引号写法一致，见 check_library_guard 的"引用可解析"条）：
+      1. 先按**仓库根**解析（`CHANGELOG.adoc`、`AGENTS_COMMON.adoc`、`specs/general/doc.adoc`）
+         —— 与 Asciidoctor.js 渲染的文档站一致（`link:` 按文档源所在目录解析，文档在仓库根）；
+      2. 未命中再按**本文件所在目录**解析（`../specs/...` 这类真正离开 `library/` 的写法）。
+
+    **同一写法只有一个基准**：历史实现里反引号按仓库根、`link:` 按本文件目录，
+    结果同一句引用 `CHANGELOG.adoc` 的两种写法在"文件存在/不存在"上给出相反结论。
+    """
+    t = target.strip()
+    if not t or t.startswith("#"):
+        return None
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):
+        return None
+    if t.startswith("/"):
+        return None                       # 根绝对路径：格式问题单独报，不进存在性核对
+    is_dir = t.endswith("/")
+    repo_rel = posixpath.normpath(t).replace("\\", "/")
+    if repo_rel != ".." and not repo_rel.startswith("../"):
+        if is_dir:
+            if os.path.isdir(os.path.join(REPO_ROOT, *repo_rel.split("/"))):
+                return repo_rel + "/"
+        elif os.path.isfile(os.path.join(REPO_ROOT, *repo_rel.split("/"))):
+            return repo_rel
+    local = posixpath.normpath(posixpath.join("library", t)).replace("\\", "/")
+    if local == ".." or local.startswith("../"):
+        return repo_rel                  # 越出仓库根：返回仓库根解析结果，交由存在性判定报错
+    return local + "/" if (is_dir and not local.endswith("/")) else local
+
+
+def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: bool = False):
+    """核对一条馆内引用的落点是否为**本仓库内真实存在的文件/目录**。
+
+    `m` 为写法（反引号内的路径或 `link:` 目标）；`desc` 为报错里的引用描述。
+    """
+    if _is_placeholder_ref(m):
+        return
+    is_dir = bool(m.endswith("/"))
+    resolved = _lib_resolve(m)
+    if resolved is None:
+        return
+    if resolved == ".." or resolved.startswith("../"):
+        if allow_escape:
+            err(f"{desc} 越出仓库根——馆内引用须指向本仓库内的真实文件", rel, j)
+        return
+    if is_dir:
+        if not os.path.isdir(os.path.join(REPO_ROOT, *resolved.rstrip("/").split("/"))):
+            err(f"{desc} 指向不存在的目录——悬空引用等于依据链断在这里", rel, j)
+        return
+    if not os.path.isfile(os.path.join(REPO_ROOT, *resolved.split("/"))):
+        err(f"{desc} 指向不存在的文件——"
+            "悬空引用等于依据链断在这里（公共内容里的死链判据与它无关："
+            "图书馆不在默认引用面内，读者在本仓库内，故按仓库根基准核对）", rel, j)
+
+
+# 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
+# 只有在此列内的写法才被当作"路径"核对存在性——防止把普通词/文件名约定当路径误报）。
+_LIB_ROOT_FILES = ("AGENTS.adoc", "AGENTS_COMMON.adoc", "AGENTS.md", "PUBLIC.adoc",
+                   "README.adoc", "PROMPTS.adoc", "CHANGELOG.adoc", "INSTALL.adoc",
+                   "check_specs.py", "check_effective.py", "clean_tmp.py",
+                   "_common.txt", "review.adoc", "refactor.adoc")
+LIBRARY_QUOTE_ANCHORS = (
+    "Software Reviews and Audits",
+    "IEEE Standard for Information Technology--Systems Design--Software Design Descriptions",
+    "Software and systems engineering — Software testing — Part 4: Test techniques",
+    "Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model",
+    "ISO/IEC Directives, Part 2 — Principles and rules for the structure and drafting",
+    "Ergonomics of human-system interaction — Part 110: Interaction principles",
+    "Key words for use in RFCs to Indicate Requirement Levels",
+    "Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words",
+    "UTF-8, a transformation format of ISO 10646",
+    "Date and Time on the Internet: Timestamps",
+    "The OAuth 2.0 Authorization Framework",
+    "Best Current Practice for OAuth 2.0 Security",
+    "The 'Basic' HTTP Authentication Scheme",
+    "Digital Identity Guidelines: Authentication and Lifecycle Management",
+    "Deserialization of Untrusted Data",
+    "Observable Timing Discrepancy",
+    "Generation of Error Message Containing Sensitive Information",
+    "Active Debug Code",
+    "Dependency specification for Python Software Packages",
+    "Style Guide for Python Code",
+    "Docstring Conventions",
+    "**/IT*.java",
+    "**/*ITCase.java",
+    "**/*TestCase.java",
+    "MAJOR version when you make incompatible API changes",
+    "In many IETF documents, several words",
+    "when they are in all capitals as shown below",
+) + LIBRARY_SOURCE_MARKERS
+
+
+def check_library_guard():
+    """『图书馆防线』：依据须查得到、对得上、引用不悬空（不在默认引用面内的内容）。
+
+    背景：规范正文刻意只给"怎么走"（规则 + 判定标准 + 依据名），但依据**不能只存在
+    名称**——规则执行久了就退化成"只记得是这么做的"，无法判断它还成不成立、无法据以
+    取舍与举一反三。图书馆（仓库根 `library/`）就是依据的落点：外部标准的**原文摘录**、
+    "这条标准确实支持这条规则"的映射、当初的失效与实证。
+
+    **落点**：图书馆**不在默认引用面内**（本仓库内容全部会被发布出去，见 `README.adoc`；
+    它的落点在仓库根而不是 `specs/` 下，是因为 `specs/**` 属**默认引用的公共规范**、
+    其内容即引用方的输入，而图书馆天然含只对本项目成立的内容；引用方按公共输入执行时
+    既取不到它、其项目里也没有本仓库的文件）。
+    由此本条**不按"自足性 / 是否夹带私有落点"口径检查**（那是默认引用项的要求：不在
+    默认引用面内的内容本就可以引用自己仓库的任何落点），只检查它作为"依据落点"是否真的可用。
+
+    故本条钉住四件确定项（都是机械可判定的）：
+      * **存在与登记**：图书馆入口存在，且**被本仓库项目规范入口 `AGENTS.adoc` 登记**
+        （未登记即无触发特征，读者不知道何时该读它，图书馆等于不存在）；
+      * **登记双向一致**：以**入口「主题登记」表解析出的集合 `::` 磁盘实际主题文件集合**
+        为准（README 的登记表是唯一索引，`LIBRARY_TOPICS` 只是"已知必须有"的下限补丁，
+        不是第二真源）——登记了不存在的主题、或存在未登记的主题文件，都报错；
+      * **逐字引文仍在**：所登记外部标准的关键片段（题名、模板片段、代码模式等）仍在
+        图书馆内——少一句就意味着依据被压成了名称；
+      * **引用可解析**：图书馆文件里的引用**一律按仓库根基准**解析——反引号写法
+        （`specs|library|script|...` 带目录前缀，以及**根级文件名** `AGENTS.adoc`/
+        `PROMPTS.adoc` 等，见 `_LIB_ROOT_FILES` 白名单）、`link:` 目标、`../` 相对写法
+        三种**同一基准**：先按仓库根解析，命中即通过；未命中再按"本文件所在目录"解析
+        （`../specs/...` 这类真正离开 `library/` 的写法）——**同一写法只有一个基准**，
+        不出现"反引号按仓库根、link: 按本文件目录"两套口径（历史缺陷：同一句引用
+        `CHANGELOG.adoc` 的两种写法结论相反）。目录型写法核目录、其余核文件。
+
+    "该依据是否真的支持该条、依据找得全不全、有没有把解释当原文"属语义判断，交人/
+    子 agent 复核承担。
+    """
+    phase("图书馆防线检查")
+    if not os.path.isfile(LIBRARY_INDEX):
+        err("缺少图书馆入口 library/README.adoc——"
+            "规范条目与项目决策背后的依据将只剩名称、无从核对"
+            "（本仓库为根目录 library/；注意它不是\"未发布\"，站点与仓库都发布它，"
+            "它只是不属默认引用面——见 AGENTS.adoc「依据图书馆」）",
+            "library/README.adoc")
+        phase_done()
+        return
+
+    with open(LIBRARY_INDEX, encoding="utf-8") as fh:
+        index_text = fh.read()
+    with open(PROJECT_FILE, encoding="utf-8") as fh:
+        project_entry = fh.read()
+
+    # 1) 项目规范入口登记：图书馆入口须在 AGENTS.adoc 被登记
+    if "library/README.adoc" not in project_entry:
+        err("图书馆未在本仓库项目规范入口（AGENTS.adoc）登记——"
+            "读者无从知道何时该加载它，依据实际不可达"
+            "（写文件与登记是同一个动作）",
+            "AGENTS.adoc")
+
+    # 2) 入口登记的主题 ↔ 主题目录实际文件，双向一致
+    registered = set(re.findall(r"link:([^\[\]]+\.adoc)\[", index_text))
+    actual = set()
+    if os.path.isdir(LIBRARY_DIR):
+        actual = {f for f in os.listdir(LIBRARY_DIR)
+                  if f.endswith(".adoc") and f != "README.adoc"}
+    for r in sorted(registered):
+        if not os.path.isfile(os.path.join(LIBRARY_DIR, r)):
+            err(f"图书馆入口登记了不存在的主题文件: {r}——"
+                "读者按入口找不到依据（登记与实际不一致）", "library/README.adoc")
+    for a in sorted(actual - registered):
+        err(f"图书馆存在未登记的主题文件: {a}——"
+            "未登记即不会被读者发现，依据实际不可达（写文件与登记是同一个动作）",
+            "library/README.adoc")
+    # 下限补丁（已知局限性）：`LIBRARY_TOPICS` 只保证"这几个主题必须有"，不表达"应有哪些
+    # 主题"——主题集合的完整来源仍是入口登记表（上一步已双向核对）。故"某主题该不该有、
+    # 有没有被悄悄漏掉"属语义判断，交人/子 agent 复核；此处不做也不假装做。
+    for t in LIBRARY_TOPICS:
+        if t not in actual:
+            err(f"图书馆缺少主题文件: {t}", "library/README.adoc")
+
+    # 3) 逐字引文锚点：依据不得只剩名称
+    texts = {}
+    for f in sorted(actual):
+        with open(os.path.join(LIBRARY_DIR, f), encoding="utf-8") as fh:
+            texts[f] = fh.read()
+    blob = "\n".join(texts.values())
+    missing = [q for q in LIBRARY_QUOTE_ANCHORS if q not in blob]
+    if missing:
+        err(f"图书馆缺失逐字引文锚点 {missing}——依据被压成名称后将无从核对"
+            "（判据：所引标准的关键片段须能在馆内逐字找到）",
+            "library/README.adoc")
+
+    # 3b) 『规范准入与自身取舍』主题的要点锚点：该主题的关键不是"引到某段标准原文"，
+    # 而是"如实写明本集合自己的取舍与外部材料的差异"。缺这几句，依据仍能凑齐，
+    # 但读者会把本站更严取舍/组织约定读成标准规定——这正是该主题存在的理由。
+    if "adoption.adoc" in actual:
+        adoption_text = texts.get("adoption.adoc", "")
+        miss_adoption = [q for q in _LIBRARY_ADOPTION_ANCHORS if q not in adoption_text]
+        if miss_adoption:
+            err(f"图书馆『规范准入与自身取舍』主题缺失要点锚点 {miss_adoption}——"
+                "同义性差异与取舍判据被删后，本站更严取舍会被读成外部标准原文"
+                "（依据不实，见 specs/general/source.adoc「外部引用」）",
+                "library/adoption.adoc")
+
+    # 3c) 『依据的写入与关联』主题的要点锚点：该主题的价值全在"写入有触发判据、反查有可执行
+    # 算法"——缺这几句，"写依据"重新变成靠自觉（不主动写、写什么凭发挥），或把规则本体抄进馆
+    # （第二真源，改一处必漏一处）；解析算法被删则又回到"遍历项目找依据"。
+    if "usage.adoc" in actual:
+        usage_text = texts.get("usage.adoc", "")
+        miss_usage = [q for q in _LIBRARY_USAGE_ANCHORS if q not in usage_text]
+        if miss_usage:
+            err(f"图书馆『依据的写入与关联』主题缺失要点锚点 {miss_usage}——"
+                "写入触发判据与反查解析算法被删后，依据的写入重新靠自觉、"
+                "关联重新退化成'凭印象检索'",
+                "library/usage.adoc")
+
+    # 4) 引用可解析：馆内引用按仓库根基准解析（悬空引用 = 依据链断在这里）
+    for f in sorted(actual) + ["README.adoc"]:
+        path = os.path.join(LIBRARY_DIR, f)
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+        rel = f"library/{f}"
+        for j, line in enumerate(lines, 1):
+            # 反引号写法：`specs/...`（按仓库根解析；`library/...` 同基准）。
+            # **也收根级文件名写法**（`AGENTS.adoc`、`PUBLIC.adoc`、`README.adoc` 等）：
+            # 馆内很自然地会写"登记与维护说明见 `AGENTS.adoc`"，漏收即这类引用悬空
+            # 无人发现（实测：把 `AGENTS.adoc` 改成不存在的名字，检查原本不报）。
+            # 只认**扩展名在册**的根级文件名（下方白名单），避免把普通词当路径。
+            for m in re.findall(r"`((?:(?:specs|library|specs-project-maintainer|script|"
+                                r"prompts)/[^`\s]*)|(?:[A-Za-z0-9_.-]+\.(?:adoc|py|txt|md|"
+                                r"yml|yaml|json|sh|bat|cmd)))`", line):
+                if "/" not in m and m not in _LIB_ROOT_FILES:
+                    continue                   # 非根级文件名白名单内 → 当普通词，不核
+                if _is_placeholder_ref(m):
+                    continue
+                _check_library_target(m, f"图书馆内的引用 `{m}`", rel, j)
+            # link: 写法：**与反引号同一基准**（见 _lib_resolve）。
+            # 馆内 link: 很自然会写根级名（`link:AGENTS_COMMON.adoc[]`、`link:CHANGELOG.adoc[]`），
+            # 原实现只按"本文件所在目录"解析 → 同一句引用两种写法结论相反：
+            # 文件存在时 link: 形态误报（解析成 library/xxx，不存在）、文件缺失时不报（漏报）。
+            for raw in re.findall(r"\blink:([^\[]+)\[", line):
+                target = raw.strip()
+                if not target or target.startswith("#"):
+                    continue
+                if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target):
+                    continue
+                if target.startswith("/"):
+                    err(f"图书馆内的链接 link:{target}[] 是根绝对路径——"
+                        "馆内引用按仓库根基准的相对写法书写，不用根绝对路径", rel, j)
+                    continue
+                _check_library_target(target, f"图书馆内的链接 link:{target}[]", rel, j,
+                                      allow_escape=True)
+    phase_done()
+
+
+def check_library_locating_guard():
+    """『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
+
+    背景（用户报告的真实问题）：图书馆**没有限制内容的大小与长度、也没有限制要存的内容的
+    范围**（`library/README.adoc`「放什么、不放什么」），将来可能特别大；于是**其他项目引用
+    时**要在**不把整馆下载下来**的前提下，**准确找到"这条依据具体在哪个文件"**。缺这份协议
+    时，位置只有三种坏做法：①**整馆下载**（拉全量再 grep，馆一大就付不动）；②**按主题名猜
+    文件名**（命名会随重构变化——本仓库的图书馆自己就搬过落点，路径不是主键）；③**把图书馆
+    当全文检索引擎**（外部项目本来就不该遍历本仓库）。这三条都属"定义了却落不了地"。
+
+    故本条钉住**四件确定项**（都是机械可判定的）：
+      * **定位协议在**：`library/README.adoc` 有「为什么还要有"定位协议"」与「依据的定位协议」
+        两节，含**先分清作者侧/取用侧**（**取用侧是游客：只有 https、没有仓库、没有 git**）、
+        **入口 = 常驻层里的固定地址**（不经页面结构、不需版本号）、三步取值、**版本固化是可选
+        加固而非取用前置**（不得要求调用方先取 commit）、以及"不解析页面结构"（页面是产物）；
+      * **使用判据在**：`library/usage.adoc` 有「四、引用方怎么准确定位依据（不全量下载）」
+        节，含**取用侧只有 https**（作者侧/取用侧条件不同，不得以"先取 commit"为前置）、
+        "主键是内容、不是路径"与终止条件（定位到文件与段即止，不打包第二真源）；
+      * **依据侧有原文与如实取样状态**：`library/sources.adoc` 收 Git（内容寻址、按 blob 取回）
+        与 RFC 7233（206 Partial Content）的**逐字引文**，且**如实标"未实测"**本站站点 Range
+        是否生效——不得把"支持 Range"当成既定事实（`specs/general/source.adoc`「不臆造行为」）；
+      * **入口可发现**：项目规范入口 `AGENTS.adoc` 的图书馆段须含定位协议的落点（主键口径），
+        否则读者不知道有这份协议、定位重新靠猜；
+      * **文件名不承担定位**（用户报告的真实问题）：馆内 `.adoc` 的**文件名长度**须在
+        `LIBRARY_FILE_NAME_MAX` 以内——名字会被读进每一次链接与每一次目录列举，**"把主张写进
+        文件名"**（名字写成一句话）等于让每个读者反复为它付上下文，而名字**本来就不是检索键**
+        （检索键是依据名，经入口「主题登记」表解析）；馆一大，没人会靠文件结构或文件名找依据，
+        都是**从已有内容反查到馆**。
+
+    "该协议是否真的够用、主键取值是否合理"属语义判断，交人/子 agent 复核承担。
+    """
+    phase("依据定位防线检查（馆无限大时的定位协议）")
+    if not os.path.isfile(LIBRARY_INDEX):
+        err("缺少图书馆入口 library/README.adoc——『依据的定位协议』无处承载"
+            "（馆无体量上限时，引用方将退回整馆下载或按文件名猜）", "library/README.adoc")
+    else:
+        with open(LIBRARY_INDEX, encoding="utf-8") as fh:
+            index_text = fh.read()
+        miss = [q for q in _LIBRARY_LOCATING_ANCHORS if q not in index_text]
+        if miss:
+            err(f"图书馆入口缺失『依据定位』要点 {miss}——"
+                "馆无限大时定位要么退化成整馆下载/按文件名猜，要么要求取用者先说出 commit"
+                "（游客只有 https，取不到）；须写清作者侧/取用侧的区别、入口=常驻层的固定地址、"
+                "三步取值、版本固化只是可选加固、且不解析页面结构"
+                "（见 library/README.adoc「依据的定位协议」）", "library/README.adoc")
+
+    usage_path = os.path.join(LIBRARY_DIR, "usage.adoc")
+    if not os.path.isfile(usage_path):
+        err("缺少 library/usage.adoc——『引用方怎么准确定位依据』的使用判据无处承载",
+            "library/usage.adoc")
+    else:
+        with open(usage_path, encoding="utf-8") as fh:
+            usage_text = fh.read()
+        miss_u = [q for q in _LIBRARY_LOCATING_USAGE_ANCHORS if q not in usage_text]
+        if miss_u:
+            err(f"library/usage.adoc 缺失『依据定位』使用判据 {miss_u}——"
+                "定位协议缺了这条，引用方要么全量下载、要么按路径猜（改名即断档），"
+                "要么被要求先取一个它根本取不到的 commit："
+                "取用侧只有 https 的前提、主键口径（内容而非路径）、"
+                "不承载派生落点的形态约束与终止条件须成文", "library/usage.adoc")
+
+    sources_path = os.path.join(LIBRARY_DIR, "sources.adoc")
+    if not os.path.isfile(sources_path):
+        err("缺少 library/sources.adoc——定位协议所依赖的机制原文（git / RFC 7233）无处承载",
+            "library/sources.adoc")
+    else:
+        with open(sources_path, encoding="utf-8") as fh:
+            sources_text = fh.read()
+        miss_s = [q for q in _LIBRARY_LOCATING_SOURCE_MARKERS if q not in sources_text]
+        if miss_s:
+            err(f"library/sources.adoc 缺失『依据定位』的机制原文/取样状态 {miss_s}——"
+                "缺了逐字引文，'主键是内容'与'只取一段'只是本站说法；"
+                "缺了'未实测'的标注，会把'支持 Range'当成既定事实"
+                "（specs/general/source.adoc「不臆造行为」）", "library/sources.adoc")
+
+    # 『取用前置』回退：把"先取 commit 再拼地址"写回图书馆即命中——游客只有 https
+    for rel in (LIBRARY_INDEX, os.path.join(LIBRARY_DIR, "usage.adoc")):
+        if not os.path.isfile(rel):
+            continue
+        with open(rel, encoding="utf-8") as fh:
+            text = fh.read()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(word in line for word in _LOCATING_COMMIT_PREREQ_EXEMPT):
+                continue
+            for pat, desc in _LOCATING_COMMIT_PREREQ_PATTERNS:
+                if pat.search(line):
+                    err(f"{rel}:{lineno} 出现『取用前置』回退：{desc}", rel)
+
+    if not os.path.isfile(PROJECT_FILE):
+        err("缺少项目规范入口 AGENTS.adoc——图书馆的定位协议无从被读者发现", "AGENTS.adoc")
+    else:
+        with open(PROJECT_FILE, encoding="utf-8") as fh:
+            entry = fh.read()
+        if "馆无体量上限" not in entry or "固定地址" not in entry:
+            err("项目规范入口未含『依据定位』的口径（馆无体量上限 / 入口 = 常驻层的固定地址）——"
+                "读者不知道有这份协议，定位要么重新靠猜、要么退化成"
+                "「要求取用侧先取一个它取不到的 commit」（写文件与登记是同一个动作）",
+                "AGENTS.adoc")
+
+    # 『文件名』回退：馆内主题文件名过长（把主张写进名字）即命中——名字会被读进每一次链接与
+    # 每一次目录列举，且**名字本就不是检索键**（检索键是依据名，经入口主题表解析）。
+    lib_dir = os.path.join(REPO_ROOT, "library")
+    if os.path.isdir(lib_dir):
+        for name in sorted(os.listdir(lib_dir)):
+            path = os.path.join(lib_dir, name)
+            if not os.path.isfile(path) or not name.endswith(".adoc"):
+                continue
+            if len(name) > LIBRARY_FILE_NAME_MAX:
+                err(f"文件名过长：`library/{name}` 共 {len(name)} 字符，超出上限 "
+                    f"{LIBRARY_FILE_NAME_MAX}——图书馆的检索键是**依据名**（经入口「主题登记」表"
+                    "解析），**文件名不是主键、也不承担语义**；名字会被读进每一次链接与每一次目录"
+                    "列举，长名让每个读者反复白付上下文，且制造『改名即断档』的错觉。请取**单个"
+                    "短词、小写 ASCII**，把内容描述写进文件正文"
+                    "（见 library/README.adoc「文件名协议（短、无语义、不承担定位）」）",
+                    f"library/{name}")
+    phase_done()
+
+
+# 『默认引用面』口径（全仓库统一的表述判据）：**本仓库所有内容都会被发布出去**
+# （站点渲染本仓库文档），各内容之间的区别只在"**默认引用什么**"——被引用方按入口加载的
+# 是**公共规范**（`AGENTS_COMMON.adoc` + `specs/`），其余落点（图书馆、维护方自查层、
+# 站点说明文档等）**不在默认引用面内**（没有公共加载项）。历史口径把后者写成"**本仓库
+# 私有 / 不对外发布**"，与平台事实相反：它们同样是被发布的内容（在站点上可读），只是
+# 引用方不按入口加载它们、其项目里也没有本仓库的文件。口径写错会连带改错判断：维护方会
+# 以为"发布与不发布可选"，而实际只能选择"默认引用面里放什么"。
+# 故把**已被纠正的错误表述形态**机械钉住（只认"发布与否"这一形态，不碰"私有落点/
+# 私有抓手名"这类**自足性**判据——那拦的是引用好不好用，与发布与否是两件事）。
+_REF_SCOPE_BAD_PATTERNS = (
+    (re.compile(r"(本仓库|本站)[^。\n]{0,12}私有[^。\n]{0,12}(不随|不分发|不对外|不外发)"),
+     "不得写\"本仓库私有…不随规范分发\"——本仓库所有内容都会被发布，应写\"不在默认引用面内\""),
+    (re.compile(r"私有内容[^。\n]{0,10}(不随|不对外)"),
+     "不得写\"私有内容不随规范分发\"——发布与否不是判据，判据是\"是否被引用方按入口加载\""),
+    (re.compile(r"不随规范分发"),
+     "不得写\"不随规范分发\"——本仓库全部内容都会被发布，正确表述是\"不在默认引用面内\""),
+)
+# 豁免：历史记录（`CHANGELOG.adoc` 记录的是**当时口径**，不得改写）；以及**引用/澄清
+# 该错误表述本身**的句子（含"不是/并非/≠/不得写/错"等词），以及"私有落点/私有抓手名"
+# 这类自足性用语（与发布与否无关）。
+_REF_SCOPE_BAD_EXEMPT = ("不是", "并非", "≠", "错误", "不得写", "纠正", "区分")
+
+
+def check_ref_scope_wording_guard():
+    """『默认引用面口径防线』：不得再把本仓库内容写成"私有 / 不对外发布"。
+
+    背景（用户纠正的事实错误）：本仓库**所有内容都会被发布出去**（站点由 `index.html`
+    渲染本仓库文档），所谓"私有"从来没有发生——**默认只有公共规范被引用方加载**
+    （`AGENTS_COMMON.adoc` + `specs/`），其余落点只是**不在默认引用面内**。原口径把图书馆、
+    维护方自查层、站点说明文档一律写成"本仓库私有、不随规范分发"，与平台事实相反，且会
+    连带改错判断（以为"发布/不发布"是可选项）。
+
+    判定：本仓库维护范围内的 `.adoc` 里不得出现该错误表述形态（见
+    `_REF_SCOPE_BAD_PATTERNS`）；`CHANGELOG.adoc` 豁免（历史条目记的是当时口径），
+    **引用/纠正该表述本身**的句子豁免（含"不是/并非/不得写"等词），"私有落点/私有抓手名"
+    这类**自足性**用语豁免（与发布与否无关）。
+
+    只钉"这一句怎么写"，某处该不该被引用方加载仍由人/子 agent 复核承担。
+    """
+    phase("默认引用面口径检查（不得写成私有/不对外发布）")
+    for rel in collect_adoc_files():
+        if _is_historical(rel):
+            continue                       # 历史条目记的是当时口径，不得改写
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.readlines(), 1):
+                if any(w in line for w in _REF_SCOPE_BAD_EXEMPT):
+                    continue               # 引用/纠正该表述本身，或讨论"私有落点"这一自足性判据
+                for pat, msg in _REF_SCOPE_BAD_PATTERNS:
+                    if pat.search(line):
+                        err(f"口径错误：{msg}"
+                            "（平台事实——本仓库所有内容都会被发布出去，站点可读；"
+                            "\"私有\"与事实不符，且会连带把\"发布与否\"误当成可选项）",
+                            rel, j)
+                        break
+    phase_done()
+
+
+def check_dependency_view_guard():
+    """『依赖关系文档防线』：模块间依赖的唯一视图（完整、UML、可直达、不过期）不得被删或降级。
+
+    背景（用户报告的真实失效）：AI 编辑代码时**加重复依赖**——模块**已经（直接或间接）依赖**
+    了某库，却又在它的依赖清单里声明一次。根因不是"忘了"，而是**项目里没有一份完整依赖关系
+    的视图**：只能临场重建，于是每次都要先把依赖树捋一遍。后果是依赖图变脏——版本收敛与统一
+    升级失去唯一入口、可重现性变差、体积与启动开销悄然增加。
+
+    本条是**跨语言**的（依赖关系与语言无关），落点在 `specs/general/doc-design.adoc`
+    的「依赖关系文档（模块间依赖的唯一视图）」节 + 「UML 表述规范」子节，并由加载调度器
+    （`AGENTS_COMMON.adoc` 的设计文档条目，否则多模块项目不知道有这份视图）与依赖规范
+    （`specs/general/dependency.adoc` 的「引入依赖」，否则按依赖规范学习时漏掉）两处指向。
+
+    本防线钉住该节的**可执行要点**（钉"要求文本仍在且落在该落点"；"某个项目的依赖视图是否
+    真的完整、有没有过期"属引用方项目产物，本仓库看不到，交人/子 agent 复核）：
+    完整（模块之间、不列第三方库）、UML 优先（不得只写一段文字）、位置可直达（AI 按固定路径
+    读取）、先查本文档（不重启依赖树解析）、缺失即新增、同提交同步、不重复声明、与构建工具
+    的边界（不替代依赖树）。
+    """
+    phase("依赖关系文档防线检查")
+    rel = os.path.relpath(DEPENDENCY_VIEW_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(DEPENDENCY_VIEW_FILE):
+        err(f"缺少文件 {rel}——『依赖关系文档』的落点丢失"
+            "（多模块项目将没有模块间依赖的唯一视图，重复依赖只能靠临场重建依赖树发现）", rel)
+        phase_done()
+        return
+    text = open(DEPENDENCY_VIEW_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(DEPENDENCY_VIEW_SECTION) + r".*?(?=^== |\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"依赖关系文档防线被破坏：{rel} 缺少「{DEPENDENCY_VIEW_SECTION}」节——"
+            "模块间依赖的唯一视图（完整依赖关系、UML 表述、先查本文档、缺失即新增）无处承载，"
+            "『模块已间接依赖却又加一次』的失效会重新出现", rel)
+        section = ""
+    else:
+        section = m.group(0)
+    if section:
+        for keys, desc in (
+            ((DEPENDENCY_DOC_PATH, "多模块", "文档根目录"),
+             "落点与位置：多模块项目须有固定路径 `doc/dependency.adoc`，且写明它放在文档根目录"
+             "（使站点导航与 AI 可按固定路径直达）——路径不固定则『先查本文档』无从执行"),
+            (("完整", "全部模块", "模块之间"),
+             "完整（L1）：须列出**当前项目全部模块之间**的依赖关系，"
+             "且写明『完整』的含义是模块之间、而非第三方库清单（否则读者仍要去读构建文件）"),
+            (("UML", "依赖箭头"),
+             "UML 优先（L1）：依赖关系须以 UML 图为主（模块用组件/包、依赖用依赖箭头），"
+             "**不得只写一段文字描述**——文字无法枚举全部模块对"),
+            (("先读本视图", "不重启依赖树解析"),
+             "先说清『查依赖关系优先查本文档』：涉及依赖判断时先读本视图、回答完即止，"
+             "不得每次重新解析依赖树（否则本条等于没写）"),
+            (("没有本视图时", "本次任务内", "补全后再用"),
+             "文档缺失则新增（L1）：多模块项目没有本视图时须在本次任务内新增/补全，"
+             "不得以『存量还没有』为由跳过（否则规则只对已合规的项目生效）"),
+            (("同一提交内", "更新本视图"),
+             "同提交同步（L1）：模块之间增删依赖、新增/拆分模块后须在同一提交内更新本视图——"
+             "视图过期比没有更坏（读者会按它得出错误结论）"),
+            (("不得再在它的依赖清单里重复声明", "新增依赖前先读本视图"),
+             "不重复声明（L1）：模块已被（直接或间接）依赖时不得重复声明同一依赖，"
+             "且须写明新增依赖前先读本视图（这是本条要消灭的那个失效本身）"),
+            (("不替代构建工具", "第三方库"),
+             "文档与工具各司其职（L2）：本视图不替代构建工具的依赖树"
+             "（依赖树只描述第三方库的传递关系、与模块间依赖不是一回事），冲突时以构建文件为准"),
+            (("依据", "ISO/IEC/IEEE 42010", "UML"),
+             "依据行：须标注标准名/编号（架构描述与 UML 记法、可追溯性、显式声明依赖），"
+             "否则后人无从判断它还成不成立"),
+        ):
+            missing = [k for k in keys if k not in section]
+            if missing:
+                err(f"依赖关系文档防线被破坏：{rel}「{DEPENDENCY_VIEW_SECTION}」"
+                    f"缺失要点 {missing}——{desc}；该条对应用户报告的真实失效"
+                    "（模块已间接依赖却又加一次），不得删除、不得降级为建议", rel)
+    # 加载调度器：设计文档条目须指向它（多模块项目不知道有这份视图 = 规则不会被触发）
+    generic = open(GENERIC_FILE, encoding="utf-8").read()
+    if DEPENDENCY_VIEW_SECTION not in generic:
+        err("依赖关系文档防线被破坏：AGENTS_COMMON.adoc 的设计文档加载条目未指向"
+            f"「{DEPENDENCY_VIEW_SECTION}」——多模块项目与『增删依赖』场景不会加载到它"
+            "（规则写了但不会被触发）", "AGENTS_COMMON.adoc")
+    # 依赖规范：『引入依赖』须指向本视图（按依赖规范学习时也要能读到）
+    dep_file = os.path.join(SPECS_DIR, "general", "dependency.adoc")
+    if os.path.isfile(dep_file):
+        dtext = open(dep_file, encoding="utf-8").read()
+        missing = [k for k in (DEPENDENCY_VIEW_SECTION, "不得重复声明同一依赖",
+                               "doc-design.adoc") if k not in dtext]
+        if missing:
+            err(f"依赖关系文档防线被破坏：specs/general/dependency.adoc 缺失要点 {missing}——"
+                "按依赖规范学习时会漏掉『模块间依赖不重复声明、先读依赖视图』这条"
+                "（规则被指向，不复制）", "specs/general/dependency.adoc")
+    phase_done()
+
+
+def check_index_page_guard():
+    """『索引页触发判据防线』：索引页只对"已承载实质文档"的目录要求，空壳不建、索引只做导航。
+
+    背景（用户报告的真实失效）：`specs/general/doc.adoc`「每级目录须有索引页」+
+    `specs/general/doc-module.adoc`「模块 doc 下应放 README.adoc」被叠加读宽，推成
+    "有 doc/ 目录就得有 doc/README.adoc"，于是给 48 个模块批量补了内容几乎逐字同构的
+    `doc/README.adoc`——表里指的全是同一份模块 README 与同一份依赖视图，**不含本级自身
+    信息**，属"为完整而存在"的空壳。根因是规范只写"每级目录须有索引页"、**没写"该不该
+    建索引页"的触发判据**。
+
+    本防线钉住该判据的可执行要点（防"精简/去重"时把判据压回一句"每级目录须有索引页"
+    使失效复发）：触发判据（已承载实质文档才建）、空壳不建（不为补索引先建目录）、
+    索引只做导航（不复制上一级内容）、模块级导航由模块 README 承担。
+    """
+    phase("索引页触发判据防线检查")
+    if not os.path.isfile(DOC_FILE):
+        err("缺少文件 specs/general/doc.adoc——『索引页触发判据』的落点丢失"
+            "（「每级目录须有索引页」会被重新读宽成「每个模块都建 doc/README.adoc」）",
+            "specs/general/doc.adoc")
+        phase_done()
+        return
+    text = open(DOC_FILE, encoding="utf-8").read()
+    if INDEX_PAGE_SECTION not in text:
+        err("索引页触发判据防线被破坏：specs/general/doc.adoc 缺少「索引页的触发判据」——"
+            "只说「每级目录须有索引页」而不说「该不该建」，AI 会把它读宽成"
+            "「每个模块都补一个 doc/README.adoc」并批量生成空壳索引（用户报告的真实失效）",
+            "specs/general/doc.adoc")
+    else:
+        for keys, desc in (
+            (("已承载实质文档", "已存在", "实质文档"),
+             "触发判据（L1）：索引页只在目录**已承载实质文档**时才需要——"
+             "判据是该目录是否已有本级或更深的实质 `.adoc`/`.md`，不得停在「每级目录须有索引页」"),
+            (("空目录", "仅有索引页", "不建"),
+             "空壳不建（L1）：空目录/仅有索引页「自己」的目录一律不建索引页，"
+             "不得为「补索引」先建 `doc/` 目录再放一个 `README.adoc`（这正是批量空壳的成因）"),
+            (("只做导航", "不得把上一级文档", "换个壳复制"),
+             "索引只做导航（L1）：索引页只指向下级/同级真实文档，"
+             "不得把上一级文档（如模块 README）的内容换个壳复制一份——"
+             "指向的目标全是别处同一份内容、不含本级自身信息即属空壳，发现即删"),
+            (("模块级导航由模块 `README` 承担", "不必", "另设一层索引"),
+             "模块级导航归属（L1）：模块总入口本就是模块 `README`，模块内若无独立功能文档，"
+             "不必再在 `doc/` 下另设一层索引——否则索引页只是把模块 README 的目录功能复制一份"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"索引页触发判据防线被破坏：specs/general/doc.adoc 缺失要点 {missing}——{desc}；"
+                    "该条对应用户报告的真实失效（48 个模块被批量补上同构空壳 `doc/README.adoc`），"
+                    "不得删除、不得降级为建议", "specs/general/doc.adoc")
+    # 模块级规范：模块 doc 索引条目须同样写明"按需"判据（否则按模块规范学习时会重新读宽）
+    if not os.path.isfile(DOC_MODULE_FILE):
+        err("缺少文件 specs/general/doc-module.adoc——模块 doc 索引的「按需」判据落点丢失",
+            "specs/general/doc-module.adoc")
+    else:
+        mtext = open(DOC_MODULE_FILE, encoding="utf-8").read()
+        missing = [k for k in ("按需", "无任何实质文档", "不建", "模块自身 `README`")
+                   if k not in mtext]
+        if missing:
+            err(f"索引页触发判据防线被破坏：specs/general/doc-module.adoc 缺失要点 {missing}——"
+                "模块 `doc/` 索引须写明「按需」（doc/ 下有实质文档才放 README，无则不建、"
+                "导航由模块 README 承担），否则「每个模块都该有 doc/README.adoc」会重新成立",
+                "specs/general/doc-module.adoc")
+    phase_done()
+
+
+def check_changelog_entry_guard():
+    """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
+
+    背景（本项目实测的失效形态）：变更日志是**按时间倒序、最新在最上方**的只追加记录，
+    条目主格式为单行 `版本号 | 日期 | 变更摘要`；但工具习惯（heredoc / 多次 append /
+    `cat >>`）很容易把**同一条目续写成多行**，或在末尾留下裸文本——形态上仍像"有记录"，
+    实际已与下一条粘连、渲染出来是一句话被拆断。单行是机械可判定的，故在此钉住：
+    行首命中 `- 版本 | 日期 |` 的条目行，其后**不得紧跟续行**（下一条目行、空行或节标题）。
+
+    只钉"形态"，条目内容是否记对了变更点仍由人/子 agent 复核承担
+    （`specs/general/changelog.adoc`「编写原则」）。
+    """
+    phase("变更日志条目形态检查（单行条目）")
+    path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
+    if not os.path.isfile(path):
+        err("缺少统一变更日志 CHANGELOG.adoc——"
+            "变更记录将分散在各文档、多处不一致（见 specs/general/doc-design.adoc"
+            "「版本与变更记录」）", "CHANGELOG.adoc")
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().split("\n")
+    for j, line in enumerate(lines, 1):
+        if not CHANGELOG_ENTRY_RE.match(line):
+            continue
+        if len(line) > CHANGELOG_ENTRY_MAX:
+            err(f"变更日志条目过长（{len(line)} 字符 > {CHANGELOG_ENTRY_MAX}）——"
+                "单行条目须一句话说清'改了什么、给谁带来什么影响'，"
+                "超出即说明该拆成多条或删减（specs/general/changelog.adoc「条目书写」）",
+                "CHANGELOG.adoc", j)
+        nxt = lines[j] if j < len(lines) else ""
+        if nxt.strip() and not CHANGELOG_ENTRY_RE.match(nxt) and \
+                not nxt.lstrip().startswith("="):
+            err("变更日志条目被**续行**（同一条目写成多行）——"
+                "条目须单行 `版本号 | 日期 | 变更摘要`、条目内不换行；"
+                "被续写的条目会与下一条粘连、渲染成一整段"
+                "（specs/general/changelog.adoc「条目书写」）", "CHANGELOG.adoc", j)
+    phase_done()
+
+
+def check_quote_line_guard():
+    """『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
+
+    背景（本项目实测的真实失效）：仓库文档里"引文/说明"段落长期写作 `> 说明：…`，
+    页面侧（`index.html` 用 Asciidoctor.js 渲染）一直显示成引用块、看不出问题；但
+    **命令行侧的解析器不是同一个**：
+
+      * 参考实现 Asciidoctor 把 `> x` 解析为**引用块**（measure：同一份文档在
+        `@asciidoctor/core@2.2.1` 下 `> x` → `<div class="quoteblock">`）；
+      * 旧式 AsciiDoc（Python `asciidoc` 系）的 `[listdef-callout]` 正则为
+        `^<?(?P<index>\d*)> +(?P<text>.+)$`——单 `>` 起头者也被它吃掉，`index` 取到
+        **空串**，随即在 `List.calc_style()` 里
+
+            assert False
+
+        → 整个文件 `FAILED`（实测：`library/README.adoc`、`AGENTS.adoc`、
+        `CHANGELOG.adoc`、`specs/general/git.adoc`、`specs/platform/cnb.adoc`、
+        `specs-project-maintainer/priority.adoc` 六个文件同时被打死）。
+
+    为什么必须在本仓库钉住：`index.html` 的站点渲染与 `specs/general/encoding.adoc`
+    的"命令一侧可能由 `asciidoc`（Python）实现"是同一件事的两面；而
+    `check_asciidoctor_syntax` 只在环境里真有 `asciidoctor` 时才跑（本仓库常常读不到），
+    于是"编译失败"这条**确定项**常年无人拦截——本防线不依赖外部命令，纯文本可判定。
+
+    判定标准（机械）：仓库维护范围内的 `.adoc` 里，**行首为 `> `**（即 `>` 后跟空白）
+    的行即命中——无论它本意是引文还是别的东西，该形态都会被至少一种解析器解释成
+    callout list；写引文用 `[quote]` + 正文行（两代解析器都渲染成引用块，见
+    `library/README.adoc` 的既有用法）。行内的 `>`（如 `a > b`、`<commit>:<path>`）
+    不在判定面内——本防线只判**行首**，不误伤比较运算符与 shell 重定向。
+    """
+    phase("引文段落防线检查（禁裸 > 起头的引文行）")
+    hits = []
+    for rel in collect_adoc_files():
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for j, line in enumerate(fh.read().split("\n"), 1):
+                if line.startswith("> "):
+                    hits.append((rel, j, line[:60]))
+    for rel, j, head in hits:
+        err("引文段落用裸 `>` 起头——该形态会被 AsciiDoc 解析成 **callout list**，"
+            "进而中断整份文档的编译（Python asciidoc 实测 `assert False`）；"
+            "写引文改用 `[quote]` + 正文行（两代解析器都渲染成引用块）："
+            f"{head}…", rel, j)
+    if not hits:
+        detail("  未发现裸 `>` 起头的引文行")
+    phase_done()
+
+
+def _split_adoc_sections(text: str):
+    """把一份 .adoc 文本按**二级节**切成 `[(节标题, 节正文含标题行), …]`。
+
+    只认同级 `== ` 标题；`===` 及更深层归入所属二级节正文（本函数只用于"按节取
+    表格/清单区"这类粗粒度定位，不解析完整文档树）。代码块（`----` 定界）内的
+    伪标题不计入——否则块内示例会把节切碎、定位错段。
+    """
+    lines = text.split("\n")
+    sections = []
+    cur_title, cur_lines, in_block = None, [], False
+    for line in lines:
+        if line.strip() == "----":
+            in_block = not in_block
+        is_head = (not in_block) and re.match(r"^==\s+\S", line)
+        if is_head:
+            if cur_title is not None:
+                sections.append((cur_title, "\n".join(cur_lines)))
+            cur_title, cur_lines = line[2:].strip(), [line]
+        elif cur_title is not None:
+            cur_lines.append(line)
+    if cur_title is not None:
+        sections.append((cur_title, "\n".join(cur_lines)))
+    return sections
+
+
+def _names_in_zone(zone_body: str, rel: str) -> bool:
+    """某节区里是否**以表格行**点名了 `rel`（行锚 `|` + 该行内任一点名形式）。
+
+    用途：区分"在「入口清单」表里"（= 该文件确在覆盖面内）与"在正文/反向举例段被
+    提一句"（= 说明性提及）。只靠 `rel in 全文` 判"在清单里"会把正文提及也算进去，
+    "某入口被悄悄移出表格"这类改动因此不会被拦下。
+
+    **点名形式**取表格行内任一种（这是"内容在不在表里"这一件判据，不该绑死某一种
+    排版）：反引号（`` | `INSTALL.adoc` | ... ``）、`link:` 文本（`| link:x[INSTALL.adoc] |`）、
+    裸文件名（`| INSTALL.adoc |`）。历史缺陷：原实现只认"反引号 + 文件名字面"，于是
+    把同一格改成 AsciiDoc 惯用的 `link:` 文本写法（表格结构、所在节、覆盖面均未变，
+    纯排版）后，**明明列在表里却报"未列进表"**——判据把"行的位置"与"文件名的排版"
+    混成了一件。
+    """
+    # **限定在"文件"这一列**（表格第 2 格）：表格是 `| 入口 | 文件 | 说明`，
+    # 若只在**说明列**里顺带提到某文件（如"见 `AGENTS.adoc`（另见 INSTALL.adoc 的说明）"），
+    # 那不是"它被列进了清单"——按"整行任一点名"判定会把说明列的提及也算命中（实测：
+    # 把 `INSTALL.adoc` 那行改成"文件列写别的、说明列提一句 INSTALL.adoc"，检查不报）。
+    # 故取"第一个 `|` 之后、**第二个 `|` 之前**"这一段（= 文件列）来判。
+    for line in zone_body.split("\n"):
+        if not line.startswith("|"):
+            continue
+        for cell in line.split("|")[1:]:
+            c = cell.strip()
+            # 该格须**本身就是这个文件名的点名**（允许包裹反引号、或 `link:xxx[]` 文本形态、
+            # 或裸文件名），而不是"说明句里顺带提到它"——判据是"格内去掉点名后无实质剩余"。
+            probe = c
+            probe = re.sub(r"`\s*" + re.escape(rel) + r"\s*`", "", probe)
+            probe = re.sub(r"link:\S*?\[" + re.escape(rel) + r"\]", "", probe)
+            probe = re.sub(r"\b" + re.escape(rel) + r"\b", "", probe)
+            if not c or probe == c:
+                continue
+            rest = probe
+            # 去掉纯排版残留（包裹括号、`link:` 空壳、反引号、空白、顿号/逗号等连接符）
+            rest = re.sub(r"link:\S*?\[\s*\]", "", rest)
+            rest = rest.strip(" \t`（）()［］[]·、,，,。;；:：")
+            if not rest:
+                return True
+    return False
+
+
+def check_public_content_coverage():
+    """『公共内容覆盖面防线』：公共内容的入口清单须完整、且与实际文件一致。
+
+    背景：公共内容此前只有一句口头定义（"`AGENTS_COMMON.adoc` + `specs/`"），而
+    `INSTALL.adoc`（接入时读）、`prompts/_common.txt`（AI 以纯文本读取公共片段）与
+    `script/clean_tmp.py`（随规范分发的通用工具）**同样会被引用方取到**——覆盖面界定
+    不清的后果是双向的：机械检查漏掉半个公共内容（这些文件的死链无人拦），而"自足"
+    要求又被误加到只对维护方成立的文件上（误报）；维护方自己也会按错的口径判断
+    "加一条规则会不会改变别人的行为"。
+
+    故把清单固化成 link:PUBLIC.adoc[]（公共内容入口索引，维护方内容），本检查钉住
+    它的确定项：
+      * `PUBLIC.adoc` 存在，且被本仓库项目规范入口 `AGENTS.adoc` 登记（未被登记即
+        维护方读不到它，清单等于没有）；
+      * 清单里以反引号点名的路径**真实存在**（改名/删除后须同步清单，否则覆盖面
+        界定与实际不符）；
+      * 公共内容的两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）**都列进
+        「入口清单」表**（漏一个即半个公共内容不在覆盖面内；**表**才是覆盖面的定义处
+        ——只靠"全文里出现过"判定，会把正文里提一句也算命中，"某入口被移出表格"就
+        不会被发现）。
+
+    "某文件到底算不算公共内容"属判定，交人/子 agent 复核承担（清单本身可被修改，
+    但修改要过归类举证）。
+    """
+    phase("公共内容覆盖面检查（入口清单与实际一致）")
+    if not os.path.isfile(PUBLIC_FILE):
+        err("缺少公共内容入口索引 PUBLIC.adoc——"
+            "公共内容有多个公开入口（安装文档、通用规范入口 + specs/、公共片段、"
+            "随规范分发的工具），没有清单则覆盖面界不清：检查会漏掉半个公共内容、"
+            "自足要求会被误加到只对维护方成立的文件上（见 AGENTS.adoc「校验范围」）",
+            "PUBLIC.adoc")
+        phase_done()
+        return
+    with open(PUBLIC_FILE, encoding="utf-8") as fh:
+        listing = fh.read()
+    with open(PROJECT_FILE, encoding="utf-8") as fh:
+        project_entry = fh.read()
+    if "PUBLIC.adoc" not in project_entry:
+        err("公共内容入口索引未在本仓库项目规范入口（AGENTS.adoc）登记——"
+            "维护方无从知道公共内容有哪些入口", "AGENTS.adoc")
+    # 两个公开入口须**列进「入口清单」表**：`rel not in listing` 判的是**全文**，
+    # 正文里提一句（如"'为什么需要本索引'里举例说 INSTALL.adoc 也会被读到"）同样命中，
+    # 于是"某入口被移出表格、只剩正文提到"这种改动**不会被发现**——而表格才是覆盖面
+    # 的定义处（实测：把 `INSTALL.adoc` 那行从表里删掉、只在正文保留一句 `INSTALL.adoc`，
+    # 检查仍全绿）。故本条须按**表格区**判定，与下面按节切的核对口径一致。
+    sections_pre = _split_adoc_sections(listing)
+    list_bodies = [b for t, b in sections_pre if "入口清单" in t]
+    for rel in ("INSTALL.adoc", "AGENTS_COMMON.adoc"):
+        if rel not in listing:
+            err(f"公共内容入口清单未列出 {rel}——"
+                "漏一个入口即半个公共内容不在覆盖面内"
+                "（自足检查漏的是它的死链）", "PUBLIC.adoc")
+        elif not any(_names_in_zone(b, rel) for b in list_bodies):
+            err(f"公共内容入口清单未把 {rel} 列进「入口清单」表——"
+                "只出现在正文/反向举例段不算在覆盖面内"
+                "（覆盖面界定失效后，它的死链与自足性都无人核对）", "PUBLIC.adoc")
+    # **按节切表格/清单区**判定（不再全文 re.findall + 硬编码豁免）：
+    #   ① 入口清单表所在节：其中以反引号点名的路径即"公共内容入口"，须真实存在；
+    #   ② "不属公共内容"那一段的反向举例：它点名的文件同样须真实存在（是**真实存在的
+    #      非公共内容**，不是"随便写写"）——故一并核对，**不再靠硬编码 5 个 .adoc 名跳过**；
+    #      新增任何合法反向举例都自动纳入核对，不必回来改白名单（"以豁免补判据不足"）。
+    # 全文扫描的失效模式：别节/正文里出现的任意 .adoc 名（如示例、历史叙述）都会被当成
+    # "清单点名"，只能靠硬编码豁免来掩盖——判据不足而非判据。
+    def _names_in(section_body: str):
+        return sorted(set(re.findall(r"`([A-Za-z0-9_./-]+\.(?:adoc|py|txt))`",
+                                     section_body)))
+
+    def _check_names(names, desc):
+        for m in names:
+            if not os.path.isfile(os.path.join(REPO_ROOT, *m.split("/"))):
+                err(f"{desc}点名了不存在的文件 `{m}`——"
+                    "清单与实际不一致，覆盖面界定失效", "PUBLIC.adoc")
+
+    sections = _split_adoc_sections(listing)
+    list_secs = [(t, b) for t, b in sections if "入口清单" in t]
+    non_public_secs = [(t, b) for t, b in sections if "不属公共内容" in b]
+    if not list_secs:
+        err("PUBLIC.adoc 未找到「公共内容入口清单」节——"
+            "覆盖面界定的判据失去落点（本检查按节切表格区核对，节名被改写即报错）",
+            "PUBLIC.adoc")
+    for t, b in list_secs:
+        _check_names(_names_in(b), "公共内容入口清单")
+    for t, b in non_public_secs:
+        _check_names(_names_in(b), "「不属公共内容」一段")
+    phase_done()
+
+
+def check_abstraction_adoption_guard():
+    """『抽象与接入成本防线』：对外能力的可替换点须有唯一装配点、须有可用默认。
+
+    背景（本项目真实的设计失效报告）：用户描述"**要求都实现了、功能都实现了，却很难用**"
+    ——某抽象定义了 `ISession` 接口，但每个 service 使用点都要业务项目**各自提供一遍实现类型**，
+    即 N 个使用点 = N 次重复接入、新增使用点还要再传一遍。它属"功能交付了、可用性没交付"：
+    ISO/IEC 25010 把易用性与可维护性列为**产品质量特性**（与功能适用性并列），故接入成本
+    不是锦上添花，而是设计指标；而"同一事实有多个来源"同时违反单一真源（ISO/IEC/IEEE 29148）。
+    故本条**跨语言**收在通用编码规范，并由技术栈层按"引用不复制"承接。
+
+    本防线钉住**五处要点**（钉"要求文本仍在且落在该落点"；"某个抽象有没有真的只在一处装配"
+    属引用方项目代码，本仓库看不到，交人/子 agent 复核）：
+      * **节与两句 L1**：节名、「唯一装配点」条（含"不得要求多个使用点各自提供同一实现或同一配置"）、
+        「可替换点须有可用默认」条（含"禁止既无默认又不声明"）——两句被删/降级即本条失效；
+      * **判定标准可执行**：两条 L1 各自须给出可逐条核对的判定（次数不随使用点增加、
+        "有默认或有显式必填声明二选一"），否则只剩口号；
+      * **四条要点与级别标注**：唯一装配点 / 可用默认 / 自动装配优先 / 多实现用限定符+
+        作用域承载，四条须齐全且标出 L1/L2（防"降级成建议"或"只留一句总述"）；
+      * **依据行**：标准名/编号须在（ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、
+        The Twelve-Factor App、Spring Boot 官方文档、SOLID/DIP）；
+      * **技术栈承接**：`specs/stack/spring.adoc`「配置」须引用该节（Spring 是接入侧最典型的
+        场景，只改通用层等于 Spring 项目读不到），且**不得复制条文**（规则本体唯一）。
+    """
+    phase("抽象与接入成本防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『抽象与接入成本』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        section = ""
+        m = re.search(r"^== " + re.escape(ABSTRACTION_ADOPTION_SECTION) + r"\b.*?(?=^== |\Z)",
+                      text, re.S | re.M)
+        if m is None:
+            err(f"抽象与接入成本防线被破坏：{rel_coding} 缺少"
+                f"「{ABSTRACTION_ADOPTION_SECTION}」节——"
+                "对外能力的接入成本判据（唯一装配点、可用默认）无处承载，"
+                "抽象会重新做成「每个使用点各实现一遍」", rel_coding)
+        else:
+            section = m.group(0)
+        if section:
+            for keys, desc in (
+                (("唯一装配点", "不得要求多个使用点各自提供同一实现或同一配置"),
+                 "L1（a）唯一装配点：可替换点只有一处声明/装配落点，"
+                 "不得要求多个使用点各自提供同一实现或同一配置"),
+                (("可替换点须有可用默认", "禁止既无默认又不声明"),
+                 "L1（b）可用默认：每个可替换点须有默认实现/默认值，"
+                 "给不出默认时须显式声明必填失败，禁止既无默认又不声明"),
+                (("次数不随使用点数量增加", "出现次数 > 1"),
+                 "判定标准可执行：须给出可逐条核对的判定（同一实现/配置在接入方的"
+                 "出现次数不随使用点数量增加），否则只剩口号、无法判定"),
+                (("二者必居其一",),
+                 "判定标准可执行（b）：须写明'有默认'与'显式必填声明'二者必居其一，"
+                 "否则'给不出默认'会被当成默认的豁免"),
+                (("L1", "L2"),
+                 "级别标注：须标出 L1/L2（否则条文会被当成建议，"
+                 "或全部按 L1 反过来挤掉合理裁量）"),
+                (("自动装配", "ServiceLoader"),
+                 "要点：能自动装配/约定生效的不得要求接入方逐点手写（L2）"),
+                (("限定符", "参数穿透", "作用域"),
+                 "要点：多实现用限定符声明式区分、禁逐层传参；跨层级对象用作用域/上下文承载（L2）"),
+                (("存量边界", "随动迁移", "不发动全库改造"),
+                 "存量边界：该条严于「每个使用点各传一遍实现」的常见既成做法，"
+                 "须写明适用于新写的对外能力与改到的既有抽象（随动迁移、不发动全库改造），"
+                 "否则会被读成「必须立即全量重构」"),
+                (("ISO/IEC 25010", "ISO/IEC/IEEE 29148", "The Twelve-Factor App"),
+                 "依据行：须标注标准名/编号（易用性与可维护性属质量特性、"
+                 "需求须单一无歧义可验证、配置外置与依赖显式声明），否则后人无从判断它还成不成立"),
+            ):
+                missing = [k for k in keys if k not in section]
+                if missing:
+                    err(f"抽象与接入成本防线被破坏：{rel_coding}「{ABSTRACTION_ADOPTION_SECTION}」"
+                        f"缺失要点 {missing}——{desc}；该条来自用户的真实设计失效报告，"
+                        "不得删除、不得降级为建议", rel_coding)
+    # 技术栈承接：Spring「配置」须引用该节、不复制条文
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少技术栈文件 {rel_spring}——『抽象与接入成本』的 Spring 承接落点丢失"
+            "（Spring 是接入侧最典型场景，只改通用层等于 Spring 项目读不到）", rel_spring)
+    else:
+        stext = open(SPRING_STACK_FILE, encoding="utf-8").read()
+        if ABSTRACTION_ADOPTION_SECTION not in stext:
+            err(f"{rel_spring} 的「配置」未引用「{ABSTRACTION_ADOPTION_SECTION}」——"
+                "Spring 项目按该文件学习时会漏掉接入成本判据（规则被指向，不复制）",
+                rel_spring)
+    phase_done()
+
+
+def check_config_class_guard():
+    """『配置类不写逻辑防线』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
+
+    背景（本项目已发生多次的真实失效）：`@ConfigurationProperties` 一类承载配置的类被写成
+    "顺手的服务"——在配置类里取默认值、做条件判断、拼装派生值，于是配置项的实际行为分散在
+    配置类中，既看不见也测不到。规则来自用户的硬性要求：**配置类不得含任何逻辑，任何情况
+    都不允许**；这不是某个技术栈的偏好，而是与各家公开规范一致的跨语言约定（Spring Boot
+    Externalized Configuration 把配置类定义为绑定配置的 holder；Google Java Style Guide
+    3.4.2 把 POJO 定义为"只有行为、没有逻辑"的数据持有者；阿里巴巴 Java 开发手册的
+    POJO 类约定）。故本条**跨语言**收在通用编码规范，并按技术栈补识别特征。
+
+    本防线钉住**四处要点**（提示词/README 同步的理由见 `check_npc_merge_guard`）：
+      * **通用层条文**：`specs/general/coding.adoc`「类设计」须有「配置类不写逻辑」条，
+        含"任何情况都不允许"（防被降级成建议）与"识别特征：以 Config/Properties 等命名"；
+      * **判定标准可执行**：同条须给出可逐条核对的形态（条件分支/循环、计算与对外访问、
+        `@Bean` 装配形态），否则只剩一句口号、无法判定；
+      * **Java/Spring 识别特征**：`@ConfigurationProperties` 与 `@Configuration` 须被点名
+        （只按类名识别会漏掉命名不规范的配置类，而 lombok 访问器注解的类此前只覆盖了
+        纯数据结构类一侧）；
+      * **公开说明同步**：`README.adoc` 的目录说明须让读者知道这条存在（漏了这层，读者
+        按 README 学习时根本不知道有这条规则）。
+
+    只钉"要求文本仍在且落在该落点"——"某个具体配置类有没有夹带逻辑"属引用方项目代码，
+    本仓库看不到，交人/子 agent 复核承担。
+    """
+    phase("配置类不写逻辑防线检查")
+    # (a)(b) 通用层条文 + 判定标准
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『配置类不写逻辑』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("配置类不写逻辑", "任何情况都不允许", "ConfigurationProperties"),
+             "条文：须有『配置类不写逻辑』条、写明『任何情况都不允许』（无例外），"
+             "并点名 `@ConfigurationProperties` 一类承载配置的类"),
+            (("POJO", "工具类或服务"),
+             "边界与去向：须写明配置类只保持 POJO 的基本功能、逻辑下沉到工具类或服务"
+             "（不写去向则逻辑无处安放，执行者只能塞回去）"),
+            (("判定标准", "条件分支", "对外部对象"),
+             "判定标准：须给出可逐条核对的形态（条件分支/循环、计算与对外访问、"
+             "`@Bean` 装配形态），否则只剩一句口号、无法判定"),
+            (("存量处理", "随动迁移"),
+             "存量边界：该条严于框架常规用法（Spring 官方允许配置类里放派生 getter），"
+             "须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
+             "否则等于静默推翻引用方既有做法"),
+            (("识别特征", "Config", "Properties", "Options", "Settings"),
+             "识别特征：须按 Config/Properties/Options/Settings 等命名识别，"
+             "否则命名不规范的配置类会被漏过"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"配置类不写逻辑防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条是用户明确要求的硬性约定（无例外），不得删除、不得降级为建议",
+                    rel_coding)
+    # (c) 技术栈识别特征：Java / Spring 两侧
+    for path, keys, desc in (
+        (JAVA_STACK_FILE,
+         ("配置类识别特征", "@ConfigurationProperties", "不得含任何逻辑"),
+         "Java 栈文件须补『标注 `@ConfigurationProperties` 的类一律属配置类』的识别特征"
+         "（只按类名识别会漏掉命名不规范的配置类）"),
+        (SPRING_STACK_FILE,
+         ("配置类不写逻辑", "@Configuration", "工具类或 Service", "判定标准",
+          "边界", "严于", "存量处理"),
+         "Spring 栈文件须在「配置」节点名 `@ConfigurationProperties` 与 `@Configuration`"
+         "两类配置类、给出判定标准，并写明与框架既有做法的边界（该条严于 Spring 常规用法、"
+         "存量随动迁移）——否则拿'官方本来允许'当豁免或用它推翻引用方既有做法"),
+    ):
+        rel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(path):
+            err(f"缺少技术栈文件 {rel}——『配置类不写逻辑』的技术栈落点丢失", rel)
+            continue
+        text = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"配置类不写逻辑防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # (d) 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "配置类不写逻辑" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『配置类不写逻辑』——"
+            "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+            rel_readme)
+    phase_done()
+
+
+def check_external_script_guard():
+    """『跨语言执行脚本的落点防线』：被执行的另一语言脚本须放资源文件夹、扩展名取被调语言。
+
+    背景（用户报告的失效与要求）：宿主语言里**要执行另一种语言的脚本**时，常以**字符串拼接/
+    字符串模板/字符串常量**内联在代码里——编辑时**既没有高亮也没有错误校验**（语法错、字段名
+    错、参数个数不匹配都到运行期才暴露）。用户的要求是**所有语言**统一处理：**优先把执行脚本
+    放到资源文件夹、文件扩展名取目标语言的扩展名**（或该技术明确支持的文件形式，如 MyBatis
+    的 XML 承载 SQL），**lua 通过读取文件使用、其他文件也一样**。故本条**跨语言**收在通用编码
+    规范，技术栈层按"引用不复制"承接（Java 的 `.sql` / `.lua`）。
+
+    第二个要求（用户追加）：**加载时机按性能敏感度定性**——资源进 classpath 后发布即不变，
+    **性能敏感路径**（Redis 操作争分夺秒）**不得每次使用都去读**，**第一次使用时读取后缓存**即可；
+    **需求要求内容会变**的（如转 PDF 的 HTML 模板）**不适用缓存**、按是否需重读决定。
+    两个方向都要钉：只钉"读一次缓存"会把可变内容冻结在首读版本上。
+
+    本防线钉住**四处要点**（只钉"要求文本仍在且落在该落点"——"某次编码是否真的把脚本放进了
+    资源文件夹、是否真的只读一次"属引用方项目代码，本仓库看不到，交人/子 agent 复核承担）：
+      * **通用层条文**：`specs/general/coding.adoc` 须有该节，四段 L1（落点／扩展名／读取方式／
+        加载时机）齐全——缺"读取方式"则"放文件"会退化成"放文件但仍把内容读进字符串拼装"；
+        缺"加载时机"则热点路径每次都去读一遍资源（或反过来把可变内容读死）；
+      * **判定标准与反例可判定**：须给出可逐条核对的判定（宿主语言里出现被调语言语句文本 /
+        以拼接与模板组装 / 扩展名或目录不对）与典型反例（Java 拼 SQL、Lua 内联成字符串）；
+      * **技术栈承接**：`specs/stack/java.adoc` 须有 Java 落点（`sql`/`lua` 放
+        `src/main/resources/` 下、Redis 用 `DefaultRedisScript` 按资源加载、MyBatis 的 SQL 写
+        mapper `*.xml`、`${}` 是拼接须白名单）**与 Java 侧的加载时机**（静态常量、不每次读、
+        不敏感路径无妨、可变模板不缓存），`specs/stack/spring.adoc` 须引用该条与加载时机；
+      * **入口与公开说明同步**：加载调度器的 Java 技术栈登记与通用编码加载项须含识别特征，
+        `README.adoc` 的目录说明须让读者知道这条存在（装配体量见 `check_budget_guard`）。
+    """
+    phase("跨语言执行脚本的落点防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『跨语言执行脚本的落点』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        section = ""
+        # 节名以全角"）"结尾，不能用 `\b`（`\b` 要求前/后是单词字符，全角括号两侧
+        # 都不构成边界，会让匹配恒为空）——用"行尾或空白"收尾
+        m = re.search(r"^== " + re.escape(EXTERNAL_SCRIPT_SECTION) + r"(?:\s|$).*?(?=^== |\Z)",
+                      text, re.S | re.M)
+        if m is None:
+            err(f"跨语言执行脚本防线被破坏：{rel_coding} 缺少"
+                f"「{EXTERNAL_SCRIPT_SECTION}」节——SQL/Lua 等被调语言的脚本无处安放，"
+                "会重新以字符串拼接/模板内联在宿主语言代码里（无高亮、无错误校验）",
+                rel_coding)
+        else:
+            section = m.group(0)
+        if section:
+            for keys, desc in (
+                (("资源文件夹", "不得"),
+                 "L1（a）落点：跨语言脚本须独立成文件放在资源文件夹、不得内联在宿主语言"
+                 "代码里（字符串字面量/拼接/模板/多行字符串）"),
+                (("扩展名", "取被调语言自身的扩展名", "MyBatis"),
+                 "L1（b）扩展名：须取被调语言自身的扩展名，无通用扩展名时取该技术明确"
+                 "支持的文件形式（如 MyBatis 的 `*.xml` 承载 SQL）——缺则退回无语义扩展名"),
+                (("从资源读取后执行",),
+                 "L1（c）读取方式：须写明脚本是按资源读取后执行，否则'放文件'会退化成"
+                 "'放文件但把内容读进字符串再拼装'，高亮与错误校验的收益随之消失"),
+                (("加载时机", "性能敏感", "第一次使用", "classpath"),
+                 "L1（d）加载时机：须写明性能敏感路径不得每次使用都去读资源——资源进 "
+                 "classpath 后发布即不变，须第一次使用时读取一次并缓存；缺则'争分夺秒'"
+                 "的调用（如 Redis 操作）会每次都去读一遍资源（用户报告的第二个场景）"),
+                (("需求要求内容会变", "不适用缓存"),
+                 "L1（d）反面边界：须写明需求要求内容会变的（如转 PDF 的 HTML 模板）"
+                 "不适用缓存、按是否需重读决定——缺则被读成'一律读一次缓存'，"
+                 "把需求的可变内容冻结在首次读到的版本上"),
+                (("判定标准", "SELECT", "字符串拼接", "每次使用都重新读取"),
+                 "判定标准：须给出可逐条核对的判定（宿主语言里出现被调语言语句文本、"
+                 "以拼接/格式化/插值/模板组装、扩展名不对、性能敏感路径每次重新读取），"
+                 "否则只剩口号、无法判定"),
+                (("反例", "多行字符串"),
+                 "反例：须点出典型反例（Java 拼 SQL、Lua 内联成字符串、shell 片段写进 "
+                 "Python 字符串），否则判据不可判定"),
+                (("OWASP", "ISO/IEC 25010"),
+                 "依据行：须标注标准名/编号（OWASP 参数化查询、可维护性、需求须可验证"
+                 "与性能效率），否则后人无从判断它还成不成立"),
+            ):
+                missing = [k for k in keys if k not in section]
+                if missing:
+                    err(f"跨语言执行脚本防线被破坏：{rel_coding}「{EXTERNAL_SCRIPT_SECTION}」"
+                        f"缺失要点 {missing}——{desc}；该条是用户明确要求的跨语言约定，"
+                        "不得删除、不得降级为建议", rel_coding)
+    # 技术栈承接：Java 落点 + Spring 引用（规则被指向、不复制条文）
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少技术栈文件 {rel_java}——『跨语言执行脚本』的 Java 落点丢失"
+            "（Java 项目最常见 SQL/Lua，只改通用层等于 Java 项目读不到判据）", rel_java)
+    else:
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("跨语言执行脚本", "src/main/resources/", ".sql", ".lua",
+                               "DefaultRedisScript", "MyBatis", "#{}", "白名单")
+                   if k not in jt]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须写 'sql'/'lua' 放 `src/main/resources/` 下按资源加载、"
+                "Redis 用 `DefaultRedisScript` 加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、"
+                "`${}` 是拼接须白名单校验——缺了这层，Java 执行者仍会把脚本内联成字符串",
+                rel_java)
+        missing = [k for k in ("加载时机", "private static final", "不缓存", "EVALSHA",
+                               "不敏感路径")
+                   if k not in jt]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须给**加载时机**的落点：性能敏感路径（Redis 操作）按静态常量"
+                "声明 `DefaultRedisScript`（'private static final'）、不每次调用读资源、"
+                "热点路径按 `EVALSHA` 复用脚本、不敏感路径每次读取无妨、"
+                "需求要求内容会变的模板**不缓存**——缺则 Java 执行者要么每次读一遍资源、"
+                "要么把可变内容读死", rel_java)
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(SPRING_STACK_FILE):
+        st = open(SPRING_STACK_FILE, encoding="utf-8").read()
+        if JAVA_EXTERNAL_SCRIPT_SECTION not in st:
+            err(f"{rel_spring} 未引用「{JAVA_EXTERNAL_SCRIPT_SECTION}」——"
+                "Spring 项目按该文件学习时会漏掉跨语言脚本的落点判据（规则被指向，不复制）",
+                rel_spring)
+        missing = [k for k in ("加载时机", "不适用缓存", "静态常量")
+                   if k not in st]
+        if missing:
+            err(f"跨语言执行脚本防线被破坏：{rel_spring} 缺失要点 {missing}——"
+                "Spring 栈须承接**加载时机**（性能敏感路径按静态常量读一次、"
+                "需求要求内容会变的模板不适用缓存），否则 Spring 项目读到'放文件'"
+                "却仍每次都去读", rel_spring)
+    # 入口登记：调度器的通用编码加载项与 Java 技术栈登记须含识别特征
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        for keys, desc in (
+            (("跨语言执行脚本的落点", "SQL/Lua"),
+             "调度器的通用编码加载项须含该条识别特征（缺则永不加载）"),
+            (("跨语言脚本", "src/main/resources/"),
+             "调度器的 Java 技术栈登记须含跨语言脚本的识别特征（缺则 Java 项目不知道需加载）"),
+        ):
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"跨语言执行脚本防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    # 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rd = open(README_FILE, encoding="utf-8").read()
+        if "跨语言执行脚本的落点" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『跨语言执行脚本的落点』——"
+                "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+                rel_readme)
+        if "加载时机" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『加载时机』——"
+                "加载时机（首次读一次并缓存、可变内容不缓存）是该条的判据之一，"
+                "README 不写则读者按目录说明学习时不知道这条管到读取次数",
+                rel_readme)
+    phase_done()
+
+
+def check_reuse_precedent_guard():
+    """『既有实现与先例优先防线』：先查项目已有能力与先例，禁止用手写原生写法绕过。
+
+    背景（用户报告的真实失效）：agent 写业务代码时**不读项目既有实现**，明明项目自有工具类
+    （`CIdUtils.UUID()`）与已引入库（hutool `IdUtil.fastUUID()`）已覆盖，仍手写
+    `UUID.randomUUID().toString()`；明明有 `CollUtil.isNotEmpty` 一类工具，仍手写
+    `x != null && !x.isEmpty()`。**其他语言同理**——这不是 Java 专属问题，故通用层必须
+    有一条跨语言要求，技术栈层再给现成 API 与识别特征。本条是"编码前先查、有则复用、跟随先例"
+    的前置要求，若被删或降级，编码者会退回到"凭语言常识现写"。
+
+    本防线钉住**四处要点**：
+      * **通用层条文**：`specs/general/coding.adoc`「代码复用」须有「既有实现与先例优先」
+        与「不得以语言内置写法绕过既有能力」两条，且**须为 L1**（防被降级成建议）；
+        判定要有可核对的动作（查自有能力/先例、查已引入依赖、复用时跟随先例）。
+      * **反例可判定**：通用条须点出典型反例（UUID 手写、集合判空手写），否则只剩"要复用"
+        一句口号，读者无法判断自己是否命中。
+      * **Java 栈优先级**：`specs/stack/java-syntax.adoc`「工具类使用优先级」须把
+        **项目自有工具类/已引入第三方库排在 JDK 原生写法之前**（原实现把 JDK 放第 1、
+        与用户要求相反），并点名 `IdUtil`/`CollUtil` 与 `CIdUtils`/`CList` 一类现成 API；
+        `specs/stack/java.adoc`「编码」须有 Java 侧识别特征与通用条的引用。
+      * **公开说明同步**：`README.adoc` 的目录说明须让读者知道这条存在。
+
+    只钉"要求文本仍在且落在该落点"——"某次编码是否真的先查了先例"属引用方项目行为，
+    本仓库看不到，交人/子 agent 复核承担。
+    """
+    phase("既有实现与先例优先防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『既有实现与先例优先』的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("既有实现与先例优先", "L1"),
+             "条文：须有「既有实现与先例优先」条并标 L1（防被降级成建议）"),
+            (("不得以语言内置写法绕过既有能力",),
+             "条文：须有「不得以语言内置写法绕过既有能力」条，"
+             "否则『有先例也照写原生』的失效会重新出现"),
+            (("IdUtil", "CIdUtils", "UUID"),
+             "反例：须点出 UUID 手写这类典型反例，判据才可判定"),
+            (("CollUtil.isNotEmpty", "isEmpty"),
+             "反例：须点出集合判空手写这类典型反例，判据才可判定"),
+            (("先例", "依赖"),
+             "判定动作：须写明先查项目自有能力/先例、再查已引入依赖，"
+             "否则『先查』无落点"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"既有实现与先例优先防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户报告的真实失效，不得删除、不得降级为建议",
+                    rel_coding)
+    # Java 栈：优先级顺序与现成 API
+    rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_SYNTAX_FILE):
+        err(f"缺少文件 {rel_syntax}——『工具类使用优先级』的 Java 栈落点丢失", rel_syntax)
+    else:
+        syn = open(JAVA_SYNTAX_FILE, encoding="utf-8").read()
+        missing = [k for k in ("工具类使用优先级", "项目自有工具类", "IdUtil",
+                               "CollUtil", "JDK 标准库", "跟随先例") if k not in syn]
+        if missing:
+            err(f"既有实现与先例优先防线被破坏：{rel_syntax} 缺失要点 {missing}——"
+                "「工具类使用优先级」须把项目自有工具类与已引入第三方库排在 JDK 原生写法之前，"
+                "并点名 IdUtil/CollUtil 一类现成 API（原实现把 JDK 放第 1，与用户要求相反）",
+                rel_syntax)
+        # 顺序核对：项目自有工具类须出现在 JDK 标准库之前
+        i_own = syn.find("项目自有工具类")
+        i_jdk = syn.find("JDK 标准库自带能力")
+        if i_own < 0 or i_jdk < 0 or i_own > i_jdk:
+            err(f"{rel_syntax}：优先级顺序被改回『JDK 优先』——须先项目自有/已引入库、"
+                "JDK 原生写法最后（与本条要求一致）", rel_syntax)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(JAVA_STACK_FILE):
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("既有工具类/先例优先", "java-syntax.adoc", "coding.adoc")
+                   if k not in jt]
+        if missing:
+            err(f"既有实现与先例优先防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须补该条的识别特征与通用条/优先级清单的引用（插进来只让通用层有、"
+                "技术栈层没有，Java 执行者仍会手写原生写法）", rel_java)
+    # 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "既有实现与先例优先" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『既有实现与先例优先』——"
+            "本条新增了通用层条文，读者按 README 学习时无从知道有这条规则",
+            rel_readme)
+    phase_done()
+
+
+def check_prompts_primary():
+    """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
+
+    背景：提示词的**侧重点是最核心、方向性的内容**——后续所有操作与要求都依据它，
+    方向错了后面全做错。故提示词显式标注「主侧重（方向前提）」并按业界共识
+    （RFC 2119 / RFC 8174、ISO/IEC Directives Part 2）引入 L1/L2/L3 优先级，指明
+    哪里是重点。本检查机械钉住（调整/去重不得让它们消失或降级）：
+
+      * `PROMPTS.adoc` 登记表仍标注每个提示词的**主侧重**（`| **主侧重** | 主侧重片段 `primary` …`）；
+      * 每个提示词代码块内仍注入 `primary`（主侧重）与 `priority-rules`（优先级）片段；
+      * 公共片段 `priority-rules` 仍含 L1/L2/L3 三级关键字与 RFC 2119 / ISO 依据；
+      * 侧重点与登记表双向一致（防两个提示词的侧重被复制成同一个 = 方向混用）。
+
+    只钉"存在性与一致性"，不改写内容——语义是否被削弱仍由人/子 agent 复核承担。
+    """
+    phase("提示词主侧重与优先级防线检查")
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少提示词登记入口 {rel_prompts}——提示词的主侧重与优先级无处登记",
+            rel_prompts)
+        phase_done()
+        return
+    with open(PROMPTS_FILE, encoding="utf-8") as fh:
+        registry_text = fh.read()
+
+    # 登记表须用「主侧重片段 primary」明确标出侧重列（防登记表被改成无方向信息的清单）
+    if "主侧重片段 `primary`" not in registry_text:
+        err(f"提示词登记表未标注主侧重（缺少『主侧重片段 `primary`』）——"
+            "侧重点属方向性内容，登记时不得省略", rel_prompts)
+
+    registered = {}
+    for name in PRIMARY_ADOC.findall(registry_text):
+        registered[_normalize_primary(name)] = True
+
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）",
+            "prompts/")
+
+    primaries = []
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+        # 1) 侧重方向须显式声明（放在正文最前，含"方向"字样）
+        m = PRIMARY_LINE.search(text)
+        if not m:
+            err("提示词未显式声明『主侧重（方向前提）』——侧重点是最核心、方向性的内容，"
+                "不得省去（须形如 `**主侧重（…）**：**<侧重>**——…方向…`）", rel)
+            primary = None
+        else:
+            primary = m.group(1).strip()
+            primaries.append(_normalize_primary(primary))
+            # 正文说明段的侧重值须与方向性声明一致（防两处侧重写成两个＝方向自相矛盾）
+            for other in PRIMARY_ANY.findall(text):
+                if _normalize_primary(other) != _normalize_primary(primary) \
+                        and _normalize_primary(other) != "本任务唯一主侧重":
+                    err(f"提示词内主侧重写法不一致（『{primary}』与『{other.strip()}』）——"
+                        "侧重须独此一个方向、不得自相矛盾", rel)
+        # 2) 登记表须登记该提示词的侧重，且与正文一致（防同名/防侧重被复制混用）
+        if primary is not None and _normalize_primary(primary) not in registered:
+            err(f"提示词主侧重『{primary}』未在 {rel_prompts} 登记表中标注"
+                "（登记表与正文须一致）", rel_prompts)
+        # 3) 代码块内须注入 primary 与 priority-rules 两个公共片段
+        for tag in ("primary", "priority-rules"):
+            if f"include::_common.txt[tag={tag}]" not in text:
+                err(f"提示词代码块未注入公共片段 `{tag}`——"
+                    f"{'主侧重（方向）' if tag == 'primary' else '优先级规则'}缺失，"
+                    "AI 无法据此判断重点", rel)
+
+    # 4) 侧重方向不得雷同：两个提示词侧重不同（review=检查修复、refactor=重构），
+    #    复制成同一个即方向混用。判定用**实际读到的侧重集合**，而非登记表条目数
+    #    （登记表有两行、侧重却写成同一个时，条数相同但方向已混用）。
+    if len(set(primaries)) < len(primaries):
+        err(f"提示词主侧重出现重复：{sorted(set(primaries))}——"
+            "各提示词侧重不同、须独立声明，复制成同一个即方向混用", rel_prompts)
+
+    # 5) 公共片段 priority-rules 须仍在，且含三级分级与业界依据
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——优先级规则（L1/L2/L3）无处定义", rel_common)
+    else:
+        with open(COMMON_PROMPT_FILE, encoding="utf-8") as fh:
+            common = fh.read()
+        if "tag=priority-rules" not in common.replace("::", "=") and "tag::priority-rules" not in common:
+            err(f"公共片段 {rel_common} 缺少 `priority-rules` 片段——"
+                "提示词无法引入业界共识的优先级规则", rel_common)
+        else:
+            block = common.split("tag::priority-rules[]", 1)[-1].split("end::priority-rules[]", 1)[0]
+            for level in ("L1 强制", "L2 建议", "L3 允许"):
+                if level not in block:
+                    err(f"公共片段 `priority-rules` 缺失分级定义『{level}』——"
+                        "优先级被删/降级后 AI 无法判断哪里是重点", rel_common)
+            for level, terms in PRIORITY_TERMS.items():
+                if not any(t in block for t in terms):
+                    err(f"公共片段 `priority-rules` 缺失 {level} 的判定用语（{'/'.join(terms)}）", rel_common)
+            if "RFC 2119" not in block or "ISO" not in block:
+                err("公共片段 `priority-rules` 未给业界共识依据（RFC 2119 / ISO）——"
+                    "提示词要求按业界共识加载优先级规则，依据须保留", rel_common)
+            if "不可降级" not in block:
+                err("公共片段 `priority-rules` 缺失『不可降级』要求——"
+                    "L1 须不可协商、不得被降级", rel_common)
+    phase_done()
+
+
+def check_env_marker_guard():
+    """『环境标志与专用口径防线』：环境专用口径不得脱离标志、也不得漏掉中性口径。
+
+    背景：任务提示词会被**未知项目**复制执行，但执行环境差异很大（本地人工 / CI 流水线 /
+    CNB 平台 NPC 唤起）。把"某个环境才成立的做法"当成通用要求写进提示词，会让其它环境
+    照着做而失败（本仓库实证：同一份提示词在两个环境里的工作区、默认分支、包管理器可用
+    性都不同）。故新增"环境专用口径"必须**挂在可实测的标志上**、并**保留未命中时的中性
+    口径**；"标志存在"也不能靠印象，须实际执行命令核对。本防线钉住三件确定性的事：
+
+      * 公共片段里 `env-guard` 片段仍在，且仍写明标志（`printenv CNB_EVENT`）、
+        触发条件（含 `@<Agent名>`）与**中性口径**；
+      * 每个任务提示词代码块仍 `include` 该片段（否则环境判断不会被执行）；
+      * 提示词登记入口 `PROMPTS.adoc` 仍登记该片段的标志——**登记处即本文件**，
+        新增环境专用口径而不登记，后来者无从知道它何时生效。
+
+    只钉"存在性与登记"，片段措辞的语义强弱仍由人/子 agent 复核承担。
+    """
+    phase("环境标志与专用口径防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——环境标志与专用口径无处承载", rel_common)
+        phase_done()
+        return
+    common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+    if "tag::env-guard[]" not in common.replace("::", "=") and "tag::env-guard[]" not in common:
+        err(f"公共片段 {rel_common} 缺少 `env-guard`——环境专用口径失去开关与中性口径", rel_common)
+    else:
+        block = common.split("tag::env-guard[]", 1)[-1].split("end::env-guard[]", 1)[0]
+        for key, desc in (("printenv", "标志须是可实测的命令，不得只写‘某环境’这类无法判定的描述"),
+                          ("@<Agent名>", "标志的触发条件（NPC 唤起评论）须写清"),
+                          ("中性口径", "未命中标志时的口径须写清，防环境专用做法被当通用要求")):
+            if key not in block:
+                err(f"公共片段 `env-guard` 缺失『{key}』——{desc}", rel_common)
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE) or "env-guard" not in open(
+            PROMPTS_FILE, encoding="utf-8").read():
+        err(f"{rel_prompts} 未登记 `env-guard` 及其标志——新增环境专用口径须在登记处写明"
+            "何时生效，否则后来者无从判断", rel_prompts)
+    for f in _iter_prompt_files():
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        if "include::_common.txt[tag=env-guard]" not in open(f, encoding="utf-8").read():
+            err(f"提示词 {rel} 未注入公共片段 `env-guard`——"
+                "环境判断不会被执行（环境专用口径会在错误的环境里生效）", rel)
+    phase_done()
+
+
+def check_scope_boundary_guard():
+    """『改动范围边界防线』：未声明即拒绝越界改动的边界不得被删或降级。
+
+    背景（用户明确要求收紧的一条执行边界）：执行者可能因"任务里引用了工作空间以外的文件
+    或其他项目"而把改动落到**用户并未授权**的位置上——**引用被误当成授权**。用户的要求是
+    "**除非我主动声明，否则只允许修改当前项目；未声明直接修改应当拒绝，即使我引用了其他
+    项目**"，并明确指出该要求**适用于所有项目**（不限于某个平台）：在本地/服务器上
+    "文件都在"的情形下，就是**不得改入口工作空间以外的文件**；在代码托管平台上，可写范围
+    被放大成"你有权限的**全部仓库**"，故表现为**不得改其他仓库**（含建分支、建 PR、改设置）。
+
+    落点因此分两层（本防线两处都钉，缺一处则该场景无人拦）：
+      * **通用层** `specs/general/scope.adoc`——工作空间边界与平台上的仓库边界**两节**同在
+        （对任意语言、任意项目成立，随公共入口分发，是规则本体）；
+      * **平台层** `specs/platform/cnb.adoc`「变更范围只限当前项目（未声明即拒绝）」——
+        平台侧的追加口径与同口径指向（引用方按项目类型加载 CNB 规范时也能读到）；
+      * **提示词侧** `prompts/_common.txt` 的 `scope-boundary` 片段（会被复制到未知项目
+        执行，与 `delivery` 同类：都是"交付边界"）。
+
+    本条是**"用户会要求、但必须拒绝"的又一类操作的前置边界**——与「NPC 禁合并」相邻但
+    互不豁免：合并恒为人工（无授权豁免）；本条的解禁条件是**用户显式声明**纳入范围。
+
+    本防线钉住**多处要点**（须同时命中该条的多处要素，否则别处一句同名字样即可假绿——
+    与 check_npc_merge_guard / check_checklist_guard 同口径）：(a) 主体禁令（只允许修改
+    当前工作空间 / 平台上只允许修改当前项目·入口项目）；(b) **未声明即拒绝 + 引用不等于
+    授权**（用户"引用了"工作空间以外的东西不构成授权）；(c) **判定标准**（可逐条核对：
+    改动对象不在入口工作空间内 / 以"引用过它"为由自我豁免 / 转交他人顶替）；(d) **已知
+    例外**（用户显式声明纳入范围；用户声明"只读/禁止改动"优先）；(e) 提示词侧
+    `scope-boundary` 片段同口径且在两个提示词代码块内被 `include`。
+
+    只钉"要求文本仍在、各处同口径"——"某次是否真的改到了别的项目/别的目录"属运行时行为
+    （平台操作记录、实际提交内容、文件系统状态），机械无法判定，交人/子 agent 复核；
+    但"要求被抽掉/被降级成建议/被改写成'引用即授权'"必须拦住。
+    """
+    phase("改动范围边界防线检查")
+    # ① 通用层：工作空间边界 + 平台上的仓库边界两节都在、要点齐备
+    rel_g = "specs/general/scope.adoc"
+    path_g = os.path.join(REPO_ROOT, *rel_g.split("/"))
+    if not os.path.isfile(path_g):
+        err(f"缺少文件 {rel_g}——『改动范围边界』要求无处承载"
+            "（本地/服务器场景下『不得改入口工作空间以外的文件』这条通用规则缺失）", rel_g)
+    else:
+        text = open(path_g, encoding="utf-8").read()
+        for keys, desc in (
+            (("== 工作空间边界（不依赖任何平台）", "只允许修改本次任务的工作空间", "入口工作空间"),
+             "工作空间边界节：须有该节，且禁令按『只允许修改本次任务的工作空间（入口工作空间）』"
+             "表达——离开平台（本地/服务器/容器）时『文件都在』，这条才是拦得住的那一条"),
+            (("== 平台上的仓库边界（代码托管平台）", "入口项目", "只改当前项目"),
+             "平台上的仓库边界节：须有该节，且写明平台把可写范围放大成『有权访问的全部仓库』、"
+             "禁令按当前项目（入口项目）表达——否则平台场景下无人拦"),
+            (("未声明即拒绝", "引用 ≠ 授权", "不构成改动"),
+             "未声明即拒绝 + 引用不等于授权：用户引用了工作空间以外的文件/其他项目不构成授权，"
+             "未声明一律拒绝（这是本条的价值所在，写成『尽量』或省掉即失效）"),
+            (("判定标准", "自我豁免", "顶替"),
+             "判定标准：须给出可逐条核对的越界形态（改动对象不在入口工作空间内 / 以『引用过它』"
+             "为由自我豁免 / 转交他人顶替），否则只剩一句口号、无法判定"),
+            (("已知例外", "用户显式声明", "只读"),
+             "已知例外：唯一的解禁情形是用户**显式声明**把该处纳入本次范围，"
+             "且用户声明『只读/禁止改动』优先——不写例外则要么自相矛盾（连用户明说能改的地方"
+             "也不敢改）、要么给『看着办』留口子"),
+            (("拒绝的形态", "拒绝不等于任务失败"),
+             "拒绝的形态：须如实说明依据与需补的声明、其余可做的部分照常完成，"
+             "不得默默照做、也不得只回一句『不能做』就停摆"),
+            (("只读与对照照常做", "不在禁止之列"),
+             "防『拒绝即停摆』的另一面：读取/对照被引用的外部文件不属禁止之列（禁的是改动），"
+             "否则规则会被执行成『引用的东西都不能用』"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"改动范围边界防线被破坏：{rel_g} 缺失要点 {missing}——{desc}；"
+                    "本条对应用户明确要求收窄的执行边界（『引用被误当成授权』），"
+                    "不得删除、不得降级为建议", rel_g)
+    # ② 平台层：CNB 口径仍在（引用方按平台加载时读得到），且明写通用口径在通用层
+    rel_p = "specs/platform/cnb.adoc"
+    path_p = os.path.join(REPO_ROOT, *rel_p.split("/"))
+    if not os.path.isfile(path_p):
+        err(f"缺少文件 {rel_p}——『变更范围只限当前项目』的平台侧口径无处承载", rel_p)
+    else:
+        text = open(path_p, encoding="utf-8").read()
+        for keys, desc in (
+            (("变更范围只限当前项目", "只允许修改当前项目", "入口项目"),
+             "主体禁令：只允许修改当前项目（本次任务的入口项目），越出该项目的改动不得执行"
+             "（须有节名与禁令本身）"),
+            (("未声明即拒绝", "引用 ≠ 授权", "不构成授权"),
+             "未声明即拒绝 + 引用不等于授权（平台侧同口径）"),
+            (("判定标准", "自我豁免", "顶替"),
+             "判定标准（平台侧同口径，须可逐条核对）"),
+            (("例外", "用户显式声明", "只读"),
+             "已知例外（平台侧同口径）"),
+            (("../general/scope.adoc",),
+             "须指向通用层规则本体（只写在平台层的话，非平台场景下读不到这条边界）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"改动范围边界防线被破坏：{rel_p} 缺失要点 {missing}——{desc}；"
+                    "不得删除、不得降级为建议", rel_p)
+    # ③ 提示词侧：prompts/_common.txt 的 scope-boundary 片段 + 两个提示词代码块内引入
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『改动范围边界』无处承载", rel_common)
+    else:
+        common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        block = common.split("tag::scope-boundary[]", 1)[-1].split(
+            "end::scope-boundary[]", 1)[0] if "tag::scope-boundary[]" in common else ""
+        if not block:
+            err(f"{rel_common} 缺少 `scope-boundary` 片段——提示词会被未知项目复制执行，"
+                "漏了这层则复制出去的那份没有这条边界", rel_common)
+        else:
+            for keys, desc in (
+                (("只允许修改本次任务的工作空间", "入口工作空间"),
+                 "主体禁令：只允许修改本次任务的工作空间（入口工作空间）"),
+                (("只允许修改当前项目", "入口项目"),
+                 "平台侧口径：在代码托管平台上按『只允许修改当前项目（入口项目）』表达"
+                 "（提示词会被复制到任意项目执行，两处都要有）"),
+                (("引用 ≠ 授权", "不构成改动它的授权"),
+                 "引用不等于授权：引用了工作空间以外的文件/其他项目只构成读取许可、"
+                 "不构成改动授权"),
+                (("必须拒绝", "依据"),
+                 "拒绝的形态：发现越界须拒绝并说明依据，不得默默照做"),
+                (("显式声明", "只读"),
+                 "已知例外：用户显式声明纳入范围；用户声明『只读/禁止改动』优先"),
+            ):
+                missing = [k for k in keys if k not in block]
+                if missing:
+                    err(f"改动范围边界防线被破坏：{rel_common} 的 `scope-boundary` "
+                        f"片段缺失要点 {missing}——{desc}", rel_common)
+    # 两个提示词代码块内都须引入该片段（少一处则该提示词复制出去后没有这条边界）
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel_pf = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        if "include::_common.txt[tag=scope-boundary]" not in open(f, encoding="utf-8").read():
+            err(f"提示词未引入公共片段 `scope-boundary`——"
+                "『改动范围边界』是该提示词复制到未知项目执行时唯一的边界来源，"
+                "缺了则越界改动无人拦", rel_pf)
+    phase_done()
+
+
+def check_npc_merge_guard():
+    """『NPC 禁合并防线』：NPC/CI 执行者不得合并、且不因人工授权豁免的要点不得被删。
+
+    背景（一条**"用户明确要求也不照做"**的硬约束，最容易被"顺手满足用户"的惯性冲掉）：
+    CNB 平台上的 NPC（CI/CD 环境里被评论唤起的 agent）**严禁合并合并请求**，**即使人工
+    明确要求或直接授权也必须拒绝**。本项目实证反例：曾出现"AI 在对话中被直接授权后实际
+    执行了合并"——**授权被当成豁免**，自动化执行者替人承担了不可逆且合规相关的动作。
+    故把这条的服务侧要求与判定标准钉在公共内容 `specs/platform/cnb.adoc`，并在会被未知
+    项目复制执行的提示词公共片段 `delivery` 里同口径落一条（`prompts/_common.txt`）。
+
+    本防线钉住**七处要点**（每条须同时命中多处要素，否则别处一句同名字样即可假绿——与
+    `check_delegation_guard` / `check_checklist_guard` 同口径）：(a) 主体禁令（CNB NPC
+    严禁合并）；(b) **无豁免**（人工要求/直授也必须拒绝，含"授权不免除该禁令"）；(c)
+    **判定标准**（可逐条核对：执行了合并动作 / 以授权为由豁免 / 转交他人顶替）；(d)
+    **边界**（只禁合并——推送分支/解决分支内冲突/同步目标分支不算合并，不误伤「冲突处理」）；
+    (e) **同文件既有规则不得被新节顶掉**（「分支与合并请求统一」「冲突处理」两节与其判据
+    都须仍在——本轮实测犯过：新增节点把「冲突处理」整段替换掉，规则凭空消失而其余检查
+    全绿）；(f) 提示词公共片段 `delivery` 的同口径 L1 条；(g) 公开提示词入口 `PROMPTS.adoc`
+    的公共约定同步（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条）。
+
+    只钉"要求文本仍在"——"某次是否真的执行了合并"属运行时行为（平台操作记录/评论实际
+    内容），机械无法判定，交人/子 agent 复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("NPC 禁合并防线检查")
+    # (a)-(d) 公共内容侧：specs/platform/cnb.adoc
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『NPC 禁合并』要求无处承载（平台层规范缺失）", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("合并请求的合并主体", "NPC 禁合并", "严禁合并"),
+             "主体禁令：CNB NPC/CI 执行者一律不得合并合并请求（须有节名与禁令本身）"),
+            (("人工要求", "直接授权", "必须拒绝", "授权不免除"),
+             "无豁免：人工明确要求/直接授权也必须拒绝，且写明『授权不免除该禁令』"),
+            (("判定标准", "合并动作", "豁免", "顶替"),
+             "判定标准：须给出可逐条核对的违规形态（执行了合并/以授权为由豁免/转交他人顶替），"
+             "否则只剩一句口号、无法判定"),
+            (("不是合并", "解决冲突", "同步目标分支"),
+             "边界：明确『推送分支/解决分支内冲突/同步目标分支都不是合并』，"
+             "避免与「冲突处理」节的自动解决冲突自相矛盾、也不误伤合法操作"),
+            (("== 分支与合并请求统一", "只能修改同一个分支"),
+             "同文件既有规则不得被新节顶掉（本轮实测犯过：新增节点把「冲突处理」整段"
+             "替换掉，规则凭空消失而 check_specs.py 全绿——文件只是变短、无引用悬空）："
+             "「分支与合并请求统一」须在且含『只能修改同一个分支』"),
+            (("== 冲突处理", "自动解决冲突"),
+             "同文件既有规则不得被新节顶掉：「冲突处理」须在且含『自动解决冲突』"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"NPC 禁合并防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
+                    "本条是『用户明确要求也不照做』的唯一一类操作，最易被『顺手满足用户』冲掉，"
+                    "不得删除、不得降级为建议（L1）", rel)
+    # (e) 提示词公共片段：prompts/_common.txt 的 delivery 片段
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『合并一律不做』无处承载", rel_common)
+    else:
+        common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        block = common.split("tag::delivery[]", 1)[-1].split("end::delivery[]", 1)[0] \
+            if "tag::delivery[]" in common else ""
+        for keys, desc in (
+            (("合并一律不做", "无环境区分"),
+             "公共片段 `delivery` 须含『合并一律不做（L1，无环境区分）』一条"),
+            (("直接授权", "也必须拒绝", "授权不免除"),
+             "公共片段须写明人工直授也必须拒绝、授权不免除（提示词会被复制到未知项目执行）"),
+        ):
+            missing = [k for k in keys if k not in block]
+            if missing:
+                err(f"NPC 禁合并防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 {missing}——"
+                    f"{desc}；提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条禁令",
+                    rel_common)
+    # (f) 公开提示词入口：PROMPTS.adoc 的公共约定
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
+    elif "合并一律不做" not in open(PROMPTS_FILE, encoding="utf-8").read():
+        err(f"{rel_prompts} 的公共约定未同步『合并一律不做（L1）』——"
+            "登记处与实际口径不一致，后来者按登记处读会漏掉这条禁令", rel_prompts)
+    phase_done()
+
+
+def check_comment_dispatch_guard():
+    """『评论唤起新实例防线』：评论即派发入口的要点不得被删或降级。
+
+    背景（用户提出的机制，要求"看可不可以加到 CNB 规范里"）：在 CNB 平台下，**在 Issue 或
+    PR 里新增一条评论、@ 某个 NPC（如 `@CodeBuddy`）、并在评论里说清要求**，即可发起一次
+    新的执行；并**可以要求它使用干净的上下文**。这条对使用者是"怎么派活"的入口说明，
+    但它同时是一处**高风险串接点**——容易被读成"评论里 @ 一下就能绕过派发规则"：既可能
+    被当成"可以点名外部 Agent"的例外（与「不得点名外部 Agent / 外部 NPC」「强制同 Agent」
+    直接冲突——那两条正禁着"用 @提及 外部执行者"这一形态），也可能让执行者跟着整条
+    Issue/PR 的旧结论跑（"用干净上下文"的意义正在于此），还可能被当成"未写清也能自行开工"。
+
+    故本防线钉住**四处要点**（须同时命中该条的多处要素，否则别处一句同名字样即可假绿）：
+      * **平台层** `specs/platform/cnb.adoc`「评论唤起新实例（平台侧的派发入口）」——须有该节，
+        且写明：①评论 + @ + 说清要求 = 一次执行；②**不放宽任何派发约束**（派发判据仍按
+        通用层「派发入口」/`collab` 判）；③**一次评论 = 一次派发、要求须在评论里写清**
+        （未写清不得自行假定开工）；④**"用干净上下文"须显式要求**，且是**要求不是保证**
+        （须如实说明实际上下文范围）；⑤仅点名、没有要求时不构成派发、不得自行开工；
+      * **通用层** `specs/general/collab.adoc`「派发入口」——平台无关的同一机制（"评论即入口"
+        不只在 CNB 成立），含"一次评论 = 一次派发""可要求干净上下文/不等于清约束"；
+      * **加载调度器** `AGENTS_COMMON.adoc`——两处识别特征须在（否则该节永远不会被加载：
+        多 agent 协作条目含"评论唤起新实例"、CNB 平台条目含"在 Issue/PR 里发评论 @ 某个
+        NPC 发起一次执行"）；
+      * **公开说明同步** `README.adoc` 的目录说明须让读者知道这条存在。
+
+    只钉"要求文本仍在、口径未被放宽"——"某次派发是否真的按评论里的要求执行、是否真的用了
+    干净上下文"属运行时行为（评论内容与执行者的实际读取范围），机械无法判定，交人/子 agent
+    复核；但"允许点名外部 Agent 的例外口径被塞进来"必须拦住。
+    """
+    phase("评论唤起新实例防线检查")
+    # ① 平台层：CNB 的派发入口一节与四处要点
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『评论唤起新实例』的平台侧口径无处承载", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("评论唤起新实例（平台侧的派发入口）",),
+             "须有该节（平台侧的派发入口：评论 + @ + 说清要求 = 发起一次执行）"),
+            (("新增一条评论", "说清要求"),
+             "入口形态：在 Issue/PR 下新增一条评论、@ 某个 NPC 并说清要求"),
+            (("不放宽任何派发约束", "collab.adoc"),
+             "边界：本条只讲『往哪派』，不放宽任何派发约束、也不构成『可以点名外部 Agent』的"
+             "例外（否则与『不得点名外部 Agent / 外部 NPC』『强制同 Agent』直接冲突）"),
+            (("一次评论 = 一次派发", "评论里写清", "不得自行假定"),
+             "任务边界：一次评论 = 一次派发，要求须在评论里写清（目标/边界/产物形态/验证口径），"
+             "未写清不得自行假定后开工"),
+            (("干净上下文", "显式要求", "沿用该 Issue/PR 的既有上下文"),
+             "『用干净上下文』：默认沿用既有上下文，须在评论里**显式要求**才生效（写成默认即失真）"),
+            (("规范仍须按入口重新加载", "不清约束"),
+             "干净上下文只清历史对话、不清约束（规范须重新按入口加载）——否则会被执行成"
+             "『上下文干净了所以不用再读规范』"),
+            (("要求不是保证", "如实说明本次实际读到的上下文范围"),
+             "可核对性：『要求干净上下文』属降低风险的措施、不是保证，须如实说明实际上下文范围"),
+            (("唤起不等于自动开工", "只有寒暄"),
+             "仅 @ 一下/只有寒暄不构成派发，不得据此自行开工（防『@ 一下就开始乱改』）"),
+            (("仅作举例",),
+             "平台层正文里的具体实例名须显式标注为本仓库举例，"
+             "防被未知项目照抄成通用要求"),
+            (("缺项", "列出缺失项"),
+             "要求缺项/判据不满足时须回复拒绝并列出缺失项、留证落在该条评论下"),
+            (("不豁免任何派发判据",),
+             "『干净上下文』不豁免任何派发判据（写清这一句才能拦住『我要求了干净上下文所以不用照判据』）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"评论唤起新实例防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
+                    "本条是用户明确要求收录的派发入口说明，不得删除、不得降级为建议",
+                    rel)
+    # ② 通用层：平台无关的同一机制
+    rel_c = "specs/general/collab.adoc"
+    path_c = os.path.join(REPO_ROOT, *rel_c.split("/"))
+    if not os.path.isfile(path_c):
+        err(f"缺少文件 {rel_c}——『派发入口』的通用侧口径无处承载", rel_c)
+    else:
+        ctext = open(path_c, encoding="utf-8").read()
+        for keys, desc in (
+            (("== 派发入口（往哪派、派什么）",),
+             "通用层须有「派发入口」节（『评论即入口』不只在一个平台上成立）"),
+            (("评论", "@", "即在该任务单下新增一次执行"),
+             "机制本体：评论 + 点名 + 说清要求 = 一次执行（平台无关表述）"),
+            (("不豁免本文件的任何派发判据",),
+             "边界：该入口不豁免本文件的任何派发判据（同 Agent 强制、钉定对象、硬超时一律照判）"),
+            (("一次评论 = 一次派发", "不得自行假定"),
+             "任务边界：一次评论 = 一次派发、要求须写清、未写清不得自行假定后开工"),
+            (("干净上下文", "不清约束", "环境能力"),
+             "『用干净上下文』：可要求、须自评环境能力、且只清历史对话不清约束"),
+            (("不豁免本文件任何派发判据", "不意味着"),
+             "『干净上下文』不豁免任何派发判据、也不意味着连本次对象钉定都要另取一套"
+             "（两种误读都要在文本里被消解）"),
+            (("派发者", "不是\"执行者\"的手段", "不得自行发一条评论"),
+             "执行者不得自行发评论唤起另一个 Agent/NPC 接手自己的活"
+             "（那是点名外部 Agent 的禁止形态，且会让任务挂起）"),
+            (("写清", "缺项", "不得开工"),
+             "要求缺项/判据不满足时须在原评论下回复拒绝并列出缺失项，不得开工、"
+             "也不得拿『他没写清』当擅自扩大范围的挡箭牌（防把入口读成无限授权）"),
+            (("留证落点", "评论下的回复"),
+             "留证落点须写明（该条评论下的回复）——否则事后无法核对是否合规"),
+            (("一条评论 = 一次派发", "N 次派发"),
+             "计数口径：一条评论 = 一次派发；同一任务单下另起一条评论即另一次派发；"
+             "一条评论点名多个对象按对象个数计 N 次（防与调用量控制口径打架）"),
+            (("评论不是交付", "文件操作强制检查"),
+             "入口边界：发评论不等于完成/不等于可以改文件，改动仍按本任务自己的范围与规范判"),
+        ):
+            missing = [k for k in keys if k not in ctext]
+            if missing:
+                err(f"评论唤起新实例防线被破坏：{rel_c} 缺失要点 {missing}——{desc}", rel_c)
+    # ③ 加载调度器：两处识别特征（缺则规则写了也不会被加载）
+    rel_g = "AGENTS_COMMON.adoc"
+    if not os.path.isfile(GENERIC_FILE):
+        # 该抓手以"本仓库文本"为核对对象；若被当作通用工具取用、仓库里没有入口与 README，
+        # 则**跳过并显式提示**（不报错、不改判据）——不得把"没读到"静默当成"通过"。
+        detail("  跳过：未找到 AGENTS_COMMON.adoc / README.adoc，"
+               "『评论唤起新实例』的调度器识别特征与公开说明未校验（不代表通过）")
+    if os.path.isfile(GENERIC_FILE):
+        gtext = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("派发入口（评论唤起新实例：",),
+             "多 agent 协作条目须含『派发入口（评论唤起新实例：…）』识别特征"
+             "（否则该入口的通用口径永远不会被加载）"),
+            (("cnb.adoc", "在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行"),
+             "CNB 平台条目须含『在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行』识别特征"
+             "（否则平台侧口径永远不会被加载）"),
+        ):
+            missing = [k for k in keys if k not in gtext]
+            if missing:
+                err(f"评论唤起新实例防线被破坏：{rel_g} 缺失要点 {missing}——{desc}", rel_g)
+    else:
+        err(f"缺少文件 {rel_g}——加载调度器缺失，评论唤起口径不会被加载", rel_g)
+
+    # ④ 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "评论唤起" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『评论唤起新实例』——"
+            "本条新增了平台侧派发入口，读者按 README 学习时无从知道有这条规则",
+            rel_readme)
+    phase_done()
+
+
+def check_squash_commit_guard():
+    """『压缩提交防线』：用户要求"压缩提交"时的判据、禁止形态与新旧 sha 对应关系不得被删。
+
+    背景（一个**被"AI 不许强推/不许改写历史"的一般口径误伤**的合规动作）：用户明确要求
+    "压缩提交"时，执行者**应当照做**——那是提交历史整理、不是合并，也不是越界；但本仓库
+    既有体系里有三处容易被读成"不许做"的地方（`specs/general/git.adoc` 的提交历史整理、
+    `specs/platform/cnb.adoc`「对象钉定与可追溯」把压缩提交与强推并列成"会替换对象"的
+    风险来源、以及 `prompts/_common.txt` `delivery` 片段的推送口径），且压缩必然需要覆盖
+    远端推送。故把这条写成**可执行的判据**：压什么、不压什么、先确认什么、用哪种推送、
+    压完必须声明什么——否则执行者只能在"用户要求"与"规范像是禁止"之间自行发挥（实测：
+    本项目 PR #64 上用户要求"压缩提交"，此前该场景无任何条文，只能靠临场判断）。
+
+    本防线钉住**六处要点**（与 `check_npc_merge_guard` 同口径，每条须同时命中多处要素，
+    否则别处一句同名字样即可假绿）：(a) 节在（平台层须有「压缩提交」一节，含触发语）；
+    (b) **判据**（对象只限本次任务尚未合入的临时中间提交、内容零变化、只动本条 PR 的源分支）；
+    (c) **禁止形态**（他人提交/已合入目标分支的历史/内容出现差异/借机扩范围）；
+    (d) **先确认无人在用旧对象**（派发/复核钉定的旧 sha 会作废）；
+    (e) **推送用 `--force-with-lease`**、不得用裸 `--force`，且写明"AI 不做强推"的一般
+    口径**不适用于本条压缩提交**；并须写明**与「NPC 禁合并」互不豁免**（压缩提交不是合并，
+    但也不构成"可以合并"的依据）；
+    (f) **压缩后须声明新旧 sha 对应关系**（旧 sha 结论标为过期），且在「对象钉定与可追溯」
+    一侧须把"压缩提交后强推"标为**合规动作**（否则下游会把合规的 sha 变化当成违规改写）；
+    另须在调度器与 README 两处登记同步（缺则该节永远不会被加载/找不到）。
+
+    只钉"要求文本仍在"——"某次压缩是否真的内容零变化、是否真没人基于旧 sha 工作"属运行时
+    事实（git 记录、派发记录），机械无法判定，交人/子 agent 复核；但"要求被抽掉/被降级成
+    建议"必须拦住。
+    """
+    phase("压缩提交防线检查")
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『压缩提交』要求无处承载（平台层规范缺失）", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("== 压缩提交", "压缩提交＝提交历史整理", "不属禁止行为"),
+             "节与定性：平台层须有「压缩提交」一节，且写明它属提交历史整理、不是禁止行为"
+             "（否则执行者只能在『用户要求』与『像是禁止』之间临场发挥）"),
+            (("尚未合入目标分支的临时中间提交", "内容零变化", "逐字节相同"),
+             "判据：对象只限本次任务尚未合入目标分支的临时中间提交、压缩前后内容逐字节相同"
+             "（否则压缩会变成夹带改动的通道）"),
+            (("只作用于本次任务自己的 PR 源分支", "不动目标分支"),
+             "作用域：只动本次任务自己的 PR 源分支，不动目标分支、不动他人分支"),
+            (("禁止的压缩形态", "他人（或其它任务）的提交", "已合入目标分支", "扩大范围"),
+             "禁止形态：他人提交/已合入目标分支的历史/内容出现差异/借『压缩提交』扩范围"
+             "（缺则最危险的几条形态无判据可依）"),
+            (("须先确认无人在用旧对象", "确认**无他人正基于该分支的旧 sha 工作**",
+              "已派发、正等待结论", "标为过期"),
+             "先确认：压缩会 force push，执行前须确认无他人正基于旧 sha 工作（已派发/等待结论），"
+             "确需执行须告知并可把旧结论标为过期（**四条关键词须同时命中**——只留标题即被拦："
+             "实测初版只钉'确认'与'标为过期'两句，把整条改写成「附注」这类不含关键词的写法即可绕过）"),
+            (("--force-with-lease", "不得**用裸 `git push --force`"),
+             "推送口径：须写明用 `--force-with-lease`（带租约的强推）、不得用裸 `--force`"),
+            (("一般口径**不适用于本条的压缩提交", "授权范围仅限本次 PR 的源分支"),
+             "与一般口径的关系：须写明『AI 不做强推』的一般口径**不适用于本条压缩提交**，"
+             "且授权范围仅限本次 PR 的源分支（否则执行者会以『不许强推』为由拒绝用户的压缩要求）"),
+             (("与「NPC 禁合并」互不豁免", "压缩提交**不是合并**", '不构成\"可以合并\"的依据'),
+             "与「NPC 禁合并」的接口：须写明压缩提交不是合并、照做；但其也不构成『可以合并』"
+             "的依据（两节目的一处被删，就会出现『历史都整理干净了，顺手合了吧』式的自我豁免）"),
+            (("压缩后须声明新旧 sha 对应关系", "新 sha 为 X，旧 sha Y 作废",
+              "按旧 sha 复核的结论视为过期", "被压缩掉的中间 sha"),
+             "对应关系声明：压缩后须写明新旧 sha 对应关系、旧 sha 上的复核结论视为过期"
+             "（否则下游按已失效的 sha 复核，结论错位——本仓库已有这类实证）"),
+            (("那是**合规动作、不是违规改写**",),
+             "对象钉定侧口径：『压缩提交后强推』须在「对象钉定与可追溯」一侧被标为合规动作，"
+             "否则下游会把合规的 sha 变化当成违规改写历史"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"压缩提交防线被破坏：{rel} 缺失要点 {missing}——{desc}；本条是用户可明确"
+                    "要求、执行者应当照做的合规动作，不得删除、不得降级为建议（L1）", rel)
+        # (g) 同文件既有「NPC 禁合并」不得被顶掉（两节相邻、最易在改写时互相吃掉）
+        for keys, desc in (
+            (("== 合并请求的合并主体（NPC 禁合并）", "严禁合并", "授权不免除"),
+             "「NPC 禁合并」须与本节并存（压缩提交不是它、也不能顶掉它）"),
+            (("== 对象钉定与可追溯", "压缩提交/强推会替换对象"),
+             "「对象钉定与可追溯」须仍在且保留压缩提交/强推的对应关系条文"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"压缩提交防线被破坏：{rel} 缺失既有要点 {missing}——{desc}", rel)
+    # (h) 调度器与 README 登记同步（缺则该节永远不会被加载 / 按目录说明读会漏掉）
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
+    elif "**压缩提交（" not in open(common_path, encoding="utf-8").read():
+        err(f"{rel_common} 的 CNB 平台加载项未同步『压缩提交』识别特征——"
+            "缺则该节永远不会被加载（规则在、但没人会读到）", rel_common)
+    rel_readme = "README.adoc"
+    readme_path = os.path.join(REPO_ROOT, rel_readme)
+    if not os.path.isfile(readme_path):
+        err(f"缺少 {rel_readme}——目录说明无从核对", rel_readme)
+    else:
+        readme = open(readme_path, encoding="utf-8").read()
+        for keys, desc in (
+            (("**压缩提交（提交历史整理",), "目录说明须同步『压缩提交』一节"),
+            (("压缩提交要照做、合并仍不做",),
+             "使用要点须写明『压缩提交要照做、合并仍不做』（否则公开面只看得见‘禁止’、"
+             "看不到用户可要求的这条）"),
+        ):
+            missing = [k for k in keys if k not in readme]
+            if missing:
+                err(f"压缩提交防线被破坏：{rel_readme} 缺失要点 {missing}——{desc}",
+                    rel_readme)
+    phase_done()
+
+
+def check_merge_relationship_guard():
+    """『合并关系防线』：压缩/解决冲突后，**目标分支仍须是本分支的祖先**。
+
+    背景（一次**工作树看不出、平台必拦**的真实失效）：本仓库某 PR 上用户要求"解决冲突、
+    压缩提交"，上一轮执行者把 main 的内容**照抄进工作树、另起了一个单亲提交**——
+    `git diff` 看起来与 main 一致、工作区也没有未提交改动，于是汇报"已含 main 全部改动、快进式并入"；
+    但**目标分支并未成为本分支的祖先**（`git rev-list --parents -n1` 只显示一个父提交、
+    `git merge-base --is-ancestor <目标分支> <本分支>` 为假）。**平台侧据合并关系（而非工作树
+    差异）判定**，故 PR 仍卡在 `code_conflict`、用户第三次追问"依旧有冲突"。
+
+    为什么必须成抓手：这类坏形态**没有任何一处本地可见的异常**——工作树一致、`git diff` 无输出、
+    单测全绿、甚至 `check_effective` 也照过；唯一的判据是**历史拓扑**（祖先关系 / 合并提交的双亲），
+    而这种判据最容易被顺手"整理掉"（用户要求压缩提交时，把合并提交一并压掉，凭据随之消失）。
+    故把"须保留合并关系"写成 L1 并用本防线钉住其**判据句与根因句**。
+
+    本防线钉住两处（缺一即报）：
+    (a) 平台层「压缩提交」节须有 **L1「压缩须保留与目标分支的合并关系」**，且写明可核对的判据
+        （`git merge-base` 等于目标分支最新提交 / `git merge --no-ff` 保留双亲=合并提交）；
+    (b) 须写明**根因形态**（"照抄目标分支文件内容后另起单亲提交"）与**压缩不吞掉合并提交**
+        （合并提交是"已并入"的凭据，不是可压掉的临时提交）——否则条文会被读成"只要工作树
+        一致即可"，正是本条要拦的失效。
+
+    只钉"要求文本仍在"——"某次合并是否真的建了双亲关系"属运行时事实（git 记录），机械无法
+    在静态文本上判定，交人/子 agent 用 `git merge-base --is-ancestor` 与 `git rev-list --parents`
+    复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("合并关系防线检查")
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『合并关系』要求无处承载（平台层规范缺失）", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for keys, desc in (
+            (("压缩须保留与目标分支的合并关系", "须仍以目标分支的最新提交为祖先"),
+             "L1 与判据：平台层「压缩提交」节须有『压缩须保留与目标分支的合并关系』一条，"
+             "并写明『须以目标分支最新提交为祖先』这一可核对判据"
+             "（删除或降级则『照抄内容后另起单亲提交』的失效复发、PR 卡 conflict）"),
+            (("git merge-base <分支> <目标分支>", "git rev-list --parents -n1"),
+             "可核对判据：须给出祖先关系与双亲的核对命令（`git merge-base` / `git rev-list --parents`），"
+             "让『已并入』这件事可被机械核对、而不是只靠工作树差异宣称"),
+            (("照抄目标分支的文件内容后另起一个单亲提交", "目标分支并未成为本分支的祖先"),
+             "根因形态：须写明真实失效（照抄目标分支文件内容后另起单亲提交→目标分支不是祖先→"
+             "平台仍报冲突），否则条文会被读成『工作树一致即可』——正是本条要拦的失效"),
+            (("git merge-base --is-ancestor <目标分支> <分支>"),
+             "假绿的判据：须写明 `--is-ancestor` 为假这一判据（工作树一致、`git diff` 无输出时"
+             "唯一能看出问题的信号，缺则防线看不到坏形态）"),
+            (("不吞掉合并提交", "合并提交是\"已并入\"的凭据"),
+             "与压缩的接口：须写明压缩**不吞掉合并提交**（合并提交是『已并入』的凭据、不是可压掉的"
+             "临时提交），否则『用户要求压缩』会把唯一凭据一并压掉"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"合并关系防线被破坏：{rel} 缺失要点 {missing}——{desc}；本条是"
+                    "『解决冲突/压缩后目标分支仍须是本分支的祖先』的底线，不得删除、"
+                    "不得降级为建议（L1）", rel)
+
+DELIVERY_GUARD_KEYS = (
+    (("报告落点", "过程性叙述", "不得作为独立的一条评论", "答非所问"),
+     "报告落点：过程性叙述不得作为独立评论发出（本轮实测失效：唯一对外的输出就是一条过程性废话）"),
+    (("结果与结论", "汇总成一次完整汇报", "一条评论"),
+     "结论须汇总成一次完整汇报（平台上即一条评论），不得用零散评论代替"),
+    (("没有提交即等于没有交付", "有改动却没提交也没推送", "没有改动却没说明"),
+     "交付形态两态都要有判据：有改动却没交付、无改动却没说明，两者都属交付失败"),
+    (("提交并推送到 PR 分支", "创建 PR", "只提交不推送"),
+     "自动化场景的交付形态须写明『提交并推送到 PR 分支 + 创建 PR』（两者缺一不可）"),
+    (("输出通道只有两条", "除这两条之外的任何中间话一律不发", "第三条通道"),
+     "报告落点须写死**输出通道数**（两条：最终汇报 / 必须停下确认）并写明"
+     "『除这两条之外的任何中间话一律不发』——旧文只说『例外只有必须停下确认这一种』、"
+     "**没说其余一律不发**，执行者就把『我认定这属于必要的说明』当成第三条通道、"
+     "判据回到执行者手里，与本条要防的失效同形（L1）"),
+)
+
+
+def check_delivery_guard():
+    """『交付形态与报告落点防线』：不得中途冒过程性叙述、不得只交付不汇报。
+
+    背景（本项目实测失效，用户直接问责）：一轮 NPC 任务（CNB 评论唤起）**唯一对外的
+    输出是一句过程性叙述**——"Now let me check whether there's a … check … and validate
+    my findings with actual experiments."——**既不是汇报、也没有任何提交**，发起人只看到
+    一句莫名其妙的话。这类失效在提示词层面**拦不住**：旧版 `delivery` 片段只写"有改动
+    必须提交推送"，**没写"当次无改动也算完成态"**，恰恰漏掉它要治的那一种（有改动却
+    没交付）；也**没有任何一条**规定"过程性叙述不得作为评论发出去"。而提示词会被未知
+    项目复制执行，失效面比本仓库大得多，故把这两条钉进**公共片段**（一处维护、两处生效）
+    并加机械防线：
+
+      * **报告落点**（过程性叙述不得作为独立评论发出；结论汇总成一次完整汇报）；
+      * **交付形态两态**（有改动却没交付 / 无改动却没说明，两者都属交付失败）；
+      * **自动化场景的交付形态**（提交并推送到 PR 分支 + 创建 PR 缺一不可）；
+      * 两个任务提示词代码块内**各有一条"交付即汇报"步骤**（`prompts/*.adoc`，题面侧）；
+      * 登记处同步（`PROMPTS.adoc` 的公共约定、`README.adoc` 的使用要点）——提示词会被
+        未知项目复制执行，登记处漏了这层，公开面就看不到这条边界。
+
+    只钉"要求文本仍在"——"某次是否真的只发了一句废话、是否真的漏了提交"属运行时行为
+    （评论内容与推送记录），机械无法判定，交人/子 agent 复核；但"要求被抽掉"必须拦住。
+    """
+    phase("交付形态与报告落点防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『交付形态与报告落点』无处承载", rel_common)
+        phase_done()
+        return
+    common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+    block = common.split("tag::delivery[]", 1)[-1].split("end::delivery[]", 1)[0] \
+        if "tag::delivery[]" in common else ""
+    if not block:
+        err(f"{rel_common} 缺少 `delivery` 片段——交付形态与报告落点失去落点", rel_common)
+    else:
+        for keys, desc in DELIVERY_GUARD_KEYS:
+            missing = [k for k in keys if k not in block]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 "
+                    f"{missing}——{desc}；本条对应用户报告的真实失效（一轮任务只冒了一句"
+                    "过程性废话、没有任何提交），不得删除、不得降级为建议", rel_common)
+    # 题面侧：两个提示词各须有"交付即汇报"步骤（片段证不了题面）
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        text = open(f, encoding="utf-8").read()
+        for keys, desc in ((("9. 交付即汇报", "有改动", "没有交付",
+                             "输出通道只有两条", "任何中间话一律不发"),
+                            "代码块内须有一条『交付即汇报』步骤、且写明**输出通道只有两条**"
+                            "（最终汇报 / 必须停下确认）与『此外任何中间话一律不发』"
+                            "（否则题面侧仍允许『只交付不汇报』『只冒一句、没有交付』，"
+                            "以及执行者自行认定『这属于必要的说明』的第三条通道）"),):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # 登记处：公开面（提示词入口与 README 使用要点）
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
+    else:
+        ptext = open(PROMPTS_FILE, encoding="utf-8").read()
+        for keys, desc in ((("交付即汇报", "过程性叙述", "没有改动却没说明",
+                             "输出通道只有两条", "除这两条之外的任何中间话一律不发"),
+                            "公共约定须同步『交付即汇报 + 输出通道只有两条 + "
+                            "过程性叙述不得作为评论发出 + 无改动须显式说明』"
+                            "（提示词会被未知项目复制执行，漏了这层"
+                            "则复制出去的那份没有这条边界）"),
+                           (("题目与片段的改动边界", "不扩大题面",
+                             "不得在两个提示词里各写一遍"),
+                            "维护约定须写明改动的边界：改题面属新版本，而『补片段缺口/补 "
+                            "include』只补片段与引用、不扩大题面、对已在执行的任务同样成立")):
+            missing = [k for k in keys if k not in ptext]
+            if missing:
+                err(f"交付形态与报告落点防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
+                    rel_prompts)
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rtext = open(README_FILE, encoding="utf-8").read()
+        missing = [k for k in ("过程性叙述", "不得作为独立评论发出去", "却没有任何提交",
+                               "输出通道只有两条", "除这两条之外的任何中间话一律不发")
+                   if k not in rtext]
+        if missing:
+            err(f"交付形态与报告落点防线被破坏：{rel_readme} 的使用要点缺失 {missing}——"
+                "公开面看不到『不得只冒一句话、不得只交付不汇报』这条边界", rel_readme)
+    phase_done()
+
+
+# 『提示词取值路径与装配状态防线』要点（须同时命中多处要素，否则别处一句同名字样即可假绿）
+PROMPT_SURFACE_GUARD_KEYS = (
+    (("查看与复制方式", "按取值路径判断", "只在 AsciiDoc 处理器", "不是"),
+     "公共片段须给出取值路径的判据（『按取值路径判断、不按渲染视图这个印象』＋"
+     "『include 只在处理器解析时展开』），否则执行者只能靠印象推断是否要补齐"),
+    (("经处理器装配过的内容", "未经处理器装配的内容"),
+     "两类取值路径须分列：装配过的（IDE 预览 / asciidoctor / 站点页面内渲染）与"
+     "未装配的（远程原始文件地址 / 本地读取）"),
+    (("逐字节一致", "直出"),
+     "未装配一侧须写明实证（远程原始文件地址与工作区逐字节一致、站点对非 HTML 直出仓库字节），"
+     "否则后来者仍会按『站点 = 渲染视图』推断"),
+    (("不得", "当成取用时的事实", "原始文件地址与本地文件都不会装配"),
+     "须有禁止式表述：不得把『站点/渲染视图已展开』当成取用时的事实（本条对应用户指出的"
+     "既有偏差：原表述与两条取值路径都不吻合）"),
+    (("本地读本文件", "等价"),
+     "须写明『远程读本文件与本地读它等价、都未装配』——防把它读成『一份装配好的、"
+     "一份没装配的』"),
+)
+
+# 图书馆侧的同一判据（本轮用户确认一并修复）：站点直链同为未装配的仓库字节，
+# 不得让读者按「站点 = 渲染视图」推断图书馆被装配过。
+PROMPT_SURFACE_LIBRARY_FILES = ("library/README.adoc", "library/usage.adoc", "library/sources.adoc")
+
+PROMPT_SURFACE_LIBRARY_KEYS = (
+    (("未经处理器装配的仓库字节", "index.html", "正文区"),
+     "图书馆入口的取值形态须写明『站点直链是未经处理器装配的仓库字节、页面内装配只发生在 "
+     "index.html 正文区』，并指向提示词侧的同一判据（不得按『站点 = 渲染视图』推断）"),
+    (("未经装配的仓库字节",),
+     "图书馆用法文档的「入口」一步须写明直链取到的是未经装配的仓库字节"),
+    (("未经处理器装配的仓库字节", "逐字节一致"),
+     "图书馆依据文档的取用侧实测记录须写明直链取到的是未经处理器装配的仓库字节、且逐字节一致"),
+)
+
+PROMPT_SURFACE_PROMPT_KEYS = (
+    (("给 AI 的读取说明", "内容有没有被 AsciiDoc 处理器装配过"),
+     "各提示词的读取说明须按『内容是否被处理器装配过』判定（不得按『像不像渲染过的页面』）"),
+    (("原始文件", "不会被展开", "补齐"),
+     "读取说明须写明：取到原始文件（远程原始文件地址、本地直接读）时指令不展开、须先补齐"),
+    (("不得", "渲染视图", "跳过补齐"),
+     "须有禁止式表述：不得以『这是站点的渲染视图、片段已展开』为由跳过补齐"),
+)
+
+
+def check_prompt_delivery_surface_guard():
+    """『提示词取值路径与装配状态防线』：取值口径不得退回与实测不符的印象式说法。
+
+    背景（用户指出的既有偏差，本轮单开一条处理）：提示词正文与 `PROMPTS.adoc` 长期写着
+    "以渲染视图查看时 `include::` 已展开、内容完整"。但这句**与两条实际取值路径都不吻合**：
+
+      * 站点**原始文件地址**（`https://agent.c332030.com/prompts/review.adoc`）直出的是
+        **仓库字节**、`include::` 仍在（实测与工作区**逐字节一致**，review 的 `include::` 字样 10 处、
+        其中代码块内真正的引用指令 9 条（1 处是读取说明里作字面示例的写法）；`_common.txt` 4 处字样）；站点上真正装配过的只有 `index.html` **页面内**由 Asciidoctor.js 解析后
+        写进正文区的 HTML；
+      * 本地/工作区直接读文件同理不会装配。
+
+    而**推断"这是渲染视图所以已展开"恰恰是本仓库实证过的失效**（上一轮把站点原始文件地址
+    当"渲染视图"、据此以为内容完整），且提示词会被未知项目复制执行，读错就会跳步、漏掉
+    公共片段里的边界（如 `delivery` / `scope-boundary`）。故把口径改成**按取值路径判断**，
+    并加机械防线钉住要点与"与实测一致"的证据字样：
+
+      * 公共片段 `prompts/_common.txt` 的「查看与复制方式」两侧分列 + 逐字节实证 + 禁止式表述；
+      * 各任务提示词的「给 AI 的读取说明」按"是否被处理器装配过"判定（题面侧，片段证不了）；
+      * 公开提示词入口 `PROMPTS.adoc` 的「取值路径与装配状态」表与两条判据（L1 实证话术、
+        L2 配图与判据一致）；
+      * 项目规范入口 `AGENTS.adoc` 的提示词条同步提到取值路径（维护方侧要知道这条存在）。
+
+    只钉"口径与证据文本仍在"——"某次取值实际是否装配过"属运行时事实（取值路径与文件
+    内容），机械无法判定，交人/子 agent 用 `curl` 原始文件地址逐字节比对复核；但"退回
+    印象式说法"必须拦住。
+    """
+    phase("提示词取值路径与装配状态防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——取值路径与装配状态无处承载", rel_common)
+    else:
+        common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        for keys, desc in PROMPT_SURFACE_GUARD_KEYS:
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel_common} 缺失要点 {missing}——{desc}；"
+                    "本条对应用户指出的既有偏差（原表述与两条实际取值路径都不吻合），"
+                    "不得退回『渲染视图下已展开』这类与路径绑不上的笼统说法", rel_common)
+    # 题面侧：每个提示词的读取说明（片段证不了题面）
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        text = open(f, encoding="utf-8").read()
+        for keys, desc in PROMPT_SURFACE_PROMPT_KEYS:
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # 登记处：公开提示词入口（表 + 两条判据）
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——取值路径与装配状态无处登记", rel_prompts)
+    else:
+        ptext = open(PROMPTS_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("取值路径与装配状态", "已装配", "未装配"),
+             "入口须有『取值路径与装配状态』节并给三行判据表（IDE/asciidoctor/站点页面内 = 已装配；"
+             "远程原始文件地址、本地读取 = 未装配）"),
+            (("不是三种", "不同取值路径"),
+             "须写明三类是同一份文件的不同取值路径、不是三种『版本的提示词』"
+             "（防把未展开读成内容缺失/旧版）"),
+            (("站点直链 = 仓库字节", "index.html"),
+             "须有 L1 条：站点直链（非 HTML 文件）直出原文、与站点发布分支的同名文件逐字节一致，"
+             "站点上存在装配形态的只有 index.html 自己的正文区（『站点』不等于『已装配』）"),
+            (("实证与话术", "不得", "与路径绑不上"),
+             "须有 L1 条：描述取值路径须与实际抽样一致、不得留下『渲染视图下已展开』这类"
+             "与路径绑不上的笼统说法"),
+        ):
+            missing = [k for k in keys if k not in ptext]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
+                    rel_prompts)
+    # 图书馆侧：同一判据（本轮用户确认一并修复）
+    for rel_lib, keys, desc in (
+        (PROMPT_SURFACE_LIBRARY_FILES[0], PROMPT_SURFACE_LIBRARY_KEYS[0][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[0][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[1], PROMPT_SURFACE_LIBRARY_KEYS[1][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[1][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[2], PROMPT_SURFACE_LIBRARY_KEYS[2][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[2][1]),
+    ):
+        lib_path = os.path.join(REPO_ROOT, rel_lib)
+        if not os.path.isfile(lib_path):
+            err(f"缺少图书馆文件 {rel_lib}——图书馆侧的取值路径口径无处承载", rel_lib)
+            continue
+        ltext = open(lib_path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in ltext]
+        if missing:
+            err(f"提示词取值路径防线被破坏：{rel_lib} 缺失要点 {missing}——{desc}", rel_lib)
+
+    # 维护方入口：AGENTS.adoc 的提示词条须带上取值路径与抓手名
+    rel_agents = os.path.relpath(PROJECT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROJECT_FILE):
+        err(f"缺少项目规范入口 {rel_agents}——维护方无处知道这条防线", rel_agents)
+    else:
+        atext = open(PROJECT_FILE, encoding="utf-8").read()
+        missing = [k for k in ("取值路径", "check_prompt_delivery_surface_guard")
+                   if k not in atext]
+        if missing:
+            err(f"提示词取值路径防线被破坏：{rel_agents} 缺失要点 {missing}——"
+                "维护方入口须登记该口径与具名抓手（否则后来者无从知道这条存在）", rel_agents)
+    phase_done()
+
+def main(argv=None) -> int:
+    """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
+
+    参数：`-v/--verbose` 打开逐文件进度日志（默认只打阶段级进度与最终结论）。
+    """
+    global VERBOSE
+    parser = argparse.ArgumentParser(
+        description="本规范集合的完整性机械校验（引用/链接/节名/栈登记/调度器/私有约定/"
+                    "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
+                    "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
+                    "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作/"
+                    "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + AsciiDoc 语法）")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
+    args = parser.parse_args(argv)
+    VERBOSE = args.verbose
+
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
     print()
@@ -547,7 +4820,45 @@ def main():
     check_forbidden_patterns()
     check_historical_notes()
     check_install_codeblock()
+    check_filler_docs()
     check_principle_guard()
+    check_priority_guard()
+    check_spec_admission_guard()
+    check_self_check_guard()
+    check_git_mv_selfcheck()
+    check_budget_guard()
+    check_delegation_guard()
+    check_verify_guard()
+    check_lifecycle_guard()
+    check_adoption_guard()
+    check_ci_cd_guard()
+    check_no_mechanism_claims_in_public()
+    check_public_facing_docs_stay_self_contained()
+    check_source_guard()
+    check_line_ending_guard()
+    check_java_test_naming()
+    check_library_guard()
+    check_library_locating_guard()
+    check_ref_scope_wording_guard()
+    check_changelog_entry_guard()
+    check_quote_line_guard()
+    check_dependency_view_guard()
+    check_index_page_guard()
+    check_public_content_coverage()
+    check_prompts_primary()
+    check_env_marker_guard()
+    check_npc_merge_guard()
+    check_squash_commit_guard()
+    check_merge_relationship_guard()
+    check_scope_boundary_guard()
+    check_config_class_guard()
+    check_abstraction_adoption_guard()
+    check_reuse_precedent_guard()
+    check_external_script_guard()
+    check_comment_dispatch_guard()
+    check_delivery_guard()
+    check_prompt_delivery_surface_guard()
+    check_checklist_guard()
     check_asciidoctor_syntax()
 
     print()
@@ -555,10 +4866,11 @@ def main():
         log(f"发现 {len(errors)} 个规范性问题：")
         for e in errors:
             print("  - " + e)
-        sys.exit(1)
+        return 1
     log("OK 规范检查全部通过。")
-    sys.exit(0)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+
