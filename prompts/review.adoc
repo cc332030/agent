@@ -8,7 +8,7 @@
 
 将下方代码块内的文字**完整原样**复制给 AI 作为任务指令。
 
-**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `scope-boundary` / `baseline` / `final-verify` / `delivery`）组装。若你读到的是**文本形式**、其中 `include::_common.txt[tag=…]` 指令**未被展开**，请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**——不得因指令未展开就跳步或漏掉公共步骤。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
+**给 AI 的读取说明（保证内容完整，先做）**：正文由 link:_common.txt[] 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `scope-boundary` / `baseline` / `final-verify` / `delivery`）组装。**判据是"内容有没有被 AsciiDoc 处理器装配过"，不是"看起来像不像渲染过的页面"**：取到**原始文件**（远程原始文件地址、本地/工作区直接读文件）时 `include::_common.txt[tag=…]` 指令**不会被展开**，看到该指令即说明**尚未装配**——请**先读取同目录的 link:_common.txt[]（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**，不得因指令未展开就跳步或漏掉公共步骤；**不得**以"这是站点的渲染视图、片段已展开"为由跳过补齐（站点上只有页面内渲染出的 HTML 装配过，**原始文件地址与本地文件都不会装配**；远程读本文件与本地读它等价、都未装配）。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
 
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『检查修复问题』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
