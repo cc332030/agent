@@ -156,18 +156,14 @@
      （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
      **性能敏感路径每次读取本可只读一次的资源**）。
 
- 35. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
-     （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
-     按资源读取后执行／**加载时机按性能敏感度定性**：发布后不变的资源在性能敏感路径
-     须首次读取后缓存、需求要求内容会变的模板不缓存）、可逐条核对的判定标准、典型反例
-     与依据行齐备；`specs/stack/java.adoc`
-     须写 Java 落点（`sql`/`lua` 放 `src/main/resources/` 下、Redis 用 `DefaultRedisScript`
-     加载 `.lua`、MyBatis 的 SQL 写 mapper `*.xml`、`${}` 是拼接须白名单校验）与
-     **Java 侧的加载时机**（静态常量 `DefaultRedisScript`、不在方法内逐次读资源、可变模板不冻结）、
-     `specs/stack/spring.adoc` 须引用该条，加载调度器两处登记与 `README.adoc` 目录说明同步
-     ——防"脚本以字符串拼接/模板内联"与"热点路径每次读一次资源"重新变成默认做法
-     （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
-     **性能敏感路径每次读取本可只读一次的资源**）。
+ 36. 提示词取值路径与装配状态防线（**用户指出的既有偏差**）：提示词会被**未知项目**按不同
+     路径取用，`include::` 的装配状态随路径而变，而**推断"这是渲染视图所以已展开"正是本仓库
+     实测过的失效**（曾把站点**原始文件地址**当渲染视图、据此以为内容完整）。本防线钉住：
+     公共片段 `prompts/_common.txt` 的「查看与复制方式」须按**取值路径**判断（装配过的：
+     IDE 预览 / `asciidoctor` / 站点**页面内**渲染；未装配的：远程**原始文件地址** / 本地读取
+     ——直出仓库字节、**逐字节一致**）、并含禁止式表述；各提示词的「给 AI 的读取说明」须按
+     "内容有没有被处理器装配过"判定；`PROMPTS.adoc` 须有「取值路径与装配状态」节（三行判据表
+     + "不是三种版本的提示词" + L1 实证话术条）；`AGENTS.adoc` 的提示词条须登记该口径与抓手名。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -4640,6 +4636,155 @@ def check_delivery_guard():
                 "公开面看不到『不得只冒一句话、不得只交付不汇报』这条边界", rel_readme)
     phase_done()
 
+
+# 『提示词取值路径与装配状态防线』要点（须同时命中多处要素，否则别处一句同名字样即可假绿）
+PROMPT_SURFACE_GUARD_KEYS = (
+    (("查看与复制方式", "按取值路径判断", "只在 AsciiDoc 处理器", "不是"),
+     "公共片段须给出取值路径的判据（『按取值路径判断、不按渲染视图这个印象』＋"
+     "『include 只在处理器解析时展开』），否则执行者只能靠印象推断是否要补齐"),
+    (("经处理器装配过的内容", "未经处理器装配的内容"),
+     "两类取值路径须分列：装配过的（IDE 预览 / asciidoctor / 站点页面内渲染）与"
+     "未装配的（远程原始文件地址 / 本地读取）"),
+    (("逐字节一致", "直出"),
+     "未装配一侧须写明实证（远程原始文件地址与工作区逐字节一致、站点对非 HTML 直出仓库字节），"
+     "否则后来者仍会按『站点 = 渲染视图』推断"),
+    (("不得", "当成取用时的事实", "原始文件地址与本地文件都不会装配"),
+     "须有禁止式表述：不得把『站点/渲染视图已展开』当成取用时的事实（本条对应用户指出的"
+     "既有偏差：原表述与两条取值路径都不吻合）"),
+    (("本地读本文件", "等价"),
+     "须写明『远程读本文件与本地读它等价、都未装配』——防把它读成『一份装配好的、"
+     "一份没装配的』"),
+)
+
+# 图书馆侧的同一判据（本轮用户确认一并修复）：站点直链同为未装配的仓库字节，
+# 不得让读者按「站点 = 渲染视图」推断图书馆被装配过。
+PROMPT_SURFACE_LIBRARY_FILES = ("library/README.adoc", "library/usage.adoc", "library/sources.adoc")
+
+PROMPT_SURFACE_LIBRARY_KEYS = (
+    (("未经处理器装配的仓库字节", "index.html", "正文区"),
+     "图书馆入口的取值形态须写明『站点直链是未经处理器装配的仓库字节、页面内装配只发生在 "
+     "index.html 正文区』，并指向提示词侧的同一判据（不得按『站点 = 渲染视图』推断）"),
+    (("未经装配的仓库字节",),
+     "图书馆用法文档的「入口」一步须写明直链取到的是未经装配的仓库字节"),
+    (("未经处理器装配的仓库字节", "逐字节一致"),
+     "图书馆依据文档的取用侧实测记录须写明直链取到的是未经处理器装配的仓库字节、且逐字节一致"),
+)
+
+PROMPT_SURFACE_PROMPT_KEYS = (
+    (("给 AI 的读取说明", "内容有没有被 AsciiDoc 处理器装配过"),
+     "各提示词的读取说明须按『内容是否被处理器装配过』判定（不得按『像不像渲染过的页面』）"),
+    (("原始文件", "不会被展开", "补齐"),
+     "读取说明须写明：取到原始文件（远程原始文件地址、本地直接读）时指令不展开、须先补齐"),
+    (("不得", "渲染视图", "跳过补齐"),
+     "须有禁止式表述：不得以『这是站点的渲染视图、片段已展开』为由跳过补齐"),
+)
+
+
+def check_prompt_delivery_surface_guard():
+    """『提示词取值路径与装配状态防线』：取值口径不得退回与实测不符的印象式说法。
+
+    背景（用户指出的既有偏差，本轮单开一条处理）：提示词正文与 `PROMPTS.adoc` 长期写着
+    "以渲染视图查看时 `include::` 已展开、内容完整"。但这句**与两条实际取值路径都不吻合**：
+
+      * 站点**原始文件地址**（`https://agent.c332030.com/prompts/review.adoc`）直出的是
+        **仓库字节**、`include::` 仍在（实测与工作区**逐字节一致**，review 的 `include::` 字样 10 处、
+        其中代码块内真正的引用指令 9 条（1 处是读取说明里作字面示例的写法）；`_common.txt` 4 处字样）；站点上真正装配过的只有 `index.html` **页面内**由 Asciidoctor.js 解析后
+        写进正文区的 HTML；
+      * 本地/工作区直接读文件同理不会装配。
+
+    而**推断"这是渲染视图所以已展开"恰恰是本仓库实证过的失效**（上一轮把站点原始文件地址
+    当"渲染视图"、据此以为内容完整），且提示词会被未知项目复制执行，读错就会跳步、漏掉
+    公共片段里的边界（如 `delivery` / `scope-boundary`）。故把口径改成**按取值路径判断**，
+    并加机械防线钉住要点与"与实测一致"的证据字样：
+
+      * 公共片段 `prompts/_common.txt` 的「查看与复制方式」两侧分列 + 逐字节实证 + 禁止式表述；
+      * 各任务提示词的「给 AI 的读取说明」按"是否被处理器装配过"判定（题面侧，片段证不了）；
+      * 公开提示词入口 `PROMPTS.adoc` 的「取值路径与装配状态」表与两条判据（L1 实证话术、
+        L2 配图与判据一致）；
+      * 项目规范入口 `AGENTS.adoc` 的提示词条同步提到取值路径（维护方侧要知道这条存在）。
+
+    只钉"口径与证据文本仍在"——"某次取值实际是否装配过"属运行时事实（取值路径与文件
+    内容），机械无法判定，交人/子 agent 用 `curl` 原始文件地址逐字节比对复核；但"退回
+    印象式说法"必须拦住。
+    """
+    phase("提示词取值路径与装配状态防线检查")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——取值路径与装配状态无处承载", rel_common)
+    else:
+        common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        for keys, desc in PROMPT_SURFACE_GUARD_KEYS:
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel_common} 缺失要点 {missing}——{desc}；"
+                    "本条对应用户指出的既有偏差（原表述与两条实际取值路径都不吻合），"
+                    "不得退回『渲染视图下已展开』这类与路径绑不上的笼统说法", rel_common)
+    # 题面侧：每个提示词的读取说明（片段证不了题面）
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
+        text = open(f, encoding="utf-8").read()
+        for keys, desc in PROMPT_SURFACE_PROMPT_KEYS:
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # 登记处：公开提示词入口（表 + 两条判据）
+    rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROMPTS_FILE):
+        err(f"缺少公开提示词入口 {rel_prompts}——取值路径与装配状态无处登记", rel_prompts)
+    else:
+        ptext = open(PROMPTS_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("取值路径与装配状态", "已装配", "未装配"),
+             "入口须有『取值路径与装配状态』节并给三行判据表（IDE/asciidoctor/站点页面内 = 已装配；"
+             "远程原始文件地址、本地读取 = 未装配）"),
+            (("不是三种", "不同取值路径"),
+             "须写明三类是同一份文件的不同取值路径、不是三种『版本的提示词』"
+             "（防把未展开读成内容缺失/旧版）"),
+            (("站点直链 = 仓库字节", "index.html"),
+             "须有 L1 条：站点直链（非 HTML 文件）直出原文、与站点发布分支的同名文件逐字节一致，"
+             "站点上存在装配形态的只有 index.html 自己的正文区（『站点』不等于『已装配』）"),
+            (("实证与话术", "不得", "与路径绑不上"),
+             "须有 L1 条：描述取值路径须与实际抽样一致、不得留下『渲染视图下已展开』这类"
+             "与路径绑不上的笼统说法"),
+        ):
+            missing = [k for k in keys if k not in ptext]
+            if missing:
+                err(f"提示词取值路径防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
+                    rel_prompts)
+    # 图书馆侧：同一判据（本轮用户确认一并修复）
+    for rel_lib, keys, desc in (
+        (PROMPT_SURFACE_LIBRARY_FILES[0], PROMPT_SURFACE_LIBRARY_KEYS[0][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[0][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[1], PROMPT_SURFACE_LIBRARY_KEYS[1][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[1][1]),
+        (PROMPT_SURFACE_LIBRARY_FILES[2], PROMPT_SURFACE_LIBRARY_KEYS[2][0],
+         PROMPT_SURFACE_LIBRARY_KEYS[2][1]),
+    ):
+        lib_path = os.path.join(REPO_ROOT, rel_lib)
+        if not os.path.isfile(lib_path):
+            err(f"缺少图书馆文件 {rel_lib}——图书馆侧的取值路径口径无处承载", rel_lib)
+            continue
+        ltext = open(lib_path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in ltext]
+        if missing:
+            err(f"提示词取值路径防线被破坏：{rel_lib} 缺失要点 {missing}——{desc}", rel_lib)
+
+    # 维护方入口：AGENTS.adoc 的提示词条须带上取值路径与抓手名
+    rel_agents = os.path.relpath(PROJECT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(PROJECT_FILE):
+        err(f"缺少项目规范入口 {rel_agents}——维护方无处知道这条防线", rel_agents)
+    else:
+        atext = open(PROJECT_FILE, encoding="utf-8").read()
+        missing = [k for k in ("取值路径", "check_prompt_delivery_surface_guard")
+                   if k not in atext]
+        if missing:
+            err(f"提示词取值路径防线被破坏：{rel_agents} 缺失要点 {missing}——"
+                "维护方入口须登记该口径与具名抓手（否则后来者无从知道这条存在）", rel_agents)
+    phase_done()
+
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
 
@@ -4706,6 +4851,7 @@ def main(argv=None) -> int:
     check_external_script_guard()
     check_comment_dispatch_guard()
     check_delivery_guard()
+    check_prompt_delivery_surface_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 

@@ -4851,6 +4851,134 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
         self.assertIn("缺少统一变更日志", self.error_texts())
 
 
+class TestCheckPromptDeliverySurfaceGuard(CheckSpecsTestCase):
+    """钉住『提示词取值路径与装配状态』：不得退回与实测不符的印象式说法。
+
+    用户指出的既有偏差：提示词与 `PROMPTS.adoc` 长期写"渲染视图下 `include::` 已展开"，
+    但**实测**站点**原始文件地址**直出的是**仓库字节**（与工作区逐字节一致、指令仍在），
+    站点上装配过的只有 `index.html` **页面内**渲染出的 HTML；而"把原始文件地址当渲染视图"
+    正是上一轮实证过的失效。本组用例把"按取值路径判断 + 实证字样 + 禁止式表述"钉住。
+    """
+
+    COMMON = ("提示词公共片段\n"
+              "查看与复制方式（**按取值路径判断，不按\"渲染视图\"这个印象**）："
+              "`include::` **只在 AsciiDoc 处理器解析时**才展开，"
+              "**判定依据是\"当前内容是被谁加工的\"、不是\"看起来像不像渲染过的页面\"**：\n"
+              "- **经处理器装配过的内容**（IDE 预览、`asciidoctor` 渲染、站点页面内渲染的正文区）"
+              "——未见指令即已装配；\n"
+              "- **未经处理器装配的内容**：远程**原始文件**地址与本地读取都属此类，"
+              "站点对非 HTML 文件**直出**仓库字节、与工作区**逐字节一致**，指令仍在；"
+              "**本地读本文件**与远程取它**等价**；\n"
+              "- **不得**把\"站点/渲染视图已展开\"**当成取用时的事实**——"
+              "**原始文件地址与本地文件都不会装配**。\n")
+
+    PROMPT = ("= 检查修复\n\n**给 AI 的读取说明（保证内容完整，先做）**："
+              "判据是\"内容有没有被 AsciiDoc 处理器装配过\"——取到**原始文件**时指令"
+              "**不会被展开**，请先读取片段**补齐**；**不得**以\"这是站点的**渲染视图**\"为由"
+              "**跳过补齐**。\n")
+
+    REGISTRY = ("=== 取值路径与装配状态（判据，不靠印象）\n\n"
+                "| 取值路径 | 已装配？ |\n"
+                "| IDE 预览 / 站点页面内渲染 | 是 |\n"
+                "| 远程原始文件地址（**未装配**） | 否 |\n"
+                "- **站点直链 = 仓库字节**：非 HTML 文件**直出原文**、与站点发布分支的同名文件逐字节一致；"
+                "站点上存在装配形态的只有 `index.html` 自己的正文区。\n"
+                "- **配图与判据一致**：三类是**不同取值路径**，**不是三种**版本的提示词。\n"
+                "- **实证与话术（L1）**：**不得**留下与路径绑不上的笼统说法；"
+                "须与实际抽样一致。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._prompts_orig = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+        self._repo_root_orig = cm.REPO_ROOT
+        cm.REPO_ROOT = self.root
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE) = self._prompts_orig
+        cm.REPO_ROOT = self._repo_root_orig
+        super().tearDown()
+
+    LIB_README = ("图书馆入口的取值形态：站点直链取到的是**未经处理器装配的仓库字节**——"
+                  "站点对非 HTML 文件直出原文，页面内装配只发生在 `index.html` 自己的**正文区**。\n")
+    LIB_USAGE = ("入口：`https` 直接可达（实测返回纯文本，即**未经装配的仓库字节**）。\n")
+    LIB_SOURCES = ("取用侧实测：站点直链 → `text/plain`、**未经处理器装配的仓库字节**、"
+                   "与站点发布分支的同名文件**逐字节一致**。\n")
+
+    def _write_valid(self) -> None:
+        self.write("prompts/_common.txt", self.COMMON)
+        for name in ("review.adoc", "refactor.adoc"):
+            self.write("prompts/" + name, self.PROMPT)
+        self.write("PROMPTS.adoc", self.REGISTRY)
+        self.write("AGENTS.adoc", "提示词条的**取值路径**须与实际一致；"
+                                  "由 `check_prompt_delivery_surface_guard` 钉住。\n")
+        self.write("library/README.adoc", self.LIB_README)
+        self.write("library/usage.adoc", self.LIB_USAGE)
+        self.write("library/sources.adoc", self.LIB_SOURCES)
+
+    def test_valid_surface_passes(self):
+        self._write_valid()
+        cm.check_prompt_delivery_surface_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_fragment_missing_judgement_reports(self):
+        # 反例：片段没写"按取值路径判断" → 执行者只能靠印象推断
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   "查看与复制方式：渲染视图下已展开、内容完整。\n")
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("按取值路径判断", self.error_texts())
+
+    def test_fragment_missing_evidence_reports(self):
+        # 反例：抽掉实证（逐字节一致/直出） → 后来者仍按"站点=渲染视图"推断
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   self.COMMON.replace("**逐字节一致**", "内容相同")
+                               .replace("**直出**", "按原样返回"))
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("逐字节一致", self.error_texts())
+
+    def test_prompt_note_not_updated_reports(self):
+        # 反例：提示词读取说明仍按"渲染视图"陈述（题面侧没跟上）
+        self._write_valid()
+        self.write("prompts/review.adoc",
+                   "= 检查修复\n\n**给 AI 的读取说明**：渲染视图下片段已展开、内容完整。\n")
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("内容有没有被 AsciiDoc 处理器装配过", self.error_texts())
+
+    def test_registry_table_removed_reports(self):
+        # 反例：入口没有判据表 → 三类取值路径与两类状态无处可查
+        self._write_valid()
+        self.write("PROMPTS.adoc", "* 公共片段与 AI 读取：取到原始文件时须补齐。\n")
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("取值路径与装配状态", self.error_texts())
+
+    def test_not_three_versions_clause_removed_reports(self):
+        # 反例：抽掉"不是三种版本" → 未展开会被读成内容缺失/旧版
+        self._write_valid()
+        self.write("PROMPTS.adoc", self.REGISTRY.replace("**不是三种**", "可与"))
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("不是三种", self.error_texts())
+
+    def test_wording_rule_removed_reports(self):
+        # 反例：抽掉 L1 话术条 → "渲染视图下已展开"这类说法可以再写回来
+        self._write_valid()
+        self.write("PROMPTS.adoc",
+                   self.REGISTRY.replace("**实证与话术（L1）**",
+                                         "**补充说明**"))
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("实证与话术", self.error_texts())
+
+    def test_maintainer_entry_not_synced_reports(self):
+        # 反例：维护方入口未登记该口径与抓手 → 后来者无从知道这条存在
+        self._write_valid()
+        self.write("AGENTS.adoc", "普通项目规范说明。\n")
+        cm.check_prompt_delivery_surface_guard()
+        self.assertIn("check_prompt_delivery_surface_guard", self.error_texts())
+
+
 class TestCheckQuoteLineGuard(CheckSpecsTestCase):
     """钉住『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
 
