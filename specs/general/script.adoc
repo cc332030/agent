@@ -4,7 +4,7 @@
 
 == 文件格式与编码
 
-* 编码与换行：脚本文件一律 UTF-8 编码；**Windows 批处理 `.bat`/`.cmd` 例外，默认用 GBK 落盘**（`cmd.exe` 按系统 ANSI 代码页解析，判据与自检见 link:../general/encoding.adoc[]「读写编码」）。通用编码要求见 link:../general/doc.adoc[]「文件格式与编码」；行尾按下表取值，权威判据见 link:../general/encoding.adoc[]「换行符」
+* 编码与换行：脚本文件一律 UTF-8 编码（通用编码要求见 link:../general/doc.adoc[]「文件格式与编码」；行尾按下表取值，权威判据见 link:../general/encoding.adoc[]「换行符」）
 * 可执行标识：Unix/Linux 下的脚本文件须在首行写明 shebang（如 `#!/usr/bin/env bash`、`#!/usr/bin/env python3`），明确解释器；须设置可执行权限（git 中 `chmod +x`），确保可直接以 `./脚本名` 方式运行
 * 行尾（**按脚本类型取值、不得混用**，权威判据见 link:../general/encoding.adoc[]「换行符」）：**Python、Node.js 等能自主识别两种行尾的脚本用 LF**；**Windows 批处理 `.bat`/`.cmd` 必须 CRLF**（LF-only 在 `cmd.exe` 下直接执行失败，见该条）；`bash`/`sh`/PowerShell 见各自栈文件。**CRLF 只允许出现在强制要求它的少量例外上**，其余一律 LF
 * 缩进与格式：缩进风格随脚本语言惯例统一，同一文件内保持一致

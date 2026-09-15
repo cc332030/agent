@@ -83,7 +83,7 @@
 
 * 标准名：UTF-8, a transformation format of ISO 10646。
 * 逐字摘（官方文本已取回，RFC 3629 摘要）："UTF-8, a transformation format of ISO 10646"；编码形态"a string of octets"（摘其短语）。
-* 用途：`specs/general/encoding.adoc`「读写编码」（一律 UTF-8 的基准；`.bat`/`.cmd` 的 GBK 属显式例外）、`specs/general/doc.adoc`「文件格式与编码」。
+* 用途：`specs/general/encoding.adoc`「一律 UTF-8（L1）」、`specs/general/doc.adoc`「文件格式与编码」。
 
 == RFC 3339（时间戳格式）
 
@@ -147,14 +147,14 @@
 == Microsoft Learn（Windows 命令参考）
 
 * 材料：Microsoft Learn 上 Windows 命令（`cmd.exe`）的官方参考。
-* 依据要点：命令解释器**按字节读取行尾、不做行尾归一化**（LF-only 批处理会直接执行失败：`goto`/标签匹配、`if`/`for` 复合语句、行尾注释与续行都可能失效）；批处理按**系统 ANSI 代码页**解析（简体中文 Windows 为 GBK/CP936），存为 UTF-8（尤其带 BOM）会解析失败。
-* 用途：`specs/general/encoding.adoc`「读写编码」（`.bat`/`.cmd` 默认 GBK）「Windows 批处理必须 CRLF（L1）」、`specs/stack/powershell.adoc`「启动脚本保存为 GBK（系统 ANSI 代码页）、不得存为 UTF-8（L1）」。
+* 依据要点：命令解释器**按字节读取行尾、不做行尾归一化**（LF-only 批处理会直接执行失败：`goto`/标签匹配、`if`/`for` 复合语句、行尾注释与续行都可能失效）；批处理按**系统 ANSI 代码页**解析（简体中文 Windows 为 GBK/CP936）——**带 BOM 的 UTF-8** 会把 BOM 并入首行指令，**含非 ASCII 字符的 UTF-8** 会被按该代码页解析成乱码，故这两类会出现解析/显示异常，而**纯 ASCII 内容与代码页无关**。
+* 用途：`specs/general/encoding.adoc`「Windows 批处理必须 CRLF（L1）」、`specs/stack/powershell.adoc`「启动脚本（同名 .bat）」（纯 ASCII、不写 BOM、行尾 CRLF）。
 
 == EditorConfig 规范（编辑器配置）
 
 * 材料：EditorConfig 规范（EditorConfig Specification，站点 `spec.editorconfig.org`；**官方文本已取回**，编写时为 0.17.2 版）。
-* 依据要点（键名与取值清单取自规范正文）：`.editorconfig` 以"按文件路径匹配的 INI 段"声明编辑器行为，键含 `charset`、`end_of_line`、`insert_final_newline`、`indent_style`/`indent_size` 等；`charset` 的取值只有 `latin1`/`utf-8`/`utf-8-bom`/`utf-16be`/`utf-16le`（**无 GBK**），`end_of_line` 取 `lf`/`cr`/`crlf`；取值为 `unset` 时**移除该键值对的效果**（即使外层段已设置过，要点转述）。
-* 用途：`specs/general/encoding.adoc`「跨平台检出」——仓库根须有 `.editorconfig`（缺失即补齐）、其行尾取值须与 `.gitattributes` 一致；因 `charset` 无 GBK 取值，`.bat`/`.cmd` 的 GBK 编码不由它承载，且须用 `charset = unset` 移除外层 `[*]` 的 `charset = utf-8`（否则编辑器保存会把 GBK 字节改写成 UTF-8）。
+* 依据要点（键名与取值清单取自规范正文）：`.editorconfig` 以"按文件路径匹配的 INI 段"声明编辑器行为，键含 `charset`、`end_of_line`、`insert_final_newline`、`indent_style`/`indent_size` 等；`charset` 的取值只有 `latin1`/`utf-8`/`utf-8-bom`/`utf-16be`/`utf-16le`，`end_of_line` 取 `lf`/`cr`/`crlf`；取值为 `unset` 时**移除该键值对的效果**（即使外层段已设置过，要点转述）。
+* 用途：`specs/general/encoding.adoc`「跨平台检出」——仓库根须有 `.editorconfig`（缺失即补齐）、其行尾取值须与 `.gitattributes` 一致、`charset` 默认取 `utf-8`（`.ps1` 需要 BOM 时取 `utf-8-bom`；按格式规范须存为非 UTF-8 的文件用 `unset` 移除外层声明）。
 * **须注意的语义差异（同义性）**：该规范只定义"键与取值怎么写、如何生效"，**未**规定项目必须提供 `.editorconfig`、也未规定行尾与编码该怎么取值；"仓库根须有该文件、取值须与 `.gitattributes` 一致"是本集合自己的要求（`specs/general/source.adoc`「外部引用」）。
 
 == git 官方文档

@@ -4,9 +4,7 @@
 
 == 读写编码
 
-* **一律 UTF-8，Windows 批处理用 GBK（L1）**：所有源文件、脚本、文档、配置文件一律使用 UTF-8 编码（依据：RFC 3629 定义的 UTF-8），除非该格式明确不是（二进制格式、规范指定其他编码者除外）；**不得使用 GBK/GB2312/UTF-16 等本地或平台默认编码**——它们一旦离开原环境即乱码，且在跨平台工具链与 CI 中行为不一致。**唯一例外是 Windows 批处理 `.bat`/`.cmd`：默认以 GBK 落盘**（系统 ANSI 代码页，简体中文 Windows 为 CP936）——`cmd.exe` 按系统 ANSI 代码页解析文件字节，存为 UTF-8（尤其带 BOM）会把中文与部分指令解析成乱码、甚至直接解析失败（依据：Microsoft Learn 的 Windows 命令参考）；该例外只覆盖 `.bat`/`.cmd` 自身的编码，其余文件一律 UTF-8（行尾判据见下「换行符」，编辑器与 git 侧的固定见「跨平台检出」）。
-  ** 取值与自检：`.bat`/`.cmd` 落盘为 GBK——纯 ASCII 内容是其子集、同样合规；改完按 GBK 读回核对（中文正常显示、未乱码），不"能打开就当成功"。
-  ** 环境边界：GBK 只在系统 ANSI 代码页为 CP936 的环境（简体中文 Windows）下解析正确；目标环境代码页不同时（非中文区域设置、或系统开了 UTF-8 模式），须改存该环境代码页对应的编码、或**只写 ASCII**（不含非 ASCII 字符，任何代码页下都一致）——批处理以**实际运行环境**为准，不作跨环境分发格式。
+* **一律 UTF-8（L1）**：所有源文件、脚本、文档、配置文件一律使用 UTF-8 编码（依据：RFC 3629 定义的 UTF-8），除非该格式明确不是（二进制格式、规范指定其他编码者除外）；**不得使用 GBK/GB2312/UTF-16 等本地或平台默认编码**——它们一旦离开原环境即乱码，且在跨平台工具链与 CI 中行为不一致。
 * **编码一致性校验（L2）**：涉及中文等多字节内容时，改完随机抽检（能正常显示、未出现乱码），不得"看起来写了中文"就当成功。
 
 == 换行符（行尾）
@@ -37,7 +35,7 @@
   *.ps1 text eol=crlf
   *.png binary
   ----
-* **`.editorconfig` 的取值与批处理例外（L1）**：`.editorconfig` 声明编辑器侧的编码、行尾、缩进与末尾换行，取值须与本规范一致——`[*]` 段 `charset = utf-8`、`end_of_line = lf`、`insert_final_newline = true`，缩进按项目实际统一（`indent_style`/`indent_size`）；行尾按文件类型分段（`.bat`/`.cmd`/`.ps1` 用 `crlf`）。**`.bat`/`.cmd` 的 GBK 字节不由 `.editorconfig` 声明**：其 `charset` 只有 `latin1`/`utf-8`/`utf-8-bom`/`utf-16be`/`utf-16le` 五个取值（依据：EditorConfig 规范），**没有 GBK**；也**不得**让它继承 `[*]` 的 `charset = utf-8`（编辑器保存时会把 GBK 字节改写成 UTF-8、直接破坏它）——须为 `.bat`/`.cmd` 单列一段写 `charset = unset`（该取值用于**移除该键的既有效果**，依据同上），批处理的编码仍按上「读写编码」的判据与自检承担；`.ps1` 的 BOM 取舍见 link:../stack/powershell.adoc[]「编码与行尾」（要求 BOM 时该段写 `charset = utf-8-bom`，BOM 由该声明固定、不靠人工增删）。示例（路径按项目实际调整）：
+* **`.editorconfig` 的取值（L1）**：`.editorconfig` 声明编辑器侧的编码、行尾、缩进与末尾换行，取值须与本规范一致——`[*]` 段 `charset = utf-8`、`end_of_line = lf`、`insert_final_newline = true`，缩进按项目实际统一（`indent_style`/`indent_size`）；行尾按文件类型分段（`.bat`/`.cmd`/`.ps1` 用 `crlf`）；`.ps1` 的 BOM 取舍见 link:../stack/powershell.adoc[]「编码与行尾」（要求 BOM 时该段写 `charset = utf-8-bom`，BOM 由该声明固定、不靠人工增删）；**`charset = utf-8` 只覆盖按本规范按 UTF-8 存储的文件**——某类文件若按格式规范或外部工具要求须存为非 UTF-8 编码，须为该类文件单列一段写 `charset = unset`（该取值用于**移除该键的既有效果**），不得让它继承 `[*]` 的 `charset`。示例（路径按项目实际调整）：
   [listing]
   ----
   root = true
@@ -48,7 +46,6 @@
   insert_final_newline = true
 
   [*.{bat,cmd}]
-  charset = unset
   end_of_line = crlf
 
   [*.ps1]
@@ -57,7 +54,7 @@
 * **新接入项目先配好再提交（L1）**：首次提交前就要有 `.gitattributes` 与 `.editorconfig`，避免先按本机默认提交、再回头统一行尾与编码（历史里会留下大量"只因换行符"的假变更）。
 * **配套设置（L2）**：`.gitattributes` 已显式声明时，开发者本机的 `core.autocrlf` 应设为 `false`（由仓库配置决定行尾，不再让本机设置二次改写）；`eol=crlf` 的文件其 CRLF 由 git 按规则生成、**不写进仓库内容**（仓库内仍按 LF 存储）。
 * **存量项目补齐（L2）**：尚未配置的存量项目按 link:../core/execution.adoc[]「规范变更的存量处理」随项目开发逐步补上，不为此发动全库一次性转换。
-* **自检（L1，引用方项目执行）**：本规范集合看不到引用方的工作区，故该条由**引用方项目自查**承担——仓库根 `.gitattributes`、`.editorconfig` 均存在（缺失即按本节补齐）；`git check-attr -a <文件>` 须给出与上表一致的 `eol` 取值；`git ls-files --eol` 无违规（见上节「行尾一致性校验」）；`.editorconfig` 与 `.gitattributes` 对同一类文件的行尾取值一致，且未把 `.bat`/`.cmd` 纳入 `charset = utf-8`。
+* **自检（L1，引用方项目执行）**：本规范集合看不到引用方的工作区，故该条由**引用方项目自查**承担——仓库根 `.gitattributes`、`.editorconfig` 均存在（缺失即按本节补齐）；`git check-attr -a <文件>` 须给出与上表一致的 `eol` 取值；`git ls-files --eol` 无违规（见上节「行尾一致性校验」）；`.editorconfig` 与 `.gitattributes` 对同一类文件的行尾取值一致。
 
 == 语言无关性
 

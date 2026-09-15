@@ -15,11 +15,11 @@
   ** 用 `%*` 把 `.bat` 收到的所有命令行参数透传给 `.ps1`；
   ** `.bat` 与 `.ps1` 保持**同名**，便于识别对应关系。
 * `.bat` 与 `.ps1` 同步维护：`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，二者成对存在、保持一致，避免启动入口失效。
-* **启动脚本保存为 GBK（系统 ANSI 代码页）、不得存为 UTF-8（L1）**：`.bat` 会被 `cmd.exe` 按系统 ANSI 代码页（简体中文 Windows 为 GBK/CP936）解析，且按字节读行尾——**存为 UTF-8（尤其带 BOM）或存成 LF 时，启动脚本会解析失败**（如 `@echo off` 变成命令本身、`@echo` 被当作命令名、中文 echo 乱码、块语句直接报错；依据：Microsoft Learn 的 Windows 命令参考）。故：`.bat` **默认按 GBK 编码落盘**（纯 ASCII 内容是其子集、同样合规；判据见 link:../general/encoding.adoc[]「读写编码」）、**行尾 CRLF**（判据见 link:../general/encoding.adoc[]「换行符」），不存为 UTF-8；指令用**纯 ASCII** 写、路径与参数用 `%~dp0`/`%*` 变量表达，不硬编码路径；确需写中文字面量时，须先确认运行环境代码页为 CP936（否则按该环境的代码页存、或只写 ASCII）。`.bat` 与 `.ps1` **同名但编码与行尾不同**，二者分别按本条与「编码与行尾」的要求保存。
+* **启动脚本须在 `cmd.exe` 下可解析、不依赖本地编码（L1）**：`.bat` 会被 `cmd.exe` 按**系统 ANSI 代码页**（简体中文 Windows 为 GBK/CP936）解析，且**按字节读行尾**——**带 BOM 的 UTF-8、或 LF 行尾都会让启动脚本解析失败**（如 `@echo off` 变成命令本身、`@echo` 被当作命令名、块语句直接报错；依据：Microsoft Learn 的 Windows 命令参考）。故：`.bat` **指令一律用纯 ASCII 写**（路径与参数用 `%~dp0`/`%*` 变量表达、不硬编码中文；需要中文提示/输出时由同名 `.ps1` 承载，其编码见下「编码与行尾」）、**不写 BOM**、**行尾 CRLF**（判据见 link:../general/encoding.adoc[]「换行符」）；**不指定某一种本地编码**——纯 ASCII 内容在任何代码页下字节一致、与代码页无关。故 `.bat` 与 `.ps1` **同名但格式要求不同**（`.bat` 纯 ASCII + CRLF，`.ps1` UTF-8 + CRLF），二者分别按本条与「编码与行尾」的要求保存。纯 ASCII 是 UTF-8 的子集，故本条与通用层「一律 UTF-8」一致；**存量已按本地编码（如 GBK）保存的 `.bat`** 按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移——改到该文件时转为纯 ASCII、中文移入同名 `.ps1`，不为此发动全库一次性转换。
 
 == 编码与行尾
 
 * **编码（L1）**：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM，避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
 * **行尾（L1）**：`.ps1` **落盘 CRLF**（与同名 `.bat` 一致）——PowerShell 虽能解析 LF，但带 BOM 的脚本改用 BOM 字符集、CRLF 是 Windows 工具链与编辑器的一致预期；**不得**为"统一成 LF"把 `.ps1`/`.bat` 改成 LF（`.bat` 改成 LF 会直接失效，见上「启动脚本」）。行尾由 `.gitattributes` 的 `*.ps1 text eol=crlf` 与 `*.bat text eol=crlf` 声明（见 link:../general/encoding.adoc[]「跨平台检出」），不靠人工逐个文件手动调整。
-* 编码与行尾核对：`.ps1` 的 `file <脚本>` 应显示 UTF-8(BOM) 文本、`.bat` 应显示 ASCII 或非 UTF-8 文本（如 `ISO-8859`），二者均 `with CRLF line terminators`；`.bat` 另须按 GBK 读回核对（中文正常显示、未乱码）；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
+* 编码与行尾核对：`file <脚本>`——`.bat` 应显示 `ASCII` 文本（显示 `UTF-8`/`UTF-8(BOM)` 即说明它含非 ASCII 或 BOM、属待改存量）、`.ps1` 应显示 `UTF-8(BOM)`；二者均须 `with CRLF line terminators`；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
 * 执行策略：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略。

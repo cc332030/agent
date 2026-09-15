@@ -30,7 +30,7 @@
 
 
 
-变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
+变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；**更新由明确要求触发**——未被要求时不新增/不改写条目（见该文件「何时记录（由明确要求触发）」），条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
 
 == 分类与懒加载（加载调度器）
 
@@ -42,9 +42,9 @@
   ** 执行原则（含「任务生命周期与节点自查」：任务从提出到收尾各节点各查什么、何时不设这些节点；以及「规范变更的存量处理」：规范新增/调整后存量**随动迁移、不一次性变更**，除非主动声明收敛）：link:specs/core/execution.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言；**含「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」**：SQL/Lua 等被调语言的脚本须独立成文件放资源文件夹、扩展名取被调语言自身的扩展名，且**按性能敏感度决定读取时机**——发布后不变的资源在性能敏感路径（如 Redis 操作）须第一次使用时读取一次并缓存、不敏感路径每次读无妨、需求要求内容会变的模板不缓存——检测特征：宿主语言代码里出现另一语言的语句、字符串拼接/模板组装脚本、MyBatis XML 承载 SQL、Redis 执行 Lua、热点路径每次都读资源）
-  ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾与编码按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF 且默认 GBK，判据见下文编码条目）
+  ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF，判据见下文编码条目）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
-  ** 写/更新变更记录（changelog，识别特征：存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]
+  ** 写/更新变更记录（changelog，识别特征：**被明确要求记录/更新变更日志**；或存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]（**未被要求时不主动记**，触发口径见该文件「何时记录（由明确要求触发）」）
   ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]（**含模块间依赖关系文档**：多模块项目须有 `doc/dependency.adoc` 以 UML 表述完整模块依赖关系，是查依赖关系的**第一落点**，见其「依赖关系文档（模块间依赖的唯一视图）」）
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
   ** 模块级文档组织（存在**多模块结构**，或涉及"模块文档放哪、根 `doc/` 放什么"的归属判定） → link:specs/general/doc-module.adoc[]
@@ -67,7 +67,7 @@
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
   ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 LF）
   ** Python 脚本（存在以 `python3`/`python` 为 shebang 的 `.py` 脚本）→ link:specs/stack/python.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 LF）
-  ** PowerShell 脚本（存在 `.ps1` 文件）→ link:specs/stack/powershell.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 CRLF，**含同名 `.bat` 启动脚本的编码与 CRLF 要求**）
+  ** PowerShell 脚本（存在 `.ps1` 文件）→ link:specs/stack/powershell.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 CRLF，**含同名 `.bat` 启动脚本的纯 ASCII、不写 BOM 与 CRLF 要求**）
   ** 其他语言/技术栈（nodejs、ubuntu 服务器配置、python 等）按其对应栈文件加载——栈文件由引用方项目按「技术栈扩展约定」在 `specs/stack/` 下补充登记（尚未登记的栈按 AGENTS_COMMON.adoc 通用层与 coding.adoc 执行，不臆造其专属规则）
 * 项目类型层（**按项目在其自身规范中的主动声明加载，声明才加载、未声明不加载**——仅适用于特定项目类型、对普通项目不生效的规范归入此层，由项目主动声明所属类型触发加载，不靠特征自动检测）：
   ** 通用工具/库类项目（以可复用组件/库/工具为主、要求每个类在设计时保证绝对正确与绝对可维护性的项目）→ link:specs/general/doc-tool.adoc[]（文档组织：类级细节归代码文档注释、独立文档承载模块/功能级总结与规划）。**触发方式**：项目在其**自身规范**（引用方项目自己编写的项目规范，如项目根目录 `AGENTS.adoc`）中**主动声明**本项目为通用工具/库类项目，agent 检测到该声明即加载本规范；未声明则视为普通项目，不加载。**声明模板（可直接粘贴到项目自身规范头部）**：`本项目为通用工具/库类项目，各类须保证绝对正确与可维护性。`；等价表述关键词放宽匹配"通用工具/库类项目""通用工具类项目""工具库""可复用组件库""组件库项目"等，描述意思一致即可
