@@ -1,0 +1,17 @@
+# 编辑器约定（取值与判据见 specs/general/encoding.adoc「读写编码」「跨平台检出」）：
+# 仓库内容以 UTF-8 + LF 为基准；Windows 批处理默认 GBK、与 PowerShell 一样用 CRLF。
+# 批处理段用 charset = unset：EditorConfig 的 charset 无 GBK 取值，unset 用于移除
+# 外层 [*] 的 charset 效果（否则编辑器保存时会把 GBK 字节改写成 UTF-8）。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[*.{bat,cmd}]
+charset = unset
+end_of_line = crlf
+
+[*.ps1]
+end_of_line = crlf

@@ -34,10 +34,11 @@
  16. Java 测试类命名防线：AGENTS_COMMON.adoc 的 Java 技术栈登记与 specs/stack/java-testing.adoc
      必须同时含四类后缀判据（`Tests`/`BootTests`/`PerfTests`/`IT`），防四类命名契约的口径在
      某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）。
- 17. 换行符防线：specs/general/encoding.adoc 必须仍按解释器分流行尾——`LF` 基准、`.bat`/`.cmd`
-     必须 `CRLF`，且保留检出归一（`core.autocrlf`）与 `.gitattributes` 落盘约定；脚本技术栈
-     文件（bash/python/powershell）也须各自写明行尾要求，防"Windows 批处理被写成 LF"这类
-     跨平台失效的规则被删或只剩一句"统一行尾符"。
+ 17. 换行符与批处理编码防线：specs/general/encoding.adoc 必须仍按解释器分流行尾与编码——
+     `LF` 基准、`.bat`/`.cmd` 必须 `CRLF` 且默认 `GBK`，且保留检出归一（`core.autocrlf`）与
+     `.gitattributes`、`.editorconfig` 两个落盘约定；脚本技术栈文件（bash/python/powershell）
+     也须各自写明行尾要求，防"Windows 批处理被写成 LF / 存成 UTF-8"这类跨平台失效的规则被删
+     或只剩一句"统一行尾符"。
  18. 本仓库 git mv 自查：暂存区不得出现"删除 + 新增（未识别为 rename）"的疑似
      delete+create 形态（P1 在本仓库自身侧的那一半抓手；引用方侧仍靠其自检）。
  19. 从属者与能力自评防线：子 agent/被引用方"入口驱动加载、不靠自报"与"执行环境
@@ -1565,14 +1566,16 @@ def check_lifecycle_guard():
 
 
 def check_line_ending_guard():
-    """『换行符防线』：跨平台行尾规则（LF 基准 + Windows 批处理 CRLF）不得被删或弱化。
+    """『换行符防线』：跨平台行尾与批处理编码规则（LF 基准 + Windows 批处理 CRLF/GBK）不得被删或弱化。
 
-    背景：行尾错配是**跨平台直接失效**的一类问题——`.bat`/`.cmd` 被写成 LF 在 Windows 上
-    会直接执行失败（`goto`/标签、`if`/`for` 复合语句、行尾注释与续行都可能失效），而
-    "在 Unix 上编辑 Windows 批处理"又极常见，故这类规则最容易被"统一换行符、不用管平台"
+    背景：行尾错配与编码错配都是**跨平台直接失效**的一类问题——`.bat`/`.cmd` 被写成 LF、或
+    存成 UTF-8（`cmd.exe` 按系统 ANSI 代码页解析）在 Windows 上会直接执行失败（`goto`/标签、
+    `if`/`for` 复合语句、行尾注释与续行都可能失效，中文与部分指令还会乱码），而"在 Unix 上
+    编辑 Windows 批处理"又极常见，故这类规则最容易被"统一换行符/统一 UTF-8、不用管平台"
     式的精简删成一句空话。故机械钉住 encoding.adoc 中的**分流判据**（LF 基准、`.bat`/`.cmd`
-    必须 CRLF、`core.autocrlf`/`.gitattributes` 检出归一），并要求 bash/python/powershell
-    三个脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即学不全）。
+    必须 CRLF 且默认 GBK、`core.autocrlf`/`.gitattributes`/`.editorconfig` 落盘），并要求
+    bash/python/powershell 三个脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即
+    学不全）。
 
     只钉"判据存在"，不改写内容——行尾规则是否被实质削弱仍由人/子 agent 复核承担。
     """
@@ -1590,7 +1593,9 @@ def check_line_ending_guard():
                 (".bat", "Windows 批处理必须 CRLF 的对象"),
                 ("CRLF", "Windows 批处理的行尾要求"),
                 ("core.autocrlf", "检出归一化依据（不靠人工手动调整）"),
-                (".gitattributes", "行尾策略的权威落盘口")):
+                (".gitattributes", "行尾策略的权威落盘口"),
+                ("GBK", "Windows 批处理的编码要求"),
+                (".editorconfig", "编辑器侧编码/行尾的落盘口")):
             if key not in text:
                 err(f"换行符防线被破坏：{rel} 缺失『{key}』（{desc}）——"
                     "跨平台行尾规则不得被删或弱化", rel)

@@ -12,7 +12,7 @@
   * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
   * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
   * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
-  * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
+  * check_line_ending_guard —— 换行符与批处理编码防线（正：LF 基准 + `.bat`/`.cmd` CRLF/GBK + `.gitattributes`/`.editorconfig` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
   * check_verify_guard   —— 规范验证防线（正：两问定式化节 + P2 + 本仓库落点三处一致；
                              反：文件被删/节改名/第二问被删/P2 或本仓库口径未同步/未登记）
   * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
@@ -3087,8 +3087,9 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         self.write("specs/general/encoding.adoc",
                    "= 编码与语言无关\n\n"
                    "== 换行符（行尾）\n"
-                   "内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF；`.ps1` 用 CRLF；"
-                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+                   "内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF 且默认 GBK 编码；`.ps1` 用 CRLF；"
+                   "由 `.gitattributes`（行尾）与 `.editorconfig` 固定，"
+                   "`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{f}", "行尾：按本栈要求（LF 或 CRLF）\n")
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
@@ -3124,6 +3125,30 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
         cm.check_line_ending_guard()
         self.assertIn(".gitattributes", self.error_texts())
+
+    def test_dropped_batch_gbk_encoding_reports(self):
+        # 反例：删掉 `.bat` 默认 GBK（这正是"批处理存成 UTF-8 后中文乱码/解析失败"的源头）
+        self.write("specs/general/encoding.adoc",
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF；"
+                   "由 `.gitattributes` 与 `.editorconfig` 固定，"
+                   "`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}", "行尾：LF\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+        cm.check_line_ending_guard()
+        self.assertIn("GBK", self.error_texts())
+
+    def test_dropped_editorconfig_reports(self):
+        # 反例：删掉 `.editorconfig` 落盘口 → 编辑器侧的编码/行尾无人固定
+        self.write("specs/general/encoding.adoc",
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；"
+                   "`.bat`/`.cmd` 必须 CRLF 且默认 GBK 编码；"
+                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}", "行尾：LF\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+        cm.check_line_ending_guard()
+        self.assertIn(".editorconfig", self.error_texts())
 
     def test_stack_file_without_line_ending_reports(self):
         # 反例：脚本栈文件未写明行尾要求 → 引用方按该栈文件学习学不到
