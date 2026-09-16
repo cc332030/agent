@@ -30,7 +30,7 @@
 
 
 
-变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；**更新由明确要求触发**——未被要求时不新增/不改写条目（见该文件「何时记录（由明确要求触发）」），条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
+变更历史由规则化的变更日志承载，但**只记影响、不记过程**：changelog 条目写"改了什么、给谁带来什么影响"，不写实现过程与工作量（读者不问改了几行代码）；条目取舍口径见 link:specs/general/changelog.adoc[]，版本号与统一 changelog 的机制见 link:specs/general/doc-design.adoc[]「版本与变更记录」。
 
 == 分类与懒加载（加载调度器）
 
@@ -44,7 +44,7 @@
   ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言；**含「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」**：SQL/Lua 等被调语言的脚本须独立成文件放资源文件夹、扩展名取被调语言自身的扩展名，且**按性能敏感度决定读取时机**——发布后不变的资源在性能敏感路径（如 Redis 操作）须第一次使用时读取一次并缓存、不敏感路径每次读无妨、需求要求内容会变的模板不缓存——检测特征：宿主语言代码里出现另一语言的语句、字符串拼接/模板组装脚本、MyBatis XML 承载 SQL、Redis 执行 Lua、热点路径每次都读资源）
   ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF，判据见下文编码条目）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
-  ** 写/更新变更记录（changelog，识别特征：**被明确要求记录/更新变更日志**；或存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志，或本次改动涉及版本号/changelog 条目） → link:specs/general/changelog.adoc[]（**未被要求时不主动记**，触发口径见该文件「何时记录（由明确要求触发）」）
+  ** 写/更新变更记录（changelog，识别特征：**本次要新增或改写变更日志条目**；或存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志） → link:specs/general/changelog.adoc[]
   ** 设计文档/测试设计文档/文档分层（核心功能新增、重构、行为变更、方案选型；判定"内容写在哪一层"） → link:specs/general/doc-design.adoc[]（**含模块间依赖关系文档**：多模块项目须有 `doc/dependency.adoc` 以 UML 表述完整模块依赖关系，是查依赖关系的**第一落点**，见其「依赖关系文档（模块间依赖的唯一视图）」）
   ** 业务系统全生命周期文档（**项目按生命周期阶段组织文档**，识别特征：`doc/` 下存在按阶段编号的子目录（如 `1-initiation/`、`3-design/`、`operations/`），或项目涉及需求→设计→开发→测试→部署→验收→上线的完整流程、存在需求规格/测试报告/部署方案/验收报告等阶段级文档、或存在 `doc/external/` 外部系统文档目录） → link:specs/general/doc-lifecycle.adoc[]
   ** 模块级文档组织（存在**多模块结构**，或涉及"模块文档放哪、根 `doc/` 放什么"的归属判定） → link:specs/general/doc-module.adoc[]
