@@ -54,6 +54,7 @@ MECHANISMS = [
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py", "20+ 用例"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py", "check_section_refs 钉住「应当记录/不应当记录/条目书写」三节引用不悬空；条目内容的详略判断交人 review"),
+    ("发现的问题/事项备注落点与表述按适用范围判定（全局性问题不进范围性落点，全局备注也不夹带范围性内容）", "specs/general/review.adoc", "script/check_specs.py", "check_review_guard 钉住判据条与两个方向的约束（去限定词后仍成立＝全局性 / 只有某一处能触发＝范围性 / 全局性问题不得写进范围性落点 / 全局备注不夹带范围性内容 / 范围性问题不上升为全局规范）仍在，并要求必加载层执行原则与 doc-design「信息归属」两处引用未断；『某次备注究竟属全局还是范围』属语义判断，交人/子 agent 复核"),
     ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       "script/check_specs.py",      "check_git_mv_selfcheck 覆盖**本仓库自身侧**（暂存区不得出现 delete+add 形态）；**引用方侧**本仓库看不到、仍靠遵守 + 各项目按 git 规范自检"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,                         "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
     ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据；「某项目某个类该用哪个后缀」属语义判断，交人/子 agent review"),

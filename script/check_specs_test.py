@@ -13,6 +13,7 @@
   * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
   * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
   * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes`/`.editorconfig` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
+  * check_review_guard   —— 评审备注落点防线（正：判据条 + 两个方向约束 + 两处引用齐备；反：文件被删/判据缺失/引用断开）
   * check_verify_guard   —— 规范验证防线（正：两问定式化节 + P2 + 本仓库落点三处一致；
                              反：文件被删/节改名/第二问被删/P2 或本仓库口径未同步/未登记）
   * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
@@ -4864,6 +4865,67 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
     def test_missing_changelog_reports(self):
         cm.check_changelog_entry_guard()
         self.assertIn("缺少统一变更日志", self.error_texts())
+
+
+class TestCheckReviewGuard(CheckSpecsTestCase):
+    """钉住『评审备注落点』判据与两处引用（全局性问题不进范围性落点、全局备注不夹带范围内容）。
+
+    实测失效：把"全项目都要注意 X"备注进某个类的 javadoc——只有读那个类的人看得见、
+    换个入口就找不到；故判据（去限定词仍成立＝全局，只有一处能触发＝范围）与两个方向的
+    约束须都在，且必加载层执行原则与 doc-design「信息归属」两处引用不得断开。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_files = (cm.REVIEW_FILE, cm.EXECUTION_FILE)
+        cm.REVIEW_FILE = os.path.join(self.root, "specs", "general", "review.adoc")
+        cm.EXECUTION_FILE = os.path.join(self.root, "specs", "core", "execution.adoc")
+
+    def tearDown(self) -> None:
+        (cm.REVIEW_FILE, cm.EXECUTION_FILE) = self._orig_files
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/general/review.adoc",
+                   "= code review 规范\n\n== 问题记录\n\n"
+                   "* **备注落点按事项的适用范围判定（L1）**：判定标准："
+                   "①去掉具体类名/模块名后该结论是否仍成立；②是否只有某一处能触发或违反。\n"
+                   "  ** 全局性 → 全局落点，**不得**写进范围性落点；"
+                   "**全局备注里也不出现范围性内容**。\n"
+                   "  ** 范围性 → 范围内落点，不上升为全局规范。\n")
+        self.write("specs/core/execution.adoc",
+                   "* 临时文档只做问题记录、不写备注（备注写入持久文档，"
+                   "**落点按事项的适用范围判定**，见 link:../general/review.adoc[]「问题记录」）\n")
+        self.write("specs/general/doc-design.adoc",
+                   '* **发现的问题/事项的备注落点同样按"范围"判定**'
+                   '（见 link:../general/review.adoc[]「问题记录」）。\n')
+
+    def test_valid_rule_passes(self):
+        self._write_valid()
+        cm.check_review_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_review_file_reports(self):
+        cm.check_review_guard()
+        self.assertIn("缺少 code review 规范文件", self.error_texts())
+
+    def test_dropped_global_note_ban_reports(self):
+        # 反例：删掉"全局备注里也不出现范围性内容" → 全局落点里写具体类/方法细节又变成默许
+        self._write_valid()
+        p = os.path.join(self.root, "specs", "general", "review.adoc")
+        with open(p, encoding="utf-8") as fh:
+            t = fh.read()
+        self.write("specs/general/review.adoc",
+                   t.replace("全局备注里也不出现范围性内容", "备注要简洁"))
+        cm.check_review_guard()
+        self.assertIn("全局备注里也不出现范围性内容", self.error_texts())
+
+    def test_dropped_reference_reports(self):
+        # 反例：必加载层不再指向 review 规范 → 不按 review 规范加载的执行者学不到该判据
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "* 临时文档只做问题记录。\n")
+        cm.check_review_guard()
+        self.assertIn("specs/core/execution.adoc", self.error_texts())
 
 
 class TestCheckPromptDeliverySurfaceGuard(CheckSpecsTestCase):

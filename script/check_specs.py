@@ -165,6 +165,14 @@
      "内容有没有被处理器装配过"判定；`PROMPTS.adoc` 须有「取值路径与装配状态」节（三行判据表
      + "不是三种版本的提示词" + L1 实证话术条）；`AGENTS.adoc` 的提示词条须登记该口径与抓手名。
 
+37. 评审备注落点防线：`specs/general/review.adoc`「问题记录」的『备注落点按事项的适用范围
+    判定』须仍在且**两个方向都在**——判定标准（去具体类名/模块名后仍成立＝全局性；只有某
+    一处能触发/违反＝范围性）、全局性问题**不得写进范围性落点**、**全局备注也不夹带范围性
+    内容**（范围性内容留在范围内落点、只用链接指向）、范围性问题不上升为全局规范；并由
+    必加载层执行原则（临时产物条，每次会话都读）与 `specs/general/doc-design.adoc`「信息归属」
+    两处指向该节——防"备注"退化成"记得记一笔"而没有落点（实测失效：把"全项目都要注意 X"
+    写进某个类的 javadoc，只有读那个类的人看得见、换个入口即找不到）。
+
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
@@ -259,6 +267,11 @@ CONTEXT_FILE = os.path.join(PROJECT_SPECS_DIR, "context.adoc")
 # 人工手动调整。行尾错配属"跨平台直接执行失败"（LF-only 的批处理在 Windows 上不可用），
 # 且最易在"统一换行符"的精简中被压成一句空话，故机械钉住其判据与配套文件。
 ENCODING_FILE = os.path.join(SPECS_DIR, "general", "encoding.adoc")
+# 评审问题/事项的**备注落点**规范（公共内容）：扫出问题后由人工决定"备注到哪"——按适用范围
+# 判定（全局性问题不进范围性落点，全局备注也不夹带范围性内容）。实测失效：把"全项目都要注意 X"
+# 写进某个类的 javadoc，只有读该类的人看得见、换个入口就找不到。判据定式化在 review.adoc
+# 「问题记录」，并由必加载层执行原则与 doc-design「信息归属」各一句话指向，故一并机械钉住。
+REVIEW_FILE = os.path.join(SPECS_DIR, "general", "review.adoc")
 # 须各自写明行尾要求的脚本技术栈文件（引用方按各自栈文件学习，漏一处即学不全）
 LINE_ENDING_STACK_FILES = (
     os.path.join(SPECS_DIR, "stack", "bash.adoc"),
@@ -3238,6 +3251,59 @@ def check_changelog_entry_guard():
     phase_done()
 
 
+def check_review_guard():
+    """『评审备注落点防线』：问题/事项的备注落点判据不得被删、两个方向的引用不得断开。
+
+    背景（实测失效形态）：扫描出问题后按人工要求"备注"时，最易出错的是**把全局性问题记在
+    范围性落点**——例如把"全项目都要注意 X"写进某个类的 javadoc：文本上"已经备注了"，实际
+    只有读那个类的人看得见、换个入口就找不到（并与「信息归属」的"同一信息只写一处"冲突）；
+    反向同样成立：全局落点里夹带具体类/方法细节，会把全局约定写成局部说明（与
+    `specs/general/doc-module.adoc`「全局文档与模块文档的分界」同源）。判据定式化在
+    `specs/general/review.adoc`「问题记录」，并由两处一句话指向：必加载层的执行原则
+    （临时产物条，每次会话都会读到）与 `specs/general/doc-design.adoc`「信息归属」。三处
+    散落，任一被删或引用断开，执行侧就只剩"记得备注"这种没有落点的要求，故机械钉住。
+
+    只钉"判据还在、两个方向的约束都在、两处引用没断"，某次备注究竟属全局还是范围仍由人/
+    子 agent 复核承担（`script/check_effective.py` 台账登记该条时即以本防线为抓手）。
+    """
+    phase("评审备注落点防线检查")
+    rel = os.path.relpath(REVIEW_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(REVIEW_FILE):
+        err(f"缺少 code review 规范文件 {rel}——"
+            "『备注落点按事项的适用范围判定』失去集中落点", rel)
+    else:
+        with open(REVIEW_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("问题记录", "承载该判据的小节"),
+                ("备注落点按事项的适用范围判定", "判据条本身"),
+                ("去掉具体类名/模块名", "全局性判定标准（去掉限定词后仍成立）"),
+                ("只有某一处能触发", "范围性判定标准（只有一处能触发/违反）"),
+                ("写进范围性落点", "全局性问题不得写进范围性落点"),
+                ("全局备注里也不出现范围性内容", "全局备注不夹带范围性内容"),
+                ("不上升为全局规范", "范围性问题不升级为全局规范")):
+            if key not in text:
+                err(f"评审备注落点防线被破坏：{rel} 缺失『{key}』（{desc}）——"
+                    "该条的两个方向（全局性问题不进范围性落点、全局备注不夹带范围性内容）"
+                    "不得被删、也不得被合并成一句口号", rel)
+    # 两处引用：必加载层执行原则（每次会话都读到）+ doc-design「信息归属」（文档落点判据）
+    for path, key, where in (
+            (EXECUTION_FILE, "按事项的适用范围判定", "必加载层执行原则的临时产物条"),
+            (os.path.join(SPECS_DIR, "general", "doc-design.adoc"),
+             "备注落点同样按", "doc-design「信息归属」")):
+        frel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(path):
+            err(f"缺少 {frel}——评审备注落点的引用落点缺失（{where}）", frel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            ftext = fh.read()
+        if key not in ftext or os.path.basename(REVIEW_FILE) not in ftext:
+            err(f"评审备注落点防线被破坏：{frel} 未指向 {rel}「问题记录」"
+                f"（{where} 缺『{key}』或未给出该引用）——"
+                "判据只在 review 规范里时，不按 review 规范加载的执行者学不到", frel)
+    phase_done()
+
+
 def check_quote_line_guard():
     """『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
 
@@ -4843,6 +4909,7 @@ def main(argv=None) -> int:
     check_library_locating_guard()
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
+    check_review_guard()
     check_quote_line_guard()
     check_dependency_view_guard()
     check_index_page_guard()
