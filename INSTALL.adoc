@@ -19,6 +19,8 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
 规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。
 ----
 
+同时将 tmp* 加入到 .gitignore
+
 == 已存在 AGENTS 文档
 
 先检查目标项目根目录是否已存在 agent 规范文档，按 `AGENTS.adoc` → `AGENTS.md` 顺序取**第一个命中者**：
