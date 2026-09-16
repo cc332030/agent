@@ -2353,12 +2353,6 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
         self.assertIn("README.adoc", self.error_texts())
 
 
-if __name__ == "__main__":
-
-
-    unittest.main(verbosity=2)
-
-
 # --------------------------------------------------------------------------- #
 # check_prompts_primary（提示词主侧重与优先级防线：方向不得被删/降级）
 # --------------------------------------------------------------------------- #
@@ -5360,3 +5354,207 @@ class TestCheckCommentDispatchGuard(CheckSpecsTestCase):
         self.write("README.adoc", "# README\n\n## 目录结构\n* 平台层：cnb\n")
         cm.check_comment_dispatch_guard()
         self.assertIn("评论唤起", self.error_texts())
+
+
+class TestCheckApiNamingGuard(CheckSpecsTestCase):
+    """钉住『Feign 接口命名带所属域/项目前缀防线』。
+
+    该条对应用户提出的真实失效：写 Feign 接口时接口名不带所归属的前缀，同域多个服务的同类
+    Feign 接口**同名碰名**（`UserApi` 到处都是），只能靠包名区分。
+    用户要求：`api` 前加一个前缀，**优先考虑已有的固定前缀**；没有先例则取项目名称单词的
+    词首再组合（`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`）。
+    用户同时限定范围：**目前只需要考虑 feign，不需要考虑其他对外接口**。
+
+    最易被四件事冲掉：
+      * **条文被删或降级成建议** —— "随手取个不碰名的"重回默认做法；
+      * **范围被自行放大** —— 写回"对外提供或跨服务/跨项目调用的接口"，把用户明确排除的
+        REST Controller / RPC 契约接口卷进来；
+      * **技术栈落点缺失** —— Java 执行者按栈文件学，通用层有、栈层没有等于没写；
+      * **调度器识别特征被删** —— 该条永远不会被触发加载（写了等于没写）。
+    故本组用例覆盖：条文被删 / L1 被降级 / 范围限定被删 / 范围被写宽 / 判据被抽（先例优先、
+    实例）/ 栈落点缺失 / 栈层不指向通用条 / 调度器未登记 / README 未同步 / 图书馆依据缺失。
+    """
+
+    CODING = (
+        "= 通用编码规范\n"
+        "\n"
+        "== 命名与代码质量\n"
+        "* Feign 接口命名带所属域/项目前缀（L1）：**Feign 声明式 HTTP 客户端接口**"
+        "（跨服务远程调用接口；本次**只此一类**，其他对外接口如 REST Controller、RPC 服务契约接口"
+        "暂不在本约束内，不按本条改名，也不得据此扩张判定）命名须为「**前缀 + 接口业务名 + `Api`**」，"
+        "前缀由**接口所属的域/项目**决定——**先取该域已存在的固定前缀（先例优先），没有先例才按项目名"
+        "取词首字母组合**（`user-center` → `Uc`、`open-user-center` → `Ouc`，即 `UcUserApi`、"
+        "`OucUserApi`）。判定：①所属域已有固定前缀却另取一套；②同类接口有的带前缀有的不带"
+        "（同一项目内不一致）；③把业务名或所属服务的全名当接口名前缀（如 `UserCenterUserApi` "
+        "一类**拼全名**的写法）。\n"
+    )
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n"
+        "\n"
+        "== 命名\n"
+        "* Feign 接口命名带所属域前缀（L1，Java 落点，本条唯一适用面）：**Feign 声明式 HTTP "
+        "客户端接口**按「**前缀 + 接口业务名 + `Api`**」命名——`user-center` → `UcUserApi`、"
+        "`open-user-center` → `OucUserApi`；**只约束 Feign 接口**，REST Controller、RPC 服务契约"
+        "等其他对外接口不适用。判据见 link:../general/coding.adoc[]「命名与代码质量」的"
+        "「Feign 接口命名带所属域/项目前缀」。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「Feign 接口命名带所属域/项目前缀」**："
+        "**只此一类**接口适用）\n"
+        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**Feign 接口命名**："
+        "前缀 + 接口业务名 + `Api`，只约束 Feign 接口）\n"
+    )
+
+    SOURCES = (
+        "= 图书馆依据\n\n== Feign 接口命名带所属域前缀（Spring Cloud）\n"
+        "* 说明：此条为要点转述、非逐字摘录；本仓库**未逐字取回**，故不引用任何加引号的字句。\n"
+        "* 适用范围：用户明确「目前只需要考虑 feign，不需要考虑其他对外接口」，故只取 Feign 这一类。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_generic = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.GENERIC_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_generic,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 技术栈层：java（含**Feign 接口命名**）\n")
+        self.write("library/sources.adoc", self.SOURCES)
+
+    def test_valid_api_naming_guard_passes(self):
+        self._write_valid()
+        cm.check_api_naming_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层条文被删 → "随手取个不碰名的"重回默认做法
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 命名与代码质量\n* 命名要清晰。\n")
+        cm.check_api_naming_guard()
+        self.assertIn("Feign 接口命名带所属域/项目前缀", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：L1 被降级成建议（读起来无害，于是"项目小可以不加"重新成立）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("（L1）", "（L2，建议）"))
+        cm.check_api_naming_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_scope_narrowing_removed_reports(self):
+        # 反例：范围限定（只此一类接口）被删 → 判定面可被自行放大
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("（跨服务远程调用接口；本次**只此一类**，其他对外接口如 REST Controller、"
+                                       "RPC 服务契约接口暂不在本约束内，不按本条改名，也不得据此扩张判定）", ""))
+        cm.check_api_naming_guard()
+        self.assertIn("只此一类", self.error_texts())
+
+    def test_scope_widened_reports(self):
+        # 反例：范围被写宽（用户明确排除的其他对外接口被卷进来）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("（跨服务远程调用接口；本次**只此一类**，其他对外接口如 REST Controller、"
+                                       "RPC 服务契约接口暂不在本约束内，不按本条改名，也不得据此扩张判定）",
+                                       "（RPC/服务契约接口等其他对外接口同样适用）"))
+        cm.check_api_naming_guard()
+        self.assertIn("RPC/服务契约接口", self.error_texts())
+
+    def test_precedent_priority_removed_reports(self):
+        # 反例：'优先用已有的固定前缀'（先例优先）被抽掉 → 等于要求每个接口现场发明一套前缀
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**先取该域已有的固定前缀（先例优先），", "")
+                   .replace("先例优先", ""))
+        cm.check_api_naming_guard()
+        self.assertIn("先例优先", self.error_texts())
+
+    def test_examples_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：实例被抽掉 → 读者无法判断自己是否命中
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 命名与代码质量\n"
+                   "* Feign 接口命名带所属域/项目前缀（L1）：只此一类，其他对外接口不适用。"
+                   "前缀取已有固定前缀、先例优先；判定：同一项目内不一致属违规。"
+                   "Feign 接口固定后缀 `Api`。\n")
+        cm.check_api_naming_guard()
+        self.assertIn("UcUserApi", self.error_texts())
+
+    def test_java_stack_missing_reports(self):
+        # 反例：Java 栈落点缺失 → Java 执行者按栈文件学仍会随手取名
+        self._write_valid()
+        os.remove(cm.JAVA_STACK_FILE)
+        cm.check_api_naming_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_java_stack_not_pointing_general_reports(self):
+        # 反例：栈层只写实例、不指向通用条 → 判据与反例在栈层读不到
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 命名\n* Feign 接口：`UcUserApi`、`OucUserApi`。\n")
+        cm.check_api_naming_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_dispatcher_not_registered_reports(self):
+        # 反例：调度器两处识别特征被删 → 该条永远不会被触发加载（写了等于没写）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]\n")
+        cm.check_api_naming_guard()
+        self.assertIn("Feign 接口命名", self.error_texts())
+
+    def test_dispatcher_scope_marker_removed_reports(self):
+        # 反例：调度器只剩条名、范围标注被删 → 会被读成适用于所有接口
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]"
+                   "（含**「Feign 接口命名带所属域/项目前缀」**）\n"
+                   "  ** Java 项目 → link:specs/stack/java.adoc[]（**Feign 接口命名**）\n")
+        cm.check_api_naming_guard()
+        self.assertIn("只此一类", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 公开面看不到这条
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 技术栈层：java\n")
+        cm.check_api_naming_guard()
+        self.assertIn("接口命名", self.error_texts())
+
+    def test_library_basis_missing_reports(self):
+        # 反例：图书馆依据落点缺该条（依据只剩名称）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 图书馆依据\n\n== 别的主题\n* 略。\n")
+        cm.check_api_naming_guard()
+        self.assertIn("library/sources.adoc", self.error_texts())
+
+    def test_library_scope_note_removed_reports(self):
+        # 反例：图书馆依据未写明只取 Feign 这一类 → 依据被读成通用命名规则
+        self._write_valid()
+        self.write("library/sources.adoc",
+                   "= 图书馆依据\n\n== Feign 接口命名带所属域前缀（Spring Cloud）\n"
+                   "* 说明：要点转述、非逐字摘录；本仓库**未逐字取回**。\n")
+        cm.check_api_naming_guard()
+        self.assertIn("只需要考虑 feign", self.error_texts())
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

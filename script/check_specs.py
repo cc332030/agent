@@ -173,6 +173,19 @@
     两处指向该节——防"备注"退化成"记得记一笔"而没有落点（实测失效：把"全项目都要注意 X"
     写进某个类的 javadoc，只有读那个类的人看得见、换个入口即找不到）。
 
+38. Feign 接口命名带所属域/项目前缀防线：`specs/general/coding.adoc`「命名与代码质量」的
+     「Feign 接口命名带所属域/项目前缀」须仍在且为 L1，**且范围限定只此一类接口**
+     （用户明确"目前只需要考虑 feign，不需要考虑其他对外接口"）——条文不得写回
+     "对外提供或跨服务/跨项目调用的接口"这类宽口径；齐备「前缀 + 接口业务名 + `Api`」形态、
+     **先例优先**（先用该域已有的固定前缀）、无先例的取词规则与实例
+     （`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`）、可逐条核对的判定
+     标准（已有固定前缀却另取一套 / 同类接口有的带有的不带 / 把服务全名当前缀）与存量口径；
+     `specs/stack/java.adoc`「命名」须写 Feign 落点并指向通用条（不复制条文）；
+     加载调度器的通用层（编写代码）与 Java 技术栈两处须带识别特征且写明只约束 Feign；
+     `README.adoc` 目录说明同步；`library/sources.adoc` 须有该条依据并如实标注取样状态与
+     适用范围限定——防"随手取个不碰名的"重回默认做法（用户提出的真实失效：同域多个服务的
+     同类 Feign 接口碰名、按名看不出归属）。
+
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
@@ -3927,6 +3940,108 @@ def check_reuse_precedent_guard():
     phase_done()
 
 
+def check_api_naming_guard():
+    """『Feign 接口命名带所属域/项目前缀防线』：Feign 接口的命名前缀不得退回"随手取名"。
+
+    背景（用户提出的规范要求）：**写 Feign 接口时，`Api` 前加一个前缀，优先考虑已有的固定前缀；
+    没有先例则取项目名称单词的词首再组合**——`user-center` → `UcUserApi`、`open-user-center`
+    → `OucUserApi`（`UserApi` 是接口业务名）。用户报告的真实失效形态：同域多个服务的同类
+    Feign 接口，**同名碰名**（`UserApi` 到处都是），只能靠包名区分，调用方与检索者按名看不出归属。
+
+    **适用范围经用户明确收窄**：**目前只考虑 Feign**，其他对外接口（REST Controller、
+    RPC 服务契约接口等）不在约束内。规则本体收在通用编码规范的「命名与代码质量」（命名规则
+    不绑语言），Java 栈（Feign 是本条的实际来源）按"引用不复制"承接。最易被三件事冲掉：
+      * **条文被删或降级成建议** —— 于是"随手取个不碰名的"重回默认做法；
+      * **前半句禁止、后半句放宽** —— "要有前缀，但项目小可以不加"这类写法（本仓库真实踩过）；
+      * **范围被自行放大** —— 把"只考虑 Feign"改写成"对外提供或跨服务/跨项目调用的接口"，
+        于是一批本不适用本条的其他接口被卷进来（用户明确排除）。
+    故本防线钉住：通用层条文、范围限定与本条判据、Java 栈落点与指向、加载调度器两处识别
+    特征（缺则 Java 执行者与通用读者都不会被触发加载）、README 目录说明同步、图书馆依据
+    落点与范围标注。
+
+    只钉"要求文本仍在、且落在该落点、范围未被放大"——"某次是否真的给接口加了前缀、前缀是否
+    真属该域"属语义判断（取决于项目自身的域与既有先例），交人/子 agent 复核。
+    """
+    phase("Feign 接口命名带所属域前缀防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace(chr(92), "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「Feign 接口命名带所属域/项目前缀」的通用层落点丢失",
+            rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("Feign 接口命名带所属域/项目前缀", "L1"),
+             "条文：须有该条并标 L1（防被降级成建议、退回随手取名）"),
+            (("只此一类", "其他对外接口"),
+             "范围：须写明本条**只约束 Feign 接口**、其他对外接口不在内——"
+             "用户明确「目前只需要考虑 feign，不需要考虑其他对外接口」，"
+             "范围标注被删等于判定面可被自行放大"),
+            (("已存在的固定前缀", "先例优先"),
+             '判据：须写明「优先使用已有的固定前缀」（先例优先），否则等于要求现场发明一套'),
+            (("词首", "UcUserApi", "OucUserApi"),
+             '判据须可判定：须给出「无先例时按项目名取词首组合」与 `UcUserApi`/`OucUserApi` 实例，'
+             "否则读者无法判断自己是否命中"),
+            (("Feign", "Api"),
+             '适用面：须点名 Feign 声明式 HTTP 客户端接口与固定的接口后缀，否则「给接口加前缀」'
+             '会被读成「所有接口」或「只加后缀」'),
+            (("判定", "同一"),
+             "判定标准：须含可逐条核对的反例（有固定前缀却另取一套 / 同类接口有的带有的不带）"),
+            (("全名", "拼全名"),
+             "边界：须写明前缀只承载归属、不拼服务全名（防把业务信息堆进类名）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"接口命名防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户提出的真实失效（同域同类 Feign 接口碰名、按名看不出归属），"
+                    "不得删除、不得降级为建议、不得放大到其他对外接口", rel_coding)
+        for wide in ("对外提供或跨服务/跨项目调用的接口", "RPC/服务契约接口"):
+            if wide in text:
+                err(f"接口命名防线被破坏：{rel_coding} 出现被用户排除的宽口径「{wide}」——"
+                    "用户要求目前只考虑 Feign，判定面不得自行放大到其他对外接口", rel_coding)
+    # 技术栈层：Java（Feign 的实际落点）引用通用条
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace(chr(92), "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——Feign 接口命名的技术栈落点丢失", rel_java)
+    else:
+        jtext = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("Feign", "UcUserApi", "OucUserApi", "coding.adoc")
+                   if k not in jtext]
+        if missing:
+            err(f"接口命名防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须写明 Feign 接口的命名前缀（含实例）并指向通用条"
+                "（只让通用层有、技术栈层没有，Java 执行者按栈文件学仍会随手取名）",
+                rel_java)
+    # 加载调度器：两处识别特征（否则规则永远不会被加载）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace(chr(92), "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        ctext = open(GENERIC_FILE, encoding="utf-8").read()
+        missing = [k for k in ("Feign 接口命名", "只此一类") if k not in ctext]
+        if missing:
+            err(f"接口命名防线被破坏：{rel_common} 缺失要点 {missing}——"
+                "加载调度器须在通用层（编写代码）与 Java 技术栈两处带上识别特征"
+                "（含只约束 Feign 的范围标注），否则该条永远不会被触发加载"
+                "或会被读成适用于所有接口", rel_common)
+    # 公开面：README 目录说明（读者按 README 学习时须能看到这条存在）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace(chr(92), "/")
+    if os.path.isfile(README_FILE) and "接口命名" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步接口命名前缀条——"
+            "公开面看不到这条，引用方按 README 学习时会漏掉", rel_readme)
+    # 图书馆侧：依据落点（引用与说明须可查到）
+    rel_sources = "library/sources.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_sources)):
+        stext = open(os.path.join(REPO_ROOT, rel_sources), encoding="utf-8").read()
+        missing = [k for k in ("Feign 接口命名带所属域前缀", "未逐字取回", "只需要考虑 feign")
+                   if k not in stext]
+        if missing:
+            err(f"接口命名防线被破坏：{rel_sources} 缺失要点 {missing}——"
+                "依据落点须有该条并如实标注取样状态（未逐字取回须写明）与范围限定"
+                "（只取 Feign 这一类比标准更窄的取舍），不得让依据只剩名称", rel_sources)
+    phase_done()
+
+
 def check_prompts_primary():
     """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
 
@@ -4927,6 +5042,7 @@ def main(argv=None) -> int:
     check_comment_dispatch_guard()
     check_delivery_guard()
     check_prompt_delivery_surface_guard()
+    check_api_naming_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 
