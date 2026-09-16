@@ -146,6 +146,15 @@ class TestEvaluate(unittest.TestCase):
                      "且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）"],
             "has-grip")
 
+    def test_api_naming_guard_has_mechanical_grip(self):
+        # 对外接口命名带所属域/项目前缀由 check_api_naming_guard 钉住
+        # （通用层条文与判据 + Java 栈 Feign 落点 + 调度器识别特征 + README 与图书馆依据）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["对外接口命名带所属域/项目前缀（Feign 接口的 `Api` 前须带该域固定前缀，"
+                     "先例优先、无先例取项目名词首组合）"], "has-grip")
+
     def test_delivery_guard_has_mechanical_grip(self):
         # 交付形态与报告落点（不得只冒一句、不得只交付不汇报）由 check_delivery_guard 钉住
         self._mk("script/check_specs.py")

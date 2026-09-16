@@ -9,6 +9,7 @@
 == 命名
 
 * 类重名：除非类全名（全限定类名）冲突不可避免，否则不使用类重名；发现类重名的需调整优化
+* Feign 接口命名带所属域前缀（L1，Java 落点，本条唯一适用面）：**Feign 声明式 HTTP 客户端接口**按「**前缀 + 接口业务名 + `Api`**」命名，前缀取**该接口所属域/项目**的固定前缀（先例优先；无先例按项目名取词首字母组合）——`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`（`UserApi` 是接口业务名）。**只约束 Feign 接口**：REST Controller、RPC 服务契约等其他对外接口不适用本条、不据此改名。判定标准、反例与存量口径见 link:../general/coding.adoc[]「命名与代码质量」的「Feign 接口命名带所属域/项目前缀」（本文件不复制条文）
 * 工具类命名**优先用复数 `Utils` 结尾**：**仅限工具类**（承载通用静态工具方法、提供项目自有功能的类，如字符串/集合处理 `CStrUtils`），类名优先以 `Utils` 结尾（参考 Apache Commons/Spring `StringUtils`/`ObjectUtils`），单数 `Util` 仅在既有一致约定等情况下采用，不混用。**非工具类不受此约束**——即使静态使用或加 `@UtilityClass`，下列不算工具类，命名由自身语义决定（跟随所替代/扩展的对象），不得套用 `Utils`/`Util` 结尾：
   ** 常量类（只放常量）；
   ** **低版本 JDK 替代/补齐类**：复刻 JDK 静态能力为低版本补齐（如 JDK8 无 `List.of`，提供 `CList.of(...)`）；

@@ -41,7 +41,7 @@
 * 必加载层（每次工作都须加载）：
   ** 执行原则（含「任务生命周期与节点自查」：任务从提出到收尾各节点各查什么、何时不设这些节点；以及「规范变更的存量处理」：规范新增/调整后存量**随动迁移、不一次性变更**，除非主动声明收敛）：link:specs/core/execution.adoc[]
 * 通用层（涉及对应活动时加载，不得跳过）：
-  ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言；**含「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」**：SQL/Lua 等被调语言的脚本须独立成文件放资源文件夹、扩展名取被调语言自身的扩展名，且**按性能敏感度决定读取时机**——发布后不变的资源在性能敏感路径（如 Redis 操作）须第一次使用时读取一次并缓存、不敏感路径每次读无妨、需求要求内容会变的模板不缓存——检测特征：宿主语言代码里出现另一语言的语句、字符串拼接/模板组装脚本、MyBatis XML 承载 SQL、Redis 执行 Lua、热点路径每次都读资源）
+  ** 编写代码 → link:specs/general/coding.adoc[]（通用编码，跨语言；**含「Feign 接口命名带所属域/项目前缀」**：**Feign 声明式 HTTP 客户端接口**须为「前缀 + 接口业务名 + `Api`」，前缀先取该域已有的固定前缀、无先例才按项目名取词首字母组合（`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`），**只此一类接口适用**；检测特征：写 Feign 客户端接口、为其命名或改名；**含「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」**：SQL/Lua 等被调语言的脚本须独立成文件放资源文件夹、扩展名取被调语言自身的扩展名，且**按性能敏感度决定读取时机**——发布后不变的资源在性能敏感路径（如 Redis 操作）须第一次使用时读取一次并缓存、不敏感路径每次读无妨、需求要求内容会变的模板不缓存——检测特征：宿主语言代码里出现另一语言的语句、字符串拼接/模板组装脚本、MyBatis XML 承载 SQL、Redis 执行 Lua、热点路径每次都读资源）
   ** 编写/修改脚本（bash/sh、Python、Node、PowerShell 等脚本文件，含 Windows 批处理 `.bat`/`.cmd`） → link:specs/general/script.adoc[]（通用脚本规范，跨语言；**行尾按脚本类型取值**——LF 基准、`.bat`/`.cmd` 必须 CRLF，判据见下文编码条目）
   ** 写注释/文档/格式（含代码内文档注释 javadoc/docstring/JSDoc 的地位与**文档质量六项：准确/完整/可执行/有价值/简洁/可验证**、"内容不减少"要求，以及禁止无意义/划水/凑字数文档、多余文档去除） → link:specs/general/doc.adoc[]
   ** 写/更新变更记录（changelog，识别特征：**本次要新增或改写变更日志条目**；或存在 `CHANGELOG.adoc`/`CHANGELOG.md`/`CHANGELOG.txt` 等变更日志文件、`changelog` 目录或项目自身规范/README 声明的统一变更日志） → link:specs/general/changelog.adoc[]
@@ -62,7 +62,7 @@
   ** 编译/运行/分步验证（构建/测试的实际统计、**验证须覆盖项目全部既定校验手段（含配套测试）**、分步隔离复核、外部资源须实测可用、**验证对象须钉定 commit sha**）与未知项目加载可控性 → link:specs/general/verify.adoc[]「验证与运行契约的落点」
   ** 配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、CI 平台流水线配置等，或涉及流水线运行时/步骤调优；**含判定流水线是否跑全了既定校验、触发路径是否覆盖校验对象、外部依赖是否实测可用、超时是否可判定**） → link:specs/general/ci-cd.adoc[]（**校验链完整、触发与作用范围、依赖与外部资源可用性、超时与资源**各节）
 * 技术栈层（按项目实际使用的语言/技术栈加载，**检测到即必须加载，不得遗漏**）：
-  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端，后两者不随常规测试执行；**执行 SQL / Lua 等跨语言脚本**：`sql`/`lua` 文件须放 `src/main/resources/` 下、按资源加载执行，**加载时机按性能敏感度定性**（Redis 热点用静态常量 `DefaultRedisScript` 读一次、不每次读），MyBatis 的 SQL 写 mapper `*.xml`）
+  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ link:specs/stack/java.adoc[] + link:specs/stack/java-syntax.adoc[] + link:specs/stack/java-testing.adoc[]（**Feign 接口命名**：前缀 + 接口业务名 + `Api`，前缀取所属域固定前缀（先例优先、无先例按项目名取词首字母组合），**只约束 Feign 接口**；测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端，后两者不随常规测试执行；**执行 SQL / Lua 等跨语言脚本**：`sql`/`lua` 文件须放 `src/main/resources/` 下、按资源加载执行，**加载时机按性能敏感度定性**（Redis 热点用静态常量 `DefaultRedisScript` 读一次、不每次读），MyBatis 的 SQL 写 mapper `*.xml`）
   ** Spring 项目（存在 Spring 依赖/注解）→ link:specs/stack/spring.adoc[]
   ** Maven 构建（存在 `pom.xml`/`mvnw`）→ link:specs/stack/maven.adoc[]
   ** Bash/Shell 脚本（存在 `.sh` 文件，或 shebang 为 bash/sh）→ link:specs/stack/bash.adoc[]（结合通用脚本规范 link:specs/general/script.adoc[] 加载；行尾 LF）
