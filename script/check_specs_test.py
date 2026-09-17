@@ -5556,5 +5556,236 @@ class TestCheckApiNamingGuard(CheckSpecsTestCase):
         self.assertIn("只需要考虑 feign", self.error_texts())
 
 
+class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
+    """钉住『持久化访问防线』（通用层抽象 / 技术栈层框架专名）。
+
+    该条对应用户明确提出的硬性要求：**强制使用 `IService` 的成员方法
+    `lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`，除非无法替代，否则禁止
+    `new QueryWrapper` 及其子类**。用户报告的失效形态：Service 已经
+    `extends ServiceImpl<XxxMapper, Xxx>`，业务代码里却仍 `new QueryWrapper<>()` /
+    `new LambdaQueryWrapper<>()` 拼条件——同一项目并存两套写法；非 Lambda 形态还用
+    **字符串写列名**（`eq("user_name", ...)`），编译期查不出、改名即静默失效。
+
+    分层口径（用户追加要求"coding.adoc 是通用规范，不应写入 mybatis plus"）：通用层只留
+    **跨语言抽象**（三条 L1 + 抽象判定标准 + 例外 + 存量），**框架专名与禁止清单的唯一落点**
+    是 `specs/stack/java.adoc`（不新开 `mybatis.adoc`）。
+
+    最易被五件事冲掉（故本组用例逐一覆盖）：
+      * **条文被删或降级成建议** —— `new` 构造器重回默认做法；
+      * **禁止面被放宽** —— 只禁非 Lambda 形态、漏掉"同样类型安全但仍绕过入口"的
+        `new LambdaQueryWrapper`（用户要求是"及其子类"）；
+      * **技术栈落点缺失** —— Java 执行者按栈文件学，通用层有、栈层没有等于没写；
+      * **通用层被框架专名污染** —— `coding.adoc` 里点名 `IService`/`QueryWrapper`，
+        对非 Java 项目不成立、又白占其上下文；
+      * **调度器识别特征被删或未去专名** —— 该条永远不会被触发加载（写了等于没写），
+        或非 Java 项目也被带入 MyBatis-Plus 术语。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        "== 持久化访问（数据库/缓存等）\n"
+        "访问数据库、缓存等持久化存储时，一律走所属技术已提供的类型安全/声明式查询构造 API"
+        "与其统一入口。\n"
+        "* **统一入口（L1）**：持久化操作须经该技术约定的统一访问入口调用（该技术承载"
+        "查询/更新的既有抽象），不自建构造器。\n"
+        "* **优先用类型安全/声明式查询构造 API（L1）**：以方法引用/属性名引用表达列名、"
+        "以声明式方法名表达查询（`findByXxx` 一类）；禁止用字符串写列名表名的构造方式。\n"
+        "* **替代优先（L1）**：技术自带替代写法时强制使用，只在该形态表达不了所需语义时才退回"
+        "通用构造器，且须写明理由。\n"
+        "* **判定标准（任一命中即违规）**：①出现技术自带构造器的直接 `new`；②列名以字符串写进"
+        "查询构造；③绕过统一入口自建查询构造。\n"
+        "* **例外与边界（L2）**：不禁止「跨语言执行脚本的落点」所指的映射文件承载。\n"
+        "* **存量边界**：按「规范变更的存量处理」随动迁移。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148。\n"
+        "\n== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
+        "* 略。\n"
+    )
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n\n"
+        "== 持久化访问（MyBatis-Plus / JPA 等）\n"
+        "持久化访问按通用编码规范的「持久化访问（数据库/缓存等）」执行（见 "
+        "link:../general/coding.adoc[]）；框架专名与禁止清单如下：\n"
+        "* **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `lambdaQuery()`、"
+        "`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`；禁止 `new QueryWrapper<>()`、"
+        "`new UpdateWrapper<>()` 及其子类（含 `new LambdaQueryWrapper<>()`）。\n"
+        "* **`IService` 之外的落点（L1）**：用 `Wrappers` 的 lambda 静态方法或 Mapper 接口上的"
+        "注解/映射文件声明。\n"
+        "* **例外（L2，须写清理由）**：确需 Wrapper 子类时在 Mapper 接口封装一次，业务侧不 new。\n"
+        "* **判定标准（任一命中即违规）**：①构造器 `new`；②列名以字符串写进查询构造"
+        "（可用方法引用表达时）；③绕过 `IService` 另起一套访问写法。\n"
+        "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
+        "走该技术给定的**统一入口**，禁止字符串写列名表名的构造方式；具体技术的入口与"
+        "禁止清单见 link:specs/stack/java.adoc[] 等栈文件）\n"
+        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
+        "强制走 `IService` 的 `lambdaQuery()`/`ktQuery()`，禁止 `new QueryWrapper` 及其子类）\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_generic = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.GENERIC_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_generic,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 通用层：含**持久化访问**：统一入口 + 类型安全构造\n")
+
+    def test_valid_persistence_guard_passes(self):
+        self._write_valid()
+        cm.check_persistence_access_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层条文被删 → "随手 new 构造器"重回默认做法
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 略。\n")
+        cm.check_persistence_access_guard()
+        self.assertIn("持久化访问（数据库/缓存等）", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：统一入口被降级成建议（读起来无害，于是"偶尔 new 一下"重新成立）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**统一入口（L1）**", "**统一入口（L2，建议）**"))
+        cm.check_persistence_access_guard()
+        self.assertIn("统一入口（L1）", self.error_texts())
+
+    def test_alternative_priority_removed_reports(self):
+        # 反例：'替代优先'条被删 → "无法替代"的边界无处可判、禁止面可以被读成"看情况"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**替代优先（L1）**", "**补充说明**")
+                   .replace("替代优先（L1）", "补充说明"))
+        cm.check_persistence_access_guard()
+        self.assertIn("替代优先（L1）", self.error_texts())
+
+    def test_judgement_standard_removed_reports(self):
+        # 反例：判定标准被删 → 只剩一句口径、无法判定是否命中
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **判定标准（任一命中即违规）**：①出现技术自带构造器的直接 "
+                                       "`new`；②列名以字符串写进"
+                                       "查询构造；③绕过统一入口自建查询构造。\n", ""))
+        cm.check_persistence_access_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_general_layer_framework_name_reports(self):
+        # 反例：通用层点名框架专名 → 对非 Java 项目不成立（替换主语测试失败）、白占其上下文
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**优先用类型安全/声明式查询构造 API（L1）**：以方法引用/属性名引用表达列名、",
+                                       "**优先用类型安全/声明式查询构造 API（L1）**：优先用 `IService` 的 `lambdaQuery()`、"))
+        cm.check_persistence_access_guard()
+        self.assertIn("IService", self.error_texts())
+
+    def test_general_layer_wrapper_name_reports(self):
+        # 反例：通用层把具体禁止清单（Wrapper 类名）写进来 → 专名归技术栈层
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("③绕过统一入口自建查询构造。",
+                                       "③出现 `new QueryWrapper` 或 `new LambdaQueryWrapper`。"))
+        cm.check_persistence_access_guard()
+        self.assertIn("QueryWrapper", self.error_texts())
+
+    def test_java_stack_missing_reports(self):
+        # 反例：Java 栈落点缺失 → Java 执行者按栈文件学仍会随手 new
+        self._write_valid()
+        os.remove(cm.JAVA_STACK_FILE)
+        cm.check_persistence_access_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_kt_methods_removed_reports(self):
+        # 反例：Kotlin 的 kt* 成员方法被漏掉 → Kotlin 项目学不全、更新侧无落点
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`", "`lambdaUpdate()`"))
+        cm.check_persistence_access_guard()
+        self.assertIn("ktQuery", self.error_texts())
+
+    def test_lambda_wrapper_subclass_allowed_reports(self):
+        # 反例：禁止面被放宽成"只禁非 Lambda 形态" → 用户明确要求的"及其子类"被丢掉
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("、`new UpdateWrapper<>()` 及其子类（含 `new LambdaQueryWrapper<>()`）", ""))
+        cm.check_persistence_access_guard()
+        self.assertIn("子类", self.error_texts())
+
+    def test_exception_clause_removed_reports(self):
+        # 反例：例外条被删 → "无法替代"时执行者无处可去，只能继续 new
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **例外（L2，须写清理由）**：确需 Wrapper 子类时在 Mapper 接口"
+                                     "封装一次，业务侧不 new。\n", ""))
+        cm.check_persistence_access_guard()
+        self.assertIn("例外（L2", self.error_texts())
+
+    def test_iservice_alternative_removed_reports(self):
+        # 反例：IService 之外的落点（Wrappers / mapper 注解）被删 → 无可替代时无路可走
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("`Wrappers` 的 lambda 静态方法或 Mapper 接口上的", "框架提供的方法或"))
+        cm.check_persistence_access_guard()
+        self.assertIn("Wrappers", self.error_texts())
+
+    def test_dispatcher_registration_removed_reports(self):
+        # 反例：调度器识别特征被删 → 该条永远不会被触发加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+                   "  ** Java 项目 → link:specs/stack/java.adoc[]\n")
+        cm.check_persistence_access_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_java_entry_marker_removed_reports(self):
+        # 反例：Java 栈登记只剩条名、成员方法与禁止面被删 → Java 项目看不到判据
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
+                   "走该技术给定的**统一入口**）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**）\n")
+        cm.check_persistence_access_guard()
+        self.assertIn("lambdaQuery", self.error_texts())
+
+    def test_dispatcher_general_entry_framework_name_reports(self):
+        # 反例：通用层调度条目仍带框架专名 → 非 Java 项目也被带入 MyBatis-Plus 术语、与归属层冲突
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
+                   "走该技术给定的**统一入口**，强制走 `IService` 的 `lambdaQuery()`）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
+                   "强制走 `IService` 的 `lambdaQuery()`/`ktQuery()`，禁止 `new QueryWrapper` 及其子类）\n")
+        cm.check_persistence_access_guard()
+        self.assertIn("IService", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 公开面看不到这条
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 通用层：通用编码\n")
+        cm.check_persistence_access_guard()
+        self.assertIn("持久化访问", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
