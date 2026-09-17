@@ -206,6 +206,20 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
+ 41. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
+     「跨服务/对外调用的请求响应类优先移动复用」须仍在且为 L1，且**两种例外与一条边界齐备**——
+     ①数据库实体类（除用户声明外不移动）；②类里引用了第三方类型；**本项目自身的依赖不算三方依赖**
+     （该字句缺位等于给出一个随时可套用的豁免口）；并含「移动而非复制、同步更新原引用」的动作、
+     可逐条核对的判定标准（另建同构类／同名或仅差包名／复制不改原引用／以「依赖本项目其他模块」为由拒绝移动／
+     移动数据库实体类而无声明）、存量随动迁移与依据行；`specs/stack/spring.adoc`「分层与职责」须有
+     「HTTP 接口路径优先用中划线」（L1，**唯一落点**）并齐备禁止下划线与驼峰、两处照旧（服务路由/网关前缀
+     与已发布对外路径）、判定标准（出现 `_`／路径片段用驼峰或大写／同一接口内混用）与存量口径，
+     同时写明与本项目命名规则的分工；**通用层不得出现「HTTP 接口路径」专条**（该判据只在 Web 框架语境下
+     有定义）；加载调度器的通用层（编写代码）与 Spring 技术栈两处须带识别特征且写明例外与边界；
+     `README.adoc` 目录说明同步；`library/sources.adoc` 须有这两条依据并写明**同义性差异**、
+     `library/adoption.adoc` 的「本集合自己承认的更严取舍」须登记两条——防「另建一套更省事」与
+     「下划线与驼峰混用」重回默认做法（用户提出的真实失效：同一数据契约出现两个定义、路径风格混用）。
+
  40. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
      （也不得转由他人/其他执行者代发）——`specs/platform/cnb.adoc`「评论唤起新实例
      （平台侧的派发入口）」须有该 L1 条（含判定标准四态：新增评论指向本次唤起名 /
@@ -347,6 +361,18 @@ ABSTRACTION_ADOPTION_SECTION = "抽象与接入成本"
 # 的（Redis 操作争分夺秒），故**不能每次使用都去读**——第一次使用时读取后缓存即可；
 # 反之**需求要求内容会变**的（如转 PDF 的 HTML 模板）不适用缓存、按是否需重读决定。
 # 两处必须都钉住：只钉"读取后缓存"会让可变模板被冻结在首读版本上（反方向误用）。
+# 跨服务/对外调用的请求响应类优先移动复用（`specs/general/coding.adoc`「代码复用」）：给已有的接口增加
+# **新的内部调用接口**（如 Feign 等声明式 HTTP 客户端）时，**优先把该接口所需的请求/响应类移动**到新接口
+# 所属位置并沿用，**不得**为它另写一套同名同构的类——同一份数据契约出现两个类后即分叉：改一处必漏另一处，
+# 序列化字段与校验规则各自漂移。**两种例外**：①数据库实体类（除用户声明外不移动）；②类里引用了第三方类型。
+# **边界**：本项目自身的**模块依赖不算三方依赖**（仍可一起移动）。用户提出的原文口径：「**当给一个现有的接口
+# 添加 feign 内部接口时，优先移动请求和响应类，而不是新增**，除非该类是**数据库实体类**（除声明外不用）或者
+# **有三方依赖**（**本项目依赖不算，可以一起移动**）」。
+CONTRACT_REUSE_SECTION = "跨服务/对外调用的请求响应类优先移动复用"
+# HTTP 接口路径优先用中划线（`specs/stack/spring.adoc`「分层与职责」）：路由路径的**路径片段**用小写 + 中划线，
+# 不得用下划线或驼峰；服务路由/网关前缀与已发布且外部依赖的对外路径照旧。用户提出的口径：「**feign 接口地址
+# 优先使用中划线**」。本条**只在技术栈层**（「HTTP 路径」只在 Web 框架语境下有定义，通用层不写协议/框架专名）。
+API_PATH_DASH_SECTION = "HTTP 接口路径优先用中划线（kebab-case）"
 EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）"
 JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
@@ -4125,6 +4151,138 @@ def check_persistence_access_guard():
     phase_done()
 
 
+def check_api_contract_reuse_guard():
+    """『请求/响应类优先移动复用 + HTTP 接口路径优先中划线』防线。
+
+    两条都来自用户在一次要求里给出的口径（原文见常量注释）：
+      * **请求/响应类优先移动复用**（通用层 `specs/general/coding.adoc`「代码复用」）：给已有接口加 Feign
+        等内部调用接口时，优先**移动**并沿用请求/响应类，**不新建一套**——否则同一数据契约出现两个定义，
+        字段增删只改一处、序列化与校验规则各自漂移，且没有编译期提示。例外只有两类：**数据库实体类**
+        （除用户声明外不移动，因为它跟随表结构归属）与**类里引用了第三方类型**的类；**本项目自身的模块依赖
+        不算三方依赖**（仍可一起移动）。
+      * **HTTP 接口路径优先中划线**（技术栈层 `specs/stack/spring.adoc`「分层与职责」）：路由路径片段用小写 + `-`，
+        不得用 `_` 或驼峰；服务路由/网关前缀与已发布对外路径照旧。用户口径：「feign 接口地址优先使用中划线」。
+
+    本防线钉住（防三种降级）：
+      * **条文被删或降级成建议** —— "另建一套更省事"重回默认做法；
+      * **例外被写宽或边界被抽掉** —— 例外只留"实体类/第三方依赖"两类且**本项目自身的依赖不算三方依赖**
+        这两点缺任一点，等于给出一个可以随时套用的豁免口（「它依赖本项目别的模块」就能另建一套）；
+      * **路径条被搬到通用层或退回"随手取名/下划线"** —— 路径条须仍在**技术栈层**（通用层不写协议/框架专名），
+        且须保留两处照旧（服务路由/网关前缀、已发布对外路径）与可逐条核对的判定标准。
+
+    只钉"要求文本仍在、且落在该落点、范围未被放开"——"某次是否真的移动了类、路径是否真的用了中划线"
+    属引用方项目代码（本仓库不可见），交人/子 agent 复核。
+    """
+    phase("请求/响应类复用与接口路径中划线防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「请求/响应类优先移动复用」的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            ((CONTRACT_REUSE_SECTION, "L1"),
+             "条文：须有该条并标 L1（防被降级成建议、退回「另建一套更省事」）"),
+            (("数据库实体类", "不移动"),
+             "例外一：须写明数据库实体类除用户声明外不移动（它跟随表结构归属）"),
+            (("第三方类型", "例外"),
+             "例外二：须写明「类里引用了第三方类型」才可另建，否则例外面无从判定"),
+            (("本项目自身的依赖不算三方依赖",),
+             "边界：须写明本项目自身的依赖不算三方依赖——该字句被抽掉即等于给出一个随时可套用的豁免口"
+             "（「它依赖本项目别的模块」就能另建一套）"),
+            (("移动而非复制", "同步更新全部引用"),
+             "动作：须写明是移动（并同步更新原引用）而非复制——只复制会立刻产生两个可独立演化的定义"),
+            (("判定标准", "同名或仅差包名"),
+             "判定标准：须含可逐条核对的反例（新建同构类 / 同名或仅差包名 / 复制不改原引用 / "
+             "以「依赖本项目其他模块」为由拒绝移动 / 移动数据库实体类而无声明）"),
+            (("存量处理",),
+             "存量口径：须写存量随动迁移（不发动全库改造），否则会被读成「必须立即全库搬类」"),
+            (("依据",),
+             "依据：须保留依据名（该条属本集合更严取舍，依据只写名称/编号、不写全文）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"请求/响应类复用防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户提出的真实失效（同一数据契约出现两个定义、字段与校验各自漂移），"
+                    "不得删除、不得降级为建议、不得放开例外与边界", rel_coding)
+    # 技术栈层：HTTP 接口路径优先中划线（唯一落点）
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少文件 {rel_spring}——「HTTP 接口路径优先中划线」的技术栈落点丢失"
+            "（该条只在 Web 框架语境下有定义、不得写进通用层）", rel_spring)
+    else:
+        stext = open(SPRING_STACK_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            ((API_PATH_DASH_SECTION, "L1"),
+             "条文：须有该条并标 L1（防被降级成建议或删除）"),
+            (("下划线", "驼峰"),
+             "判据须可判定：须点名禁止下划线与驼峰（只写「优先中划线」无法判定「哪些写法算违规」）"),
+            (("服务路由", "已发布"),
+             "两处照旧：服务路由/网关前缀与已发布且外部依赖的对外路径须明文照旧，"
+             "否则会被读成「所有路径都要改名」（对外路径改名即破坏既有调用方）"),
+            (("判定标准", "混用"),
+             "判定标准：须含可逐条核对的反例（出现 `_` / 路径片段用驼峰或大写 / 同一接口内混用）"),
+            (("存量处理",),
+             "存量口径：须写存量随动迁移，不发动全库改名"),
+            (("命名", "java.adoc"),
+             "分工：须写明本条只管路径字符串，类名与标识符命名另按命名规则（防两条规则混用）"),
+        ):
+            missing = [k for k in keys if k not in stext]
+            if missing:
+                err(f"接口路径防线被破坏：{rel_spring} 缺失要点 {missing}——{desc}", rel_spring)
+    # 通用层不得出现路径命名专条（归属：HTTP 路径只在 Web 框架语境下有定义）
+    if os.path.isfile(CODING_FILE):
+        ctext = open(CODING_FILE, encoding="utf-8").read()
+        if "接口路径优先用中划线" in ctext or "接口路径优先使用中划线" in ctext:
+            err(f"接口路径防线被破坏：{rel_coding} 出现「HTTP 接口路径」专条——"
+                "该条的判据只在 Web 框架/HTTP 语境下有定义，归技术栈层；通用层写具体协议专名会"
+                "把非 Web 项目也带进 HTTP 术语（与「持久化访问」的归属口径一致）", rel_coding)
+    # 加载调度器：通用层与 Spring 技术栈两处识别特征（否则该条永远不会被触发加载）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        gtext = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("请求响应类优先移动复用", "本项目自身的依赖不算三方依赖"),
+             "调度器通用层条目须带识别特征（何时命中、例外与边界），否则该条永远不会被触发加载"),
+            (("接口路径优先用中划线", "路由路径"),
+             "调度器 Spring 条目须带接口路径的识别特征（写/改路由路径即命中），否则 Spring 执行者读不到"),
+        ):
+            missing = [k for k in keys if k not in gtext]
+            if missing:
+                err(f"接口路径/契约复用防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    # 公开面：README 目录说明（读者按 README 学习时须能看到这两条存在）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rtext = open(README_FILE, encoding="utf-8").read()
+        missing = [k for k in ("请求响应类优先移动复用", "接口路径优先用中划线") if k not in rtext]
+        if missing:
+            err(f"{rel_readme} 的目录说明未同步要点 {missing}——"
+                "公开面看不到这两条，引用方按 README 学习时会漏掉", rel_readme)
+    # 图书馆侧：依据落点（引文/同义性/实证须可查到，且如实标注取样状态）
+    rel_sources = "library/sources.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_sources)):
+        sctext = open(os.path.join(REPO_ROOT, rel_sources), encoding="utf-8").read()
+        missing = [k for k in ("HTTP 接口路径的命名风格", "请求/响应类的复用与跨模块移动",
+                               "同义性") if k not in sctext]
+        if missing:
+            err(f"接口路径/契约复用防线被破坏：{rel_sources} 缺失要点 {missing}——"
+                "依据落点须有这两条并写明同义性差异（标准只给方向与下限，"
+                "判据化取值与例外清单属本集合取舍），不得让依据只剩名称", rel_sources)
+    rel_adoption = "library/adoption.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_adoption)):
+        atext = open(os.path.join(REPO_ROOT, rel_adoption), encoding="utf-8").read()
+        missing = [k for k in ("请求/响应类优先移动复用、HTTP 接口路径优先中划线",
+                               "本集合自己的判据化取舍") if k not in atext]
+        if missing:
+            err(f"接口路径/契约复用防线被破坏：{rel_adoption} 缺失要点 {missing}——"
+                "「本集合自己承认的更严取舍」一节须登记这两条（防读者把它们读成标准规定）",
+                rel_adoption)
+    phase_done()
+
+
 def check_api_naming_guard():
     """『Feign 接口命名带所属域/项目前缀防线』：Feign 接口的命名前缀不得退回"随手取名"。
 
@@ -5427,6 +5585,7 @@ def main(argv=None) -> int:
     check_self_dispatch_guard()
     check_delivery_guard()
     check_prompt_delivery_surface_guard()
+    check_api_contract_reuse_guard()
     check_api_naming_guard()
     check_persistence_access_guard()
     check_checklist_guard()

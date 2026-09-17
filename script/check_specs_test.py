@@ -5842,6 +5842,205 @@ class TestCheckApiNamingGuard(CheckSpecsTestCase):
         self.assertIn("只需要考虑 feign", self.error_texts())
 
 
+class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
+    """钉住『请求/响应类优先移动复用 + HTTP 接口路径优先中划线』防线。
+
+    两条都来自用户的一次要求：给已有接口加 Feign 内部接口时**优先移动请求/响应类、不新建**（例外只有
+    数据库实体类与"类里引用了第三方类型"，且**本项目自身的依赖不算三方依赖**）；**feign 接口地址优先使用中划线**。
+
+    最易被四件事冲掉：
+      * **条文被删或降级成建议** —— "另建一套更省事"重回默认做法；
+      * **例外与边界被写宽/抽掉** —— 尤其"本项目自身的依赖不算三方依赖"这条边界，缺位即等于给出一个
+        随时可套用的豁免口（"它依赖本项目别的模块"就能另建一套）；
+      * **路径条被删或退回下划线/驼峰** —— 同一项目两种风格并存；
+      * **路径条被搬到通用层** —— 通用层会出现只在 Web 框架语境下有定义的判据（协议/框架专名污染）。
+    故本组用例覆盖：条文缺失 / L1 降级 / 边界字句被抽 / 移动动作被抽 / 判定标准被抽 / 路径条缺失或降级 /
+    两处照旧被删 / 路径条被写进通用层 / 调度器两处识别特征缺失 / README 未同步 / 图书馆依据缺失。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n== 代码复用\n"
+        "* **跨服务/对外调用的请求响应类优先移动复用，不新建（L1）**：给**已有的接口**增加**新的内部调用接口**"
+        "（如 Feign 等声明式 HTTP 客户端）时，**优先把**该接口所需的**请求/响应类移动**到新接口所属的位置并**沿用**，"
+        "**不得**为它另写一套同名同构的类。**移动而非复制**：移动后同步更新全部引用；"
+        "**不得**一处移动、一处留副本。**两种例外**：①**数据库实体类**——除用户明确声明允许外一律**不移动**；"
+        "②**引用了第三方类型**的类。**边界：本项目自身的依赖不算三方依赖**——由本项目自己的**其他模块**提供的类型"
+        "仍属可一起移动。**判定标准（任一命中即违规）**：①另建新建的请求/响应类而项目内已有等价同类；"
+        "②该新建类与既有类**同名或仅差包名**；③只**复制**既有类而不改原引用；"
+        "④以「它依赖本项目的其他模块」为由拒绝移动；⑤**移动了数据库实体类**而没有用户声明。"
+        "存量按「规范变更的存量处理」随动迁移。依据：ISO/IEC 25010 可维护性。\n"
+    )
+
+    SPRING = (
+        "= Spring 规范（技术栈层）\n\n== 分层与职责\n"
+        "* **HTTP 接口路径优先用中划线（kebab-case）（L1）**：路由路径的**路径片段**须用小写 + 中划线（`-`），"
+        "**不得**用下划线（`_`）或驼峰/大写。**两处照旧**：①**服务路由前缀/网关前缀**；"
+        "②**已发布、外部依赖的对外路径**。**判定标准**：①路径里出现 `_`；②路径片段用驼峰/大写；"
+        "③同一接口内两种风格混用。存量路径按「规范变更的存量处理」随动迁移。"
+        "**与命名规则的分工**：本条只管**路径字符串**，类名命名按 link:java.adoc[]「命名」。"
+        "依据：RFC 3986。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「跨服务调用的请求响应类优先移动复用」**："
+        "给已有接口加内部调用接口（如 Feign）时，请求/响应类**优先移动沿用、不新建**"
+        "（例外只两类：数据库实体类除声明外不移动、类里引用了第三方类型；**本项目自身的依赖不算三方依赖**）；"
+        "检测特征：加接口时另建请求/响应类）\n"
+        "  ** Spring 项目 → link:specs/stack/spring.adoc[]（**HTTP 接口路径优先用中划线**："
+        "路由路径片段用小写 + `-`，不得用 `_` 或驼峰；检测特征：写/改路由路径）\n"
+    )
+
+    README = "# README\n\n## 目录结构\n* 通用层：请求响应类优先移动复用\n* 技术栈层：接口路径优先用中划线\n"
+
+    SOURCES = (
+        "= 图书馆依据\n\n== HTTP 接口路径的命名风格（RFC 3986）\n"
+        "* **须注意的语义差异（同义性）**：标准只给方向与下限，判据化取值属本集合取舍。\n"
+        "\n== 请求/响应类的复用与跨模块移动（ISO/IEC 25010 可维护性）\n"
+        "* **须注意的语义差异（同义性）**：例外清单属本集合自己的取舍。\n"
+    )
+
+    ADOPTION = (
+        "= 图书馆：本集合自身取舍\n\n== 同义性差异与覆盖点\n"
+        "* **请求/响应类优先移动复用、HTTP 接口路径优先中划线（L1）两条均为本集合自己的判据化取舍**：略。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        self._orig_generic = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.SPRING_STACK_FILE, cm.GENERIC_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_spring, self._orig_generic,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/spring.adoc", self.SPRING)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("README.adoc", self.README)
+        self.write("library/sources.adoc", self.SOURCES)
+        self.write("library/adoption.adoc", self.ADOPTION)
+
+    def test_valid_guard_passes(self):
+        self._write_valid()
+        cm.check_api_contract_reuse_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：通用层条文被删 → "另建一套更省事"重回默认做法
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 复用。\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("跨服务/对外调用的请求响应类优先移动复用", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：L1 被降级成建议
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.CODING.replace("（L1）", "（L2，建议）"))
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_dependency_boundary_removed_reports(self):
+        # 反例：'本项目自身的依赖不算三方依赖'被抽掉 → 给出一个随时可套用的豁免口
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**边界：本项目自身的依赖不算三方依赖**——", "")
+                   .replace("本项目自身的依赖不算三方依赖", ""))
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("本项目自身的依赖不算三方依赖", self.error_texts())
+
+    def test_move_action_removed_reports(self):
+        # 反例：'移动而非复制、同步更新全部引用'被抽 → 只剩"别新增"一句口号
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**移动而非复制**：移动后同步更新全部引用；", ""))
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("移动而非复制", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：判定标准被抽掉 → 无法判定是否命中
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.CODING.split("**判定标准")[0])
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_spring_clause_deleted_reports(self):
+        # 反例：路径条被删 → 下划线与驼峰混用重回默认做法
+        self._write_valid()
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 分层与职责\n* 分层。\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("HTTP 接口路径优先用中划线（kebab-case）", self.error_texts())
+
+    def test_spring_existing_paths_exception_removed_reports(self):
+        # 反例：两处照旧（服务路由前缀、已发布对外路径）被抽掉 → 会被读成"所有路径都要改名"
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace("**两处照旧**：①**服务路由前缀/网关前缀**；"
+                                       "②**已发布、外部依赖的对外路径**。", ""))
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("服务路由", self.error_texts())
+
+    def test_path_clause_in_general_layer_reports(self):
+        # 反例：路径条被放进通用层 → 只在 Web 框架语境下有定义的判据污染非 Web 项目
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING + "* HTTP 接口路径优先用中划线：路径片段用小写 + `-`。\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_dispatcher_general_entry_not_pointing_reports(self):
+        # 反例：调度器通用层识别特征被删 → 该条永远不会被触发加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+                   "  ** Spring 项目 → link:specs/stack/spring.adoc[]（**HTTP 接口路径优先用中划线**："
+                   "路由路径片段用小写 + `-`）\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("请求响应类优先移动复用", self.error_texts())
+
+    def test_dispatcher_spring_entry_not_pointing_reports(self):
+        # 反例：调度器 Spring 条目识别特征被删 → Spring 执行者读不到该条
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「跨服务调用的请求响应类优先移动复用」**："
+                   "请求/响应类**优先移动沿用、不新建**；**本项目自身的依赖不算三方依赖**）\n"
+                   "  ** Spring 项目 → link:specs/stack/spring.adoc[]\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("接口路径优先用中划线", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 公开面看不到这两条
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 通用层\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_library_basis_missing_reports(self):
+        # 反例：图书馆依据落点缺这两条（依据只剩名称）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 图书馆依据\n\n== 别的主题\n* 略。\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("library/sources.adoc", self.error_texts())
+
+    def test_adoption_tradeoff_missing_reports(self):
+        # 反例：'本集合自己承认的更严取舍'未登记 → 读者会把两条读成标准规定
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 图书馆：本集合自身取舍\n\n== 同义性差异与覆盖点\n* 别的取舍。\n")
+        cm.check_api_contract_reuse_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+
 class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
     """钉住『持久化访问防线』（通用层抽象 / 技术栈层框架专名）。
 
