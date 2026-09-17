@@ -54,7 +54,7 @@
 * **新接入项目先配好再提交（L1）**：首次提交前就要有 `.gitattributes` 与 `.editorconfig`，避免先按本机默认提交、再回头统一行尾与编码（历史里会留下大量"只因换行符"的假变更）。
 * **配套设置（L2）**：`.gitattributes` 已显式声明时，开发者本机的 `core.autocrlf` 应设为 `false`（由仓库配置决定行尾，不再让本机设置二次改写）；`eol=crlf` 的文件其 CRLF 由 git 按规则生成、**不写进仓库内容**（仓库内仍按 LF 存储）。
 * **存量项目补齐（L2）**：尚未配置的存量项目按 link:../core/execution.adoc[]「规范变更的存量处理」随项目开发逐步补上，不为此发动全库一次性转换。
-* **自检（L1，引用方项目执行）**：本规范集合看不到引用方的工作区，故该条由**引用方项目自查**承担——仓库根 `.gitattributes`、`.editorconfig` 均存在（缺失即按本节补齐）；`git check-attr -a <文件>` 须给出与上表一致的 `eol` 取值；`git ls-files --eol` 无违规（见上节「行尾一致性校验」）；`.editorconfig` 与 `.gitattributes` 对同一类文件的行尾取值一致。
+* **自检（L1，引用方项目执行）**：本规范集合看不到引用方的工作区，故该条由**引用方项目自查**承担——仓库根 `.gitattributes`、`.editorconfig` 均存在（缺失即按本节补齐）；`git check-attr -a <文件>` 须给出与上表一致的 `eol` 取值；`git ls-files --eol` 无违规（见 link:../general/git.adoc[]「行尾与检出归一」的『核对命令』条）；`.editorconfig` 与 `.gitattributes` 对同一类文件的行尾取值一致。
 
 == 语言无关性
 

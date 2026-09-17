@@ -6077,7 +6077,7 @@ class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
         "仍属可一起移动。**判定标准（任一命中即违规）**：①另建新建的请求/响应类而项目内已有等价同类；"
         "②该新建类与既有类**同名或仅差包名**；③只**复制**既有类而不改原引用；"
         "④以「它依赖本项目的其他模块」为由拒绝移动；⑤**移动了数据库实体类**而没有用户声明。"
-        "存量按「规范变更的存量处理」随动迁移。依据：ISO/IEC 25010 可维护性。\n"
+        "存量随动迁移（不发动全库改造）。依据：ISO/IEC 25010 可维护性。\n"
     )
 
     SPRING = (
@@ -6585,6 +6585,70 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
                    "    pass\n")
         cm.check_wiring_guard()
         self.assertIn("main()", self.error_texts())
+
+
+
+class TestCheckPromptsIndexGuard(CheckSpecsTestCase):
+    """钉住『提示词登记处索引形态』防线（本轮重构新增）。
+
+    背景：`PROMPTS.adoc` 的公共约定原先把 `prompts/_common.txt` 各片段的要点**逐条复述**
+    一遍——同一约束两份正文，片段一改这里就漂移。本轮改为**索引**（只写"有哪几个片段、
+    每个片段管哪条边界、正文唯一落点在片段里"）。但索引也有反向失效：把某条边界从索引里
+    **整条删掉**，复制提示词的人就再也看不到它。
+
+    用例覆盖：①正例（索引形态 + 指向语 + 各片段名齐备）通过；②某条边界的片段名被整条删掉 →
+    报错；③没写明"此处只作索引、正文在片段里" → 报错（会被读成全文）；④入口缺失 → 报错。
+    """
+
+    INDEX = (
+        "= 公共任务提示词（入口）\n\n"
+        "== 登记\n"
+        "* 公共约定（**展开见 link:prompts/_common.txt[] 的对应片段——此处只作索引，不复述正文**）：\n"
+        "** `baseline-and-compat` / `compat`：动手前与改动后的边界。\n"
+        "** `scope-boundary`：改动范围边界。\n"
+        "** `delivery`：交付边界。\n"
+        "** `self-dispatch`：不得自行发评论唤起自己。\n"
+        "** 各片段的正文只写在 link:prompts/_common.txt[]（一处维护、两处生效）。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = cm.PROMPTS_FILE
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+
+    def tearDown(self) -> None:
+        cm.PROMPTS_FILE = self._orig_prompts
+        super().tearDown()
+
+    def test_valid_index_passes(self):
+        self.write("PROMPTS.adoc", self.INDEX)
+        cm.check_prompts_index_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_entry_deleted_reports(self):
+        # 反例①：把 `self-dispatch`（不得自行发评论唤起自己）整条从登记处删掉 →
+        # 复制提示词的人彻底看不到这条边界
+        self.write("PROMPTS.adoc", self.INDEX.replace("** `self-dispatch`：不得自行发评论唤起自己。\n", ""))
+        cm.check_prompts_index_guard()
+        self.assertIn("self-dispatch", self.error_texts())
+
+    def test_scope_entry_deleted_reports(self):
+        # 反例②：把 `scope-boundary`（改动范围边界）整条删掉
+        self.write("PROMPTS.adoc", self.INDEX.replace("** `scope-boundary`：改动范围边界。\n", ""))
+        cm.check_prompts_index_guard()
+        self.assertIn("scope-boundary", self.error_texts())
+
+    def test_no_pointer_reports(self):
+        # 反例③：只列片段名、没说"正文在片段里、此处只作索引" → 会被读成全文
+        self.write("PROMPTS.adoc", self.INDEX.replace("——此处只作索引，不复述正文", "")
+                   .replace("** 各片段的正文只写在 link:prompts/_common.txt[]（一处维护、两处生效）。\n", ""))
+        cm.check_prompts_index_guard()
+        self.assertIn("索引", self.error_texts())
+
+    def test_missing_entry_file_reports(self):
+        # 反例④：入口缺失 → 公共约定无处登记，必须报错、不得静默通过
+        cm.check_prompts_index_guard()
+        self.assertIn("PROMPTS.adoc", self.error_texts())
 
 
 if __name__ == "__main__":
