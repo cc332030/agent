@@ -209,7 +209,10 @@
  42. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
      （动手前先摸清现状与最佳方案 / 不得绕开既有体系另写一套（三个允许条件、不留两套并存）/
      大范围改动先确认（不得替用户判定既有流程已废弃）/ 改动前先定基线（扫描既有校验手段、完整可用
-     必须先跑通、落盘留证、复跑比对）），任务生命周期表的「方案」「验证」两节点须带基线条；通用层
+     必须先跑通、落盘留证、复跑比对、**清单够不够用**：手段与用例可能不全、先 review 既有用例、
+     只补本次直接相关面、无关存量缺口不阻断）），`specs/general/planning.adoc` 须含「基线完整性」节、
+     `specs/general/verify.adoc`「验证须覆盖项目的全部既定校验手段」须补"跑的那套够不够用"、
+     提示词片段 `baseline-and-compat` 同口径，任务生命周期表的「方案」「验证」两节点须带基线条；通用层
      `specs/general/planning.adoc` 须承载展开（现状与最佳方案、另写一套的三条件与处置、大动确认四问与
      老旧废弃流程、基线的扫描/留证/复跑与"既有用例不得改判"的接口、依据行）；`specs/general/testing.adoc`
      须有「重构后须同时满足既有用例与新用例」（既有用例不得为迁就重构而改判、前后完整兼容）与
@@ -2585,6 +2588,8 @@ def check_dev_flow_guard():
         最佳方案」「不得绕开既有体系另写一套」「大范围改动先确认」「改动前先定基线」四条与各自
         级别，且**基线**须含"扫描既有校验手段""完整可用必须先跑通""落盘留证""改完复跑比对"；
         任务生命周期的「方案」「验证」两节点须分别带"基线是否已定""是否与基线逐项比对"；
+        且基线须含**基线完整性（L2）**——清单「够不够用」：手段与既有用例可能不全（边界/正反例/步骤），
+        须先按用例设计判据 review、只补本次直接相关面、无关存量缺口不阻断（`verify.adoc` 侧同口径）；
       * **通用层展开**（`specs/general/planning.adoc`）：三个节（现状与最佳方案 / 不得绕开既有
         体系另写一套（含三个允许条件）/ 大范围改动先确认 / 动手前先定基线）与依据行齐备；
       * **测试侧**（`specs/general/testing.adoc`）：须有「重构后须同时满足既有用例与新用例」与
@@ -2614,8 +2619,10 @@ def check_dev_flow_guard():
             (("大范围改动先确认（L1）", "不得替用户判定某段既有流程", "已废弃"),
              "须有「大范围改动先确认」L1 条与『是否废弃由用户认定』（旧流程的废弃不能被执行者自行认定）"),
             (("改动前先定基线（L1）", "扫描项目声明的全部校验手段", "完整可用时必须先跑通",
-              "落盘留证", "复跑同一套校验"),
-             "须有「改动前先定基线」L1 条且含扫描/跑通/留证/复跑四要素"),
+              "落盘留证", "复跑同一套校验", "够不够用", "先按用例设计判据 review 既有用例",
+              "本次改动的直接相关面", "不阻断动手"),
+             "须有「改动前先定基线」L1 条且含扫描/跑通/留证/复跑四要素 + **基线完整性（L2）**"
+             "（清单够不够用、先 review 既有用例、只补本次直接相关面、无关缺口不阻断）"),
             (("基线是否已定", "是否与基线逐项比对"),
              "任务生命周期表的「方案」「验证」两节点须带基线条（缺则该节点到点不会问基线）"),
         ):
@@ -2647,12 +2654,34 @@ def check_dev_flow_guard():
               "红的还是红的", "基线用于改完复跑（L1）", "既有用例不得为迁就改动而改判"),
              "「动手前先定基线」须齐备扫描/跑通留证/**无手段与红测试不阻断**/复跑/与测试侧接口"
              "（缺降级分支会把基线变成引用方的硬性前置）"),
+            (("基线的完整性：手段与用例够不够用（L2）", "先按这些判据 review 既有用例",
+              "复核了哪些角度与样本", "正常路径", "异常路径", "正反例成对", "步骤与前置",
+              "本次改动的直接相关面", "无关的存量缺口", "不阻断", "用例设计", "测试有效性"),
+             "「动手前先定基线」须含**基线完整性（L2）**条：手段与用例可能不完整（边界/正反例/步骤），"
+             "先 review 既有用例并给出复核角度与未覆盖项，只补本次直接相关面、无关存量缺口不阻断"
+             "（缺此条则『扫一遍声明的命令』仍会被当成完整基线）"),
             (("ISO 10007",),
              "基线条须给依据（ISO 10007 配置管理与变更控制）"),
         ):
             missing = [k for k in keys if k not in pl]
             if missing:
                 err(f"开发流程防线被破坏：{rel_pl} 缺失要点 {missing}——{desc}", rel_pl)
+    # ②b 验证侧：覆盖全部既定校验手段 ≠ 手段/用例够用（基线完整性的验证侧口径）
+    rel_v = "specs/general/verify.adoc"
+    path_v = os.path.join(REPO_ROOT, *rel_v.split("/"))
+    if not os.path.isfile(path_v):
+        err(f"缺少文件 {rel_v}——验证侧口径无处承载", rel_v)
+    else:
+        v = open(path_v, encoding="utf-8").read()
+        for keys, desc in (
+            (("验证须覆盖项目的全部既定校验手段（L1）", "本身可能不完整", "先按 link:testing.adoc[]「用例设计」review",
+              "哪些未覆盖", "本次改动的直接相关面"),
+             "「验证须覆盖项目的全部既定校验手段」须补『被跑的那一套够不够用』——手段与被跑用例本身可能不完整，"
+             "须先按用例设计判据 review 并说明未覆盖/未确证项（只钉『跑全了』会漏掉『跑的那套本来就不全』）"),
+        ):
+            missing = [k for k in keys if k not in v]
+            if missing:
+                err(f"开发流程防线被破坏：{rel_v} 缺失要点 {missing}——{desc}", rel_v)
     # ③ 测试侧：老用例不得为迁就改动而改判 + 兼容不了先确认
     rel_t = "specs/general/testing.adoc"
     path_t = os.path.join(REPO_ROOT, *rel_t.split("/"))
@@ -2680,8 +2709,9 @@ def check_dev_flow_guard():
         cf = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
         for keys, desc in (
             (("tag::baseline-and-compat[]", "先查现状、再谈方案", "先定基线",
-              "大动之前先确认", "不得绕开既有实现另写一套", "都不是不动手的理由"),
-             "须有 `baseline-and-compat` 片段（动手前：现状/最佳方案/基线/大动先确认/不另写一套）"),
+              "大动之前先确认", "不得绕开既有实现另写一套", "都不是不动手的理由",
+              "基线清单还要核", "够不够用", "review 既有用例", "无关的存量缺口"),
+             "须有 `baseline-and-compat` 片段（动手前：现状/最佳方案/基线（含清单够不够用）/大动先确认/不另写一套）"),
             (("tag::compat[]", "既有用例不得为迁就改动而改判", "新老用例在同一套校验里同时全绿",
               "兼容不了就停下确认", "验证须与基线比对"),
              "须有 `compat` 片段（改动后：老用例不得改判/新老同时成立/兼容不了先确认/与基线比对）"),
@@ -2851,6 +2881,89 @@ def check_checklist_guard():
             elif name not in defined:
                 err(f"{rel} 点名了脚本中未定义的 `{name}`——"
                     "防线的声称与实现不一致（改名/删除后未同步文档）", rel)
+    phase_done()
+
+
+def check_wiring_guard():
+    """『防线接线完整性』：每个 `check_*` 都必须被 `main()` 真正调用——防"定义了却不执行"。
+
+    本仓库的失效形态在 CI/CD 规范里被明确记录过（`specs/general/ci-cd.adoc`「校验链完整」的
+    实证）：**"存在校验"≠"校验被执行"**。该失效在本仓库自己身上同样成立，且已实测复现：
+    把任一道防线从 `main()` 的调用序列里摘掉、或新增一道防线却忘记接线，**`check_specs.py`
+    与全部配套测试仍全绿**——因为既有用例都是逐个函数直接调用被测防线，从不经过 `main()`
+    的接线路径，接线断了没有任何用例会红。
+
+    另一类"半个接线"是 `check_*` 函数体被清空（防线逻辑被删空），这类由各防线自己的
+    正例/反例用例兜住，**不在本防线职责内**；本防线只钉"接线"这一层，与各防线的回归
+    用例互补。
+
+    本防线的由来（本项目实测，2026-09）：
+      * 探针 A：让一条测试用例永远失败 → 只跑 `check_specs.py` 仍 exit=0（README 只点名了
+        这一条"校验规范完整性"命令；配套测试是第二套命令，漏跑即整层失效）；
+      * 探针 B：把 `check_ci_cd_guard()` 从 `main()` 摘掉 → `check_specs.py` 与
+        `unittest discover` **双双全绿**，接线断了无人发现；
+      * 探针 C：新增一道带 `err()` 的防线函数但不接进 `main()` 且无测试
+        → 两套校验照样全绿，防线零执行却"看起来已接入"。
+
+    判定口径（确定性，只看本文件自身源码，不触碰引用方工作区）：
+      * `main()` 函数体内（去除注释与 docstring 后）出现的防线调用集合，须**等于**
+        模块内定义的 `check_*` 函数集合——少一个即"定义了却不执行"，多一个即"调用了
+        不存在的防线"；
+      * 只认**被 `main()` 编排到的调用**：`main()` 体内直接调用，或在 `main()` 调用的
+        防线函数体内调用（如 `check_verification_guard` 末尾调用的两个公共内容自足性
+        防线）——两者都属"被执行到"；函数定义、docstring、注释里的提及不计入。
+    """
+    phase("防线接线完整性检查（定义了必须被执行）")
+    path = os.path.join(REPO_ROOT, "script", "check_specs.py")
+    if not os.path.isfile(path):
+        err("找不到 script/check_specs.py，无法核对防线接线", "script/check_specs.py")
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read()
+    defined = set(re.findall(r"^def (check_[a-z0-9_]+)\(", src, re.M))
+    m = re.search(r"^def main\(", src, re.M)
+    if m is None:
+        err("script/check_specs.py 缺少 main()——防线无统一入口，接线无从核对",
+            "script/check_specs.py")
+        phase_done()
+        return
+    def _strip_comments(text):
+        """去掉注释与 docstring，只留可执行代码——防"注释里提到某防线"被误判为已接线。"""
+        text = re.sub(r'"""(?:.|\n)*?"""', "", text)
+        return "\n".join(re.sub(r"#.*$", "", ln) for ln in text.split("\n"))
+    body_start = m.end()
+    nxt = re.search(r"^def ", src[body_start:], re.M)
+    body = src[body_start:body_start + nxt.start()] if nxt else src[body_start:]
+    direct = set(re.findall(r"\b(check_[a-z0-9_]+)\(", _strip_comments(body)))
+    # 被 main() 直接调用的防线，其函数体内的调用同样属于"被编排到"（如
+    # check_verification_guard 末尾调用的两个公共内容自足性防线）——按可达闭包展开。
+    def _fn_body(name):
+        mm = re.search(r"^def " + name + r"\(", src, re.M)
+        if mm is None:
+            return ""
+        start = mm.end()
+        nxt2 = re.search(r"^def ", src[start:], re.M)
+        seg = src[start:start + nxt2.start()] if nxt2 else src[start:]
+        return _strip_comments(seg)
+    wired = set(direct)
+    frontier = list(direct)
+    while frontier:
+        for name in re.findall(r"\b(check_[a-z0-9_]+)\(", _fn_body(frontier.pop())):
+            if name not in wired:
+                wired.add(name)
+                frontier.append(name)
+    unwired = sorted(defined - wired)
+    orphan = sorted(wired - defined)
+    if unwired:
+        err("防线接线不完整：以下 check_* 已定义但未在 main() 中调用（"
+            + "、".join(unwired) + "）——即『定义了却不执行』：该防线从未被 main() 编排，"
+            "check_specs.py 与配套测试都会全绿而它一次也没跑过", "script/check_specs.py")
+    if orphan:
+        err("main() 调用了不存在的防线：" + "、".join(orphan)
+            + "——接线与实现不一致", "script/check_specs.py")
+    if not unwired and not orphan:
+        log(f"  防线接线完整：{len(defined)} 道防线全部在 main() 中被调用")
     phase_done()
 
 
@@ -5761,6 +5874,7 @@ def main(argv=None) -> int:
     check_persistence_access_guard()
     check_dev_flow_guard()
     check_checklist_guard()
+    check_wiring_guard()
     check_asciidoctor_syntax()
 
     print()

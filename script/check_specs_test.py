@@ -3317,7 +3317,8 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**允许另写一套的条件只有三个**：确实无法承载 / 已被用户确认废弃 / 已被证明优于，**不留两套并存**。\n"
                    "* 大范围改动先确认（L1）：**不得替用户判定某段既有流程\"已废弃\"**。\n"
                    "* 改动前先定基线（L1）：**扫描项目声明的全部校验手段**，**完整可用时必须先跑通**，"
-                   "并**落盘留证**，改动完成后**复跑同一套校验**。\n\n== 任务生命周期与节点自查\n\n"
+                   "并**落盘留证**，改动完成后**复跑同一套校验**；**扫出的清单还要先核\"够不够用\"（L2）**："
+                   "须**先按用例设计判据 review 既有用例**，**本次改动的直接相关面**先补全、**不阻断动手**。\n\n== 任务生命周期与节点自查\n\n"
                    "| **方案** | **基线是否已定**\n"
                    "| **验证** | **是否与基线逐项比对**\n\n== 下节\n")
         self.write("specs/general/planning.adoc",
@@ -3332,8 +3333,16 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "* **留证的形态按项目自身的交付约定**：**留证不等于「必须提交」**。\n"
                    "* **不完整或本来就红时怎么办（L1，防把基线变成硬性前置）**："
                    "**没有任何校验手段**时记录即可开工；**红的还是红的**。\n"
-                   "* **基线用于改完复跑（L1）**：**既有用例不得为迁就改动而改判**。\n\n"
+                   "* **基线用于改完复跑（L1）**：**既有用例不得为迁就改动而改判**。\n"
+                   "* **基线的完整性：手段与用例够不够用（L2）**：**先按这些判据 review 既有用例**，"
+                   "给出**复核了哪些角度与样本**；按**正常路径**/边界/异常路径/**正反例成对**/步骤与前置核对，"
+                   "**用例设计**与**测试有效性**判据见 testing.adoc；**本次改动的直接相关面**先补全，"
+                   "**无关的存量缺口**如实记录、**不阻断**。\n\n"
                    "=== 依据（标准名/编号）\n\n* **ISO 10007**（配置管理）。\n")
+        self.write("specs/general/verify.adoc",
+                   "= 验证\n\n* **验证须覆盖项目的全部既定校验手段（L1）**：**存在测试**≠**测试被执行**；"
+                   "手段与其用例**本身可能不完整**，须**先按 link:testing.adoc[]「用例设计」review**、"
+                   "说明\"哪些未覆盖\"，**本次改动的直接相关面**先补全。\n")
         self.write("specs/general/testing.adoc",
                    "= 测试\n\n* 重构后须**同时满足既有用例与新用例**（L1）："
                    "**既有用例不得为迁就重构而改判**（除**相关功能被显式移除**）、**前后完整兼容**"
@@ -3345,6 +3354,8 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**动手前：先定基线 + 先查现状 + 先调研最佳方案（L1，方向性前提）**\n"
                    "  - **先查现状、再谈方案**\n  - **先定基线**\n  - **大动之前先确认**\n"
                    "  - **不得绕开既有实现另写一套**\n"
+                   "  - **基线清单还要核\"够不够用\"（L2）**：**review 既有用例**、"
+                   "**无关的存量缺口**如实记录。\n"
                    "  - **没有校验手段、环境跑不起来，都不是不动手的理由**\n"
                    "// end::baseline-and-compat[]\n\n// tag::compat[]\n"
                    "**改动后：老用例与新用例必须同时成立（L1）**\n"
@@ -3414,6 +3425,50 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "* **基线用于改完复跑（L1）**\n")
         cm.check_dev_flow_guard()
         self.assertIn("降级分支", self.error_texts())
+
+    def test_baseline_without_completeness_clause_reports(self):
+        # 反例：基线只要求"扫一遍声明的命令"，缺"清单够不够用"（手段/用例本身可能不全）
+        self._write_valid()
+        self.write("specs/general/planning.adoc",
+                   "= 任务规划\n\n== 动手前先定基线\n\n"
+                   "* **扫描既有验证手段（L1）**\n* **能跑通即跑通、并落盘留证（L1）**\n"
+                   "* **留证的形态按项目自身的交付约定**：**留证不等于「必须提交」**。\n"
+                   "* **不完整或本来就红时怎么办（L1，防把基线变成硬性前置）**："
+                   "**没有任何校验手段**时记录即可开工；**红的还是红的**。\n"
+                   "* **基线用于改完复跑（L1）**：**既有用例不得为迁就改动而改判**。\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("基线完整性", self.error_texts())
+
+    def test_baseline_completeness_without_scope_boundary_reports(self):
+        # 反例：基线完整性条缺"只补本次直接相关面 / 无关存量缺口不阻断"
+        # （会把"先补齐所有用例"读成动手的硬性前置——基线变硬性前置的第二种形态）
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read().replace(
+            "**本次改动的直接相关面**先补全，**无关的存量缺口**如实记录、**不阻断**。",
+            "须把发现的缺口全部补全。")
+        open(pl, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("直接相关面", self.error_texts())
+
+    def test_verify_side_without_completeness_reports(self):
+        # 反例：验证侧只说"须覆盖全部既定校验手段"、不说"跑的那套够不够用"
+        self._write_valid()
+        self.write("specs/general/verify.adoc",
+                   "= 验证\n\n* **验证须覆盖项目的全部既定校验手段（L1）**：存在测试≠测试被执行。\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("verify.adoc", self.error_texts())
+
+    def test_prompt_fragment_without_completeness_reports(self):
+        # 反例：公共片段缺"清单还要核够不够用"（复制到未知项目后这条边界整条丢失）
+        self._write_valid()
+        cf = os.path.join(self.root, "prompts", "_common.txt")
+        text = open(cf, encoding="utf-8").read().replace(
+            "  - **基线清单还要核\"够不够用\"（L2）**：**review 既有用例**、"
+            "**无关的存量缺口**如实记录。\n", "")
+        open(cf, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("够不够用", self.error_texts())
 
     def test_prompt_fragment_without_fallback_reports(self):
         # 反例：公共片段缺"没手段/红测试也不是不动手的理由"
@@ -6424,6 +6479,112 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self.write("README.adoc", "# README\n\n## 目录结构\n* 通用层：通用编码\n")
         cm.check_persistence_access_guard()
         self.assertIn("持久化访问", self.error_texts())
+
+
+class TestCheckWiringGuard(CheckSpecsTestCase):
+    """钉住『防线接线完整性』：每个 `check_*` 都必须被 main() 真正调用。
+
+    本仓库的实测失效（2026-09 复核 PR #89 时用探针复现）：把任一道防线从 main() 的调用
+    序列里摘掉，或新增防线却忘记接线，**check_specs.py 与全部配套测试仍全绿**——
+    既有用例都是逐个函数直接调用被测防线，从不经过 main() 的接线路径。本防线把该失效
+    变成机械可拦项，此处钉住它自己的正例与两类反例（防它本身失效）。
+    """
+
+    def _write_valid(self):
+        """造一份"定义了且被 main() 调用"的最小脚本 + 一个合法仓库根。"""
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def check_beta():\n"
+                   "    \"\"\"B.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def main(argv=None):\n"
+                   "    check_alpha()\n"
+                   "    check_beta()\n"
+                   "    return 0\n")
+
+    def test_all_wired_passes(self):
+        # 正例：定义的防线全部被 main() 调用 → 不报错
+        self._write_valid()
+        cm.check_wiring_guard()
+        self.assertEqual(self.error_texts(), "")
+
+    def test_defined_but_not_wired_reports(self):
+        # 反例①：定义了却没在 main() 里调用（"定义了却不执行"）→ 必须报错
+        self._write_valid()
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def check_beta():\n"
+                   "    \"\"\"B.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def main(argv=None):\n"
+                   "    check_alpha()\n"
+                   "    return 0\n")
+        cm.check_wiring_guard()
+        self.assertIn("check_beta", self.error_texts())
+
+    def test_wired_but_undefined_reports(self):
+        # 反例②：main() 调用了不存在的防线（接线与实现不一致）→ 必须报错
+        self._write_valid()
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def main(argv=None):\n"
+                   "    check_alpha()\n"
+                   "    check_gamma()\n"
+                   "    return 0\n")
+        cm.check_wiring_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_comment_mention_is_not_wiring(self):
+        # 反例③：只有在注释里提到防线名，不构成接线（防"注释里写一句就算接上了"）
+        self._write_valid()
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def check_beta():\n"
+                   "    \"\"\"B.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def main(argv=None):\n"
+                   "    check_alpha()\n"
+                   "    # check_beta()\n"
+                   "    return 0\n")
+        cm.check_wiring_guard()
+        self.assertIn("check_beta", self.error_texts())
+
+    def test_nested_wiring_counts(self):
+        # 正例：被 main() 直接调用的防线，其体内再调用别的防线也算"被执行到"
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    check_beta()\n\n\n"
+                   "def check_beta():\n"
+                   "    \"\"\"B.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def main(argv=None):\n"
+                   "    check_alpha()\n"
+                   "    return 0\n")
+        cm.check_wiring_guard()
+        self.assertEqual(self.error_texts(), "")
+
+    def test_missing_script_reports(self):
+        # 反例④：连脚本都找不到 → 必须报错，不得静默通过
+        cm.check_wiring_guard()
+        self.assertIn("check_specs.py", self.error_texts())
+
+    def test_missing_main_reports(self):
+        # 反例⑤：脚本没有 main() → 无统一入口，接线无从核对，必须报错
+        self.write("script/check_specs.py",
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n")
+        cm.check_wiring_guard()
+        self.assertIn("main()", self.error_texts())
 
 
 if __name__ == "__main__":

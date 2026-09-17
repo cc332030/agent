@@ -167,8 +167,9 @@ class TestEvaluate(unittest.TestCase):
         self._mk("script/check_specs.py")
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(
-            statuses["开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证）、"
-                     "大范围改动先确认、不得绕开既有体系另写一套、老用例不得为迁就改动而改判"],
+            statuses["开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证、"
+                     "清单还要先核『够不够用』）、大范围改动先确认、不得绕开既有体系另写一套、"
+                     "老用例不得为迁就改动而改判"],
             "has-grip")
 
     def test_destructive_op_has_mechanical_grip(self):
