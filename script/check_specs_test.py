@@ -2246,13 +2246,13 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
         self.write("prompts/_common.txt", self.DELIVERY)
         self.write("prompts/review.adoc",
                    "= 检查修复\n\n[listing]\n----\n"
-                   "9. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "10. 交付即汇报（**有改动**须提交推送并建 PR，"
                    "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
                    "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
         self.write("prompts/refactor.adoc",
                    "= 重构\n\n[listing]\n----\n"
-                   "9. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "10. 交付即汇报（**有改动**须提交推送并建 PR，"
                    "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
                    "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
@@ -3502,6 +3502,22 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         super().tearDown()
 
     CNB = ("= CNB 规范（平台层）\n\n"
+           "== 评论唤起新实例（平台侧的派发入口）\n"
+           "* **不得以评论派发唤起自己（L1，防无限派发）**：被评论唤起的执行者不得在本次执行中"
+           "再发一条评论去**点名唤起自己**（**同一实例名**），**也不得转由他人**/其他执行者**代发**。"
+           "**判定标准**：①本次执行期间**新增的点名评论指向本条评论上的唤起名**；"
+           "②以\"分两步更清楚\"等理由**自我豁免**；③**实际发了这条评论**、把任务在执行中重新发起一次"
+           "（判据是**这条评论发出去没有**、**不是这次执行有没有因此结束**）；④**转交他人**代发。"
+           "正当形态：**先停**、只输出一次\"停下确认\"，由**人**另发一条评论决定"
+           "（**一次评论就是一次派发**，**发起下一次是派发者的动作**）。\n"
+           "* **须由与执行者相同的 Agent 承担验证（L1）**：**要求验证/复核须由与执行者相同的 "
+           "Agent 来做的那些规则，只在本平台（CNB）成立**——**本平台之外不适用**：环境不提供同 Agent "
+           "的子执行者时，**不得援引该条拒做或把任务停在中间**；**不提供**时按降级路径执行、"
+           "**验证与交付不因此缺失**。**由谁承担**是**项目自身的取舍**（IEEE 1028 只要求有独立、"
+           "可核对的评审发生）；条文的写入面本就在平台层、**不在公共内容**"
+           "（`AGENTS_COMMON.adoc` + `specs/`）里，引用方按入口加载时**不会取到它**。\n"
+
+
            "== 合并请求的合并主体（NPC 禁合并）\n"
            "* **CNB NPC（即 CI/CD 执行环境中的 agent）严禁合并（L1）**。\n"
            "* **人工要求、直接授权也不得合并（L1，无豁免）**：即使人工明确要求合并、"
@@ -5354,6 +5370,276 @@ class TestCheckCommentDispatchGuard(CheckSpecsTestCase):
         self.write("README.adoc", "# README\n\n## 目录结构\n* 平台层：cnb\n")
         cm.check_comment_dispatch_guard()
         self.assertIn("评论唤起", self.error_texts())
+
+
+class TestCheckSelfDispatchGuard(CheckSpecsTestCase):
+    """钉住『不得自行发评论唤起自己防线』：执行者不得把任务在执行中重新发起一次。
+
+    用户提出的收紧要求（"不能艾特自己"）。这条最容易被"分两步更清楚""换个节点更专注"
+    合理化成自动动作——而每次唤起都要重新按入口加载规范、重新建上下文并付一次调用与等待，
+    **跨轮分步该由人决定**。故本组用例把平台层/通用层/题面侧/登记处/调度器五处一并钉住。
+    """
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 评论唤起新实例（平台侧的派发入口）\n"
+        "* **评论唤起是平台侧的派发方式（L1）**：在 Issue 或 PR 下**新增一条评论**、"
+        "@ 某个 NPC（**仅作举例**）、并在评论里**说清要求**，即新增一次执行。\n"
+        "* **不得以评论派发唤起自己（L1，防无限派发）**：被评论唤起的执行者**不得在本次执行中"
+        "再发一条评论去点名唤起自己**（同一点名、**同一实例名**），"
+        "**也不得转由他人**/其他执行者**代发**。判定标准：①本次执行期间新增的点名评论"
+        "指向本条评论上的唤起名；②以\"分两步更清楚\"等理由**自我豁免**；"
+        "③**实际发了这条评论**、把任务在执行中重新发起一次（判据是**这条评论发出去没有**、"
+        "**不是这次执行有没有因此结束**）；④**转交他人**代发。"
+        "**为什么**：**一次评论就是一次派发**，**发起下一次是派发者的动作**、不是执行者的动作。"
+        "**正当形态**：**先停**、只输出一次\"**停下确认**\"，由**人**另发一条评论决定是否再来一次。\n"
+        "* **须由与执行者相同的 Agent 承担验证（L1）**：**要求验证/复核须由与执行者相同的 "
+        "Agent 来做的那些规则，只在本平台（CNB）成立**——**本平台之外不适用**：环境不提供同 Agent "
+        "的子执行者时，**不得援引该条拒做或把任务停在中间**；**不提供**时按降级路径执行、"
+        "**验证与交付不因此缺失**。判定标准：平台层未写明时不得援引本条拒做。"
+        "**由谁承担**是**项目自身的取舍**（IEEE 1028 只要求有独立、可核对的评审发生）；"
+        "条文的写入面本就在平台层、**不在公共内容**（`AGENTS_COMMON.adoc` + `specs/`）里，"
+        "引用方按入口加载时**不会取到它**。\n"
+        "* **复核者的来源：\"谁发起的\"与\"谁承担\"的区分（L1）**：**\"须由与执行者相同的 "
+        "Agent 承担\"说的是复核者的来源要求，**不是复核的发起方式**、**各自独立**。"
+        "故**执行者不得用**\"为了满足同 Agent 复核\"**去 @ 自己**（不因目的是复核而放宽）。"
+        "**能不能拿到，在动手前判定**（`printenv CNB_EVENT` 实测）；"
+        "**一个任务只由**人**决定起几次执行**，缺的复核**在本次执行内**按降级路径补。"
+        "**该情形下的交付形态**：**照常交付**，结论里**如实写明可信的独立复核不可得**；"
+        "**\"已交付 + 校验全绿 + 复核缺口如实标出\"不得混写**成\"已复核通过\"。"
+        "判定标准：①用 @ 自己换取一次新执行来做复核 "
+        "②把\"拿不到独立复核\"写成\"已复核通过\" ③以\"等下一轮复核\"为由**停在中间**不交付。\n"
+    )
+
+    COLLAB = (
+        "= agent 协作规范（通用层）\n\n"
+        "== 派发入口（往哪派、派什么）\n"
+        "* **评论唤起是『评论即派发入口』的一种形态（L1）**：在 Issue / PR 下新增一条评论、"
+        "点名并说清要求，即在该任务单下新增一次执行。\n"
+        "* **执行者不得自行发评论唤起自己（L1，防无限派发）**：执行者不得在本次执行中"
+        "自行发一条评论点名唤起自己（也不得转由他人代发）——**发起下一次是\"派发者\"的动作**，"
+        "故**执行者\"想分步\"不是派发的依据**；**先停**、由**人**另发一条评论；"
+        "**跨轮分步由人决定**。平台侧同口径条见 link:../platform/cnb.adoc[]。\n"
+        "* **同 Agent 的适用面（L1，先定条件再谈强制）**：**不是无条件成立的规则**——"
+        "以**平台层写明该前提成立**为前提；**平台层未写明**时不得援引本条拒做、照做该职责。"
+        "**由谁承担**是**项目自身的取舍**，标准**未规定复核者须是同一产品**。\n"
+        "* **\"复核者的来源\"与\"复核的发起\"是两件事（L1）**：不得把\"满足同 Agent\"读成"
+        "\"必须再发一条评论叫一个 Agent 来\"——**一个任务只由人决定起几次执行**；"
+        "**拿不到同 Agent 子执行者时**按降级路径**在本次执行内**补；**交付照常**、缺口如实写明。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE,
+                              cm.README_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE,
+         cm.README_FILE) = self._orig_prompts
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write("specs/general/collab.adoc", self.COLLAB)
+        self.write("specs/general/verify.adoc",
+                   "= 验证\n\n* **执行者选择：强制同 Agent（L1，其适用面由平台层限定）**："
+                   "『由与执行者相同的 Agent 承担』**不是平台无关的强制前提**——"
+                   "**平台层写明该前提成立**时按强制判；平台不提供同 Agent 子执行者时"
+                   "**不得援引本条跳过复核**或把任务停在中间。\n")
+        self.write("prompts/_common.txt", "// tag::delivery[]\n8. 交付\n// end::delivery[]\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "* 多 agent 协作（派发入口；**执行者不得自行发评论唤起自己**）\n"
+                   "* CNB 平台（评论唤起新实例；**执行者不得自行发评论唤起自己**）\n")
+        self.write("prompts/review.adoc",
+                   "= 检查修复\n\n[listing]\n----\n"
+                   "10. **不得自行发评论唤起自己（L1，防无限派发）**："
+                   "**一次评论 = 一次派发**；想分步就**先停**、**由**人**另发一条评论**。\n"
+                   "include::_common.txt[tag=delivery]\n----\n")
+        self.write("prompts/refactor.adoc",
+                   "= 重构\n\n[listing]\n----\n"
+                   "10. **不得自行发评论唤起自己（L1，防无限派发）**："
+                   "**一次评论 = 一次派发**；想分步就**先停**、**由**人**另发一条评论**。\n"
+                   "include::_common.txt[tag=delivery]\n----\n")
+        self.write("PROMPTS.adoc",
+                   "* 公共约定：**不得自行发评论唤起自己**——\"分两步更清楚\"不构成理由。\n")
+        self.write("README.adoc",
+                   "# README\n\n**执行者不得在本次执行中自行发评论点名唤起自己**"
+                   "（想分步就**先停**、由**人**另发一条评论；\"分两步更清楚\"不构成理由）。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_self_dispatch_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_platform_file_reports(self):
+        # 反例：平台层文件被删 → 自派禁令无处承载
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "platform", "cnb.adoc"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_platform_clause_removed_reports(self):
+        # 反例（最危险的一种）：平台层那条 L1 被整条删掉 → "再派一次"重新变成可选动作
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "* **不得以评论派发唤起自己（L1，防无限派发）**", "* **附注**")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_self_dispatch_guard()
+        self.assertIn("不得以评论派发唤起自己", self.error_texts())
+
+    def test_platform_rule_relaxed_reports(self):
+        # 反例：把禁令降级成建议（L1 被抽掉）→ 强制点没了
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("（L1，防无限派发）**：被评论唤起的执行者",
+                                    "**：原则上被评论唤起的执行者"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_relay_to_others_clause_removed_reports(self):
+        # 反例："转由他人代发"被删 → 把自派外包出去就绕过了
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("**也不得转由他人**/其他执行者**代发**。", "。"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("代发", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准被抽空（只留一句口号）→ 争议时无法判断是否被遵守
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("①本次执行期间新增的点名评论"
+                                    "指向本条评论上的唤起名；", "")
+                   .replace("**实际发了这条评论**、把任务在执行中重新发起一次（判据是**这条评论发出去没有**、"
+                            "**不是这次执行有没有因此结束**）；", "")
+                   .replace("**转交他人**代发。", ""))
+        cm.check_self_dispatch_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_process_boundary_clause_removed_reports(self):
+        # 反例："判据是这条评论发出去没有"被删 → "不在同一进程内所以不算"成为新借口
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("（判据是**这条评论发出去没有**、"
+                                    "**不是这次执行有没有因此结束**）", ""))
+        cm.check_self_dispatch_guard()
+        self.assertIn("这条评论发出去没有", self.error_texts())
+
+    def test_general_layer_clause_removed_reports(self):
+        # 反例：通用层同口径条被删 → 非 CNB 场景下"想分步就自动再派"无人拦
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= agent 协作规范（通用层）\n\n== 派发入口（往哪派、派什么）\n"
+                   "* 评论即派发入口。\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("执行者不得自行发评论唤起自己", self.error_texts())
+
+    def test_prompt_step_removed_reports(self):
+        # 反例：题面侧步骤被删（片段在、流程里却没有这一步）→ 执行者按流程走即漏
+        self._write_valid()
+        self.write("prompts/refactor.adoc",
+                   "= 重构\n\ninclude::_common.txt[tag=delivery]\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("不得自行发评论唤起自己", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例：调度器识别特征被删 → 该 L1 永远不会被加载（写了等于没写）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "* 多 agent 协作（派发入口）\n* CNB 平台（评论唤起新实例）\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_registry_not_synced_reports(self):
+        # 反例：登记处未同步 → 提示词被复制到未知项目后公开面看不到这条禁令
+        self._write_valid()
+        self.write("PROMPTS.adoc", "* 公共约定：改动范围边界。\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("PROMPTS.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 使用要点未同步 → 公开面只看得见"可以评论派活"
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n普通说明。\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_platform_applicability_removed_reports(self):
+        # 反例（用户后续澄清的那一条）：平台层把"只适用于 CNB"的适用面删掉
+        # → 该要求被外推成平台无关的强制前提，非 CNB 环境会把"没有同 Agent 子执行者"
+        # 读成"所以不能验证/不能交付"。
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("**只在本平台（CNB）成立**", "**一律成立**")
+                   .replace("**本平台之外不适用**", "**各处一律适用**")
+                   .replace("**不得援引该条拒做或把任务停在中间**", "**照常执行**"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("本平台之外不适用", self.error_texts())
+
+    def test_platform_not_public_content_clause_removed_reports(self):
+        # 反例：把"写入面不在公共内容里"删掉 → 引用方会以为该前提随公共入口一起下发
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace("不在公共内容", "在公共内容"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("不在公共内容", self.error_texts())
+
+    def test_general_applicability_removed_reports(self):
+        # 反例：通用层把"不是无条件成立的规则 / 以平台层写明为前提"删掉
+        # → 通用层被当成平台无关的强制前提。
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   self.COLLAB.replace("**不是无条件成立的规则**——"
+                                       "以**平台层写明该前提成立**为前提；", ""))
+        cm.check_self_dispatch_guard()
+        self.assertIn("不是无条件成立的规则", self.error_texts())
+
+    def test_self_mention_for_review_clause_removed_reports(self):
+        # 反例：把"不得用为了复核去 @ 自己"删掉 → "再要一个干净上下文来复核"成为自派的正当理由
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace(
+                       '故**执行者不得用**\"为了满足同 Agent 复核\"**去 @ 自己**'
+                       '（不因目的是复核而放宽）。', "。"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("去 @ 自己", self.error_texts())
+
+    def test_deliver_without_review_not_confused_clause_removed_reports(self):
+        # 反例：把"已交付 + 校验全绿 + 复核缺口如实标出不得混写成已复核通过"删掉
+        # → 缺复核被悄悄记成"已复核通过"。
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc",
+                   self.CNB.replace(
+                       '**\"已交付 + 校验全绿 + 复核缺口如实标出\"不得混写**成'
+                       '\"已复核通过\"。', "。"))
+        cm.check_self_dispatch_guard()
+        self.assertIn("已复核通过", self.error_texts())
+
+    def test_general_layer_source_vs_dispatch_clause_removed_reports(self):
+        # 反例：通用层把"来源要求 ≠ 发起方式"这条配套判据删掉
+        # → 非 CNB 场景下会被读成"必须自派"或"不许复核"。
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   self.COLLAB.replace('* **"复核者的来源"与"复核的发起"是两件事（L1）**：'
+                                       '不得把"满足同 Agent"读成'
+                                       '"必须再发一条评论叫一个 Agent 来"——'
+                                       '**一个任务只由人决定起几次执行**；'
+                                       '**拿不到同 Agent 子执行者时**按降级路径'
+                                       '**在本次执行内**补；**交付照常**、缺口如实写明。\n', ""))
+        cm.check_self_dispatch_guard()
+        self.assertIn("复核的发起", self.error_texts())
+
+    def test_verify_applicability_removed_reports(self):
+        # 反例：三视角落点把适用面标注删掉 → 不同口径的平台被同一条强判。
+        self._write_valid()
+        self.write("specs/general/verify.adoc",
+                   "= 验证\n\n* 执行者选择：强制同 Agent（L1）：一律由与执行者相同的 Agent 承担。\n")
+        cm.check_self_dispatch_guard()
+        self.assertIn("其适用面由平台层限定", self.error_texts())
 
 
 class TestCheckApiNamingGuard(CheckSpecsTestCase):
