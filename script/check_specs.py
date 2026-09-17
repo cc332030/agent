@@ -206,6 +206,18 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
+ 42. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
+     （动手前先摸清现状与最佳方案 / 不得绕开既有体系另写一套（三个允许条件、不留两套并存）/
+     大范围改动先确认（不得替用户判定既有流程已废弃）/ 改动前先定基线（扫描既有校验手段、完整可用
+     必须先跑通、落盘留证、复跑比对）），任务生命周期表的「方案」「验证」两节点须带基线条；通用层
+     `specs/general/planning.adoc` 须承载展开（现状与最佳方案、另写一套的三条件与处置、大动确认四问与
+     老旧废弃流程、基线的扫描/留证/复跑与"既有用例不得改判"的接口、依据行）；`specs/general/testing.adoc`
+     须有「重构后须同时满足既有用例与新用例」（既有用例不得为迁就重构而改判、前后完整兼容）与
+     「兼容性无法满足时先确认」两条 L1；公共片段 `prompts/_common.txt` 的 `baseline-and-compat` 与
+     `compat` 两片段须在且**两个提示词代码块内都引入**；调度器与 `PROMPTS.adoc` / `README.adoc`
+     公开面同步——防"不摸现状直接动手""绕开既有实现另写一套""重构后把老用例改掉让它通过"
+     重回默认做法（本项目实测失效）。
+
  41. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
      「跨服务/对外调用的请求响应类优先移动复用」须仍在且为 L1，且**两种例外与一条边界齐备**——
      ①数据库实体类（除用户声明外不移动）；②类里引用了第三方类型；**本项目自身的依赖不算三方依赖**
@@ -2557,6 +2569,165 @@ def _iter_prompt_files():
                   for f in os.listdir(PROMPTS_DIR)
                   if f.endswith(".adoc") and not f.startswith("_"))
 
+
+
+
+def check_dev_flow_guard():
+    """『开发流程防线』：先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删。
+
+    背景（用户提出的开发流程要求，本项目实证失效：不摸现状直接动手、绕开既有实现另写一套、
+    重构后把老用例改掉让它"通过"）：动手前那一步与改动后那一步，都必须有**可核对的底线**，
+    否则会重新退化成"能跑就行"。
+
+    本防线钉住（每条须同时命中多处要素，否则别处一句同名字样即可假绿——与
+    `check_checklist_guard` / `check_npc_merge_guard` 同口径）：
+      * **必加载层底线**（`specs/core/execution.adoc`）：先规划后执行一节须含「动手前先摸清现状与
+        最佳方案」「不得绕开既有体系另写一套」「大范围改动先确认」「改动前先定基线」四条与各自
+        级别，且**基线**须含"扫描既有校验手段""完整可用必须先跑通""落盘留证""改完复跑比对"；
+        任务生命周期的「方案」「验证」两节点须分别带"基线是否已定""是否与基线逐项比对"；
+      * **通用层展开**（`specs/general/planning.adoc`）：三个节（现状与最佳方案 / 不得绕开既有
+        体系另写一套（含三个允许条件）/ 大范围改动先确认 / 动手前先定基线）与依据行齐备；
+      * **测试侧**（`specs/general/testing.adoc`）：须有「重构后须同时满足既有用例与新用例」与
+        「兼容性无法满足时先确认」两条 L1，且明写"既有用例不得为迁就改动而改判""行为完整兼容"；
+      * **提示词侧**（会被未知项目复制执行）：公共片段 `prompts/_common.txt` 须有
+        `baseline-and-compat` 与 `compat` 两个片段，且**两个提示词代码块内都引入**；
+      * **登记同步**：加载调度器（`AGENTS_COMMON.adoc`）须登记 `specs/general/planning.adoc`，
+        `PROMPTS.adoc` 与 `README.adoc` 的公开面须同步该口径。
+
+    只钉"要求文本仍在"——"某次是否真的先跑了基线、是否真的没改老用例"属运行时行为
+    （改动记录、提交内容与测试统计），机械无法判定，交人/子 agent 复核；但"要求被抽掉或被
+    降级成建议"必须拦住。
+    """
+    phase("开发流程防线检查")
+    # ① 必加载层底线
+    rel_ex = "specs/core/execution.adoc"
+    path_ex = os.path.join(REPO_ROOT, *rel_ex.split("/"))
+    if not os.path.isfile(path_ex):
+        err(f"缺少文件 {rel_ex}——「先规划后执行」的底线无处承载", rel_ex)
+    else:
+        ex = open(path_ex, encoding="utf-8").read()
+        for keys, desc in (
+            (("动手前先摸清现状与最佳方案（L1）", "先调研最佳实践", "先规划后执行"),
+             "须有「动手前先摸清现状与最佳方案」L1 条（不摸现状、不调研最佳实践就动手，等于按想象改）"),
+            (("不得绕开既有体系另写一套（L1）", "允许另写一套的条件只有三个", "不留两套并存"),
+             "须有「不得绕开既有体系另写一套」L1 条与三个允许条件（防『新写一套能满足需求』被当成完成）"),
+            (("大范围改动先确认（L1）", "不得替用户判定某段既有流程", "已废弃"),
+             "须有「大范围改动先确认」L1 条与『是否废弃由用户认定』（旧流程的废弃不能被执行者自行认定）"),
+            (("改动前先定基线（L1）", "扫描项目声明的全部校验手段", "完整可用时必须先跑通",
+              "落盘留证", "复跑同一套校验"),
+             "须有「改动前先定基线」L1 条且含扫描/跑通/留证/复跑四要素"),
+            (("基线是否已定", "是否与基线逐项比对"),
+             "任务生命周期表的「方案」「验证」两节点须带基线条（缺则该节点到点不会问基线）"),
+        ):
+            missing = [k for k in keys if k not in ex]
+            if missing:
+                err(f"开发流程防线被破坏：{rel_ex} 缺失要点 {missing}——{desc}；"
+                    "该要求不得删除、不得降级为建议", rel_ex)
+    # ② 通用层展开
+    rel_pl = "specs/general/planning.adoc"
+    path_pl = os.path.join(REPO_ROOT, *rel_pl.split("/"))
+    if not os.path.isfile(path_pl):
+        err(f"缺少文件 {rel_pl}——动手前的现状/方案/基线口径失去**展开落点**"
+            "（必加载层只剩底线，条件判据与判定标准无处可查）", rel_pl)
+    else:
+        pl = open(path_pl, encoding="utf-8").read()
+        for keys, desc in (
+            (("先查现状（L1）", "不得凭印象或标题推断", "核实方式"),
+             "须有「先查现状」L1 与『不得凭印象推断/须列核实方式』"),
+            (("先调研最佳方案（L1）", "备选方案与取舍依据", "能交差"),
+             "须有「先调研最佳方案」L1（含备选方案与取舍依据、不得只给『能交差』的写法）"),
+            (("默认改在既有实现上（L1）", "确实无法承载", "已被用户确认废弃",
+              "已被证明优于", "不留两套并存"),
+             "须有「不得绕开既有体系另写一套」的三个允许条件与处置要求"),
+            (("大动之前先确认（L1）", "保持原状", "是否废弃只能由用户认定"),
+             "须有「大范围改动先确认」L1（未确认前保持原状、废弃由用户认定）"),
+            (("动手前先定基线", "扫描既有验证手段（L1）", "能跑通即跑通、并落盘留证（L1）",
+              "不完整或本来就红时怎么办（L1，防把基线变成硬性前置）", "没有任何校验手段",
+              "留证不等于",
+              "红的还是红的", "基线用于改完复跑（L1）", "既有用例不得为迁就改动而改判"),
+             "「动手前先定基线」须齐备扫描/跑通留证/**无手段与红测试不阻断**/复跑/与测试侧接口"
+             "（缺降级分支会把基线变成引用方的硬性前置）"),
+            (("ISO 10007",),
+             "基线条须给依据（ISO 10007 配置管理与变更控制）"),
+        ):
+            missing = [k for k in keys if k not in pl]
+            if missing:
+                err(f"开发流程防线被破坏：{rel_pl} 缺失要点 {missing}——{desc}", rel_pl)
+    # ③ 测试侧：老用例不得为迁就改动而改判 + 兼容不了先确认
+    rel_t = "specs/general/testing.adoc"
+    path_t = os.path.join(REPO_ROOT, *rel_t.split("/"))
+    if not os.path.isfile(path_t):
+        err(f"缺少文件 {rel_t}——回归/兼容口径无处承载", rel_t)
+    else:
+        t = open(path_t, encoding="utf-8").read()
+        for keys, desc in (
+            (("重构后须**同时满足既有用例与新用例**", "既有用例不得为迁就重构而改判",
+              "相关功能被显式移除", "前后完整兼容", "Semantic Versioning"),
+             "须有「重构后须同时满足既有用例与新用例」L1（含『既有用例不得改判、除功能被移除』"
+             "与兼容性定义依据）——否则「让老用例变绿」会重成默认做法"),
+            (("兼容性无法满足时先确认（L1）", "兼容不了", "老旧废弃流程",
+              "不得自行取舍"),
+             "须有「兼容性无法满足时先确认」L1（含老旧废弃流程与『不得自行取舍』）"),
+        ):
+            missing = [k for k in keys if k not in t]
+            if missing:
+                err(f"开发流程防线被破坏：{rel_t} 缺失要点 {missing}——{desc}", rel_t)
+    # ④ 提示词侧：两个片段须在，且两个提示词都引入
+    rel_cf = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/").replace(os.sep, "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_cf}——基线/兼容口径无处承载", rel_cf)
+    else:
+        cf = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("tag::baseline-and-compat[]", "先查现状、再谈方案", "先定基线",
+              "大动之前先确认", "不得绕开既有实现另写一套", "都不是不动手的理由"),
+             "须有 `baseline-and-compat` 片段（动手前：现状/最佳方案/基线/大动先确认/不另写一套）"),
+            (("tag::compat[]", "既有用例不得为迁就改动而改判", "新老用例在同一套校验里同时全绿",
+              "兼容不了就停下确认", "验证须与基线比对"),
+             "须有 `compat` 片段（改动后：老用例不得改判/新老同时成立/兼容不了先确认/与基线比对）"),
+        ):
+            missing = [k for k in keys if k not in cf]
+            if missing:
+                err(f"开发流程防线被破坏：{rel_cf} 缺失要点 {missing}——{desc}；"
+                    "提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条", rel_cf)
+    files = _iter_prompt_files()
+    if not files:
+        err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
+    for f in files:
+        rel_f = os.path.relpath(f, REPO_ROOT).replace(os.sep, "/")
+        ftext = open(f, encoding="utf-8").read()
+        for tag in ("baseline-and-compat", "compat"):
+            if f"include::_common.txt[tag={tag}]" not in ftext:
+                err(f"开发流程防线被破坏：{rel_f} 未引入公共片段 `{tag}`——"
+                    "题面未装配该边界，AI 按此提示词执行时读不到它", rel_f)
+    # ⑤ 登记同步：调度器 + 公开面
+    rel_d = "AGENTS_COMMON.adoc"
+    dpath = os.path.join(REPO_ROOT, rel_d)
+    if os.path.isfile(dpath):
+        dt = open(dpath, encoding="utf-8").read()
+        if "specs/general/planning.adoc" not in dt:
+            err(f"开发流程防线被破坏：{rel_d} 未登记 `specs/general/planning.adoc`——"
+                "该文件不会被加载，其中规则实际失效", rel_d)
+    else:
+        err(f"缺少 {rel_d}——加载调度器无处登记 planning.adoc", rel_d)
+    rel_p = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace(os.sep, "/")
+    if os.path.isfile(PROMPTS_FILE):
+        pt = open(PROMPTS_FILE, encoding="utf-8").read()
+        for key in ("baseline-and-compat", "compat", "先定基线"):
+            if key not in pt:
+                err(f"开发流程防线被破坏：{rel_p} 公开面缺失『{key}』——"
+                    "提示词的公共约定须登记该边界（公开面漏了这层则复制出去的那份没有）", rel_p)
+    else:
+        err(f"缺少 {rel_p}——公开提示词入口未登记该边界", rel_p)
+    rel_r = os.path.relpath(README_FILE, REPO_ROOT).replace(os.sep, "/")
+    if os.path.isfile(README_FILE):
+        rt = open(README_FILE, encoding="utf-8").read()
+        for key in ("先定基线", "既有用例不得为迁就改动而改判"):
+            if key not in rt:
+                err(f"开发流程防线被破坏：{rel_r} 使用要点未同步『{key}』", rel_r)
+    else:
+        err(f"缺少 {rel_r}——公开面说明无处承载", rel_r)
+    phase_done()
 
 
 def check_checklist_guard():
@@ -5588,6 +5759,7 @@ def main(argv=None) -> int:
     check_api_contract_reuse_guard()
     check_api_naming_guard()
     check_persistence_access_guard()
+    check_dev_flow_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 

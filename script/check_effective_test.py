@@ -161,6 +161,16 @@ class TestEvaluate(unittest.TestCase):
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(
             statuses["交付形态与报告落点：不得只冒一句过程性叙述、不得只交付不汇报"], "has-grip")
+    def test_dev_flow_has_mechanical_grip(self):
+        # 开发流程（现状/最佳方案/基线、大动先确认、不另写一套、老用例不得改判）
+        # 由 check_dev_flow_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证）、"
+                     "大范围改动先确认、不得绕开既有体系另写一套、老用例不得为迁就改动而改判"],
+            "has-grip")
+
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")
