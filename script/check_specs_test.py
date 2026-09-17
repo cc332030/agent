@@ -3286,6 +3286,160 @@ class TestCheckPromptsPrimary(CheckSpecsTestCase):
         cm.check_prompts_primary()
         self.assertEqual(cm.errors, [])
 
+
+class TestCheckDevFlowGuard(CheckSpecsTestCase):
+    """钉住『开发流程防线』（用户提出的开发流程要求，本项目实测失效）。
+
+    失效形态：不摸现状直接动手（按想象改）；绕开既有实现另写一套（留下两套实现/配置/文档，
+    达不到最佳实践）；重构后把老用例改掉让它"通过"（既有行为的规格被改动方单方面改判）；
+    兼容不了就自行取舍（老旧废弃流程的处置被执行者自行认定）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_prompts = (cm.PROMPTS_DIR, cm.PROMPTS_FILE, cm.README_FILE,
+                              cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+
+    def tearDown(self) -> None:
+        (cm.PROMPTS_DIR, cm.PROMPTS_FILE, cm.README_FILE,
+         cm.COMMON_PROMPT_FILE) = self._orig_prompts
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("specs/core/execution.adoc",
+                   "= 执行原则\n\n== 先规划后执行\n\n"
+                   "* **动手前先摸清现状与最佳方案（L1）**：先搞清现状，再**先调研最佳实践、再定方案**。\n"
+                   "* 不得绕开既有体系另写一套（L1）：默认改在既有实现上；"
+                   "**允许另写一套的条件只有三个**：确实无法承载 / 已被用户确认废弃 / 已被证明优于，**不留两套并存**。\n"
+                   "* 大范围改动先确认（L1）：**不得替用户判定某段既有流程\"已废弃\"**。\n"
+                   "* 改动前先定基线（L1）：**扫描项目声明的全部校验手段**，**完整可用时必须先跑通**，"
+                   "并**落盘留证**，改动完成后**复跑同一套校验**。\n\n== 任务生命周期与节点自查\n\n"
+                   "| **方案** | **基线是否已定**\n"
+                   "| **验证** | **是否与基线逐项比对**\n\n== 下节\n")
+        self.write("specs/general/planning.adoc",
+                   "= 任务规划\n\n== 动手前：现状与最佳方案\n\n"
+                   "* **先查现状（L1）**：**不得凭印象或标题推断**，并列出**核实方式**。\n"
+                   "* **先调研最佳方案（L1）**：列出**备选方案与取舍依据**，不得只给\"能交差\"的写法。\n\n"
+                   "== 不得绕开既有体系另写一套\n\n* **默认改在既有实现上（L1）**："
+                   "**确实无法承载** / **已被用户确认废弃** / **已被证明优于**；**不留两套并存**。\n\n"
+                   "== 大范围改动先确认\n\n* **大动之前先确认（L1）**：**保持原状**；"
+                   "**是否废弃只能由用户认定**。\n\n== 动手前先定基线\n\n"
+                   "* **扫描既有验证手段（L1）**\n* **能跑通即跑通、并落盘留证（L1）**\n"
+                   "* **留证的形态按项目自身的交付约定**：**留证不等于「必须提交」**。\n"
+                   "* **不完整或本来就红时怎么办（L1，防把基线变成硬性前置）**："
+                   "**没有任何校验手段**时记录即可开工；**红的还是红的**。\n"
+                   "* **基线用于改完复跑（L1）**：**既有用例不得为迁就改动而改判**。\n\n"
+                   "=== 依据（标准名/编号）\n\n* **ISO 10007**（配置管理）。\n")
+        self.write("specs/general/testing.adoc",
+                   "= 测试\n\n* 重构后须**同时满足既有用例与新用例**（L1）："
+                   "**既有用例不得为迁就重构而改判**（除**相关功能被显式移除**）、**前后完整兼容**"
+                   "（参考 **Semantic Versioning**）。\n"
+                   "* 兼容性无法满足时先确认（L1）：**兼容不了**先停下确认，"
+                   "**老旧废弃流程**是否废弃由用户认定、**不得自行取舍**。\n")
+        self.write("prompts/_common.txt",
+                   "// tag::baseline-and-compat[]\n"
+                   "**动手前：先定基线 + 先查现状 + 先调研最佳方案（L1，方向性前提）**\n"
+                   "  - **先查现状、再谈方案**\n  - **先定基线**\n  - **大动之前先确认**\n"
+                   "  - **不得绕开既有实现另写一套**\n"
+                   "  - **没有校验手段、环境跑不起来，都不是不动手的理由**\n"
+                   "// end::baseline-and-compat[]\n\n// tag::compat[]\n"
+                   "**改动后：老用例与新用例必须同时成立（L1）**\n"
+                   "  - **既有用例不得为迁就改动而改判**\n"
+                   "  - **新老用例在同一套校验里同时全绿**\n  - **兼容不了就停下确认**\n"
+                   "  - **验证须与基线比对**\n// end::compat[]\n")
+        for name in ("review.adoc", "refactor.adoc"):
+            self.write(f"prompts/{name}",
+                       "= 提示词\n\ninclude::_common.txt[tag=baseline]\n"
+                       "include::_common.txt[tag=baseline-and-compat]\n"
+                       "include::_common.txt[tag=compat]\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n  ** 动手前的现状与方案、基线 → link:specs/general/planning.adoc[]\n")
+        self.write("PROMPTS.adoc",
+                   "= 提示词入口\n\n公共约定：**先定基线**、`baseline-and-compat`、`compat`。\n")
+        self.write("README.adoc",
+                   "= 说明\n\n**先定基线**；**既有用例不得为迁就改动而改判**。\n")
+
+    def test_valid_dev_flow_guard_passes(self):
+        self._write_valid()
+        cm.check_dev_flow_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_baseline_clause_reports(self):
+        # 反例：基线条被删（"改完有没有破坏既有行为"失去尺子）
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "= 执行原则\n\n== 先规划后执行\n\n动手前先规划。\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("改动前先定基线", self.error_texts())
+
+    def test_missing_planning_file_reports(self):
+        # 反例：通用层展开文件被删（必加载层只剩底线，条件判据无处可查）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "planning.adoc"))
+        cm.check_dev_flow_guard()
+        self.assertIn("planning.adoc", self.error_texts())
+
+    def test_old_cases_may_be_rewritten_clause_removed_reports(self):
+        # 反例：「既有用例不得为迁就重构而改判」被删（改老用例变绿重成默认做法）
+        self._write_valid()
+        self.write("specs/general/testing.adoc", "= 测试\n\n修改代码后须确保既有用例全部通过。\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("testing.adoc", self.error_texts())
+
+    def test_missing_prompt_fragment_reports(self):
+        # 反例：公共片段被删（提示词复制到未知项目后这条边界整条丢失）
+        self._write_valid()
+        self.write("prompts/_common.txt", "// tag::baseline[]\n1. 规范与基线。\n// end::baseline[]\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("baseline-and-compat", self.error_texts())
+
+    def test_prompt_missing_include_reports(self):
+        # 反例：提示词代码块少一个 include（题面未装配该边界）
+        self._write_valid()
+        self.write("prompts/review.adoc",
+                   "= 提示词\n\ninclude::_common.txt[tag=baseline-and-compat]\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("compat", self.error_texts())
+
+    def test_baseline_has_no_fallback_branch_reports(self):
+        # 反例：基线条缺"无手段/红测试不阻断"的降级分支
+        # （会把基线变成引用方的硬性前置：没有测试的项目从此动不了手）
+        self._write_valid()
+        self.write("specs/general/planning.adoc",
+                   "= 任务规划\n\n== 动手前先定基线\n\n"
+                   "* **扫描既有验证手段（L1）**\n* **能跑通即跑通、并落盘留证（L1）**\n"
+                   "* **基线用于改完复跑（L1）**\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("降级分支", self.error_texts())
+
+    def test_prompt_fragment_without_fallback_reports(self):
+        # 反例：公共片段缺"没手段/红测试也不是不动手的理由"
+        self._write_valid()
+        cf = os.path.join(self.root, "prompts", "_common.txt")
+        text = open(cf, encoding="utf-8").read().replace(
+            "  - **没有校验手段、环境跑不起来，都不是不动手的理由**\n", "")
+        open(cf, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("都不是不动手的理由", self.error_texts())
+
+    def test_dispatcher_not_registered_reports(self):
+        # 反例：调度器未登记（该文件不会被加载，其中规则实际失效）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= 入口\n\n  ** 自检 → link:specs/general/self-check.adoc[]\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("未登记", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：公开面未同步（公开面读不到这条边界）
+        self._write_valid()
+        self.write("README.adoc", "= 说明\n\n普通说明。\n")
+        cm.check_dev_flow_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+
 class TestCheckChecklistGuard(CheckSpecsTestCase):
     """钉住"清单逐项"与"文档-脚本一致性"（补独立复核指出的两类漏检）。
 
