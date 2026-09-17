@@ -29,6 +29,17 @@
 * 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
 * 日志打印（禁 println、统一 slf4j 见通用编码规范）：静态文本（无参）不属占位符参数化约束范围，合规；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（如 `log.error("msg: {}", arg, e)`）
 
+== 持久化访问（MyBatis-Plus / JPA 等）
+
+持久化访问按通用编码规范 link:../general/coding.adoc[]「持久化访问（数据库/缓存等）」执行——**统一入口** + **优先用类型安全/声明式查询构造 API** + **替代优先**三条 L1 的**抽象形态**在通用层（该层不写具体框架类名）；**框架专名与禁止清单（本文件是唯一落点）**如下：
+
+* **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `IService` 的成员方法——`lambdaQuery()`、`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`（Kotlin 用 `kt*`），**不手工 `new` 任何 Wrapper**。**禁止** `new QueryWrapper<>()`、`new UpdateWrapper<>()`、**及其子类**（含 `new LambdaQueryWrapper<>()`、`new LambdaQueryChainWrapper<>()`、`new UpdateChainWrapper<>()`、匿名子类与自定义 Wrapper 子类）；`new LambdaQueryWrapper<>()` 虽同样类型安全，仍属本条禁止面——**强制走 `IService` 成员方法这一统一入口**，保证同一项目只有一种写法。识别特征：Service 实现类有 `extends ServiceImpl<XxxMapper, Xxx>` 却没走 `lambdaQuery()`/`lambdaUpdate()` 的调用点、调用点出现 Wrapper 的 `new`。
+* **`IService` 之外用 `Wrappers` 静态方法或映射文件（L1）**：需要 `Mapper` 专有方法或分页等 `IService` 不覆盖的能力时，用 **`Wrappers` 的 lambda 静态方法**（`Wrappers.lambdaQuery()`/`Wrappers.lambdaUpdate()`）或**在 Mapper 接口上用注解/映射文件**声明该查询，**不得**为此 `new` 构造器；同一操作在项目内已有先例时跟随先例（见 link:../general/coding.adoc[]「代码复用」）。
+* **JPA / Spring Data（对照落点）**：走 `Repository`/`EntityManager` 等既有入口，优先声明式查询方法（`findByXxx`）与类型化 Criteria，不用字符串拼列名。
+* **例外（L2，须写清理由）**：`IService` 与 `Wrappers` 的 lambda 形态**均表达不了的语义**（如 ORM 未封装的自定义 SQL 片段与其他表条件化 JOIN）允许退回 mapper `*.xml`（见 link:../general/coding.adoc[]「跨语言执行脚本的落点」）；确需 Wrapper 子类承载领域条件时，**在 Mapper 接口上以默认方法封装一次**、业务侧只调用该方法（**不得在业务代码里 `new`**），并在代码注释写明"为何替代形态表达不了"。**存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
+* **判定标准（任一命中即违规）**：①出现 `new QueryWrapper`/`new UpdateWrapper`/`new LambdaQueryWrapper`/`new LambdaQueryChainWrapper` 一类构造器 `new`（含匿名子类、自定义子类），而同一条件可由 `lambdaQuery()`/`lambdaUpdate()` 表达；②列名/字段名以**字符串**写进查询构造（`eq("user_name", ...)`），而可用方法引用（`User::getUserName`）表达；③绕过 `IService` 另起一套访问写法（同一项目内并存 `IService` 成员方法与自建 Wrapper 两条路径）。
+* 依据（标准名/编号）：ISO/IEC 25010（可维护性：字符串列名无编译期校验、重命名即静默失效）；ISO/IEC/IEEE 29148（判定须可验证）；（MyBatis-Plus 官方文档给出 `IService` 的 lambda 方法与 `Wrappers` 静态方法，本条取其为唯一入口，属**本集合自己的取舍**）。
+
 == 跨语言执行脚本（SQL / Lua 等）
 
 Java 里要执行**其他语言**的脚本时，须按通用编码规范「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」执行——**独立成文件放资源文件夹、扩展名取被调语言的扩展名、按资源读取后执行**，不得用字符串拼接、字符串模板或字符串常量内联在 Java 代码里。

@@ -186,6 +186,27 @@
      适用范围限定——防"随手取个不碰名的"重回默认做法（用户提出的真实失效：同域多个服务的
      同类 Feign 接口碰名、按名看不出归属）。
 
+
+39. 持久化访问防线（**用户明确提出的硬性要求**，**按通用层/技术栈层分层设防**）：
+     `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」须仍在，且三条 L1（**统一
+     入口**：走该技术给定的统一入口、不自建构造器；**优先用类型安全/声明式查询构造 API**：
+     方法引用/属性名引用、`findByXxx` 一类；**替代优先**：技术自带的类型安全/声明式形态强制
+     使用，仅表达不了时才退回通用构造器且须写明理由）、可逐条核对的**抽象**判定标准
+     （构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止跨语言脚本承载）、
+     存量随动迁移与依据行齐备，**且通用层不得出现具体框架专名**（`IService`/`QueryWrapper`
+     一族/`ServiceImpl`/`RedisTemplate` 等——该文件适用于所有语言，框架名充当规则主语时
+     替换主语测试即失败，且会被无条件随「编写代码」带进非 Java 项目）；框架专名与禁止清单的
+     **唯一落点**是 `specs/stack/java.adoc`（同一 Java 栈文件就地承载，不新开 `mybatis.adoc`），
+     须点名 **`IService` 的 `lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`** 四个
+     成员方法、**禁止 `new QueryWrapper` 及其子类（含 `new LambdaQueryWrapper`）**、
+     `IService` 之外的落点（`Wrappers` 的 lambda 静态方法、mapper 注解/`*.xml`）与 L2 例外
+     口径；加载调度器通用层条目**去框架专名**（识别特征要触发的是"写持久化访问代码"而不是
+     "Java 项目"）、Java 栈条目含四个成员方法与禁止面，`README.adoc` 两处目录说明同步
+     ——防"业务代码里随手 `new` 查询构造器、并用字符串写列名"重回默认做法，也防通用层被
+     框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
+     `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
+     改名即静默失效）。
+
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
@@ -3940,6 +3961,160 @@ def check_reuse_precedent_guard():
     phase_done()
 
 
+def check_persistence_access_guard():
+    """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
+
+    背景（用户提出的规范要求）：**强制使用 `IService` 的成员方法 `lambdaQuery()`/`lambdaUpdate()`
+    /`ktQuery()`/`ktUpdate()`，除非无法替代，否则禁止 `new QueryWrapper` 及其子类**。用户报告的
+    失效形态是**同一项目里并存两套写法**：Service 已经 `extends ServiceImpl<XxxMapper, Xxx>`，
+    却仍在业务代码里 `new QueryWrapper<>()` / `new LambdaQueryWrapper<>()` 拼条件——**连同样
+    类型安全的 Lambda Wrapper 也 `new`**（绕过统一入口），于是"走哪条路径"全凭当下发挥；
+    而**非 Lambda** 的 `QueryWrapper` 还用**字符串写列名**（`eq("user_name", ...)`），编译期查不出、
+    改名即静默失效。用户的口径是"**除非无法替代，否则禁止 `new` 构造器**"——替代优先、入口统一。
+
+    本条**跨语言**（框架都自带"类型安全/声明式"的替代写法），故**分两层落点**：
+      * **通用层**（`specs/general/coding.adoc`，跨语言）——只留**抽象形态**：统一入口 /
+        优先用类型安全、声明式查询构造 API / 替代优先三条 L1 + 判定标准 + 例外与边界 + 存量边界；
+        **不得出现具体框架类名**（`IService`、`QueryWrapper`、`LambdaQueryWrapper`、
+        `ServiceImpl`、`RedisTemplate` 等）——本文件自述"适用于所有编程语言"，具体框架名
+        充当规则主语时，替换主语测试即失败（该规则对 Node/Go/Python 项目不成立），
+        且通用层按"编写代码"无条件加载、会把 Java 类名带进非 Java 项目的上下文。
+      * **技术栈层**（`specs/stack/java.adoc`，**框架专名与禁止清单的唯一落点**）——同一个 Java
+        栈文件承载（本仓库口径：先判归属与层级、能就地承载就不新开文件，`spec-lifecycle.adoc`），
+        须含 `IService` 的四个成员方法、禁止 `new QueryWrapper` **及其子类**（含
+        `new LambdaQueryWrapper`）、`IService` 之外的落点、L2 例外与'须写清理由'、判定标准、
+        存量随动迁移。
+      * **加载调度器与公开说明**：通用层登记**去框架专名**（识别特征要触发的是"写持久化
+        访问代码"而非"Java 项目"）、Java 栈登记含四个成员方法与禁止面；README 两处说明分别同步。
+
+    只钉"要求文本仍在、且落在该落点、要点未被削弱、通用层无框架专名"——"某个具体类该不该
+    `new` 构造器、该条件能否由 lambda 形态表达"属语义判断（取决于该 ORM 版本与实际语义），
+    交人/子 agent 复核。
+    """
+    phase("持久化访问（类型安全查询构造）防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「持久化访问（数据库/缓存等）」的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("持久化访问（数据库/缓存等）",),
+             "条文：须有「持久化访问（数据库/缓存等）」节，作为该条的抽象形态落点"),
+            (("统一入口（L1）",),
+             "统一入口：须写明持久化操作走该技术给定的统一入口（**不点名具体框架**），"
+             "并标 L1（防被降级成建议）"),
+            (("优先用类型安全/声明式查询构造 API（L1）", "方法引用", "findByXxx"),
+             "替代形态优先：须写明优先且一律使用类型安全/声明式查询构造 API（以方法引用/"
+             "属性名引用表达列名、声明式方法名如 `findByXxx`、类型化 Criteria），标 L1"),
+            (("替代优先（L1）", "表达不了"),
+             "替代优先：须写明技术自带的替代写法（类型安全/声明式形态）强制优先、"
+             "仅在表达不了时才退回通用构造器且须写明理由（无此条则'无法替代'的边界无处可判）"),
+            (("判定标准", "字符串", "绕过"),
+             "判定标准：须给出可逐条核对的**抽象**形态（构造器 `new`、字符串写列名、"
+             "绕过统一入口），否则只剩一句口号"),
+            (("例外与边界", "跨语言执行脚本的落点"),
+             "例外与边界：须写明本条不禁止跨语言语句的承载（映射文件）与类型安全 API "
+             "表达不了的语义（退回时调用入口不变），否则会与「跨语言执行脚本的落点」互相打架"),
+            (("存量边界", "随动迁移"),
+             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
+             "否则等于静默推翻引用方既有的 `new` 用法"),
+            (("依据", "ISO/IEC 25010"),
+             "依据行：须标标准名/编号（防依据被整段删除后无从追溯）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"持久化访问防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户明确提出的硬性要求（强制走统一入口、禁止 `new` 查询构造器），"
+                    "不得删除、不得降级为建议",
+                    rel_coding)
+        # 通用层不得出现具体框架专名（替换主语测试：本文件适用于所有编程语言）
+        for token, desc in (
+            ("IService",
+             "通用层不得点名 `IService`——它是 MyBatis-Plus 专名，充当规则主语时该规则对"
+             "非 Java 项目不成立（替换主语测试），且会被无条件随「编写代码」带进非 Java 项目"),
+            ("QueryWrapper",
+             "通用层不得点名 `QueryWrapper`/`LambdaQueryWrapper` 一族——具体禁止清单归技术栈层"),
+            ("ServiceImpl",
+             "通用层不得点名 `ServiceImpl`——框架专名归技术栈层"),
+            ("RedisTemplate",
+             "通用层不得点名 `RedisTemplate`——框架专名归技术栈层"),
+        ):
+            if token in text:
+                err(f"持久化访问防线被破坏：{rel_coding} 出现框架专名 `{token}`——{desc}；"
+                    "通用层只留跨语言抽象，框架专名与禁止清单下沉到 `specs/stack/` 对应文件",
+                    rel_coding)
+    # Java 栈落点：MyBatis-Plus 的四个成员方法 + IService 之外的落点 + 例外 + 判定标准 + 存量
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——持久化访问的 Java 技术栈落点丢失（框架专名的唯一落点）",
+            rel_java)
+    else:
+        jtext = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("持久化访问（MyBatis-Plus / JPA 等）", "coding.adoc"),
+             "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按"
+             "栈文件学仍会随手 new）"),
+            (("lambdaQuery", "lambdaUpdate", "ktQuery", "ktUpdate"),
+             "四个成员方法名须齐全（`lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`）——"
+             "漏掉 `kt*` 会让 Kotlin 项目学不全、漏掉 `lambdaUpdate` 则更新侧无落点"),
+            (("new QueryWrapper", "子类", "new LambdaQueryWrapper"),
+             "禁止面须点名 `new QueryWrapper` 的**子类**（含 `new LambdaQueryWrapper`）——"
+             "用户要求'禁止 new QueryWrapper 及其子类'，只写非 Lambda 形态即被放宽"),
+            (("Wrappers",),
+             "`IService` 之外的落点须给出（`Wrappers` 的 lambda 静态方法或 Mapper 注解/`*.xml`），"
+             "否则'无法替代'时执行者无处可去、只能继续 new"),
+            (("例外（L2", "理由"),
+             "例外须标级并写明'须写清理由'（无例外条文则等于把既有写法一刀切，"
+             "无例外且不写理由则等于留后门）"),
+            (("判定标准", "字符串", "方法引用"),
+             "判定标准：须给出可逐条核对的形态（构造器 new / 字符串列名 / 绕过 IService），"
+             "含'可用方法引用表达却写字符串'这一条"),
+            (("随动迁移", "execution.adoc"),
+             "存量边界：须指向「规范变更的存量处理」（随动迁移）"),
+        ):
+            missing = [k for k in keys if k not in jtext]
+            if missing:
+                err(f"持久化访问防线被破坏：{rel_java} 缺失要点 {missing}——{desc}",
+                    rel_java)
+    # 加载调度器：通用层去框架专名 + Java 栈含四个成员方法与禁止面
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        ctext = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("持久化访问（数据库/缓存等）", "统一入口"),
+             "通用层『编写代码』条目须带该条的抽象识别特征（含'统一入口'），否则读到它的场景"
+             "（写持久化访问代码）不会触发加载"),
+            (("MyBatis-Plus 持久化访问", "lambdaQuery", "ktQuery", "new QueryWrapper"),
+             "Java 技术栈登记须带该条识别特征（含四个成员方法与禁止面），"
+             "否则 Java 项目按栈登记加载时看不到这条"),
+        ):
+            missing = [k for k in keys if k not in ctext]
+            if missing:
+                err(f"持久化访问防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+        # 通用层调度条目不得带框架专名（识别特征要触发'写持久化代码'而不是'Java 项目'）
+        dispatcher_coding_start = ctext.find("  ** 编写代码 →")
+        dispatcher_coding_end = ctext.find("\n  ** ", dispatcher_coding_start + 1)
+        if dispatcher_coding_start != -1 and dispatcher_coding_end != -1:
+            coding_entry = ctext[dispatcher_coding_start:dispatcher_coding_end]
+            for token in ("IService", "QueryWrapper", "LambdaQueryWrapper"):
+                if token in coding_entry:
+                    err(f"持久化访问防线被破坏：{rel_common} 的通用层『编写代码』调度条目"
+                        f"出现框架专名 `{token}`——通用层识别特征不得点名框架类名"
+                        "（否则非 Java 项目也被带入 MyBatis-Plus 术语、且与归属层冲突）",
+                        rel_common)
+    # 公开面：README 目录说明（读者按 README 学习时须能看到这条存在、且两处分层一致）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "持久化访问" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步持久化访问条——"
+            "公开面看不到这条，引用方按 README 学习时会漏掉", rel_readme)
+    phase_done()
+
+
 def check_api_naming_guard():
     """『Feign 接口命名带所属域/项目前缀防线』：Feign 接口的命名前缀不得退回"随手取名"。
 
@@ -3999,7 +4174,7 @@ def check_api_naming_guard():
                 err(f"接口命名防线被破坏：{rel_coding} 出现被用户排除的宽口径「{wide}」——"
                     "用户要求目前只考虑 Feign，判定面不得自行放大到其他对外接口", rel_coding)
     # 技术栈层：Java（Feign 的实际落点）引用通用条
-    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace(chr(92), "/")
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_STACK_FILE):
         err(f"缺少文件 {rel_java}——Feign 接口命名的技术栈落点丢失", rel_java)
     else:
@@ -5043,6 +5218,7 @@ def main(argv=None) -> int:
     check_delivery_guard()
     check_prompt_delivery_surface_guard()
     check_api_naming_guard()
+    check_persistence_access_guard()
     check_checklist_guard()
     check_asciidoctor_syntax()
 
