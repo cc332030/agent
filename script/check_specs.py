@@ -346,9 +346,17 @@ except AttributeError:
     pass
 
 # 必加载层体积预算（字节）：AGENTS_COMMON.adoc + specs/core/ 的**上限**（不是目标）。
-# 常驻层每次会话无条件加载，故须有机械天花板；当前约 47 KB，留约 17% 余量，超限即要求
-# 先归位（判归属/层级）、再新增，见 specs-project-maintainer/spec-lifecycle.adoc「规范集合的自身重构」。
-RESIDENT_BUDGET = 56000
+# 常驻层每次会话无条件加载，故须有机械天花板；超限即要求先归位（判归属/层级）、再新增，
+# 见 specs-project-maintainer/spec-lifecycle.adoc「规范集合的自身重构」。
+# 2026-09 由 56000 调整为 64000：当次改动的**实际用量 55984 已贴住旧上限**（余量仅 16
+# 字节）——"执行吞吐"这一新落点要写进最高关注项那两行引用、必然顶破旧预算，而上限的
+# 用意是"拦无声膨胀"，不是"在余量耗尽时把既有引用挤掉"。故只**恢复余量**、不放宽口径：
+#   * 归位动作**已做**：执行吞吐的**判据正文全部落在 specs/general/context.adoc**（按需
+#     加载），常驻层只留引用行，未写入任何方法论；
+#   * 归位后（含本条自身新增的引用行）实测用量约 56574（约 55 KB），余量约 12%——
+#     下一次"往常驻层加实质内容"应当先归位，而不是再抬这个数；该数属本仓库自身的
+#     机械天花板，不写入公共内容。
+RESIDENT_BUDGET = 64000
 # 项目自身入口 AGENTS.adoc 的体积上限（字节）：它**同为每次会话无条件加载的常驻物**
 # （项目根入口，先于 AGENTS_COMMON.adoc 被读），故须与本仓库自己的必加载层一并设限。
 # 它是项目自身规范、不是公共内容（引用方不使用），故单列一个上限、不与 RESIDENT_BUDGET 合并。
@@ -522,7 +530,7 @@ LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
 LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
 # 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
 # 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
-LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc")
+LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc", "throughput.adoc")
 # 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
 # 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
 # ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
@@ -1628,7 +1636,7 @@ def check_priority_guard():
         text = fh.read()
     for pid, name, level in (("P1", "git mv", "L1，最高"), ("P2", "完整性", "L1，最高"),
                              ("P3", "内容不得减少", "L1，最高"),
-                             ("P4", "读取与上下文纪律", "L2 建议"),
+                             ("P4", "读取与上下文纪律（含执行轮次合并／少绕）", "L2 建议"),
                              ("P5", "不可逆操作与来源真实性", "L1，最高"),
                              ("P6", "协作执行者选择", "L1，最高")):
         if pid not in text:
@@ -1650,6 +1658,11 @@ def check_priority_guard():
                 err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 {pid}（{name}）"
                     "缺失『**依据**』行——依据可压缩为标准名/编号，但不得整段删除"
                     "（检索不到依据，就无从判断它是『拍脑袋』还是『有出处』）", rel_priority)
+            if pid == "P4" and "少绕" not in seg:
+                err(f"规范优先级防线被破坏：{rel_priority} 的最高关注项 P4 "
+                    "缺失『少绕』（执行轮次须合并）这一半——只留『少读』时，"
+                    "执行者会把可合并的调用拆成多轮，每轮重付一次全上下文输入"
+                    "（实证见 library/throughput.adoc）", rel_priority)
         if "不可降级" not in text:
             err(f"规范优先级防线被破坏：{rel_priority} 缺失『不可降级』声明——"
                 "最高关注项须明确只能加强、不得削弱", rel_priority)
@@ -3403,6 +3416,102 @@ def check_runtime_env_guard():
         missing = [k for k in keys if k not in body]
         if missing:
             err(f"运行环境防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_throughput_guard():
+    """『执行吞吐』防线：轮次纪律的判据、常驻层引用与调度器登记不得被删。
+
+    背景（用户提出，实证）：Agent 跑得慢的主因不是单次模型调用，而是**执行轮次**——
+    实测同仓库的一次任务：180 次模型请求、175 万 token 输入、运行 1659 s，其中模型
+    生成仅 580 s，**约 65% 的墙钟时间花在轮次之间的工具执行与等待上**（数据取自
+    平台侧的流水线 AI 用量与阶段耗时）。轮次既是上下文的**乘数**（每轮重付一次全
+    上下文输入），也是墙钟的直接来源，故"少绕"须与"少读"同列上下文纪律。
+
+    本防线只钉**要点文本仍在**（判据可判定、边界情形齐备），不钉措辞：
+      * 判据正文（`specs/general/context.adoc`「执行吞吐」）：L1 两条——独立调用必须
+        合并（含"先看一步再决定"式试探往返的判定标准与反例）、构建与校验的输出须
+        一次取到；L2 若干条——读到的内容不重复读、往返成本入规划、凭据一次固化、
+        缓存与镜像就近（且**已配置过即沿用不重配**，与 Maven 侧同向）、长流程不留
+        零信息等待；
+      * 常驻层引用（`specs/core/execution.adoc`）：最高关注项段落与「任务编排与上下文
+        管理」两处须点到执行吞吐——缺则该条在常驻层不可达（每次会话依赖的恰是常驻层）；
+      * 调度器登记（`AGENTS_COMMON.adoc`）：该条的加载项须含"执行吞吐/轮次合并"与
+        "多次往返"这类**识别特征**——缺则它永远不会被触发加载、规则实际失效。
+
+    实证依据（本仓库现场，2026-09）：常驻层预算当时**余量仅 16 字节**，正是"引用行
+    每次只加一点、无人核算合计"的形态；本条因此连同"预算余量必须先恢复、实质内容
+    一律归位到通用层"一起落地，防止新规则被塞进常驻层。
+    """
+    phase("执行吞吐防线检查")
+    rel = "specs/general/context.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失——执行吞吐判据无落点", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, "执行吞吐")
+    if not section:
+        err("context.adoc 缺少「执行吞吐」节——轮次纪律的判据失去落点（只有读取范围时，"
+            "执行者会把可合并的调用拆成多轮，每轮重付一次全上下文输入）", rel)
+        phase_done()
+        return
+    required = [
+        ("独立调用合并（L1）", "独立调用必须合并"),
+        ("试探式往返的判定标准", "试探式往返"),
+        ("构建/校验输出一次取到（L1）", "构建与校验的输出须一次取到"),
+        ("读到即沉淀、不重复读", "不重复读"),
+        ("往返成本入规划", "往返成本也要算"),
+        ("凭据一次固化", "固化为可复用形态"),
+        ("缓存与镜像就近、不重配", "不覆盖、不重配"),
+        ("长流程不留零信息等待（L1）", "零信息等待"),
+    ]
+    for name, token in required:
+        if token not in section:
+            err(f"「执行吞吐」节缺少要点：{name}（应含 `{token}`）", rel)
+
+    # 平台侧（CNB）：两处特有代价（一次唤起=一次完整加载、状态与用量按汇总先取再下钻）
+    plat = os.path.join(REPO_ROOT, "specs", "platform", "cnb.adoc")
+    if os.path.isfile(plat):
+        with open(plat, encoding="utf-8") as fh:
+            ptext = fh.read()
+        psec = _section_text(ptext, "执行吞吐")
+        if not psec:
+            err("cnb.adoc 缺少「执行吞吐（平台侧的两处特有代价）」节——"
+                "平台侧特有代价（一次唤起=一次完整加载、状态查询逐轮付一次往返）"
+                "失去落点，执行者会为刷新长流程而反复另起一轮", "specs/platform/cnb.adoc")
+        else:
+            for name, token in (("一次唤起=一次完整加载（L1）", "一次唤起 = 一次完整加载 + 一轮往返"),
+                                ("状态按汇总先取再下钻（L2）", "先取汇总、再按需下钻"),
+                                ("不空转等待（同一形态的现场）", "零信息"),
+                                ("AI 用量与请求明细是可观测面（L2）", "AI 用量汇总")):
+                if token not in psec:
+                    err(f"cnb.adoc「执行吞吐」节缺少要点：{name}（应含 `{token}`）",
+                        "specs/platform/cnb.adoc")
+    else:
+        err("缺少 specs/platform/cnb.adoc——平台侧执行吞吐条无从核对", "specs/platform/cnb.adoc")
+
+    for rel2, keys, desc in (
+        ("specs/core/execution.adoc",
+         ("执行吞吐", "少绕"),
+         "常驻层（最高关注项段落与「任务编排与上下文管理」）须点到执行吞吐，"
+         "否则每次会话加载到的常驻层里没有这条纪律"),
+        ("AGENTS_COMMON.adoc",
+         ("执行吞吐", "多次往返"),
+         "加载调度器须有本条的加载项与识别特征（多步命令/构建/轮询、预计需多次往返），"
+         "否则它永远不会被触发加载"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel2.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel2}——执行吞吐条在该处的落点无从核对", rel2)
+            continue
+        with open(fp, encoding="utf-8") as fh:
+            body = fh.read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"执行吞吐防线被破坏：{rel2} 缺失 {missing}——{desc}", rel2)
     phase_done()
 
 
@@ -7041,6 +7150,7 @@ def main(argv=None) -> int:
     check_runtime_env_guard()
     check_wiring_guard()
     check_maven_mirror_guard()
+    check_throughput_guard()
     check_asciidoctor_syntax()
 
     print()
