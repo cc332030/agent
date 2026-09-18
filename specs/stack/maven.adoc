@@ -4,6 +4,13 @@
 
 == 仓库与镜像
 
+=== 可选源与取舍
+
+* **推荐源（同一级里可互换）**：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`（**首选，见下条**）、阿里云 `https://maven.aliyun.com/repository/public/`、华为云 `https://repo.huaweicloud.com/repository/maven/`。**中央仓的官方源**（`repo1.maven.org`，经由全球边缘加速）属**更远一级的兜底**，仅在境内源全部实测不可用时才用；**Clojars 的构件**另见下条。
+* **先实测可用再启用、一次配置到位（L1）**：动手构建前对候选源做一次真实请求（取一个确定存在的构件，如某坐标的 `.pom`）确认可取；**已配置过即沿用**（不覆盖、不重配）；**不得**每轮重试同一个源。判定标准、选源次序与降级条件见 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」。
+* **`<mirrorOf>` 取值（L1）**：镜像代理中央仓时 `mirrorOf` 写 `central` 或 `*`；**已经指向私服/其他源的 `repository` 不得被 `*` 整体吞掉**（`mirrorOf` 写成 `*` 会把私服也镜像走，导致私有构件取不到）——私服存在时按 `<mirrorOf>central</mirrorOf>` 或 `external:*` 一类写法把它排除在外。
+* **Clojure/Clojars 构件**：`clojure`、`clojars` 的第三方构件（如 `clj-tiny-astar` 一类坐标）不在中央仓，须另加 Clojars 源；境内可用的镜像见 link:../stack/java.adoc[]「依赖与仓库（Clojars）」（**中央仓镜像不能替代 Clojars**）。
+
 * **未配置过 Maven 仓库/镜像、且外网出口 IP 在中国大陆时（L1）**：**动手构建前**，让 AI 使用 link:https://mirrors.cloud.tencent.com/nexus/repository/maven-public/[`https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`] 作为 Maven 中央仓库。**必须先用这个仓库**，不得自行另挑镜像站；**仅当它不可用**（连不上、代理不到、报错取不到构件，配置后实测确认）才允许改用**其他在境内的镜像站**。**已配置过即不做**：沿用引用方既有配置，不覆盖、不重配。
 
 == 依赖

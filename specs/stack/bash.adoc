@@ -36,3 +36,9 @@
 == 其他
 
 * 代码结构与命名遵守 link:../general/coding.adoc[]；shell 脚本中避免不必要的子进程与管道滥用，保持可读性
+
+== 系统包源（apt / apk / yum，CI 镜像内）
+
+* **在容器/CI 镜像内取系统包时按次序选源（L1）**：镜像是"未配置过源"的典型场景（多数官方镜像的 `/etc/apt/sources.list`、`/etc/apk/repositories` 指向境外源）——此时按 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」取就近的境内源；**已配置过（如基础镜像已换成境内源）即沿用**，不覆盖、不追加冲突条目。
+* **同一级里可互换（实测可用）**：腾讯云 `https://mirrors.cloud.tencent.com/`、阿里云 `https://mirrors.aliyun.com/`（两者均提供 `debian/`、`ubuntu/`、`alpine/` 目录）、中科大 `https://mirrors.ustc.edu.cn/` 等为同级备选；发行版官方源为更远一级的兜底。**条目写法要匹配发行版与版本代号**（`jammy`/`noble`、`stable`/`bookworm` 等）——**先核对基础镜像的版本再改**，改错代号会让 `apt update` 直接失败。
+* **改动只落在本次构建内（L2）**：换源脚本**不得**写回仓库（除非项目已有该配置落点）；容器内改动随镜像/任务结束即失效，属一次性装配。

@@ -30,3 +30,8 @@
 
 * 编码规则（命名、注释、避免控制台打印等）遵守 link:../general/coding.adoc[]
 * 脚本保持纯标准库优先，避免为简单脚本引入重依赖
+
+== 包源（pip）
+
+* **pip 源按次序选、先实测（L1）**：未配置过 pip 源（`pip.conf`/`pip.ini`、`PIP_INDEX_URL`、`--index-url` 均无）时，按 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」的次序取源——**同一级里可互换**；境内推荐（实测可取到包）为腾讯云 `https://mirrors.cloud.tencent.com/pypi/simple/`、阿里云 `https://mirrors.aliyun.com/pypi/simple/`、华为云 `https://repo.huaweicloud.com/repository/pypi/simple/`，高校镜像站（如清华 TUNA `https://pypi.tuna.tsinghua.edu.cn/simple/`）为同级备选；**PyPI 官方源**属更远一级的兜底，仅在境内源全部实测不可用时才用。
+* **先实测再启用、已配置过即沿用（L1）**：动手安装前先用一次真实请求（或 `pip download --no-deps` 取一个确定存在的包）确认源可用；**不得**覆盖项目/环境既有配置，**不得**每轮重试同一个源（配置落点与判定标准同上条依据）。

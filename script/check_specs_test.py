@@ -21,6 +21,8 @@
   * check_spec_admission_guard 另钉读法形态与重构后的有效性核对（反：两节被删）
   * check_runtime_env_guard —— 运行环境须与项目声明一致防线（正：条文/判据/声明落点/降级路径/依据行与三处引用齐备；
                              反：整节被删/L1 被摘/"能跑通也不得换"被删/判据被抽/声明落点被删/降级路径被删/依据被删/引用与登记断开）
+  * check_registry_mirror_guard —— 包源与镜像源防线（正：次序/降级边界/先实测/不覆盖既有配置/推荐非强制/栈侧落点与图书馆登记齐备；
+                             反：文件或节被删、次序被抹平、先实测被删、覆盖既有配置、推荐被读成强制、栈侧落点或图书馆记录缺失）
   * check_index_page_guard —— 索引页触发判据防线（正：触发判据/空壳不建/只做导航/模块 README 齐备；
                              反：doc.adoc 判据被删、doc-module.adoc 按需口径被删、文件被删）
 
@@ -2877,6 +2879,43 @@ class TestCheckPublicContentSelfContained(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "= t")
         self.write("prompts/review.adoc",
                    "= 提示词\n\n加载项目规范入口后按规范执行。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_library_ref_in_public_specs_reports(self):
+        # 反例：**图书馆与维护方自查层同属"不在默认引用面内"的落点**，公共内容里指向
+        # `library/` 的路径同样是引用方读不到的死链。
+        # 本轮实测失效：新增的「包源与镜像源」条在 specs/general/ci-cd.adoc 等处写了
+        # link:../../library/mirrors.adoc[]，而当时三条防线全绿放过——本条此前只拦
+        # `specs-project-maintainer/`。
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/dependency.adoc",
+                   "= 依赖\n\n实测记录见 link:../../library/mirrors.adoc[]。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("library/", self.error_texts())
+
+    def test_library_backtick_ref_in_public_specs_reports(self):
+        # 反例：反引号写法同样命中（不只看 link: 形态）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/core/execution.adoc",
+                   "= 执行\n\n论证见 `library/adoption.adoc`。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("library/", self.error_texts())
+
+    def test_library_name_without_path_passes(self):
+        # 正例：只给**依据名**、不给可点开的路径，属正当表述（不得误伤）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/dependency.adoc",
+                   "= 依赖\n\n实测取值属依据，见图书馆「包源与镜像源」主题"
+                   "（依据名：包源与镜像源（推荐次序与实测记录））。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_own_agents_adoc_may_reference_library(self):
+        # 正例：根 AGENTS.adoc 是项目自身内容，可以引用图书馆
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("AGENTS.adoc",
+                   "= 项目自身规范\n\n依据图书馆入口 link:library/README.adoc[]\n")
         cm.check_public_content_is_self_contained()
         self.assertEqual(cm.errors, [])
 
@@ -8178,6 +8217,128 @@ class TestCheckMavenMirrorGuard(CheckSpecsTestCase):
         cm.check_maven_mirror_guard()
         self.assertIn("在境内的镜像站", self.error_texts())
 
+
+
+class TestCheckRegistryMirrorGuard(CheckSpecsTestCase):
+    """钉住『包源与镜像源』防线：推荐次序、降级边界与"先实测再启用"不得被删或降级。
+
+    背景（本次用户要求 + 本项目实测）：换源此前只有 Maven 一栈的一条硬要求；其余语言/工具
+    （npm、pip、Cargo、Go、RubyGems、容器镜像、系统包、运行时二进制）没有次序与边界，
+    容易"凭感觉挑一个""直接跳到境外源"，或把**实测不存在**的目录（如"TUNA 的 npm 源"）
+    照抄进配置。故反例逐条对应"最易被精简掉"的字句：次序被抹平、跳级、不先实测、
+    覆盖引用方既有配置、把推荐读成强制。
+
+    正例含容差：条目措辞与顺序可变（只认关键判据），源地址可增删（不钉名单）。
+    """
+
+    SECTION = (
+        "= 依赖管理规范\n\n"
+        "== 包源（包仓库/镜像站）的选用\n"
+        "* 按次序选源、逐级降级，不得跳级（L1）：①就近/平台内已优化的源；②主流公共源；"
+        "③地理上邻近的其他境外源；④更远的境外源站；只有当上一级实测取不到内容才降级；"
+        "未配置过任何源时才动手配置。\n"
+        "* 先实测可用再启用、一次配置到位（L1）：先对候选源做一次**真实请求**；"
+        "不得**在每一轮里反复重试**同一个源。\n"
+        "* 不得覆盖引用方既有配置（L1）：已配置过**包源时**一律沿用；只有在\"未配置过任何源\"时才动手配置；"
+        "**推荐源不是强制源**，用户/项目声明的源永远优先。\n"
+        "* 结果须可复核（L2）：给结论时带**取值与条件**。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("specs/general/dependency.adoc", self.SECTION)
+        self.write("specs/stack/maven.adoc", "见 mirrors.cloud.tencent.com/nexus/repository/maven-public/\n")
+        self.write("specs/stack/python.adoc", "pip 源见 https://mirrors.cloud.tencent.com/pypi/simple/\n")
+        self.write("specs/stack/java.adoc", "Clojars（clojars）构件另加源\n")
+        self.write("specs/general/ci-cd.adoc", "取源按 link:dependency.adoc[]「包源（包仓库/镜像站）的选用」\n")
+        self.write("specs/platform/cnb.adoc", "== 包源与镜像源（平台侧优先口径）\n* 优先用平台内源\n")
+        self.write("library/README.adoc", "| link:mirrors.adoc[] | 包源依据 |\n")
+        self.write("library/mirrors.adoc",
+                   "= 包源\n外部材料**未**规定源站的优先级次序；本集合据此推出次序；"
+                   "**取样条件**见下；复核实测见下；**判可用性要取确定存在的包、不要只请求站点/目录根**；"
+                   "单次采样不构成\"某源更快\"的结论。\n== 实测记录\n")
+
+    def test_positive_passes(self):
+        cm.check_registry_mirror_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_dependency_file_reports(self):
+        os.remove(os.path.join(self.root, "specs", "general", "dependency.adoc"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("specs/general/dependency.adoc", self.error_texts())
+
+    def test_early_return_paths_still_return_normally(self):
+        # 回归：缺文件/缺节这两条**最早命中**的路径必须是"报错并返回"，不得继续往下走
+        # （否则后面的常量解包会抛异常，防线从"报错"变成"崩掉"，而既有用例只断言错误文本、
+        # 崩了也照样绿）。判据：正常返回 + 错误清单已写。
+        os.remove(os.path.join(self.root, "specs", "general", "dependency.adoc"))
+        cm.check_registry_mirror_guard()          # 不抛异常即为通过
+        self.assertIn("specs/general/dependency.adoc", self.error_texts())
+
+        cm.errors.clear()
+        self.write("specs/general/dependency.adoc", "= 依赖\n\n== 别的\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("包源（包仓库/镜像站）的选用", self.error_texts())
+
+    def test_topic_file_not_registered_in_index_reports(self):
+        # 反例：主题文件在磁盘上、却漏登记到入口表——读者按入口找不到它
+        # （既有 `quality.adoc` 就不在下限常量里，故完整性只能靠入口表核对，不能靠常量）
+        self.write("library/extra.adoc", "= 另一个主题\n\n内容。\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("extra.adoc", self.error_texts())
+
+    def test_weak_anchor_no_longer_passes_on_loose_tokens(self):
+        # 反例：只留"已配置过**"这类任何措辞都会命中的片段、把边界句删掉 → 必须报错
+        self.write("specs/general/dependency.adoc",
+                   self.SECTION.replace("只有在\"未配置过任何源\"时才动手配置；", "已配置过**就跳过；")
+                   .replace("**推荐源不是强制源**，用户/项目声明的源永远优先。", "必须用推荐源。"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("不覆盖引用方既有配置", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self.write("specs/general/dependency.adoc", "= 依赖\n\n== 引入依赖\n* 别的\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("包源（包仓库/镜像站）的选用", self.error_texts())
+
+    def test_order_terms_removed_reports(self):
+        # 次序被压成"用国内源"时，跳级与境外分档就无从判断
+        self.write("specs/general/dependency.adoc",
+                   self.SECTION.replace("地理上邻近的其他境外源", "国外源"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("邻近", self.error_texts())
+
+    def test_probe_before_use_removed_reports(self):
+        self.write("specs/general/dependency.adoc",
+                   self.SECTION.replace("先对候选源做一次**真实请求**", "按文档描述直接配置"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("真实请求", self.error_texts())
+
+    def test_existing_config_keep_removed_reports(self):
+        self.write("specs/general/dependency.adoc",
+                   self.SECTION.replace("已配置过**包源时**一律沿用", "每次都用推荐源覆盖"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("沿用", self.error_texts())
+
+    def test_recommend_not_force_removed_reports(self):
+        self.write("specs/general/dependency.adoc",
+                   self.SECTION.replace("**推荐源不是强制源**", "必须使用本规范指定的源"))
+        cm.check_registry_mirror_guard()
+        self.assertIn("强制源", self.error_texts())
+
+    def test_stack_landing_missing_reports(self):
+        # 栈侧落点被删 → 具体源地址无处承载（本条要防的正是"只有通用层、落不到现场"）
+        self.write("specs/stack/python.adoc", "= Python\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("specs/stack/python.adoc", self.error_texts())
+
+    def test_library_not_registered_reports(self):
+        self.write("library/README.adoc", "| link:sources.adoc[] | 别的 |\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("mirrors.adoc", self.error_texts())
+
+    def test_library_without_measured_record_reports(self):
+        self.write("library/mirrors.adoc", "= 包源\n本处只写推荐名单。\n")
+        cm.check_registry_mirror_guard()
+        self.assertIn("library/mirrors.adoc", self.error_texts())
 
 
 class TestCheckThroughputGuard(CheckSpecsTestCase):
