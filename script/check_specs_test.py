@@ -5544,6 +5544,174 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
         self.assertIn("缺少统一变更日志", self.error_texts())
 
 
+class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
+    """钉住『变更日志组织形态与表格形态防线』。
+
+    失效形态（用户报告、实测）：单行流水式日志在一个版本改了很多东西时**不可检索**；
+    反向失效是**换成表格后把"影响"列省掉**、或**用类型列代替破坏性变更标注**；
+    以及把**排序方向**写成正序、或把"版本倒序"与"时间倒序"读成两种可择一的排序
+    （用户口径：**排序方式还是时间倒序，版本是越来越大的、版本倒序和时间倒序是一样的**）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_extra = (cm.CHANGELOG_STRUCTURE_FILE, cm.CHANGELOG_EVIDENCE_FILE)
+        cm.CHANGELOG_STRUCTURE_FILE = os.path.join(
+            self.root, "specs", "general", "changelog.adoc")
+        cm.CHANGELOG_EVIDENCE_FILE = os.path.join(
+            self.root, "library", "sources.adoc")
+
+    def tearDown(self) -> None:
+        cm.CHANGELOG_STRUCTURE_FILE, cm.CHANGELOG_EVIDENCE_FILE = self._orig_extra
+        super().tearDown()
+
+    CHANGELOG_TEXT = (
+        "= 变更日志编写规范\n\n"
+        "== 组织形态（按版本分组；版本内按类型分组）\n\n"
+        "* **以发布版本为一级分组（默认）**：版本号即发布标识\n"
+        "* **按时间流水（次级形态，L2）**：仅无发布版本概念的项目使用\n"
+        "* **排序方向恒为时间倒序**（最新在上）；**版本倒序与时间倒序**是同一件事，"
+        "**不存在**正序形态；流水式**不得在条目之间插入版本分组**；"
+        "**两种分组口径不并存**（项目级唯一）\n"
+        "* **组内按类型分组**：类型取固定的闭集\n"
+        "* **没有条目的分组不写**\n\n"
+        "== 应当记录（有价值）\n\n"
+        "* **对外可见的行为/接口/契约变更**\n\n"
+        "**要素齐备底线（L1）**：齐备类型、变更点、影响、标记四项要素\n\n"
+        "== 表格形态的判据（采用表格式时）\n\n"
+        "* **列义：表格承载的字段**\n"
+        "  ** **分组列 = 受影响的对象**\n"
+        "  ** **类型列 = 变更类型**\n"
+        "  ** **变更点 = 受影响的对外标识**\n"
+        "  ** **影响 = 读者要做什么、能感知到什么**\n"
+        "* **判据依赖关系**：不得用类型分级代替破坏性变更标注；"
+        "不得把影响写成变更点两列的同义重复；影响列写不出读者要做的动作时说明不该记\n"
+        "* **破坏性变更在表格中的标注**：逐行标注，不得只放在版本组的引文句里\n"
+        "* **条目下限（L1）**：表格里一条 = 一个变更点\n\n"
+        "== 条目书写\n\n"
+        "* **两种条目形态（择一，不得混用）**：流水式与表格式\n"
+    )
+
+    EVIDENCE_TEXT = (
+        "== 变更日志的形态（Keep a Changelog / Conventional Commits / "
+        "Conventional Changelog）\n\n"
+        "* 自述没有标准格式：\"Not really.\"——这是业界约定，不是标准\n"
+        "* 逐字：\"Changelogs are for humans, not machines.\"、"
+        "\"The same types of changes should be grouped.\"\n"
+        "* BREAKING CHANGES 分组与 scope/subject 分列\n"
+        "* **版本倒序即时间倒序**是本集合的判据化表述（**排序方向**的前提是版本号单调递增）\n"
+        "* 日期取**tag 创建日优先**\n"
+        "* **同义性差异**：外部材料**未**要求按版本分组、**未**把两种写法写成两种排序、"
+        "**未**要求表格形态\n"
+    )
+
+    def _write_valid(self):
+        self.write("specs/general/changelog.adoc", self.CHANGELOG_TEXT)
+        self.write("library/sources.adoc", self.EVIDENCE_TEXT)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_changelog_structure_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_table_section_reports(self):
+        # 反例：表格形态的判据节被删（加了列却没人知道每列该写什么）
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace("== 表格形态的判据（采用表格式时）", "== 其它"))
+        cm.check_changelog_structure_guard()
+        self.assertIn("表格形态的判据", self.error_texts())
+
+    def test_impact_column_removed_reports(self):
+        # 反例：表格**把"影响"列省掉**（形态更整齐、要传递的信息反而更少）
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace(
+                       "  ** **影响 = 读者要做什么、能感知到什么**\n", ""))
+        cm.check_changelog_structure_guard()
+        self.assertIn("影响 = 读者要做什么、能感知到什么", self.error_texts())
+
+    def test_order_direction_flipped_to_ascending_reports(self):
+        # 反例：把**排序方向**从时间倒序写成正序（版本倒序即时间倒序，正序无依据）
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace("**排序方向恒为时间倒序**", "**按时间正序**"))
+        cm.check_changelog_structure_guard()
+        self.assertIn("排序方向恒为时间倒序", self.error_texts())
+
+    def test_version_vs_time_order_claim_removed_reports(self):
+        # 反例：把"版本倒序即时间倒序"删掉——二者会被读成两种可择一的排序
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace(
+                       "；**版本倒序与时间倒序**是同一件事，**不存在**正序形态；"
+                       "流水式**不得在条目之间插入版本分组**", ""))
+        cm.check_changelog_structure_guard()
+        self.assertIn("版本倒序与时间倒序", self.error_texts())
+
+    def test_secondary_flow_form_removed_reports(self):
+        # 反例：无发布版本概念的项目专用的次级形态被删
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace(
+                       "* **按时间流水（次级形态，L2）**：仅无发布版本概念的项目使用\n", ""))
+        cm.check_changelog_structure_guard()
+        self.assertIn("按时间流水（次级形态，L2）", self.error_texts())
+
+    def test_evidence_order_claim_unmarked_reports(self):
+        # 反例：图书馆没如实标注"版本倒序即时间倒序"是本集合表述
+        self._write_valid()
+        self.write("library/sources.adoc", self.EVIDENCE_TEXT.replace(
+            "* **版本倒序即时间倒序**是本集合的判据化表述（**排序方向**的前提是版本号单调递增）\n",
+            ""))
+        cm.check_changelog_structure_guard()
+        self.assertIn("排序方向", self.error_texts())
+
+    def test_evidence_date_priority_removed_reports(self):
+        # 反例：日期口径的优先序（tag 创建日优先）被删
+        self._write_valid()
+        self.write("library/sources.adoc", self.EVIDENCE_TEXT.replace(
+            "* 日期取**tag 创建日优先**\n", ""))
+        cm.check_changelog_structure_guard()
+        self.assertIn("tag 创建日优先", self.error_texts())
+
+    def test_type_column_replaces_breaking_marker_reports(self):
+        # 反例：用类型列代替破坏性变更标注（破坏性变更在表格里"消失"）
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace("不得用类型分级代替破坏性变更标注", "按类型判即可"))
+        cm.check_changelog_structure_guard()
+        self.assertIn("不得用类型分级代替破坏性变更标注", self.error_texts())
+
+    def test_two_baselines_coexist_reports(self):
+        # 反例：两种时间基准被写成可以并存（同一改动被记两次）
+        self._write_valid()
+        self.write("specs/general/changelog.adoc",
+                   self.CHANGELOG_TEXT.replace("**两种分组口径不并存**", "**两种分组口径可并用**"))
+        cm.check_changelog_structure_guard()
+        self.assertIn("两种分组口径不并存", self.error_texts())
+
+    def test_evidence_missing_keeps_not_really_reports(self):
+        # 反例：图书馆依据被删（形态取舍无出处、容易被读成"某标准要求"）
+        self._write_valid()
+        self.write("library/sources.adoc", "== 其它\n")
+        cm.check_changelog_structure_guard()
+        self.assertIn("Keep a Changelog", self.error_texts())
+
+    def test_evidence_written_as_standard_reports(self):
+        # 反例：把业界约定写成标准（丢掉"没有标准格式"的如实标注）
+        self._write_valid()
+        self.write("library/sources.adoc", self.EVIDENCE_TEXT.replace(
+            "\"Not really.\"——这是业界约定，不是标准", "这是标准"))
+        cm.check_changelog_structure_guard()
+        self.assertIn("Not really", self.error_texts())
+
+    def test_missing_structure_file_reports(self):
+        # 反例：规则落点消失
+        cm.check_changelog_structure_guard()
+        self.assertIn("缺少 specs/general/changelog.adoc", self.error_texts())
+
+
 class TestCheckReviewGuard(CheckSpecsTestCase):
     """钉住『评审备注落点』判据与两处引用（全局性问题不进范围性落点、全局备注不夹带范围内容）。
 
