@@ -2134,7 +2134,7 @@ class TestCheckLibraryLocatingGuard(CheckSpecsTestCase):
                   "**取用侧是游客**", "**只有 https、没有仓库、没有 git**",
                   "**文件名不承担定位（短、无语义，L1）**"):
             self.assertIn(q, cm._LIBRARY_LOCATING_USAGE_ANCHORS)
-        for q in ("== 依据的定位与取值（git / RFC 7233）",
+        for q in ("== 依据的定位与取值（git / RFC 9110）",
                   "names the **blob or tree** at the given path", "**未实测**"):
             self.assertIn(q, cm._LIBRARY_LOCATING_SOURCE_MARKERS)
 
@@ -5799,6 +5799,168 @@ class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
         self.assertIn("缺少 specs/general/changelog.adoc", self.error_texts())
 
 
+class TestCheckCommitMessageGuard(CheckSpecsTestCase):
+    """钉住『提交信息防线』。
+
+    缺口（用户要求「找业界公共规范取长补短」后发现）：本集合早已把 Conventional Commits
+    1.0.0 的原文收进图书馆，却**只用它支撑变更日志的展示形态**；`specs/` 里没有任何一条
+    约束「提交信息怎么写」——同一条链的上游空着（提交信息没有类型，变更日志的「按类型分组」
+    只能人工归类）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_extra = (cm.COMMIT_MESSAGE_FILE,)
+        cm.COMMIT_MESSAGE_FILE = os.path.join(self.root, "specs", "general", "git.adoc")
+
+    def tearDown(self) -> None:
+        (cm.COMMIT_MESSAGE_FILE,) = self._orig_extra
+        super().tearDown()
+
+    TEXT = (
+        "= git 规范\n\n"
+        "== 提交信息\n\n"
+        "* **首行写类型前缀（L2）**：按 `<type>[(scope)]: <subject>` 书写，`type` 取**固定闭集**\n"
+        "* **判定标准**：首行不以 `<type>:` 或 `<type>(scope):` 起头即不合规\n"
+        "* **破坏性变更须显式标注（L2）**：加 `!` 并在页脚写 `BREAKING CHANGE: <说明>`；"
+        "**不得把某个类型默认为破坏性的**\n"
+        "* **正文写「为什么」与边界（L2）**\n"
+        "* **依据（标准名/编号）**：Conventional Commits 1.0.0——**业界约定、非标准**\n"
+    )
+
+    def test_valid_passes(self):
+        self.write("specs/general/git.adoc", self.TEXT)
+        cm.check_commit_message_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_section_reports(self):
+        self.write("specs/general/git.adoc", self.TEXT.replace("== 提交信息", "== 其它"))
+        cm.check_commit_message_guard()
+        self.assertIn("== 提交信息", self.error_texts())
+
+    def test_missing_verdict_criteria_reports(self):
+        # 反例：可核对的判定标准被删（只剩「建议加类型」，无法判定是否被遵守）
+        self.write("specs/general/git.adoc", self.TEXT.replace(
+            "* **判定标准**：首行不以 `<type>:` 或 `<type>(scope):` 起头即不合规\n", ""))
+        cm.check_commit_message_guard()
+        self.assertIn("起头即不合规", self.error_texts())
+
+    def test_breaking_change_marker_removed_reports(self):
+        self.write("specs/general/git.adoc", self.TEXT.replace(
+            "**不得把某个类型默认为破坏性的**", "破坏性变更按类型判断即可"))
+        cm.check_commit_message_guard()
+        self.assertIn("不得把某个类型默认为破坏性的", self.error_texts())
+
+    def test_evidence_written_as_standard_reports(self):
+        # 反例：把业界约定写成标准（丢掉「业界约定、非标准」的如实标注）
+        self.write("specs/general/git.adoc", self.TEXT.replace("**业界约定、非标准**", "**标准**"))
+        cm.check_commit_message_guard()
+        self.assertIn("业界约定、非标准", self.error_texts())
+
+    def test_missing_file_reports(self):
+        cm.check_commit_message_guard()
+        self.assertIn("缺少", self.error_texts())
+
+
+class TestCheckHttpSemanticsGuard(CheckSpecsTestCase):
+    """钉住『HTTP 接口语义防线』。
+
+    缺口：此前只覆盖 HTTP 接口的**路径命名风格**，方法与状态码语义未覆盖——而「GET 承载写
+    操作」会被爬虫/预取在无人操作时触发副作用，『错误一律包 200』会让重试、缓存、监控与
+    网关策略全部失效。级别也须如实：安全方法 L1、幂等/状态码 L2、Problem Details L3。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_extra = (cm.HTTP_SEMANTICS_FILE, cm.HTTP_EVIDENCE_FILE)
+        cm.HTTP_SEMANTICS_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.HTTP_EVIDENCE_FILE = os.path.join(self.root, "library", "sources.adoc")
+
+    def tearDown(self) -> None:
+        cm.HTTP_SEMANTICS_FILE, cm.HTTP_EVIDENCE_FILE = self._orig_extra
+        super().tearDown()
+
+    TEXT = (
+        "= 通用编码规范\n\n"
+        "== HTTP 接口语义（对外提供或调用 HTTP 接口的项目）\n\n"
+        "**适用范围**：项目**对外提供或调用 HTTP 接口**时适用\n\n"
+        "* **安全方法不得产生状态变更（L1）**：`GET`、`HEAD`、`OPTIONS`、`TRACE` 是安全方法，"
+        "**不得**用它们承载写/删/状态流转等动作\n"
+        "* **幂等语义与重试须对齐（L2）**：`PUT`、`DELETE` 幂等，非幂等请求不得配自动重试\n"
+        "* **状态码按语义使用（L2）**：`4xx`/`5xx` 表达错误，不得出现 `200` + `success:false`\n"
+        "* **对外错误响应统一结构（L3，可选）**：媒体类型 `application/problem+json`\n"
+        "* **依据（标准名/编号）**：RFC 9110；RFC 9457\n"
+    )
+
+    EVIDENCE = (
+        "= 外部标准原文摘录\n\n"
+        "== HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）\n\n"
+        "* 逐字：\"essentially read-only\"、\"GET, HEAD, OPTIONS, and TRACE methods are "
+        "defined to be safe\"\n"
+        "* 逐字：idempotent 与 automatically retry\n"
+        "* 逐字：\"three-digit integer code\"\n"
+        "* 逐字：\"machine-readable details of errors\"、媒体类型 application/problem+json\n"
+        "* **同义性差异**：不得用 200 包错误是本集合的**判据化取值**\n"
+        "* Problem Details 是标准定义的**可选项**\n"
+    )
+
+    def _write_valid(self):
+        self.write("specs/general/coding.adoc", self.TEXT)
+        self.write("library/sources.adoc", self.EVIDENCE)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_http_semantics_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_section_reports(self):
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.TEXT.replace("== HTTP 接口语义", "== 其它"))
+        cm.check_http_semantics_guard()
+        self.assertIn("== HTTP 接口语义", self.error_texts())
+
+    def test_safe_method_downgraded_reports(self):
+        # 反例：安全方法被降级为 L2（等于允许用 GET 做写操作）
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.TEXT.replace(
+            "安全方法不得产生状态变更（L1）", "安全方法不得产生状态变更（L2）"))
+        cm.check_http_semantics_guard()
+        self.assertIn("安全方法不得产生状态变更（L1）", self.error_texts())
+
+    def test_problem_details_upgraded_reports(self):
+        # 反例：可选的错误响应格式被升成 L1（高频误伤只做内网接口的项目）
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.TEXT.replace(
+            "对外错误响应统一结构（L3，可选）", "对外错误响应统一结构（L1）"))
+        cm.check_http_semantics_guard()
+        self.assertIn("对外错误响应统一结构（L3", self.error_texts())
+
+    def test_scope_removed_reports(self):
+        self._write_valid()
+        self.write("specs/general/coding.adoc", self.TEXT.replace(
+            "**适用范围**：项目**对外提供或调用 HTTP 接口**时适用\n\n", ""))
+        cm.check_http_semantics_guard()
+        self.assertIn("对外提供或调用 HTTP 接口", self.error_texts())
+
+    def test_evidence_missing_reports(self):
+        self._write_valid()
+        self.write("library/sources.adoc", "= 其它\n")
+        cm.check_http_semantics_guard()
+        self.assertIn("HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）", self.error_texts())
+
+    def test_evidence_intrinsic_value_written_as_standard_reports(self):
+        # 反例：把本集合的判据化取值写成标准原文
+        self._write_valid()
+        self.write("library/sources.adoc", self.EVIDENCE.replace(
+            "* **同义性差异**：不得用 200 包错误是本集合的**判据化取值**\n", ""))
+        cm.check_http_semantics_guard()
+        self.assertIn("判据化取值", self.error_texts())
+
+    def test_missing_file_reports(self):
+        cm.check_http_semantics_guard()
+        self.assertIn("缺少", self.error_texts())
+
+
 class TestCheckReviewGuard(CheckSpecsTestCase):
     """钉住『评审备注落点』判据与两处引用（全局性问题不进范围性落点、全局备注不夹带范围内容）。
 
@@ -8333,6 +8495,341 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         self._write_all(library="= 性能测试判据的依据\n\n* JMH 见官方文档\n")
         cm.check_performance_guard()
         self.assertIn("同义性差异与覆盖点（本集合自己承认的）", self.error_texts())
+
+
+class TestCheckQualityGuard(CheckSpecsTestCase):
+    """钉住「代码质量（新产出即高质）」防线：十项下限、判定标准、依据与调度器登记。
+
+    实证（用户报告）：有的时候功能是写出来了、但代码质量比较低——此前规范只覆盖形式类要求，
+    新产出即高质的整体下限没有成文判据，执行者按"能跑就行"收敛。故反例逐条对应"最易被当
+    废话砍掉"的字句：坏味道清单、嵌套上限、命名一致、不吞异常、资源成对释放、共享状态同步、
+    可预见的性能退化、测试与文档、交付前逐条自查、依据行；另钉调度器识别特征与依据主题
+    （缺则规则不加载、或依据只剩名称）。
+    """
+
+    SECTION = (
+        "= 通用编码规范\n\n== 代码质量（新产出即高质）\n"
+        "* 适用面：**新写的内容**与**本次改到的内容**适用；**存量**随动迁移。\n"
+        "* **新代码不得引入坏味道（L1）**：重复代码、过长函数、依恋情结、注释代替澄清。\n"
+        "* **职责单一、结构清晰（L1）**：能不能**一句话说清**它做什么；嵌套**三层以内**。\n"
+        "* **命名表意、不用缩写（L1）**：同一概念在项目中只有一个叫法；禁缩写与拼音。\n"
+        "* **可读性优先（L1）**：不用**魔法值**；同一表达式不重复求值。\n"
+        "* **显式处理失败与边界（L1）**：**不得吞异常**；**边界条件必须显式处理**。\n"
+        "* **无资源泄漏（L1）**：一律用**确定性释放**机制、成对释放。\n"
+        "* **无并发隐患（L1）**：**共享可变状态**须有明确同步策略；锁范围与顺序写清。\n"
+        "* **性能不写退化写法（L2）**：**循环内** IO 与查询、**N+1** 查询。\n"
+        "* **测试与文档跟得上（L1）**：**新功能**必配用例；契约写进**文档注释**。\n"
+        "* **交付前质量自检（L1）**：**逐条自查**本节十项；**能过机械判据**是下限。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 12207、"
+        "Martin Fowler《Refactoring》、Clean Code、SEI CERT。\n")
+
+    LIBRARY = (
+        "= 代码质量与生成开销的依据\n\n"
+        "== 当初要解决的失效（本项目实证）\n文字。\n\n"
+        "== 外部材料与逐字依据（业界事实标准与标准编号）\n"
+        "ISO/IEC 25010、Martin Fowler《Refactoring》、Clean Code、"
+        "SEI CERT Coding Standards、**未逐字取回**。\n\n"
+        "== 同义性差异与覆盖点（本集合自己承认的）\n文字。\n")
+
+    def _write_all(self, section=None, common=None, library=None):
+        self.write("specs/general/coding.adoc",
+                   section if section is not None else self.SECTION)
+        self.write("library/quality.adoc",
+                   library if library is not None else self.LIBRARY)
+        self.write("AGENTS_COMMON.adoc",
+                   common if common is not None else
+                   "= 入口\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码（识别特征：**写任何新代码、改任何既有代码**（含**代码评审**）)"
+                   " → link:specs/general/coding.adoc[]（代码质量（新产出即高质））\n")
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_quality_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_spec_reports(self):
+        self._write_all()
+        os.remove(os.path.join(self.root, "specs", "general", "coding.adoc"))
+        cm.check_quality_guard()
+        self.assertIn("specs/general/coding.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self._write_all(section="= 通用编码规范\n\n== 代码复用\n* 别的\n")
+        cm.check_quality_guard()
+        self.assertIn("代码质量（新产出即高质）", self.error_texts())
+
+    def test_smell_list_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("重复代码、过长函数、依恋情结、注释代替澄清",
+                                                     "注意代码质量"))
+        cm.check_quality_guard()
+        self.assertIn("重复代码", self.error_texts())
+
+    def test_nesting_limit_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("嵌套**三层以内**", "嵌套尽量少"))
+        cm.check_quality_guard()
+        self.assertIn("三层以内", self.error_texts())
+
+    def test_naming_consistency_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("同一概念在项目中只有一个叫法", "命名要清晰"))
+        cm.check_quality_guard()
+        self.assertIn("同一概念在项目中只有一个叫法", self.error_texts())
+
+    def test_swallow_exception_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("**不得吞异常**；", ""))
+        cm.check_quality_guard()
+        self.assertIn("不得吞异常", self.error_texts())
+
+    def test_resource_release_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("一律用**确定性释放**机制、成对释放",
+                                                     "注意释放资源"))
+        cm.check_quality_guard()
+        self.assertIn("确定性释放", self.error_texts())
+
+    def test_concurrency_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("**共享可变状态**须有明确同步策略",
+                                                     "注意并发"))
+        cm.check_quality_guard()
+        self.assertIn("共享可变状态", self.error_texts())
+
+    def test_selfcheck_removed_reports(self):
+        self._write_all(section=self.SECTION.replace("**逐条自查**本节十项", "自查即可"))
+        cm.check_quality_guard()
+        self.assertIn("逐条自查", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "ISO/IEC 25010、ISO/IEC/IEEE 12207、Martin Fowler《Refactoring》、Clean Code、SEI CERT。",
+            "为业界共识。"))
+        cm.check_quality_guard()
+        self.assertIn("ISO/IEC 25010", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
+        cm.check_quality_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_library_missing_reports(self):
+        self._write_all()
+        os.remove(os.path.join(self.root, "library", "quality.adoc"))
+        cm.check_quality_guard()
+        self.assertIn("library/quality.adoc", self.error_texts())
+
+    def test_library_anchor_removed_reports(self):
+        self._write_all(library="= 依据\n\n* 见业界材料\n")
+        cm.check_quality_guard()
+        self.assertIn("同义性差异与覆盖点（本集合自己承认的）", self.error_texts())
+
+
+class TestCheckGenerationEfficiencyGuard(CheckSpecsTestCase):
+    """钉住「生成效率 / token 纪律」防线：判据、边界条与调度器登记。
+
+    实证（用户提出）：要"提高生成效率的规范"与"不影响功能完整性和代码质量的前提下提高 token
+    利用率"，并追问"是一回事吗"。此前只有「执行吞吐」管调用形态，不管"这件事该做几轮"，
+    也没有 token 维度的判据。故反例除逐条要点外，**重点钉两条边界**——"效率不得越过质量"与
+    "三件事不得为省 token 让步"（缺位即等于允许以省为名跳过校验/复核/留证）。
+    """
+
+    GEN = (
+        "== 生成效率（同等质量下最少往返）\n"
+        "* **先定完成判据，再动手（L1）**：把**什么算做完**写成判据（**返工**根因）。\n"
+        "* **一次做对一次做完（L1）**：**一次改到位**；不得**碎片推进**；"
+        "判据：**本轮交付之后是否需要再改同一批文件**。\n"
+        "* **延后验证、一次到位（L1）**：**攒到一处**；不得**重启一次构建**；"
+        "**存在真实依赖**才逐步验证。\n"
+        "* **失败一次就查根因，不靠重试撞对（L1）**：**反复重启同一构建**即违规；"
+        "**第二遍**无新认识即违规。\n"
+        "* **按需读取、不全量预处理（L1）**：**全量预读**即违规；**低信号**内容会降准确率。\n"
+        "* **批量化同类操作（L2）**：**一次做完**、能**脚本化**就脚本化。\n"
+        "* **任务边界一次说清（L2）**：避免**两段式**；不得**先做一版看看**。\n"
+        "* **依据名代替复述（L2）**：复述制造**第二真源**。\n"
+        "* **不重做已做完的事（L2）**：不得**再确认一次**、**再跑一遍看看**。\n"
+        "* **收尾一次收敛（L2）**：汇报**一次写完**；不得**再补一条**。\n"
+        "* **效率不得越过质量（L1，本节的边界）**：都**不得用于减少**必要工作；"
+        "效率不是**更少的质量**。\n"
+        "* 依据（标准名/编号）：ISO/IEC/IEEE 25010、Anthropic 工程博客 context engineering、"
+        "progressive disclosure。\n")
+
+    TOKEN = (
+        "== token 纪律（提高利用率与节省开销）\n"
+        "* **先把两个概念分开**：**不是一回事**、但**手段大幅重叠**——"
+        "**提高 token 利用率**是「每份输入产生的有效产出」，**节省 token** 是减少总量。\n"
+        "* **利用率判据：输入须「用到了」（L1）**：**答不出用途**的即**无效输入**。\n"
+        "* **约束放在外部、不进上下文（L1）**：能**落成文件**就不要复述；"
+        "写在对话里每次请求都要重发。\n"
+        "* **少复述、多引用（L1）**：不得**复述**已知内容，写**依据名**。\n"
+        "* **不重复读、不重复贴（L1）**：**只读一次**；不得**再确认一次**。\n"
+        "* **只记结论与取值、不带原始日志（L1）**：不夹带**原始日志**；写**取值 + 来源**。\n"
+        "* **三件事不得为省 token 让步（L1，本条的边界）**：**功能完整性**、**代码质量**、"
+        "**验证完整**一件都不能省。\n"
+        "* **成本须可说明、不得以「不贵」带过（L2）**：须说出换来什么判断。\n"
+        "* **不设「必须量化 token」的要求**：**判据是**输入有没有被用上。\n"
+        "* 依据（标准名/编号）：ISO/IEC/IEEE 25010、ISO/IEC Directives Part 2。\n")
+
+    def _write_all(self, gen=None, token=None, common=None):
+        body = ("= 上下文与读取范围规范\n\n"
+                + (gen if gen is not None else self.GEN) + "\n"
+                + (token if token is not None else self.TOKEN))
+        self.write("specs/general/context.adoc", body)
+        self.write("AGENTS_COMMON.adoc",
+                   common if common is not None else
+                   "= 入口\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 读取范围、生成效率（同等质量下最少往返）、token 纪律（提高利用率与"
+                   "节省开销）、执行吞吐（识别特征：预计需多次往返、出现安排取舍）"
+                   " → link:specs/general/context.adoc[]\n")
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_generation_efficiency_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_gen_section_deleted_reports(self):
+        self._write_all(gen="== 别的东西\n* x")
+        cm.check_generation_efficiency_guard()
+        self.assertIn("生成效率", self.error_texts())
+
+    def test_token_section_deleted_reports(self):
+        self._write_all(token="== 别的东西\n* x")
+        cm.check_generation_efficiency_guard()
+        self.assertIn("token 纪律", self.error_texts())
+
+    def test_utilization_judgement_removed_reports(self):
+        self._write_all(token=self.TOKEN.replace("**答不出用途**的即**无效输入**", "尽量少读"))
+        cm.check_generation_efficiency_guard()
+        self.assertIn("无效输入", self.error_texts())
+
+    def test_token_boundary_removed_reports(self):
+        self._write_all(token=self.TOKEN.replace("**功能完整性**", "一切"))
+        cm.check_generation_efficiency_guard()
+        self.assertIn("功能完整性", self.error_texts())
+
+    def test_efficiency_boundary_removed_reports(self):
+        self._write_all(gen=self.GEN.replace("都**不得用于减少**必要工作", "尽量快"))
+        cm.check_generation_efficiency_guard()
+        self.assertIn("不得用于减少", self.error_texts())
+
+    def test_not_same_thing_removed_reports(self):
+        self._write_all(token=self.TOKEN.replace("**不是一回事**、但**手段大幅重叠**", "是一回事"))
+        cm.check_generation_efficiency_guard()
+        self.assertIn("不是一回事", self.error_texts())
+
+    def test_retry_rule_removed_reports(self):
+        self._write_all(gen=self.GEN.replace("**反复重启同一构建**即违规", "可反复试"))
+        cm.check_generation_efficiency_guard()
+        self.assertIn("反复重启同一构建", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
+        cm.check_generation_efficiency_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+
+class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
+    """钉住「改动后复核」防线：五件事、干净子 agent、三态台账与维护方登记。
+
+    实证（用户要求）：每次加完规范之后都必须 review，机械手段一定要跑，干净的子 agent 也
+    不能漏（有了就忽略、没有就加）。此前"改完规范要做什么"散在多节、没有固定动作清单，
+    实测形态是只跑一遍主校验脚本、语义复核被"改动小"顺手跳过、台账写成散文结论。
+    """
+
+    VERIFY = (
+        "= 验证规范\n\n== 改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）\n"
+        "* **① 机械手段必须先跑、且跑全（L1，不可省）**：**全量扫描**；**报红就地修复**。\n"
+        "* **② 干净子 agent 的语义复核不可漏（L1，有了就忽略、没有就加）**：项目规范已有就按"
+        "已有那份执行；**没有就加**，补在**项目自身规范**里。\n"
+        "* **③ 三视角一并回答、一次读取分栏列（L1）**：完整性、有效性与认知质量、接纳面。\n"
+        "* **④ 复核要走三态台账**：通过 / 未发现问题 / **悬置**；**三态各占一栏、"
+        "**不得合并**。\n"
+        "* **⑤ 子 agent 不可用时的降级与留证（L1）**：**不得跳过复核**；不得换**外部来源**；"
+        "**标注独立性边界**。\n"
+        "* **本节的边界（L1）**：**只对规范类改动（B 类）**成立；**代码类改动不做三视角**。\n")
+
+    REVIEW = (
+        "= code review 规范\n\n== 改动后的 review（每次改完都得复核一次）\n"
+        "* **每次改动后的常规 review（L1）**：范围＝**本次改动的全部产物**；"
+        "动作＝**按改动性质取值**。\n"
+        "* **改完即审的固定动作（L1）**：①**跑**机械手段；②**比**基线；③**核**原话；"
+        "④**留**证。\n"
+        "* **规范类改动不得只跑机械手段（L1）**：**跑绿了** **不等于**判据没被压成口号。\n"
+        "* **复核者不可用时（L1）**：**不跳过复核**；或**如实标悬置**。\n"
+        "* 依据（标准名/编号）：IEEE 1028、ISO 10007。\n")
+
+    def _write_all(self, verify=None, review=None, maint=None, entry=None):
+        self.write("specs/general/verify.adoc",
+                   verify if verify is not None else self.VERIFY)
+        self.write("specs/general/review.adoc",
+                   review if review is not None else self.REVIEW)
+        self.write("specs-project-maintainer/verify.adoc",
+                   maint if maint is not None else
+                   "= 维护方验证\n* 见「改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）」；"
+                   "运行 check_specs_test.py 与 check_effective_test.py；"
+                   "**有了就忽略、没有就加**。\n")
+        self.write("AGENTS.adoc",
+                   entry if entry is not None else
+                   "= 项目规范\n* 见「改完规范必做的五件事（机械手段必跑，"
+                   "干净子 agent 复核不可漏）」；机械手段须跑全；子 agent 复核不可漏。\n")
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_after_change_review_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_verify_section_deleted_reports(self):
+        self._write_all(verify="= 验证规范\n\n== 别的\n* x\n")
+        cm.check_after_change_review_guard()
+        self.assertIn("改完规范必做的五件事", self.error_texts())
+
+    def test_mechanical_first_removed_reports(self):
+        self._write_all(verify=self.VERIFY.replace("**全量扫描**", "查一下"))
+        cm.check_after_change_review_guard()
+        self.assertIn("全量扫描", self.error_texts())
+
+    def test_clean_agent_rule_removed_reports(self):
+        self._write_all(verify=self.VERIFY.replace(
+            "**没有就加**，补在**项目自身规范**里。", "。"))
+        cm.check_after_change_review_guard()
+        self.assertIn("没有就加", self.error_texts())
+
+    def test_three_state_ledger_removed_reports(self):
+        self._write_all(verify=self.VERIFY.replace("**不得合并**", "可合并"))
+        cm.check_after_change_review_guard()
+        self.assertIn("不得合并", self.error_texts())
+
+    def test_downgrade_path_removed_reports(self):
+        self._write_all(verify=self.VERIFY.replace(
+            "**不得跳过复核**；不得换**外部来源**；", ""))
+        cm.check_after_change_review_guard()
+        self.assertIn("不得跳过复核", self.error_texts())
+
+    def test_scope_boundary_removed_reports(self):
+        self._write_all(verify=self.VERIFY.replace("**代码类改动不做三视角**", "都要做三视角"))
+        cm.check_after_change_review_guard()
+        self.assertIn("代码类改动不做三视角", self.error_texts())
+
+    def test_change_review_section_deleted_reports(self):
+        self._write_all(review="= code review 规范\n\n== 问题修复\n* x\n")
+        cm.check_after_change_review_guard()
+        self.assertIn("改动后的 review", self.error_texts())
+
+    def test_every_change_removed_reports(self):
+        self._write_all(review=self.REVIEW.replace("**本次改动的全部产物**", "大改动"))
+        cm.check_after_change_review_guard()
+        self.assertIn("本次改动的全部产物", self.error_texts())
+
+    def test_mechanical_only_removed_reports(self):
+        self._write_all(review=self.REVIEW.replace(
+            "**跑绿了** **不等于**判据没被压成口号。", "跑绿就行。"))
+        cm.check_after_change_review_guard()
+        self.assertIn("跑绿了", self.error_texts())
+
+    def test_maintainer_landing_removed_reports(self):
+        self._write_all(maint="= 维护方验证\n* 别的\n")
+        cm.check_after_change_review_guard()
+        self.assertIn("specs-project-maintainer/verify.adoc", self.error_texts())
+
+    def test_entry_landing_removed_reports(self):
+        self._write_all(entry="= 项目规范\n* 别的\n")
+        cm.check_after_change_review_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

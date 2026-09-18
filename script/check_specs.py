@@ -328,6 +328,26 @@
      执行、重新按入口加载规范并付一次调用与等待）。判据是**这条评论发出去没有**，机械只
      钉"要求文本仍在"——"某次是否真的发了"属运行时行为（评论列表），交人/子 agent 复核。
 
+ 48. 提交信息防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/git.adoc`
+     「提交信息」须仍在且齐备——首行形态 `<type>[(scope)]: <subject>`（`type` 取与变更日志同源的
+     **固定闭集**）、**可逐条核对的判定标准**（首行不以 `<type>:` / `<type>(scope):` 起头即不合规）、
+     破坏性变更的两处标注（`!` 与 `BREAKING CHANGE:` 页脚）与反向禁令（**不得把某个类型默认为
+     破坏性的**）、正文写"为什么"与边界，以及**如实标注依据是业界约定而非标准**（Conventional
+     Commits 自述为 a lightweight convention on top of commit messages，且只约束提交信息、
+     不约束变更日志的展示形态）。缺口来源：本集合早已把 Conventional Commits 1.0.0 的原文收进
+     图书馆，却**只用它支撑变更日志的展示形态**——同一条链的"上游"（一次提交改了什么）空着，
+     "下游"（按类型分组）只能靠人工归类。
+
+ 49. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
+     「HTTP 接口语义」须仍在且齐备三处——①条文与**级别**（安全方法不得产生状态变更 **L1**、
+     幂等与状态码 **L2**、Problem Details **L3 可选**；级别不得被顺手改动，把可选格式升成 L1
+     会高频误伤只做内网接口的项目）；②**适用范围**（无 HTTP 接口的项目不适用，准入面不引入
+     高频误伤）；③图书馆依据（`library/sources.adoc` 的 RFC 9110 安全方法/幂等/状态码与
+     RFC 9457 的**逐字**引文、媒体类型，以及"判据化取值 vs 标准原文"的同义性差异如实标注）。
+     缺口来源：此前只覆盖 HTTP 接口的**路径命名风格**（`specs/stack/spring.adoc` 中划线），
+     方法与状态码语义未覆盖——`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用，把错误
+     一律包成 `200` 会让重试、缓存、监控与网关策略全部失效。
+
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
@@ -607,7 +627,7 @@ _LIBRARY_LOCATING_ANCHORS = (
 LIBRARY_FILE_NAME_MAX = 32
 
 # 『依据的定位与取值』主题节（library/sources.adoc）——依据的定位协议本身也要有依据：
-# Git 的内容寻址（`<commit>:<path>` 命名的是内容对象）与 HTTP 分段取值（RFC 7233）。
+# Git 的内容寻址（`<commit>:<path>` 命名的是内容对象）与 HTTP 分段取值（RFC 9110）。
 # 缺这两条，"主键是内容"与"只取一段"就只是本站的说法；同时**取样状态必须如实**——
 # 本站站点未实测到 Range 生效，故不得把"支持 Range"当成既定事实（source.adoc「不臆造行为」）。
 # 『取用前置』不得回退（用户报告的失效，2026-09-14）：图书馆的定位路径**先入为主把 commit
@@ -629,7 +649,7 @@ _LOCATING_COMMIT_PREREQ_EXEMPT = ("不得", "不要", "不能", "走不通", "�
                                   "错误", "反例", "本站失效")
 
 _LIBRARY_LOCATING_SOURCE_MARKERS = (
-    "== 依据的定位与取值（git / RFC 7233）",
+    "== 依据的定位与取值（git / RFC 9110）",
     "In its first form, the command provides the content or the type of an object in the repository.",
     "names the **blob or tree** at the given path",
     "The 206 (Partial Content) status code indicates that the server is",
@@ -899,6 +919,345 @@ def check_maven_mirror_guard():
     for name, token in required:
         if token not in section:
             err(f"「仓库与镜像」节缺少要点：{name}（应含 `{token}`）", rel)
+    phase_done()
+
+
+# ---- 代码质量 / 生成效率与 token 纪律 / 改动后复核 三道防线 ----
+# 三条依据来源（用户提出）：
+#   ①「有的时候功能是写出来了，但是代码质量比较低」→ 新产出即高质的整体下限此前没有成文判据；
+#   ②「提高生成效率的规范」→ 此前只有「执行吞吐」管调用形态，不管「这件事该做几轮」；
+#   ③「不影响功能完整性和代码质量的前提下提高 token 利用率……是一回事吗」
+#      → 此前没有 token 维度的判据，也没把「利用率 / 节省」的区分与「不得越过质量」写清。
+# 三条共同的前提是**不能影响效率和效果**，故每道防线都同时钉住「边界条」（效率/节省不得
+# 越过质量、完整性、验证）——只钉「要不要求」而不钉边界，等于给出一条可被读成「为省而省」的规则。
+QUALITY_SECTION = "代码质量（新产出即高质）"
+QUALITY_SPEC = "specs/general/coding.adoc"
+GEN_EFF_SECTION = "生成效率（同等质量下最少往返）"
+TOKEN_SECTION = "token 纪律（提高利用率与节省开销）"
+CONTEXT_SPEC = "specs/general/context.adoc"
+AFTER_REVIEW_SECTION = "改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）"
+CHANGE_REVIEW_SECTION = "改动后的 review（每次改完都得复核一次）"
+VERIFY_SPEC = "specs/general/verify.adoc"
+REVIEW_SPEC = "specs/general/review.adoc"
+QUALITY_LIBRARY = "library/quality.adoc"
+
+# 每条：要点名 → 须同时命中的锚点（规则 + 判定标准 + 依据 三件套；只查一处关键词会在
+# 换成另一种说法保留、实际要求被抽掉 时假绿）。
+QUALITY_ANCHORS = (
+    ("适用面与存量边界",
+     ("新写的内容", "本次改到的内容", "存量"),
+     "适用面不写明时，执行者会把本条当作「存量也要全库改造」或「只管新文件」两种极端"),
+    ("不得引入坏味道（L1）",
+     ("新代码不得引入坏味道（L1）", "重复代码", "过长函数", "依恋情结", "注释代替澄清"),
+     "坏味道清单被压成「注意代码质量」后不可判定（判据退化成口号）"),
+    ("职责单一与嵌套上限（L1）",
+     ("职责单一、结构清晰（L1）", "三层以内", "一句话说清"),
+     "没有嵌套上限与「一句话说清职责」这两个可核对判据时，「结构清晰」无从判定"),
+    ("命名表意（L1）",
+     ("命名表意、不用缩写（L1）", "同一概念在项目中只有一个叫法", "拼音"),
+     "命名条缺「全文一致」与「禁缩写/拼音/数字后缀」时，只剩「命名要清晰」这类不可判定的话"),
+    ("可读性优先（L1）",
+     ("可读性优先（L1）", "魔法值", "同一表达式不重复求值"),
+     "可读性条被删后，「短写法」重新压过可读性（与表达式与调用写法同源、此处只重申）"),
+    ("失败与边界显式处理（L1）",
+     ("显式处理失败与边界（L1）", "不得吞异常", "边界条件必须显式处理"),
+     "不写「不得吞异常 / 边界须显式处理」时，新代码会把失败与边界留给运行期"),
+    ("无资源泄漏（L1）",
+     ("无资源泄漏（L1）", "确定性释放", "成对释放"),
+     "资源释放条缺「确定性释放机制 / 成对释放」时会被读成「靠 GC 也行」"),
+    ("无并发隐患（L1）",
+     ("无并发隐患（L1）", "共享可变状态", "锁范围与顺序"),
+     "并发条缺「共享可变状态须有明确同步策略」时，「没写同步」不会被判错"),
+    ("性能不写退化写法（L2）",
+     ("性能不写退化写法（L2）", "循环内", "N+1"),
+     "可预见的性能退化（循环内 IO/查询、循环内拼串、N+1）不点名时，新代码照写"),
+    ("测试与文档跟得上（L1）",
+     ("测试与文档跟得上（L1）", "新功能", "文档注释"),
+     "新功能必须配测试、行为改动须同步文档这两条不写，质量下限会漏掉「改动面」"),
+    ("交付前质量自检（L1）",
+     ("交付前质量自检（L1）", "逐条自查", "能过机械判据"),
+     "没有「交付前逐条自查、机械判据只是下限」这一条，质量要求会被当成「编译过了就合格」"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "ISO/IEC 25010", "ISO/IEC/IEEE 12207",
+      "Martin Fowler", "Clean Code", "SEI CERT"),
+     "依据被删到只剩名称或整段消失时，读者无法核对「质量下限」的依据是否仍成立"),
+)
+
+GEN_EFF_ANCHORS = (
+    ("先定完成判据（L1）",
+     ("先定完成判据，再动手（L1）", "什么算做完", "返工"),
+     "没有「先定完成判据」这一条，生成效率会退化成「多跑几轮试试」"),
+    ("一次做对一次做完（L1）",
+     ("一次做对一次做完（L1）", "一次改到位", "碎片推进", "本轮交付之后是否需要再改同一批文件"),
+     "这条给出的正是「剩下的重来从哪来」的根因；缺则「分步推进」重新成为默认"),
+    ("延后验证、一次到位（L1）",
+     ("延后验证、一次到位（L1）", "攒到一处", "重启一次构建", "存在真实依赖"),
+     "缺「延后验证 + 例外口径」时，会把每次小改都重启构建（与执行吞吐的构建输出一次取到"
+     "同向，但本条管「要不要现在跑」）"),
+    ("失败一次查根因（L1）",
+     ("失败一次就查根因，不靠重试撞对（L1）", "反复重启同一构建", "第二遍"),
+     "不写「不得靠重试撞对」，「改一处跑一次」就会被当成正常迭代（实证：轮次间隔占墙钟 65%）"),
+    ("按需读取、不全量预处理（L1）",
+     ("按需读取、不全量预处理（L1）", "全量预读", "低信号"),
+     "缺则「先把可能有用的资料全读一遍」重新成为默认，输入膨胀且准确率下降"),
+    ("批量化同类操作（L2）",
+     ("批量化同类操作（L2）", "一次做完", "脚本化"),
+     "同类操作串行的代价（每轮重付全上下文）不写时，没人会去合并"),
+    ("任务边界一次说清（L2）",
+     ("任务边界一次说清（L2）", "两段式", "先做一版看看"),
+     "缺则「先做一版看看」被当成探需求的手段，做完再问必然返工"),
+    ("依据名代替复述（L2）",
+     ("依据名代替复述（L2）", "第二真源"),
+     "「依据名代替复述」与 token 纪律同源，缺则复述照写（既费篇幅又制造第二真源）"),
+    ("不重做已做完的事（L2）",
+     ("不重做已做完的事（L2）", "再确认一次", "再跑一遍看看"),
+     "缺则已确认的结论会被重复确认、已跑的校验被重复跑"),
+    ("收尾一次收敛（L2）",
+     ("收尾一次收敛（L2）", "一次写完", "再补一条"),
+     "缺则汇报与留证被拖成多轮零散补齐"),
+    ("效率不得越过质量（L1，边界）",
+     ("效率不得越过质量（L1，本节的边界）", "不得用于减少", "更少的质量"),
+     "边界条缺位时，本节可被读成「为省一轮可以跳过校验/复核/留证」——那正是用户要求"
+     "不得出现的形态（不能影响效率和效果）"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "ISO/IEC/IEEE 25010", "context engineering",
+      "progressive disclosure"),
+     "依据被删时，「轮次当成本」的来源无从核对（外部材料讲注意力预算、不给执行侧判据）"),
+)
+
+TOKEN_ANCHORS = (
+    ("两个概念的区分（不是一回事）",
+     ("不是一回事", "提高 token 利用率", "节省 token", "手段大幅重叠"),
+     "缺这条就直接回答不了用户的问题（「是一回事吗」），且会把「省 token」当唯一目标、"
+     "顺手牺牲完整性"),
+    ("利用率判据：输入须被用到（L1）",
+     ("利用率判据：输入须", "用到了", "答不出用途", "无效输入"),
+     "没有「每份输入都要说出用在哪里」这个可核对判据，「利用率」只剩口号"),
+    ("约束放外部、不进上下文（L1）",
+     ("约束放在外部、不进上下文（L1）", "落成文件", "对话里每次请求都要重发"),
+     "缺则规则/清单/参数只留在对话里（每次请求重发），利用率永远上不去"),
+    ("少复述、多引用（L1）",
+     ("少复述、多引用（L1）", "复述", "依据名"),
+     "缺则模型把已知内容抄一遍当产出（输入很大、有效产出很小）"),
+    ("不重复读、不重复贴（L1）",
+     ("不重复读、不重复贴（L1）", "只读一次", "再确认一次"),
+     "缺则同一份文件被反复读入，纯浪费"),
+    ("只记结论与取值、不带原始日志（L1）",
+     ("只记结论与取值、不带原始日志（L1）", "原始日志", "取值 + 来源"),
+     "缺则汇报里灌日志（既是 token 也是注意力浪费；与性能测试「只记结果不记过程」同向）"),
+    ("三件事不得让步（L1，边界）",
+     ("三件事不得为省 token 让步（L1，本条的边界）", "功能完整性", "代码质量", "验证完整"),
+     "边界条是本条存在的前提（用户明确「会影响效率和效果就不加」）——缺位即等于允许以"
+     "省 token 为名缩功能、降质量、漏校验"),
+    ("成本须可说明（L2）",
+     ("成本须可说明、不得以", "换来什么判断"),
+     "缺则「不贵」这类含糊说法可以带过（与运行契约的成本维度同源）"),
+    ("不设必须量化 token 的要求",
+     ("不设", "必须量化 token", "判据是"),
+     "量化要求被塞进来时既增加开销、又不可核对（本集合的取舍须写明）"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "ISO/IEC/IEEE 25010",
+      "ISO/IEC Directives Part 2"),
+     "依据被删时，「引用不复述」与「性能效率可度量」的来源无从核对"),
+)
+
+AFTER_REVIEW_ANCHORS = (
+    ("①机械手段必须先跑且跑全（L1）",
+     ("机械手段必须先跑、且跑全（L1", "全量扫描", "报红就地修复"),
+     "缺「必须先跑、跑全、报红不留红」时，「改完跑一下」会被读成「跑一条像样的命令就行」"),
+    ("②干净子 agent 复核不可漏（L1，有了就忽略、没有就加）",
+     ("干净子 agent 的语义复核不可漏（L1", "有了就忽略", "没有就加", "项目自身规范"),
+     "这条正是用户点名的要求：必须 review、干净子 agent 不能漏；"
+     "「有了就忽略、没有就加」缺任一半，都会要么重复写第二份、要么永远没人补"),
+    ("③三视角一并回答、一次读取分栏",
+     ("三视角一并回答、一次读取分栏列（L1", "完整性", "有效性与认知质量", "接纳面"),
+     "缺则复核退化成单一视角（只看完整性、漏掉有效性与接纳面）"),
+    ("④三态台账、不得写散文（L1）",
+     ("三态台账", "未发现问题", "悬置", "不得合并"),
+     "缺「三态分列、不得合并」时，「查不出」与「没做」无法分辨"),
+    ("⑤子 agent 不可用时的降级留证（L1）",
+     ("子 agent 不可用时的降级与留证（L1", "不得跳过复核", "外部来源", "标注独立性边界"),
+     "缺则环境不支持子 agent 时会把「没复核」写成「已复核」，或据此停任务"),
+    ("本节的边界（只对规范类改动）",
+     ("只对规范类改动（B 类）", "代码类改动不做三视角"),
+     "缺边界则代码类改动被拖进概念性流程（把可控的验证做成不可控的多步流程）"),
+)
+
+CHANGE_REVIEW_ANCHORS = (
+    ("每次改动后的常规 review（L1）",
+     ("每次改动后的常规 review（L1）", "本次改动的全部产物", "按改动性质取值"),
+     "缺「每次」与「按性质取值」时，review 只在专门做 review 的任务里发生"),
+    ("改完即审的固定动作（L1）",
+     ("改完即审", "跑", "比", "核", "留"),
+     "缺固定动作（跑机械手段 / 比基线 / 核改动清单 / 留证）时，「审」没有可核对的落点"),
+    ("规范类改动不得只跑机械手段（L1）",
+     ("规范类改动不得只跑机械手段（L1", "跑绿了", "不等于"),
+     "缺则「机械全绿」会被当成「复核已做」"),
+    ("复核者不可用时（L1）",
+     ("复核者不可用时（L1", "不跳过复核", "如实标悬置"),
+     "缺则复核者不可用会被读成「这次免了」"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "IEEE 1028", "ISO 10007"),
+     "依据被删时，「每次改动都要评审」的来源无从核对（本集合严于 IEEE 1028 的「有评审发生」）"),
+)
+
+
+def _section_anchor_check(rel, section_title, anchors):
+    """公共实现：某文件某节的要点锚点须齐（三节共用，避免三份各自漂移）。"""
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——「{section_title}」的判据无处承载", rel)
+        return False
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, section_title)
+    if not section:
+        err(f"{rel} 缺少「{section_title}」节——该条失去落点"
+            "（缺条目时执行者按「能跑就行 / 能省则省」收敛）", rel)
+        return False
+    for name, tokens, why in anchors:
+        for token in tokens:
+            if token not in section:
+                err(f"「{section_title}」节缺少要点：{name}（应含 `{token}`）——{why}", rel)
+    return True
+
+
+def check_quality_guard():
+    """『代码质量（新产出即高质）』防线：十项下限、判定标准与依据不得被删或降级。
+
+    背景（用户报告）：「有的时候功能是写出来了，但是代码质量比较低」——此前规范只覆盖形式类
+    要求（命名约定、工具类优先、格式化等），**新产出即高质的整体下限没有成文判据**，
+    执行者按「能跑就行」收敛。
+
+    故本条钉住三处（都是机械可判定的「要点文本仍在」）：
+      * **判据**（`specs/general/coding.adoc`「代码质量（新产出即高质）」）：坏味道、
+        职责与嵌套上限、命名、可读性、失败与边界、资源、并发、性能退化、测试与文档、
+        交付前逐条自查、存量边界与依据行；
+      * **调度器登记**（`AGENTS_COMMON.adoc`）：加载项的识别特征须含「写任何新代码、改任何
+        既有代码」（否则命中即须加载的触发特征不全、规则实际失效）；
+      * **依据主题**（`library/quality.adoc`）：坏味道与可读性依据、同义性差异与取样状态
+        须在（否则依据只剩名称、「十项逐条自检」会被误读成某标准的规定）。
+
+    只钉「要点仍在」，不钉措辞；「某次交付的代码质量到底过不过」属引用方项目代码（本仓库
+    不可见），交人/子 agent 复核。
+    """
+    phase("代码质量防线检查")
+    _section_anchor_check(QUALITY_SPEC, QUALITY_SECTION, QUALITY_ANCHORS)
+    with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
+        generic = fh.read()
+    disp = next((ln for ln in generic.splitlines()
+                 if "specs/general/coding.adoc" in ln and QUALITY_SECTION in ln), "")
+    if not disp:
+        err(f"加载调度器缺少「{QUALITY_SECTION}」的加载项与识别特征——"
+            "缺则改代码时永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
+    else:
+        for token in ("写任何新代码", "改任何既有代码", "代码评审"):
+            if token not in disp:
+                err(f"加载调度器代码质量条目缺少识别特征 `{token}`——"
+                    "触发特征不全时，执行者会「没想到要按质量下限自查」", "AGENTS_COMMON.adoc")
+    lpath = os.path.join(REPO_ROOT, *QUALITY_LIBRARY.split("/"))
+    if not os.path.isfile(lpath):
+        err(f"缺少 {QUALITY_LIBRARY}——代码质量与生成开销的依据无处承载"
+            "（「十项逐条自检」「坏味道清单」将无从核对，也会被误读成标准规定）",
+            QUALITY_LIBRARY)
+    else:
+        with open(lpath, encoding="utf-8") as fh:
+            ltext = fh.read()
+        for token in ("当初要解决的失效（本项目实证）",
+                      "同义性差异与覆盖点（本集合自己承认的）",
+                      "Martin Fowler《Refactoring", "Clean Code",
+                      "SEI CERT Coding Standards", "未逐字取回", "ISO/IEC 25010"):
+            if token not in ltext:
+                err(f"{QUALITY_LIBRARY} 缺少依据锚点 `{token}`——"
+                    "依据被压成名称后，读者无法区分「外部材料要求」与「本集合自己的取舍」",
+                    QUALITY_LIBRARY)
+    phase_done()
+
+
+def check_generation_efficiency_guard():
+    """『生成效率 / token 纪律』防线：两条判据、边界条与调度器登记不得被删或降级。
+
+    背景（用户提出）：要「提高生成效率的规范」，以及「不影响功能完整性和代码质量的前提下提高
+    token 利用率」，并追问「提高 token 利用率和节省 token 是一回事吗」。此前只有「执行吞吐」
+    管**调用形态**（该合并的别拆开），既不覆盖「这件事该做几轮」（生成效率），也没有 token
+    维度的判据、更没有把两者的区分与「不得越过质量」的前提写清。
+
+    故本条钉住三处：
+      * **生成效率**（`specs/general/context.adoc`「生成效率（同等质量下最少往返）」）：
+        先定完成判据、一次做对做完、延后验证一次到位、失败一次查根因、按需读取、
+        批量同类操作、任务边界一次说清、依据名代替复述、不重做已做完的事、收尾一次收敛，
+        以及**「效率不得越过质量」的边界条**（缺边界条即等于允许以省一轮为名跳过校验）；
+      * **token 纪律**（同文件「token 纪律（提高利用率与节省开销）」）：**「利用率 / 节省
+        不是一回事」的区分**、利用率判据（输入须被用到）、约束放外部、少复述多引用、
+        不重复读贴、只记结论与取值，以及**「功能完整性 / 代码质量 / 验证完整三件不得让步」
+        的边界条**（这条正是用户的前提「会影响效率和效果就不加」）；
+      * **调度器登记**（`AGENTS_COMMON.adoc`）：加载项须含两节名称与「安排取舍」类识别特征。
+
+    **只钉要点仍在**——「某次任务到底跑了几轮、有没有把可合并的调用拆成多轮、有没有为省
+    token 少给信息」属运行时行为（执行日志与平台侧用量记录），交人/子 agent 复核。
+    """
+    phase("生成效率与 token 纪律防线检查")
+    _section_anchor_check(CONTEXT_SPEC, GEN_EFF_SECTION, GEN_EFF_ANCHORS)
+    _section_anchor_check(CONTEXT_SPEC, TOKEN_SECTION, TOKEN_ANCHORS)
+    with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
+        generic = fh.read()
+    disp = next((ln for ln in generic.splitlines()
+                 if "specs/general/context.adoc" in ln and GEN_EFF_SECTION in ln), "")
+    if not disp:
+        err(f"加载调度器缺少「{GEN_EFF_SECTION}」的加载项与识别特征——"
+            "缺则它永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
+    else:
+        for token in ("token 纪律", "生成效率", "安排取舍", "多次往返"):
+            if token not in disp:
+                err(f"加载调度器生成效率条目缺少识别特征 `{token}`——"
+                    "触发特征不全时，执行者会「没想到这里还有可省的一步」", "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_after_change_review_guard():
+    """『改动后复核』防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级。
+
+    背景（用户要求）：「每次加完规范之后都必须 review，机械手段一定要跑，干净的子 agent 也
+    不能漏（有了就忽略、没有就加）」。此前「改完规范要做什么」散在「验证总纲」「规范验证」
+    「验证的效力等级」等多节，**没有一份「不需要再判断的固定动作」**；实测形态是：改完只跑
+    一遍主校验脚本就算完、语义复核被「改动小」顺手跳过、台账写成散文结论（「查不出」与
+    「没做」分不清）。
+
+    故本条钉住三处：
+      * **公共五件事**（`specs/general/verify.adoc`「改完规范必做的五件事」）：①机械手段必跑全、
+        ②干净子 agent 复核不可漏（**有了就忽略、没有就加**）、③三视角一次读取分栏、
+        ④三态台账、⑤子 agent 不可用时的降级与留证，以及**只对规范类改动的边界**；
+      * **改动后的 review**（`specs/general/review.adoc`「改动后的 review（每次改完都得复核
+        一次）」）：每次改动都在同一轮内复核、按改动性质取值、改完即审的固定动作、
+        复核者不可用时的处置与依据行；
+      * **维护方登记**（`specs-project-maintainer/verify.adoc` 与 `AGENTS.adoc`）：五件事的
+        维护方适配与「本仓库已有、不重复写第二份」的口径须在（否则公共要求与本地动作之间断链）。
+
+    「某次到底跑没跑机械手段、有没有真的起一个干净子 agent、台账实际填没填」属运行时行为
+    （提交内容、平台侧记录与产物正文），机械无法判定，交人/子 agent 复核。
+    """
+    phase("改动后复核防线检查")
+    _section_anchor_check(VERIFY_SPEC, AFTER_REVIEW_SECTION, AFTER_REVIEW_ANCHORS)
+    _section_anchor_check(REVIEW_SPEC, CHANGE_REVIEW_SECTION, CHANGE_REVIEW_ANCHORS)
+    for rel, keys, desc in (
+        ("specs-project-maintainer/verify.adoc",
+         (AFTER_REVIEW_SECTION, "有了就忽略、没有就加", "check_specs_test.py",
+          "check_effective_test.py"),
+         "维护方侧须给出五件事的落点与「已有则忽略、没有就加」的归属口径"
+         "（否则公共要求与本地动作之间断链）"),
+        ("AGENTS.adoc",
+         (AFTER_REVIEW_SECTION, "机械手段", "子 agent"),
+         "维护方入口须登记该要求（缺则执行者不知道本仓库已有这份要求）"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——改动后复核在该处的落点无从核对", rel)
+            continue
+        with open(fp, encoding="utf-8") as fh:
+            body = fh.read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"改动后复核防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
     phase_done()
 
 
@@ -4099,7 +4458,7 @@ def check_library_locating_guard():
         节，含**取用侧只有 https**（作者侧/取用侧条件不同，不得以"先取 commit"为前置）、
         "主键是内容、不是路径"与终止条件（定位到文件与段即止，不打包第二真源）；
       * **依据侧有原文与如实取样状态**：`library/sources.adoc` 收 Git（内容寻址、按 blob 取回）
-        与 RFC 7233（206 Partial Content）的**逐字引文**，且**如实标"未实测"**本站站点 Range
+        与 RFC 9110（206 Partial Content / Range 请求头）的**逐字引文**，且**如实标"未实测"**本站站点 Range
         是否生效——不得把"支持 Range"当成既定事实（`specs/general/source.adoc`「不臆造行为」）；
       * **入口可发现**：项目规范入口 `AGENTS.adoc` 的图书馆段须含定位协议的落点（主键口径），
         否则读者不知道有这份协议、定位重新靠猜；
@@ -4143,7 +4502,7 @@ def check_library_locating_guard():
 
     sources_path = os.path.join(LIBRARY_DIR, "sources.adoc")
     if not os.path.isfile(sources_path):
-        err("缺少 library/sources.adoc——定位协议所依赖的机制原文（git / RFC 7233）无处承载",
+        err("缺少 library/sources.adoc——定位协议所依赖的机制原文（git / RFC 9110）无处承载",
             "library/sources.adoc")
     else:
         with open(sources_path, encoding="utf-8") as fh:
@@ -4514,6 +4873,165 @@ def check_changelog_structure_guard():
             missing = [k for k in keys if k not in etext]
             if missing:
                 err(f"变更日志形态依据被破坏：library/sources.adoc 缺失要点 {missing}——{desc}",
+                    "library/sources.adoc")
+    phase_done()
+
+
+# 『提交信息防线』：提交信息的书写规则（类型前缀、破坏性变更标注）不得被删或降级。
+# 背景：本集合早已把 Conventional Commits 1.0.0 的原文收进图书馆（`library/sources.adoc`
+# 「变更日志的形态」），但**只用于变更日志的形态**（表格的分组与破坏性变更标注），
+# `specs/` 里**没有任何一条约束「提交信息怎么写」**——于是同一条链的「上游」（一次提交改了什么）
+# 空着，「下游」（按类型分组）只能靠人工归类。缺口是实打实的（用户要求「取长补短」后补入）。
+# 钉住：形态（`<type>[(scope)]: <subject>`）、破坏性变更的两处标注（`!` 与 `BREAKING CHANGE:`
+# 页脚）、正文写「为什么」与边界、以及**如实标注这是业界约定而非标准**（Conventional Commits
+# 自述 a lightweight convention）与依据落点（图书馆不在引用面内，只留名称/编号）。
+COMMIT_MESSAGE_FILE = os.path.join(SPECS_DIR, "general", "git.adoc")
+COMMIT_MESSAGE_KEYS = (
+    (("== 提交信息",),
+     "提交信息的书写规则须有独立承载节（缺则「提交信息怎么写」无处可查，"
+     "而变更日志那边却要求按类型分组）"),
+    (("<type>[(scope)]: <subject>", "固定闭集"),
+     "首行形态须写清：`<type>[(scope)]: <subject>` + 类型取**固定闭集**"
+     "（与变更日志的类型同源、不混用同义词）——缺则「有类型前缀」不可核对"),
+    (("首行不以", "起头即不合规"),
+     "须有**可逐条核对的判定标准**（首行不以 `<type>:` / `<type>(scope):` 起头即不合规）"
+     "——只写「建议加类型」无法判定是否被遵守"),
+    (("破坏性变更须显式标注", "BREAKING CHANGE", "不得把某个类型默认为破坏性的"),
+     "破坏性变更须显式标注：`!` 或 `BREAKING CHANGE:` 页脚，且**不得把某个类型默认为"
+     "破坏性的**（破坏性变更可与任何类型组合）——这是与变更日志「不得用类型分级代替"
+     "破坏性变更标注」同源的另一半"),
+    (("正文写", "为什么"),
+     "正文须写「为什么」与影响边界（不重复 diff 已能看出的「改了什么」）"
+     "——与变更日志「说影响，不说实现过程」同口径"),
+    (("Conventional Commits", "业界约定、非标准"),
+     "须**如实标注**依据是业界约定、不是标准（Conventional Commits 自述为"
+     "a lightweight convention on top of commit messages）——防被读成"
+     "「某标准要求提交信息带类型」"),
+)
+
+# 『HTTP 接口语义防线』：方法与状态码的协议语义条文不得被删或降级，且依据须在图书馆。
+# 背景：本集合此前只覆盖了 HTTP 接口的**路径命名风格**（`specs/stack/spring.adoc` 中划线），
+# **方法与状态码语义未覆盖**——而「GET 承载写操作」「错误一律包 200」是真实项目里最常见的
+# 两类语义失效（前者会被爬虫/预取在无人操作时触发副作用，后者让重试、缓存、监控与网关
+# 策略全部失效）。补入后须与图书馆依据（RFC 9110 / RFC 9457）对得上，且**级别如实**：
+# 安全方法不得产生状态变更是 L1（不可豁免、可判定），幂等/状态码是 L2，Problem Details 是 L3。
+HTTP_SEMANTICS_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
+HTTP_SEMANTICS_KEYS = (
+    (("== HTTP 接口语义",),
+     "HTTP 接口语义须有独立承载节（缺则方法与状态码语义无处可查，只剩路径命名风格）"),
+    (("适用范围", "对外提供或调用 HTTP 接口"),
+     "须写明**适用范围**（对外提供或调用 HTTP 接口的项目才适用）——"
+     "无 HTTP 接口的项目不应被这条约束（准入面：不引入高频误伤）"),
+    (("安全方法不得产生状态变更（L1）", "GET", "HEAD", "OPTIONS", "TRACE"),
+     "安全方法不得产生状态变更须是 **L1** 且点明四个安全方法——"
+     "这是唯一一条不可豁免且可判定的底线，被降级即等于允许用 GET 做写操作"),
+    (("不得", "承载写"),
+     "须有正向禁令：不得用安全方法承载写/删/状态流转等有副作用的动作"),
+    (("幂等", "PUT", "DELETE", "自动重试"),
+     "幂等语义与重试须对齐（`PUT`/`DELETE` 幂等、非幂等请求不得配自动重试）"),
+    (("状态码按语义使用（L2）", "4xx", "5xx", "success:false"),
+     "状态码按语义使用须是 L2 且含**可判定的反例**（把错误包成 `200` + 响应体 "
+     "`success:false`）——没有反例的「按语义使用」无法判定"),
+    (("对外错误响应统一结构（L3", "application/problem+json"),
+     "Problem Details 须**如实定为 L3（可选）**并点明媒体类型——"
+     "外部材料只定义了一种格式、未要求必须采用，不得升成 L1/L2"),
+    (("RFC 9110", "RFC 9457"),
+     "依据行须写标准名/编号（RFC 9110 / RFC 9457，只写名称、不附链接）"),
+)
+
+# 『HTTP 接口语义依据防线』：图书馆侧须有逐字引文与**同义性差异的如实标注**。
+# 两处最容易失真的地方：①把「本集合按语义推出的判据化取值」（不得用 200 包错误、
+# 非幂等请求不得自动重试）写成标准原文；②把「安全方法不得产生状态变更」与标准的
+# 原文要求（资源所有者须在安全方法被访问时禁用该动作）之间的**同义关系**说不清。
+HTTP_EVIDENCE_FILE = os.path.join(REPO_ROOT, "library", "sources.adoc")
+HTTP_EVIDENCE_KEYS = (
+    (("HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）",),
+     "图书馆须有该主题节（缺则条文无逐字依据可核对）"),
+    (("essentially read-only", "GET, HEAD, OPTIONS, and TRACE methods are defined to be safe"),
+     "须有 RFC 9110 安全方法的**逐字**引文锚点（依据不得被压成一句名称）"),
+    (("idempotent", "automatically retry"),
+     "须有 RFC 9110 幂等与重试的**逐字**引文锚点"),
+    (("three-digit integer code",),
+     "须有 RFC 9110 状态码定义的**逐字**引文锚点"),
+    (("machine-readable details of errors", "application/problem+json"),
+     "须有 RFC 9457 的**逐字**引文锚点与媒体类型"),
+    (("同义性", "判据化取值"),
+     "须**如实标注同义性差异**：标准给的是协议语义，不得用 200 包错误、非幂等请求不得"
+     "自动重试是本集合推出的**判据化取值**，不得读成标准原文"),
+    (("可选项",),
+     "须标明 Problem Details 是标准定义的**格式**、非强制要求（本集合据此定 L3）"),
+)
+
+
+def check_commit_message_guard():
+    """『提交信息防线』：提交信息的书写规则不得被删或降级，且依据如实标注。
+
+    背景（缺口，用户要求「取长补短」后补入）：本集合早已把 **Conventional Commits 1.0.0**
+    的原文收进图书馆（见 `library/sources.adoc`「变更日志的形态」），但**只用它支撑变更日志
+    的展示形态**（分组、破坏性变更标注、scope 到 subject 与正文的同构）；`specs/` 里**没有
+    任何一条约束「提交信息怎么写」**——全库检索无 `feat(`/提交前缀类规则。后果是同一条链的
+    上游空着：变更日志要求「组内按类型分组」，而提交信息没有类型时，这个分组只能人工归类。
+
+    本节钉住：①形态（`<type>[(scope)]: <subject>` + 类型固定闭集）；②破坏性变更的
+    两处标注（`!` 与 `BREAKING CHANGE:` 页脚）与反向禁令（不得把某个类型默认为破坏性的）；
+    ③正文写「为什么」与边界；④**如实标注这是业界约定、不是标准**（Conventional Commits
+    自述为 a lightweight convention on top of commit messages）与依据名称。
+
+    只钉「要求文本仍在」——某条提交信息是否真的写清了影响，属语义判断，交人/子 agent 复核。
+    """
+    phase("提交信息防线检查")
+    rel = os.path.relpath(COMMIT_MESSAGE_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMIT_MESSAGE_FILE):
+        err(f"缺少 {rel}——提交信息的书写规则无处承载（变更日志要求按类型分组，"
+            "而提交信息这一上游无任何规则）", rel)
+        phase_done()
+        return
+    text = open(COMMIT_MESSAGE_FILE, encoding="utf-8").read()
+    for keys, desc in COMMIT_MESSAGE_KEYS:
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"提交信息防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_http_semantics_guard():
+    """『HTTP 接口语义防线』：方法与状态码的协议语义条文、级别与依据须齐备。
+
+    背景（缺口）：本集合此前只覆盖 HTTP 接口的**路径命名风格**（`specs/stack/spring.adoc`
+    「HTTP 接口路径优先用中划线」），**方法与状态码的语义未覆盖**——而这两处是真实项目里
+    最常见的语义失效：①用 `GET` 承载写/删（爬虫与预取会自行遍历链接，副作用在无人操作时
+    发生）；②把错误一律包成 `200` 再在响应体里写失败标记（重试、缓存、监控与网关策略全部
+    失效，客户端无从按类别处理）。
+
+    钉住三处：①条文与级别（安全方法 L1 / 幂等与状态码 L2 / Problem Details L3——**级别不得
+    被顺手改动**，把可选的格式升成 L1 会高频误伤只做内网接口的项目）；②适用范围（无 HTTP
+    接口的项目不适用）；③图书馆依据（RFC 9110 安全方法 / 幂等 / 状态码、RFC 9457 的逐字
+    引文，与「判据化取值 vs 标准原文」的同义性差异如实标注）。
+
+    只钉「要求文本与级别仍在、依据对得上」——某次接口是否真的符合语义，属语义判断，
+    交人/子 agent 复核。
+    """
+    phase("HTTP 接口语义防线检查")
+    rel = os.path.relpath(HTTP_SEMANTICS_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(HTTP_SEMANTICS_FILE):
+        err(f"缺少 {rel}——HTTP 接口语义（方法安全/幂等、状态码）无处承载", rel)
+    else:
+        text = open(HTTP_SEMANTICS_FILE, encoding="utf-8").read()
+        for keys, desc in HTTP_SEMANTICS_KEYS:
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"HTTP 接口语义防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    phase_done()
+
+    phase("HTTP 接口语义依据检查（图书馆）")
+    if not os.path.isfile(HTTP_EVIDENCE_FILE):
+        err("缺少 library/sources.adoc——HTTP 接口语义的依据无处承载", "library/sources.adoc")
+    else:
+        etext = open(HTTP_EVIDENCE_FILE, encoding="utf-8").read()
+        for keys, desc in HTTP_EVIDENCE_KEYS:
+            missing = [k for k in keys if k not in etext]
+            if missing:
+                err(f"HTTP 接口语义依据被破坏：library/sources.adoc 缺失要点 {missing}——{desc}",
                     "library/sources.adoc")
     phase_done()
 
@@ -7334,6 +7852,8 @@ def main(argv=None) -> int:
     check_ref_scope_wording_guard()
     check_changelog_entry_guard()
     check_changelog_structure_guard()
+    check_commit_message_guard()
+    check_http_semantics_guard()
     check_review_guard()
     check_quote_line_guard()
     check_dependency_view_guard()
@@ -7369,6 +7889,9 @@ def main(argv=None) -> int:
     check_maven_mirror_guard()
     check_throughput_guard()
     check_performance_guard()
+    check_quality_guard()
+    check_generation_efficiency_guard()
+    check_after_change_review_guard()
     check_asciidoctor_syntax()
 
     print()
