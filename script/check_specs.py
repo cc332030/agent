@@ -53,6 +53,11 @@
      每次会话无条件加载的常驻物）；且加载调度器"涉及即加载"条目数不得超过
      DISPATCHER_ITEMS_MAX（三者都是"越写越多、每次会话都付上下文"的机械抓手；
      体量与层级的语义判断仍由人复核）。
+ 20b. 加载调度器分层结构：调度器节内**五个公共加载层 + 项目自身维护层**的层头行
+     （`* 必加载层（…）：` 一类）仍在，且每层至少有一个条目（防空壳层头）——层头定义
+     "涉及即加载"的触发语义，层头被吞掉后其条目会挂到上一层、触发条件随之出错
+     （本仓库实证：按 `** ` 条目做"取到下一个条目"的替换时把夹在两条之间的层头一并
+     吞掉，而登记/链接/体积三类检查全绿）；由 `check_dispatcher_layers` 钉住。
  21. 规范验证防线：specs/general/verify.adoc 的「验证总纲」「规范验证」
      （验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面；每视角的判定标准与标准出处、
      ②的判据/依据/形态/性能四维、③的逐维判据、三视角由同一个干净子 agent 一并回答与
@@ -95,6 +100,14 @@
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
      并把"自足"要求误加到只对维护方成立的文件上。
+ 30d. 性能测试防线：`specs/general/testing.adoc` 的「性能测试」须仍在，且**测量与记录**的要点
+     齐备——对比测试（含当前实现作基准）、排除初始化干扰、测量口径可核对、离散度与样本量
+     （至少 3 次采样 / 报离散度 / 差异小于离散度视为无显著差异）、公平比较、计时区间与消费结果、
+     何时需要性能测试（按性能敏感度判定、不多加不漏）、记录落点与必留证据（四项）、成绩取数、
+     方案组合矩阵、优化日志、只记结果不记过程、闭环迭代至收敛、瓶颈归因与优化方向、结论落点与
+     时效、优化不得改变行为——防"跑一次看看谁快、结论只有一句'快了 X 倍'"重新成为默许形态；
+     另钉调度器（AGENTS_COMMON.adoc）与 Java 栈（java-testing.adoc）两处落点、以及图书馆依据主题
+     （library/performance.adoc）与依据锚点。
  30. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
      （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
      `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
@@ -530,7 +543,8 @@ LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
 LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
 # 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
 # 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
-LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc", "throughput.adoc")
+LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc", "throughput.adoc",
+                   "performance.adoc")
 # 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
 # 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
 # ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
@@ -1119,6 +1133,54 @@ def check_stack_consistency():
     # 实际存在但未登记（防止漏加载）
     for a in actual - registered_stack:
         err(f"specs/stack/ 存在但未在技术栈层登记（可能漏加载）: {a}", "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_dispatcher_layers():
+    """『加载调度器分层结构防线』：五个加载层（+项目自身维护层）的层头与各自条目不得被删。
+
+    背景（本仓库实证，2026-09 一次常驻层瘦身）：重构调度器时用"按条替换、`end` 取下一
+    个 `** ` 条目"的做法，**把夹在两条之间的层头行（`* 技术栈层（…）：`）一并吞掉**——
+    结果 Java 等栈条目全部挂到了"通用层"下，`技术栈层` 这一层在文件里消失。**机械校验
+    全绿**：调度器登记按文件核对、`技术栈一致性` 按链接核对、`常驻层体积` 只看字节数与
+    `** ` 条目数——**没有一道防线看层头本身**。层头不是装饰：它定义"涉及即加载"的触发
+    语义（通用层＝涉及对应活动、技术栈层＝项目具备该技术特征、平台层＝按使用平台），
+    层头一丢，条目虽在、加载触发条件却错了。
+
+    故机械钉住：调度器节内**五个公共加载层 + 项目自身维护层**的层头行仍在，且每层
+    **至少有一个条目**（层头下紧跟 `** ` 条目，防空壳层头）。只钉结构，不判语义。
+    """
+    phase("加载调度器分层结构检查")
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"== 分类与懒加载（加载调度器）(.*?)== 规范文件登记完整性", text, re.S)
+    if m is None:
+        err("AGENTS_COMMON.adoc 未找到「分类与懒加载（加载调度器）」节——"
+            "分层结构防线失去抓手", "AGENTS_COMMON.adoc")
+        phase_done()
+        return
+    sec = m.group(1)
+    lines = sec.splitlines()
+    # 层头 → 下一层头之间的条目须 ≥ 1
+    for layer in ("必加载层", "通用层", "技术栈层", "项目类型层", "平台层", "项目自身维护层"):
+        pat = re.compile(r"^\*\s+" + re.escape(layer) + r"[（(]")
+        idx = next((i for i, ln in enumerate(lines) if pat.match(ln)), None)
+        if idx is None:
+            err(f"加载调度器缺失「{layer}」层头行（形如 `* {layer}（…）：`）——"
+                "层头定义该层的加载触发语义（涉及即加载 / 具备该技术特征 / 按平台），"
+                "层头被吞掉后其条目会挂到上一层、触发条件随之出错（本仓库实证）",
+                "AGENTS_COMMON.adoc")
+            continue
+        # 该层的条目数：从层头下一行起，到下一个同级层头或节尾
+        count = 0
+        for ln in lines[idx + 1:]:
+            if re.match(r"^\*\s+\S", ln) and not ln.startswith("** "):
+                break
+            if ln.startswith("  ** "):
+                count += 1
+        if count == 0:
+            err(f"加载调度器「{layer}」层头下没有任何条目（空壳层头）——"
+                "要么补条目、要么删掉空层头", "AGENTS_COMMON.adoc")
     phase_done()
 
 
@@ -1973,11 +2035,16 @@ def check_java_test_naming():
     # 调度器的 Java 技术栈登记须与该契约一致（只说一半会让引用方学不全）
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         generic = fh.read()
-    java_line = next((ln for ln in generic.splitlines() if "stack/java-testing.adoc" in ln), "")
-    if not java_line:
+    # 调度器里**可能有多条**指向 java-testing 的加载项（如"跑测试/补测试"与"做性能测试"
+    # 各一条：后者需要该文件的承载与执行边界说明）——命名契约只要在**任一条**里写全即可，
+    # 故把候选行**合起来**核对；只看第一条会在新增第二条时假红（且与"契约是否真的被传达"
+    # 无关：契约只要在调度器里可达即成立）。
+    java_lines = [ln for ln in generic.splitlines() if "stack/java-testing.adoc" in ln]
+    if not java_lines:
         err(f"Java 测试规范 {rel} 未在加载调度器登记（不会被加载、其中命名契约实际失效）",
             "AGENTS_COMMON.adoc")
     else:
+        java_line = "\n".join(java_lines)
         missing = [s for s in JAVA_TEST_SUFFIXES if f"`{s}`" not in java_line]
         if missing:
             err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
@@ -3512,6 +3579,155 @@ def check_throughput_guard():
         missing = [k for k in keys if k not in body]
         if missing:
             err(f"执行吞吐防线被破坏：{rel2} 缺失 {missing}——{desc}", rel2)
+    phase_done()
+
+
+PERF_SECTION = "性能测试"
+PERF_SPEC = "specs/general/testing.adoc"
+PERF_JAVA = "specs/stack/java-testing.adoc"
+PERF_LIBRARY = "library/performance.adoc"
+
+# 每条：小标题级要点 → 须同时命中的锚点（只查一处关键词会在"换个说法保留、实际要求被抽掉"
+# 时假绿；故每条给 2~4 个锚点，覆盖"规则 + 判定标准 + 依据名"三件套）。
+PERF_SECTION_ANCHORS = (
+    ("承载与触发（何时需要性能测试）",
+     ("按性能敏感度判定", "多方案选型需要数据佐证", "不得一律加、也不得漏掉真敏感点"),
+     "何时需要性能测试的判据被删后，执行者会一律加（噪声用例）或一律不加（漏掉真敏感点）"),
+    ("独立与对比测试",
+     ("独立性（L1）", "类别至少 3 类", "含当前项目使用的那一类作基准"),
+     "对比测试缺了基准那一类，则\"要不要换\"无从判起（只剩候选方案之间的相对比较）"),
+    ("排除初始化干扰与测量口径",
+     ("排除初始化干扰（L1）", "测量口径须可核对（L1）",
+      "预热轮次、测量轮次", "运行环境"),
+     "测量口径不写明时，成绩不可核对、不可复现（\"只报一个孤立数字\"重新成为默许形态）"),
+    ("离散度与样本量",
+     ("离散度与样本量（L1）", "至少 3 次有效采样", "无显著差异"),
+     "缺离散度/样本量时，单次采样会被当成结论、噪声会被当成胜出"),
+    ("公平比较与计时区间",
+     ("公平比较（L1）", "同一进程", "计时区间界定（L1）", "消费结果"),
+     "公平比较与计时区间是微基准的两个经典失效（一组热一组冷、结果被 JIT 消除）"),
+    ("记录落点与必留证据",
+     ("记录（成绩与依据落在哪、记到什么程度）", "落点（L1）", "每次运行的必留证据（L1",
+      "未选方案为什么不选"),
+     "落点与必留证据被删后，\"记到什么程度\"回到靠发挥：要么只留一句结论、要么把原始日志灌进文档"),
+    ("成绩取数与组合矩阵",
+     ("成绩怎么取数（L1", "终值（均值或中位数）+ 离散度", "方案编号",
+      "与基线之比"),
+     "取数规则与组合矩阵是\"记录各方案成绩\"的可判定形态；缺则成绩表只剩孤立的均值"),
+    ("优化日志与只记结果",
+     ("优化日志（L2", "只记结果不记过程（L1）", "不保留的改动也"),
+     "优化日志（含失败尝试）与\"不记过程\"是一对：前者留住方向与教训、后者拦住把日志灌进文档"),
+    ("迭代、归因与方向",
+     ("闭环迭代（L1）", "收益判定用实测、不用估计", "瓶颈归因与方向（L1）",
+      "优化方向与思路（L1）", "结果分析须给出原因与对策（L1）", "给出对应的解决方案"),
+     "迭代闭环与归因是用户要求的核心（\"不断反复进行瓶颈优化\"\"优化的方向和思路也要记录，避免踩坑\"）"),
+    ("结论落点、时效与不变行为",
+     ("结论的落点（L1）", "结论的时效（L2）", "优化不得改变行为（L1）", "结果反哺基线（L2）"),
+     "结论只留在性能文档 = 落地后无人知道为何这么选；优化改行为 = 把重构做成了功能变更"),
+)
+
+# 图书馆依据主题（library/performance.adoc）：依据不得只剩名称——外部材料与"本站取舍"的分界须写明
+PERF_LIBRARY_ANCHORS = (
+    "== 当初要解决的失效（本项目实证）",
+    "== 外部材料：JMH 官方文档（OpenJDK，微基准的行业事实标准）",
+    "== 同义性差异与覆盖点（本集合自己承认的）",
+    "https://github.com/openjdk/jmh",
+    "ISO/IEC/IEEE 25010",
+    "ISO/IEC/IEEE 29119-4",
+    "未逐字取回",
+    "非逐字摘录",
+    "本集合自己的判据化取舍",
+)
+
+
+def check_performance_guard():
+    """『性能测试防线』：测量与记录两半的要点不得被删或降级。
+
+    背景（用户提出，本项目实证）：性能测试此前只有四条粗判据（独立性、对比测试、排除初始化
+    干扰、结果分析）——"跑一次看看谁快"即可交差：成绩是**单次采样**、没有离散度、没有可比
+    基线，结论写"快了 X 倍"却说不清测量条件与运行环境；优化也多停在"改一版跑一次"，**测出的
+    瓶颈不回头复测**、失败方向不落盘，于是后来的人重踩同一个坑。用户的口径是"尽可能地进行
+    优化……不断反复进行瓶颈优化，最后需要记录各方案的组合及成绩（可能不需要完整记录……总之
+    应该是要记录各个方案的一个成绩），以及优劣势，优缺点，选择的依据……优化的方向和思路也要
+    记录，避免以后踩坑"。
+
+    故本条钉住三处（都是机械可判定的"要点文本仍在"）：
+      * **测量那一半**（`specs/general/testing.adoc`「性能测试」的「对比与测量」）：口径可
+        核对、离散度与样本量、公平比较、计时区间与消费结果——缺任一条，"结论"就退化成"单
+        次数"或"误差大于差异的平均值"；
+      * **记录那一半**（同节「记录」「迭代与收敛」）：落点与必留证据、成绩取数、组合矩阵、
+        优化日志、只记结果不记过程、闭环迭代、瓶颈归因与方向、结论落点与时效——缺任一条，
+        "记到什么程度"回到靠发挥；
+      * **两处落点**：调度器（`AGENTS_COMMON.adoc`）须有本条的加载项与识别特征（否则它永远
+        不会被触发加载），Java 栈（`specs/stack/java-testing.adoc`）须把承载与"不混入常规
+        test 阶段"写明（否则 `PerfTests` 会被 surefire 误跑）；
+      * **依据主题**（`library/performance.adoc`）：外部材料（JMH/ISO 编号）与"本集合自己的
+        判据化取舍"须分界写明——否则读者会把"至少 3 次采样"读成某标准的规定。
+
+    只钉"要点仍在"，不钉措辞；"某次测试是不是真的做了多次采样、成绩是不是真的可复现"属
+    引用方项目行为（本仓库不可见），交人/子 agent 复核（可核对项：测试类注释与性能测试文档中
+    的预热/轮次/离散度/运行环境取值）。
+    """
+    phase("性能测试防线检查")
+    path = os.path.join(REPO_ROOT, *PERF_SPEC.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {PERF_SPEC}——性能测试判据无处承载（公共测试规范是它的唯一落点）", PERF_SPEC)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, PERF_SECTION)
+    if not section:
+        err("公共测试规范缺少「性能测试」节——测量与记录判据失去落点"
+            "（性能测试会退回\"跑一次看看谁快\"）", PERF_SPEC)
+        phase_done()
+        return
+    for name, anchors, why in PERF_SECTION_ANCHORS:
+        for token in anchors:
+            if token not in section:
+                err(f"「性能测试」节缺少要点：{name}（应含 `{token}`）——{why}", PERF_SPEC)
+
+    # 调度器：本条的加载项与识别特征（缺则它永远不会被触发加载、规则实际失效）
+    with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
+        generic = fh.read()
+    disp = next((ln for ln in generic.splitlines()
+                 if "specs/general/testing.adoc" in ln and "性能测试" in ln), "")
+    if not disp:
+        err("加载调度器缺少性能测试的加载项与识别特征（应含『性能测试』字样）——"
+            "缺则它永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
+    else:
+        for token in ("性能测试", "性能敏感", "方案组合"):
+            if token not in disp:
+                err(f"加载调度器性能测试条目缺少识别特征 `{token}`——"
+                    "触发特征不全时，执行者会\"没想到要做性能测试\"", "AGENTS_COMMON.adoc")
+
+    # Java 栈：承载与执行边界（不得混入常规 test 阶段）
+    jpath = os.path.join(REPO_ROOT, *PERF_JAVA.split("/"))
+    if not os.path.isfile(jpath):
+        err(f"缺少 {PERF_JAVA}——`PerfTests` 的承载与执行边界无处说明", PERF_JAVA)
+    else:
+        with open(jpath, encoding="utf-8") as fh:
+            jtext = fh.read()
+        for token in ("`PerfTests`（性能）", "性能测试", "不混入常规 `test` 阶段"):
+            if token not in jtext:
+                err(f"{PERF_JAVA} 的「启动型与端到端测试」缺少要点 `{token}`——"
+                    "承载/执行边界被删会让 `PerfTests` 被 surefire 误跑或被当成常规测试统计",
+                    PERF_JAVA)
+
+    # 图书馆依据主题：外部材料与"本站取舍"的分界（依据不得只剩名称）
+    lpath = os.path.join(REPO_ROOT, *PERF_LIBRARY.split("/"))
+    if not os.path.isfile(lpath):
+        err(f"缺少 {PERF_LIBRARY}——性能测试判据的依据无处承载"
+            "（\"至少 3 次采样\"\"必留未选方案\"这类取值将无从核对，也会被误读成标准规定）",
+            PERF_LIBRARY)
+    else:
+        with open(lpath, encoding="utf-8") as fh:
+            ltext = fh.read()
+        for token in PERF_LIBRARY_ANCHORS:
+            if token not in ltext:
+                err(f"{PERF_LIBRARY} 缺少依据锚点 `{token}`——"
+                    "依据被压成名称后，读者无法区分\"外部材料要求\"与\"本集合自己的取舍\"",
+                    PERF_LIBRARY)
     phase_done()
 
 
@@ -7092,6 +7308,7 @@ def main(argv=None) -> int:
     check_section_refs()
     check_stack_consistency()
     check_dispatcher_registry()
+    check_dispatcher_layers()
     check_forbidden_patterns()
     check_historical_notes()
     check_install_codeblock()
@@ -7151,6 +7368,7 @@ def main(argv=None) -> int:
     check_wiring_guard()
     check_maven_mirror_guard()
     check_throughput_guard()
+    check_performance_guard()
     check_asciidoctor_syntax()
 
     print()
