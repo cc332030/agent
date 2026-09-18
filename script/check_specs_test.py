@@ -18,6 +18,8 @@
                              反：文件被删/节改名/第二问被删/P2 或本仓库口径未同步/未登记）
   * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
   * check_spec_admission_guard 另钉读法形态与重构后的有效性核对（反：两节被删）
+  * check_runtime_env_guard —— 运行环境须与项目声明一致防线（正：条文/判据/声明落点/降级路径/依据行与三处引用齐备；
+                             反：整节被删/L1 被摘/"能跑通也不得换"被删/判据被抽/声明落点被删/降级路径被删/依据被删/引用与登记断开）
   * check_index_page_guard —— 索引页触发判据防线（正：触发判据/空壳不建/只做导航/模块 README 齐备；
                              反：doc.adoc 判据被删、doc-module.adoc 按需口径被删、文件被删）
 
@@ -3877,6 +3879,171 @@ def _real_git_rename_section() -> str:
     end = text.index("\n== 行尾与检出归一")
     return text[start:end]
 
+
+
+def _real_ci_runtime_env_section() -> str:
+    """从真实 specs/general/ci-cd.adoc 取「运行环境须与项目声明一致」整节。
+
+    正例直接用真实条文，避免测试里维护第二份会漂移的正文——防线的判据正是对着真实条文
+    写的（与 git rename 节同一做法）。
+    """
+    path = os.path.join(os.path.dirname(HERE), "specs", "general", "ci-cd.adoc")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    start = text.index("== 运行环境须与项目声明一致")
+    end = text.index("\n== 校验链完整")
+    return text[start:end]
+
+
+class TestCheckRuntimeEnvGuard(CheckSpecsTestCase):
+    """钉住用户提出的硬性要求：运行环境须与项目声明一致（换版本能跑通也不得换）。
+
+    本条最易被三条路径绕过——"另一个版本也跑通了"（结果导向的自我豁免）、等价/兼容版本顶替、
+    环境声明缺失或不可得时用默认版本开工并记作通过。故除正例外，用例专门覆盖整节被删、L1 标注
+    被摘、"能跑通也不得换"被删、判定标准被抽、声明落点被删、降级路径被删、依据行被删、
+    三处引用断开、调度器识别特征被删、维护方与图书馆落点缺失等反例。
+    """
+
+    CI_SECTION = _real_ci_runtime_env_section()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/ci-cd.adoc", "= CI 规范\n\n" + self.CI_SECTION)
+        self.write(
+            "specs/core/execution.adoc",
+            "= 执行原则\n\n* 运行环境：开发与验证**一律用项目声明的那一个运行环境**，"
+            "换别的版本也能跑通也不得换（L1）——见 "
+            "link:../general/ci-cd.adoc[]「运行环境须与项目声明一致」\n")
+        self.write(
+            "specs/general/verify.adoc",
+            "= 验证规范\n\n* 构建/测试/脚本一律用项目声明的运行环境（L1），见 "
+            "link:ci-cd.adoc[]「运行环境须与项目声明一致」\n")
+        self.write(
+            "specs/general/planning.adoc",
+            "= 规划规范\n\n* 基线须在项目声明的运行环境下取得，见 "
+            "link:ci-cd.adoc[]「运行环境须与项目声明一致」\n")
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "= 规范\n\n== 分类与懒加载\n\n* 运行环境：**识别特征**——项目有声明运行环境的"
+            "落点（`pom.xml` 的 `java.version`、`.nvmrc`、`.python-version`），"
+            "或要跑构建/测试/脚本；出现\"换个版本也能跑通\"\"用默认版本先试\" → "
+            "link:specs/general/ci-cd.adoc[]（运行环境须与项目声明一致）\n")
+        self.write(
+            "AGENTS.adoc",
+            "= 项目规范\n\n* 工具声明：`check_runtime_env_guard` —— 运行环境防线"
+            "（运行环境须与项目声明一致）\n")
+        self.write(
+            "library/adoption.adoc",
+            "= 准入依据\n\n== 同义性差异与覆盖点（本集合自己承认的）\n"
+            "* 运行环境须与项目声明一致（L1）是本集合更严的判据化取舍。\n")
+
+    def _drop_from_section(self, needle: str) -> None:
+        """把权威定义节里的某个短语删掉后重写文件（反例构造）。"""
+        text = ("= CI 规范\n\n" + self.CI_SECTION).replace(needle, "")
+        self.write("specs/general/ci-cd.adoc", text)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_runtime_env_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_ci_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "ci-cd.adoc"))
+        cm.check_runtime_env_guard()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 -> "按能跑通选版本"重回默认做法
+        self._write_valid()
+        self.write("specs/general/ci-cd.adoc", "= CI 规范\n\n== 核心原则\n* 略。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("未找到", self.error_texts())
+
+    def test_l1_marking_removed_reports(self):
+        # 反例：把"严禁/（L1）"摘掉、降级为建议
+        self._write_valid()
+        self._drop_from_section("**严禁使用与声明不同的运行环境**")
+        cm.check_runtime_env_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_runnable_excuse_removed_reports(self):
+        # 反例：删掉"即使能跑通也不得换" -> 最易被"另一个版本也跑通了"合理化掉
+        self._write_valid()
+        self._drop_from_section("**即使换一个版本也能正常跑通流程，也不得换**")
+        cm.check_runtime_env_guard()
+        self.assertIn("跑通", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：只留口号、判定标准被抽掉
+        self._write_valid()
+        self.write("specs/general/ci-cd.adoc",
+                   "= CI 规范\n\n== 运行环境须与项目声明一致\n\n"
+                   "[quote]\n本条很重要，请务必注意。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_declaration_source_removed_reports(self):
+        # 反例：删掉"取项目已有声明、不得另立第二真源" -> 出现两个互相冲突的版本来源
+        self._write_valid()
+        self._drop_from_section("**不得**为满足本条另建一份版本声明")
+        cm.check_runtime_env_guard()
+        self.assertIn("声明落点", self.error_texts())
+
+    def test_fallback_path_removed_reports(self):
+        # 反例：删掉降级路径 -> 要么把引用方卡死，要么"用别的版本跑绿"被记成通过
+        self._write_valid()
+        self._drop_from_section("**环境不可得或未声明时走降级路径，不阻断、也不记作通过（L1）**")
+        cm.check_runtime_env_guard()
+        self.assertIn("降级路径", self.error_texts())
+
+    def test_rationale_removed_reports(self):
+        # 反例：依据行被整段删掉（依据可压成标准名/编号，但不得消失）
+        self._write_valid()
+        self._drop_from_section("The Twelve-Factor App")
+        cm.check_runtime_env_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_execution_reference_removed_reports(self):
+        # 反例：必加载层的引用被删 -> 非流水线场景读不到本条
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "= 执行原则\n\n* 其他规则。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("必加载层", self.error_texts())
+
+    def test_verify_reference_removed_reports(self):
+        # 反例：验证侧引用被删 -> 验证时的环境一致性无人负责
+        self._write_valid()
+        self.write("specs/general/verify.adoc", "= 验证规范\n\n* 其他。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("verify.adoc", self.error_texts())
+
+    def test_planning_reference_removed_reports(self):
+        # 反例：基线侧引用被删 -> 基线可能在错误环境下取得、统计不可比
+        self._write_valid()
+        self.write("specs/general/planning.adoc", "= 规划规范\n\n* 其他。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("planning.adoc", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例：调度器识别特征被删 -> 本条永远不会被加载（规则实际失效）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= 规范\n\n== 分类与懒加载\n\n* 其他。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("调度器", self.error_texts())
+
+    def test_maintainer_registration_removed_reports(self):
+        # 反例：维护方工具声明清单未登记该防线
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目规范\n\n* 其他。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_library_adoption_removed_reports(self):
+        # 反例：图书馆未记同义性差异 -> 读者会把本站取舍当标准原文
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 准入依据\n\n* 其他。\n")
+        cm.check_runtime_env_guard()
+        self.assertIn("adoption.adoc", self.error_texts())
 
 
 class TestCheckRenameSplitGuard(CheckSpecsTestCase):
