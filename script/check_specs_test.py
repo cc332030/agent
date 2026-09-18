@@ -1028,8 +1028,8 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "=== P3. 内容不得减少\n\n"
                    "* **要求（L1，最高）**：内容一项不能少。\n"
                    "* **依据**：ISO 9001。\n\n"
-                   "=== P4. 读取按最小必要\n\n"
-                   "* **要求（L2 建议，最高关注项）**：只读最小必要信息集。\n"
+                   "=== P4. 读取按最小必要；执行轮次须合并（少绕）\n\n"
+                   "* **要求（L2 建议，最高关注项）**：只读最小必要信息集；执行轮次须合并（少绕，避免可供合并的调用被拆成多轮）。\n"
                    "* **依据**：Anthropic 工程博客《Effective context engineering for AI agents》。\n\n"
                    "=== P5. 不可逆操作先确认，不得编造事实与来源\n\n"
                    "* **要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。\n"
@@ -1181,11 +1181,27 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
         path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
         with open(path, encoding="utf-8") as fh:
             text = fh.read().replace(
-                "* **要求（L2 建议，最高关注项）**：只读最小必要信息集。",
-                "* **要求（L1，最高）**：只读最小必要信息集。")
+                "* **要求（L2 建议，最高关注项）**：只读最小必要信息集；执行轮次须合并"
+                "（少绕，避免可供合并的调用被拆成多轮）。",
+                "* **要求（L1，最高）**：只读最小必要信息集；执行轮次须合并"
+                "（少绕，避免可供合并的调用被拆成多轮）。")
         self.write("specs-project-maintainer/priority.adoc", text)
         cm.check_priority_guard()
         self.assertIn("P4", self.error_texts())
+
+    def test_p4_missing_throughput_half_reports(self):
+        # 反例：P4 只留「少读」、把「少绕」（执行轮次须合并）那一半删掉——
+        # 轮次是上下文的乘数，缺这一半时执行者会把可合并的调用拆成多轮
+        self._write_valid()
+        path = os.path.join(self.root, "specs-project-maintainer", "priority.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = (fh.read()
+                    .replace("=== P4. 读取按最小必要；执行轮次须合并（少绕）",
+                             "=== P4. 读取按最小必要")
+                    .replace("；执行轮次须合并（少绕，避免可供合并的调用被拆成多轮）。", "。"))
+        self.write("specs-project-maintainer/priority.adoc", text)
+        cm.check_priority_guard()
+        self.assertIn("少绕", self.error_texts())
 
     def test_silently_downgraded_p5_reports(self):
         # 反例：P5 被静默从 L1 降级为 L2（不可逆操作与来源真实性属无裁量余地的底线）
@@ -7929,6 +7945,154 @@ class TestCheckMavenMirrorGuard(CheckSpecsTestCase):
         cm.check_maven_mirror_guard()
         self.assertIn("在境内的镜像站", self.error_texts())
 
+
+
+class TestCheckThroughputGuard(CheckSpecsTestCase):
+    """钉住「执行吞吐」条：判据要点、常驻层引用与调度器登记不得被删。
+
+    实证：Agent 慢的主因是**轮次**——实测一次任务 180 次模型请求 / 175 万 token 输入 /
+    1659 s 运行，其中模型生成仅 580 s（约 65% 的墙钟花在轮次之间的工具执行与等待）。
+    故反例逐条对应"最易被当废话砍掉"的字句：合并调用、构建输出一次取到、不重复读、
+    往返成本入规划、凭据一次固化、镜像不重配、长流程不空转；另钉常驻层引用与调度器
+    识别特征（缺则规则不可达、不加载）。
+    """
+
+    PLATFORM_SECTION = (
+        "= CNB 平台相关\n\n== 执行吞吐（平台侧的两处特有代价）\n"
+        "* 一次唤起 = 一次完整加载 + 一轮往返（L1）。\n"
+        "* 状态查询按先取汇总、再按需下钻（L2）。\n"
+        "* 不要用零信息的往返等长流程。\n"
+        "* AI 用量汇总与 AI 请求明细是可观测面（L2）。\n")
+
+    SECTION = (
+        "= 上下文与读取范围规范\n\n== 执行吞吐（逐条判据）\n"
+        "* 独立调用必须合并，禁止试探式往返（L1）：不得为了先看一步再决定下一步拆成多轮。\n"
+        "* 构建与校验的输出须一次取到（L1）：执行 + 取统计 + 取失败明细一次完成。\n"
+        "* 读到的内容一次沉淀、不重复读（L2）。\n"
+        "* 往返成本也要算（L2）：规划时估出预计要几轮往返。\n"
+        "* 执行环境凭据须固化为可复用形态（L2）：开始时固化一次。\n"
+        "* 本地缓存与镜像就近取用（L2）：已配置过即沿用、不覆盖、不重配。\n"
+        "* 长流程不留零信息等待（L1）：在跑与卡住须可分辨。\n")
+
+    def _write_all(self, context=None, core=None, common=None):
+        self.write("specs/platform/cnb.adoc", self.PLATFORM_SECTION)
+        self.write("specs/general/context.adoc", context if context is not None else self.SECTION)
+        self.write("specs/core/execution.adoc",
+                   core if core is not None else "= 执行原则\n执行轮次须合并（少绕）\n执行吞吐\n")
+        self.write("AGENTS_COMMON.adoc",
+                   common if common is not None else
+                   "= 入口\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 执行吞吐（识别特征：预计需多次往返） → link:specs/general/context.adoc[]\n")
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_throughput_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_file_reports(self):
+        self._write_all()
+        os.remove(os.path.join(self.root, "specs", "general", "context.adoc"))
+        cm.check_throughput_guard()
+        self.assertIn("specs/general/context.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self._write_all(context="= 上下文与读取范围规范\n\n== 读取范围\n* 别的\n")
+        cm.check_throughput_guard()
+        self.assertIn("执行吞吐", self.error_texts())
+
+    def test_merge_rule_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("独立调用必须合并", "调用可分散"))
+        cm.check_throughput_guard()
+        self.assertIn("独立调用必须合并", self.error_texts())
+
+    def test_probe_roundtrip_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("试探式往返", "多轮"))
+        cm.check_throughput_guard()
+        self.assertIn("试探式往返", self.error_texts())
+
+    def test_build_output_rule_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("构建与校验的输出须一次取到", "构建输出稍后再说"))
+        cm.check_throughput_guard()
+        self.assertIn("构建与校验的输出须一次取到", self.error_texts())
+
+    def test_no_repeat_read_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("不重复读", "可再确认"))
+        cm.check_throughput_guard()
+        self.assertIn("不重复读", self.error_texts())
+
+    def test_roundtrip_cost_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("往返成本也要算", "只管跑"))
+        cm.check_throughput_guard()
+        self.assertIn("往返成本也要算", self.error_texts())
+
+    def test_credential_rule_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("固化为可复用形态", "每次都重新登录"))
+        cm.check_throughput_guard()
+        self.assertIn("固化为可复用形态", self.error_texts())
+
+    def test_mirror_no_reconfigure_removed_reports(self):
+        # "已配置过即沿用不重配"被抹掉即被拦下（与 Maven 侧同向：反复重配本身就是往返）
+        self._write_all(context=self.SECTION.replace("不覆盖、不重配", "每次重建配置"))
+        cm.check_throughput_guard()
+        self.assertIn("不覆盖、不重配", self.error_texts())
+
+    def test_zero_info_wait_removed_reports(self):
+        self._write_all(context=self.SECTION.replace("零信息等待", "等待期间可轮询"))
+        cm.check_throughput_guard()
+        self.assertIn("零信息等待", self.error_texts())
+
+    def test_resident_reference_removed_reports(self):
+        # 常驻层未点到执行吞吐：每次会话加载的常驻层里没有这条纪律
+        self._write_all(core="= 执行原则\n无关内容\n")
+        cm.check_throughput_guard()
+        self.assertIn("specs/core/execution.adoc", self.error_texts())
+
+    def test_dispatcher_registration_removed_reports(self):
+        # 调度器无本条的加载项与识别特征：规则永远不会被触发加载
+        self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
+        cm.check_throughput_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_section_title_extra_words_tolerated(self):
+        # 节标题带括号补充属排版，不得因此报"缺少节"
+        self._write_all(context=self.SECTION.replace("== 执行吞吐（逐条判据）",
+                                                     "== 执行吞吐（逐条判据，少绕）"))
+        cm.check_throughput_guard()
+        self.assertEqual([], cm.errors)
+
+    def _write_platform(self, content=None):
+        self.write("specs/platform/cnb.adoc",
+                   content if content is not None else self.PLATFORM_SECTION)
+
+    def test_platform_section_positive(self):
+        self._write_all()
+        self._write_platform()
+        cm.check_throughput_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_platform_section_deleted_reports(self):
+        self._write_all()
+        self._write_platform("= CNB 平台相关\n\n== 冲突处理\n* 别的\n")
+        cm.check_throughput_guard()
+        self.assertIn("specs/platform/cnb.adoc", self.error_texts())
+
+    def test_platform_wakeup_cost_removed_reports(self):
+        self._write_all()
+        self._write_platform(self.PLATFORM_SECTION.replace("一次唤起 = 一次完整加载 + 一轮往返", "唤起即执行"))
+        cm.check_throughput_guard()
+        self.assertIn("一次唤起", self.error_texts())
+
+    def test_platform_summary_first_removed_reports(self):
+        self._write_all()
+        self._write_platform(self.PLATFORM_SECTION.replace("先取汇总、再按需下钻", "逐个查"))
+        cm.check_throughput_guard()
+        self.assertIn("先取汇总", self.error_texts())
+
+    def test_platform_observability_removed_reports(self):
+        self._write_all()
+        self._write_platform(self.PLATFORM_SECTION.replace("AI 用量汇总", "用量信息"))
+        cm.check_throughput_guard()
+        self.assertIn("AI 用量汇总", self.error_texts())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
