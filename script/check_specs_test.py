@@ -3855,6 +3855,195 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         self.assertIn("缺少公开提示词入口", self.error_texts())
 
 
+
+# --------------------------------------------------------------------------- #
+# check_rename_split_guard（P7：重命名与内容修改须分两个提交）
+# --------------------------------------------------------------------------- #
+# 中文引号（在用例里拼反例字符串时用，避免与 Python 字符串引号冲突）
+LQ = "\u201c"
+RQ = "\u201d"
+
+
+def _real_git_rename_section() -> str:
+    """从真实 specs/general/git.adoc 取「重命名与内容修改须分两个提交」整节。
+
+    用例的"正例"直接用真实条文，避免测试里维护第二份会漂移的正文——防线的判据正是
+    对着真实条文写的，抄一份到测试里必然不同步。
+    """
+    path = os.path.join(os.path.dirname(HERE), "specs", "general", "git.adoc")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    start = text.index("== 重命名与内容修改须分两个提交")
+    end = text.index("\n== 行尾与检出归一")
+    return text[start:end]
+
+
+
+class TestCheckRenameSplitGuard(CheckSpecsTestCase):
+    """钉住用户提出的 P7：同一文件的重命名与内容修改须分两个提交。
+
+    本条容易被三条路径绕过——改动很小/只有三处引用（合并提交被合理化）、只 `git mv` 不先提交
+    （中间版本从未存在过）、用压缩提交把两个并回一个。故除正例外，用例专门覆盖整节被删、
+    判据被抽、分量不是理由被删、提交顺序被删、无损拆分被删、两个都进同一 PR 被删、
+    压缩提交接口被删、例外被删、引用方自检被删、必加载层重申被删、铁律登记被删、
+    维护方清单少列 P7 与级别被降等反例。
+    """
+
+    GIT_SECTION = _real_git_rename_section()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/git.adoc", "= git 规范\n\n" + self.GIT_SECTION)
+        self.write(
+            "specs/core/execution.adoc",
+            "= 执行原则\n\n== 文件操作强制检查\n"
+            "* **重命名与内容修改须分两个提交（L1 最高关注项 P7）**：第一个提交**只做重命名、"
+            "内容逐字节不变**（先 `git mv` 并只提交改名），第二个提交**再改内容**。\n")
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "= 规范\n\n== 最高优先级铁律（先读）\n"
+            "* **同一文件的重命名与内容修改必须分两个提交**：**最高关注项 P7**；"
+            "先 `git mv` 并只提交改名（**内容逐字节不变**），**再改内容**；见 "
+            "link:specs/general/git.adoc[]\u300c重命名与内容修改须分两个提交（默认固定动作）\u300d。\n")
+        self.write(
+            "specs-project-maintainer/priority.adoc",
+            "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P7，条款本身 L1）**：略。\n\n"
+            "=== P7. 重命名与内容修改必须分两个提交\n"
+            "* **要求（L1，最高）**：分两个提交、先重命名后改内容。\n"
+            "* **依据**：ISO 10007。\n"
+            "* **判定标准**：`git log --follow --name-status` 应见先 R 后 M。\n")
+
+    def _drop(self, needle: str) -> None:
+        """把权威定义节里的某条 bullet 删掉后重写文件（反例构造）。"""
+        text = ("= git 规范\n\n" + self.GIT_SECTION).replace(needle, "")
+        self.write("specs/general/git.adoc", text)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_rename_split_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_git_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
+        cm.check_rename_split_guard()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 -> 拆两个提交只能靠执行者临场发挥
+        self._write_valid()
+        self.write("specs/general/git.adoc", "= git 规范\n\n== 文件移动与重命名\n* 略。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("重命名与内容修改须分两个提交", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留节名与口号，判定标准被抽掉
+        self._write_valid()
+        self.write("specs/general/git.adoc",
+                   "= git 规范\n\n== 重命名与内容修改须分两个提交（默认固定动作）\n\n"
+                   "[quote]\n本节是**权威完整定义**（最高关注项 P7）。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_item_label_removed_reports(self):
+        # 反例（整条 bullet 被摘掉、正文并入相邻条目）：按内容关键词核对可能被相邻条款
+        # 的字样兜住，故须有"条目轴逐项"的结构核对对"整条被摘掉"发声
+        self._write_valid()
+        self._drop("* **提交顺序（L1）**：**先重命名、后改内容**，不得颠倒；否则可能连 rename 识别"
+                   "一起丢掉（相似度阈值，见 git 官方文档 `git-diff` 的 `-M`）。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("提交顺序", self.error_texts())
+
+    def test_size_is_no_excuse_removed_reports(self):
+        # 反例：删掉分量不是理由 -> 改动很小/只有三处引用即可自圆其说
+        self._write_valid()
+        self._drop("* **分量大小不是理由（L1）**")
+        cm.check_rename_split_guard()
+        self.assertIn("分量大小不是理由", self.error_texts())
+
+    def test_order_clause_removed_reports(self):
+        # 反例：删掉提交顺序 -> 先改内容再改名，可能连 rename 识别一起丢掉（P1 也失效）
+        self._write_valid()
+        self._drop("* **提交顺序（L1）**")
+        cm.check_rename_split_guard()
+        self.assertIn("提交顺序", self.error_texts())
+
+    def test_lossless_split_removed_reports(self):
+        # 反例：删掉无损拆分 -> 只 git mv、改动留在工作区，中间版本从未存在过
+        self._write_valid()
+        self._drop("* **无损拆分（L1，判定标准）**")
+        cm.check_rename_split_guard()
+        self.assertIn("无损拆分", self.error_texts())
+
+    def test_same_pr_clause_removed_reports(self):
+        # 反例：删掉两个提交都进同一 PR -> 第二个提交留本地，本条形同虚设
+        self._write_valid()
+        self._drop("* **两个提交都要进本次交付（L1）**")
+        cm.check_rename_split_guard()
+        self.assertIn("两个提交都要进本次交付", self.error_texts())
+
+    def test_exemption_clause_removed_reports(self):
+        # 反例：删掉例外 -> 与用户声明的例外冲突时无条文可依
+        self._write_valid()
+        self._drop("* **例外（只有一条，L1）**")
+        cm.check_rename_split_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_compression_clause_removed_reports(self):
+        # 反例：删掉与「压缩提交」的接口 -> 出现"历史都整理干净了、把两个并回一个"的自我豁免路径
+        self._write_valid()
+        self._drop("为由把两者压回一个")
+        cm.check_rename_split_guard()
+        self.assertIn("压缩提交", self.error_texts())
+
+    def test_selfcheck_removed_reports(self):
+        # 反例：删掉引用方自检命令 -> 规范集合看不到引用方工作区，抓手落空
+        self._write_valid()
+        self._drop("* **可执行抓手（引用方项目自检）**")
+        cm.check_rename_split_guard()
+        self.assertIn("可执行抓手", self.error_texts())
+
+    def test_item_label_removed_reports(self):
+        # 反例（整条 bullet 被摘掉、正文并入相邻条目）：按内容关键词核对可能被相邻条款的
+        # 字样兜住，故须有"条目轴逐项"的结构核对对"整条被摘掉"发声
+        self._write_valid()
+        self._drop("* **分量大小不是理由（L1）**")
+        cm.check_rename_split_guard()
+        self.assertIn("分量大小不是理由", self.error_texts())
+
+    def test_resident_reference_removed_reports(self):
+        # 反例：必加载层重申行被删 -> 常驻上下文里读不到 P7（下次会话不会加载 git 规范）
+        self._write_valid()
+        self.write("specs/core/execution.adoc", "= 执行原则\n\n== 文件操作强制检查\n* 略。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("P7", self.error_texts())
+
+    def test_iron_rule_registration_removed_reports(self):
+        # 反例：进门必读的铁律行被删 -> 只在用到 git 时才可能读到本条
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= 规范\n\n== 最高优先级铁律（先读）\n* 另议。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("最高优先级铁律", self.error_texts())
+
+    def test_maintainer_entry_removed_reports(self):
+        # 反例：维护方不可降级清单少列 P7 -> 重构/去重时会被当成普通条目删掉
+        self._write_valid()
+        self.write("specs-project-maintainer/priority.adoc",
+                   "= 最高关注项\n\n* **规范性铁律（P1/P2，条款本身 L1）**：略。\n\n"
+                   "=== P2. 调整规范必须保证完整性\n* **要求（L1，最高）**：略。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("P7", self.error_texts())
+
+    def test_maintainer_level_removed_reports(self):
+        # 反例：P7 条目的级别被静默降级（要求（L1，最高 -> L2）
+        self._write_valid()
+        self.write("specs-project-maintainer/priority.adoc",
+                   "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P7，条款本身 L1）**：略。\n\n"
+                   "=== P7. 重命名与内容修改必须分两个提交\n"
+                   "* **要求（L2）**：分两个提交。\n* **依据**：ISO 10007。\n* **判定标准**：略。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("P7", self.error_texts())
+
+
 class TestCheckSquashCommitGuard(CheckSpecsTestCase):
     """钉住『压缩提交防线』：用户要求"压缩提交"时的判据、禁止形态与新旧 sha 对应关系。
 
