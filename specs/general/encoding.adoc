@@ -27,30 +27,34 @@
 
 * **仓库根须有 `.gitattributes` 与 `.editorconfig`，缺失即按本节补齐（L1）**：两者是同一件事的两端——`.gitattributes` 定 git 检出/提交侧的行尾与二进制判定，`.editorconfig` 定编辑器侧的编码、行尾、缩进与末尾换行；**项目里缺任一个就按本节要求新建**（取值见下），**已有的就地核对、只改与本规范不一致的项**（缩进等取值随项目，不覆盖其既有约定），不"先按本机默认用着、出问题再补"。
 * **仓库根 `.gitattributes` 是权威落盘口（L1）**：行尾策略须写在仓库根的 `.gitattributes` 中，**显式声明、不按平台自动推断**——LF 规则的文本写 `text eol=lf`，必须 CRLF 的批处理与 `.ps1` 写 `text eol=crlf`，二进制写 `binary`（`text=auto` 依赖开发者本机的 `core.autocrlf` 设置、不同机器结果不同，故本规范不用它）。示例（路径按项目实际调整）：
-  [listing]
-  ----
-  * text eol=lf
-  *.bat text eol=crlf
-  *.cmd text eol=crlf
-  *.ps1 text eol=crlf
-  *.png binary
-  ----
++
+[listing]
+----
+* text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+----
+
 * **`.editorconfig` 的取值（L1）**：`.editorconfig` 声明编辑器侧的编码、行尾、缩进与末尾换行，取值须与本规范一致——`[*]` 段 `charset = utf-8`、`end_of_line = lf`、`insert_final_newline = true`，缩进按项目实际统一（`indent_style`/`indent_size`）；行尾按文件类型分段（`.bat`/`.cmd`/`.ps1` 用 `crlf`）；`.ps1` 的 BOM 取舍见 link:../stack/powershell.adoc[]「编码与行尾」（要求 BOM 时该段写 `charset = utf-8-bom`，BOM 由该声明固定、不靠人工增删）；**`charset = utf-8` 只覆盖按本规范按 UTF-8 存储的文件**——某类文件若按格式规范或外部工具要求须存为非 UTF-8 编码，须为该类文件单列一段写 `charset = unset`（该取值用于**移除该键的既有效果**），不得让它继承 `[*]` 的 `charset`。示例（路径按项目实际调整）：
-  [listing]
-  ----
-  root = true
++
+[listing]
+----
+root = true
 
-  [*]
-  charset = utf-8
-  end_of_line = lf
-  insert_final_newline = true
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
 
-  [*.{bat,cmd}]
-  end_of_line = crlf
+[*.{bat,cmd}]
+end_of_line = crlf
 
-  [*.ps1]
-  end_of_line = crlf
-  ----
+[*.ps1]
+end_of_line = crlf
+----
+
 * **新接入项目先配好再提交（L1）**：首次提交前就要有 `.gitattributes` 与 `.editorconfig`，避免先按本机默认提交、再回头统一行尾与编码（历史里会留下大量"只因换行符"的假变更）。
 * **配套设置（L2）**：`.gitattributes` 已显式声明时，开发者本机的 `core.autocrlf` 应设为 `false`（由仓库配置决定行尾，不再让本机设置二次改写）；`eol=crlf` 的文件其 CRLF 由 git 按规则生成、**不写进仓库内容**（仓库内仍按 LF 存储）。
 * **存量项目补齐（L2）**：尚未配置的存量项目按 link:../core/execution.adoc[]「规范变更的存量处理」随项目开发逐步补上，不为此发动全库一次性转换。

@@ -7833,5 +7833,102 @@ class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
         self.assertIn("specs/general/doc.adoc", self.error_texts())
 
 
+class TestCheckMavenMirrorGuard(CheckSpecsTestCase):
+    """钉住 Maven「仓库与镜像」节：指定仓库、两条触发前提与换源边界不得被删改。
+
+    该条规则的全部内容就是「用哪个仓库、什么前提下用」，故反例逐条对应"最易被精简掉"
+    的字句：前提只剩一半、地址被换、优先次序被抹平、换源被读宽、换源出境内、既有配置被重配。
+    正例含容差：节标题带括号补充、仓库地址改写成 `link:` 形态，均不报错。
+    """
+
+    SECTION = (
+        "= Maven 规范\n\n== 仓库与镜像\n"
+        "* 未配置过 Maven 仓库/镜像、且外网出口 IP 在中国大陆时（L1）："
+        "必须先用这个仓库 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`；"
+        "仅当它不可用才允许改用其他在境内的镜像站；已配置过即不做，不覆盖既有配置。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("specs/stack/maven.adoc", self.SECTION)
+
+    def test_positive_passes(self):
+        cm.check_maven_mirror_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_file_reports(self):
+        os.remove(os.path.join(self.root, "specs", "stack", "maven.adoc"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("specs/stack/maven.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self.write("specs/stack/maven.adoc", "= Maven 规范\n\n== 依赖\n* 别的\n")
+        cm.check_maven_mirror_guard()
+        self.assertIn("仓库与镜像", self.error_texts())
+
+    def test_section_title_extra_words_tolerated(self):
+        # 节标题带括号补充属排版，不得因此报"缺少节"
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("== 仓库与镜像",
+                                        "== 仓库与镜像（公有仓库在国内的初始化）"))
+        cm.check_maven_mirror_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_designated_repo_removed_reports(self):
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace(
+                       "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/",
+                       "https://example.invalid/repository/maven-public/"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("mirrors.cloud.tencent.com", self.error_texts())
+
+    def test_designated_repo_link_notation_tolerated(self):
+        # 地址改写成 link: 形态（AsciiDoc 惯用写法）不得被误报为缺失
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace(
+                       "`https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`",
+                       "link:https://mirrors.cloud.tencent.com/nexus/repository/maven-public/"
+                       "[`https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`]"))
+        cm.check_maven_mirror_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_forced_repo_wording_removed_reports(self):
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("必须先用这个仓库", "可选其一"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("必须先", self.error_texts())
+
+    def test_trigger_condition_removed_reports(self):
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("外网出口 IP 在中国大陆", "任何环境"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("中国大陆", self.error_texts())
+
+    def test_precondition_removed_reports(self):
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("未配置过 Maven 仓库/镜像、且", "总是"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("未配置过 Maven 仓库/镜像", self.error_texts())
+
+    def test_existing_config_skip_removed_reports(self):
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("已配置过即不做", "每次构建前都重配一遍"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("已配置过即不做", self.error_texts())
+
+    def test_fallback_condition_removed_reports(self):
+        # "仅当它不可用才可换源"被放宽成"可自行另挑"即被拦下
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("仅当它不可用才允许", "也可自行"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("仅当它不可用", self.error_texts())
+
+    def test_fallback_must_stay_in_china_reports(self):
+        # 换源限定"在境内"被抹掉即被拦下（换到境外源等于没换）
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("其他在境内的镜像站", "其他镜像站"))
+        cm.check_maven_mirror_guard()
+        self.assertIn("在境内的镜像站", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
