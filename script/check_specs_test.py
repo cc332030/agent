@@ -6879,6 +6879,276 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self.assertIn("持久化访问", self.error_texts())
 
 
+class TestCheckConversionGuard(CheckSpecsTestCase):
+    """钉住『对象转换防线』（通用层抽象 / 技术栈层框架专名 / **建议层口径**）。
+
+    该条对应用户提出的规范建议：**多层嵌套对象转换时，优先使用 mapstruct（jvm 下），
+    不允许手写转换代码——不是强制，但是建议**。用户报告的失效形态：对象含对象、集合含对象时
+    **手写逐字段搬运**（一层层 `new` + 逐个 `set`/`get`）——没有编译期保障，模型加字段后只在
+    运行期表现为"某个字段一直是空"。
+
+    分层口径（与「持久化访问」同一套）：通用层只留**跨语言抽象**（优先声明式映射、目标式判据、
+    范围、例外、存量），**框架专名与写法的唯一落点**是 `specs/stack/java.adoc`「对象转换
+    （MapStruct）」（就地承载，不新开 `mapstruct.adoc`）。
+
+    本防线**按建议层口径钉住**（不是强制面）——用户明确要求不做强制性限制，故最易被五件事冲掉：
+      * **优先路径被删** —— 退回"怎么顺手怎么写"；
+      * **被写成强制面** —— "不允许手写转换代码""一律"重新出现，与用户口径相抵；
+      * **范围被抄窄或抽掉** —— 无嵌套（单层）不管被抄成"两三字段以内不管"；
+      * **备注原因 / 等价路径合规被删** —— "手写须写理由"丢失、"必须用某个库"复辟；
+      * **通用层被框架专名污染** —— `coding.adoc` 里点名 `MapStruct`/`@Mapper`，
+        对非 JVM 项目不成立、又白占其上下文。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        "== 对象转换（多层嵌套对象的转换）\n"
+        "多层嵌套对象的转换，**首选声明式映射完成的转换**；**无嵌套（单层）的转换不在本条范围内**。\n"
+        "* **首选声明式映射（L2）**：转换**优先**由转换库的映射声明完成。**优先路径不是唯一解**："
+        "深拷贝/结构复制工具、序列化（如 JSON）中转、手工构建器等等价路径同样合规，判据按下条。\n"
+        "* **达标判据（本条判定的是结果，不是手段）**：同一份转换**只有一处来源**；该结构增删字段、"
+        "改字段时，转换处**不会静默漏字段**。手写逐字段搬运在多层嵌套下达不到该判据。\n"
+        "* **除主动声明外，优先声明式映射；确需手写时须备注原因（L2）**：人来主动声明允许手写的按声明写；"
+        "否则优先走声明式映射，确需手写时在**代码注释写明原因**。本条**不设强制面**。\n"
+        "* **映射声明的落点**：映射声明与转换方法独立成文件、不塞进纯数据结构类。\n"
+        "* **例外与边界（L2）**：①映射声明表达不了的语义不在本条适用，可在映射声明内以自定义方法承接；"
+        "②**无嵌套（单层）的转换不在本条范围内**（与字段数量无关）。\n"
+        "* **存量边界**：按「规范变更的存量处理」随动迁移。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148。\n"
+        "\n== 代码复用\n* 略。\n"
+    )
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n\n"
+        "== 对象转换（MapStruct）\n"
+        "对象转换按通用编码规范的「对象转换（多层嵌套对象的转换）」执行"
+        "（见 link:../general/coding.adoc[]）——JVM 下**优先用 MapStruct**、**建议不手写转换代码**。\n"
+        "* **多层嵌套对象转换优先用 MapStruct（L2，建议）**：用 MapStruct 的 `@Mapper` 映射接口声明完成；"
+        "**建议不手写转换代码**。**不做强制性限制**——深拷贝/结构复制工具、序列化中转等等价路径同样合规。\n"
+        "* **嵌套结构由映射声明表达（写法建议，非强制）**：对象含对象、集合含对象由**映射方法自动调用**"
+        "或集合映射方法表达；手写循环不构成违规。\n"
+        "* **不并存两套写法（先例优先）**：项目已有转换工具/既有 Converter 先例时跟随先例并在其基础上扩展。\n"
+        "* **例外与边界（L2）**：**无嵌套（单层）的转换不在本条范围内**；确需手写时在**代码注释备注原因**。\n"
+        "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「对象转换（多层嵌套对象的转换）」**："
+        "多层嵌套对象之间的转换（对象含对象/集合含对象的字段搬运、逐层 `new` 组装、手写循环转换））\n"
+        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**对象转换**："
+        "多层嵌套对象转换**优先用 MapStruct**、**建议不手写转换代码**）\n"
+    )
+
+    README = ("# README\n\n## 目录结构\n* 通用层：含**对象转换**：多层嵌套对象转换优先用声明式映射、"
+              "建议不手写逐字段搬运\n* 技术栈层：java（含**对象转换**：优先 MapStruct、建议不手写）\n")
+
+    SOURCES = (
+        "= 图书馆依据\n\n== 多层嵌套对象转换用声明式映射（MapStruct）\n"
+        "* 说明：此条为要点转述、非逐字摘录；本仓库**未逐字取回**官方原文。\n"
+        "* **须注意的语义差异（同义性）**：材料未规定必须用某库、也未规定禁止手写转换；"
+        "判据化取值属本集合的取向。\n"
+    )
+
+    ADOPTION = (
+        "= 规范准入与自身取舍\n\n== 同义性差异与覆盖点（本集合自己承认的）\n"
+        "* **多层嵌套对象转换优先声明式映射、JVM 下优先 MapStruct**是本集合自己的取向（**建议、非强制**）："
+        "用户要求「优先使用 mapstruct（jvm下），不允许手动写转换代码——不是强制，但是建议」。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_generic = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.JAVA_STACK_FILE, cm.GENERIC_FILE,
+         cm.README_FILE) = (self._orig_coding, self._orig_java, self._orig_generic,
+                            self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("README.adoc", self.README)
+        self.write("library/sources.adoc", self.SOURCES)
+        self.write("library/adoption.adoc", self.ADOPTION)
+
+    def test_valid_conversion_guard_passes(self):
+        self._write_valid()
+        cm.check_conversion_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例①：通用层条文被删 → 退回"怎么顺手怎么写"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 略。\n")
+        cm.check_conversion_guard()
+        self.assertIn("对象转换（多层嵌套对象的转换）", self.error_texts())
+
+    def test_preferred_path_removed_reports(self):
+        # 反例②：优先路径被抽掉（只剩范围与例外）→ 该条失去取向
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**首选声明式映射完成的转换**",
+                                       "**由映射声明完成的转换**")
+                   .replace("* **首选声明式映射（L2）**", "* **声明式映射（L2）**"))
+        cm.check_conversion_guard()
+        self.assertIn("首选声明式映射", self.error_texts())
+
+    def test_forced_wording_reports(self):
+        # 反例③：条文被写成强制面（用户口径是"不是强制，但是建议"）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**首选声明式映射完成的转换**",
+                                       "**一律用既有转换库的声明式映射完成，不允许手写转换代码**"))
+        cm.check_conversion_guard()
+        self.assertIn("不允许手写转换代码", self.error_texts())
+
+    def test_goal_judgement_removed_reports(self):
+        # 反例④：目标式判据被删 → 判据退回"用没用某个库"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **达标判据（本条判定的是结果，不是手段）**：同一份转换**只有一处来源**；"
+                                       "该结构增删字段、改字段时，转换处**不会静默漏字段**。"
+                                       "手写逐字段搬运在多层嵌套下达不到该判据。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("达标判据", self.error_texts())
+
+    def test_comment_reason_removed_reports(self):
+        # 反例⑤：备注原因被删 → "手写须写理由"这一动作丢失
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **除主动声明外，优先声明式映射；确需手写时须备注原因（L2）**："
+                                       "人来主动声明允许手写的按声明写；"
+                                       "否则优先走声明式映射，确需手写时在**代码注释写明原因**。"
+                                       "本条**不设强制面**。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("备注原因", self.error_texts())
+
+    def test_equivalent_path_removed_reports(self):
+        # 反例⑥：等价路径合规被删 → 该条易被读成"必须用某个库"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**优先路径不是唯一解**："
+                                       "深拷贝/结构复制工具、序列化（如 JSON）中转、手工构建器等等价路径同样合规，"
+                                       "判据按下条。", ""))
+        cm.check_conversion_guard()
+        self.assertIn("等价路径同样合规", self.error_texts())
+
+    def test_scope_by_field_count_reports(self):
+        # 反例⑦：范围被抄窄成按字段数判（用户口径是"无嵌套（单层）不管"）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**无嵌套（单层）的转换不在本条范围内**",
+                                       "**单层、两三个字段的转换不在本条强制面**"))
+        cm.check_conversion_guard()
+        self.assertIn("字段", self.error_texts())
+
+    def test_exception_clause_removed_reports(self):
+        # 反例⑧：例外条被删 → 既有做法被一刀切
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **例外与边界（L2）**：①映射声明表达不了的语义不在本条适用，"
+                                       "可在映射声明内以自定义方法承接；"
+                                       "②**无嵌套（单层）的转换不在本条范围内**（与字段数量无关）。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("例外与边界（L2", self.error_texts())
+
+    def test_general_layer_framework_name_reports(self):
+        # 反例⑨：通用层点名 MapStruct → 对非 JVM 项目不成立（替换主语测试失败）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("由转换库的映射声明完成。", "由 MapStruct 的 `@Mapper` 映射声明完成。"))
+        cm.check_conversion_guard()
+        self.assertIn("MapStruct", self.error_texts())
+
+    def test_java_stack_missing_reports(self):
+        # 反例⑩：Java 栈落点缺失 → Java 执行者按栈文件学仍会手写转换
+        self._write_valid()
+        os.remove(cm.JAVA_STACK_FILE)
+        cm.check_conversion_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_java_stack_not_pointing_general_reports(self):
+        # 反例⑪：栈层不指向通用条 → 通用层判据与例外在栈层读不到
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 对象转换（MapStruct）\n"
+                   "* 多层嵌套对象转换优先用 MapStruct、建议不手写转换代码。\n")
+        cm.check_conversion_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_java_stack_forced_wording_reports(self):
+        # 反例⑫：栈层回退成强制面（"不允许手写转换代码"）→ 与用户口径相抵
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("**建议不手写转换代码**。**不做强制性限制**",
+                                     "**不允许手写转换代码**"))
+        cm.check_conversion_guard()
+        self.assertIn("不允许手写转换代码", self.error_texts())
+
+    def test_java_stack_nesting_clause_removed_reports(self):
+        # 反例⑬：嵌套/集合由映射方法表达的推荐写法被删 → 多层嵌套靶心无处落
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **嵌套结构由映射声明表达（写法建议，非强制）**：对象含对象、"
+                                     "集合含对象由**映射方法自动调用**或集合映射方法表达；手写循环不构成违规。\n",
+                                     ""))
+        cm.check_conversion_guard()
+        self.assertIn("映射方法自动调用", self.error_texts())
+
+    def test_dispatcher_registration_removed_reports(self):
+        # 反例⑭：调度器识别特征被删 → 该条永远不会被触发加载（写了等于没写）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+                   "  ** Java 项目 → link:specs/stack/java.adoc[]\n")
+        cm.check_conversion_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_general_entry_framework_name_reports(self):
+        # 反例⑮：通用层调度条目带框架专名 → 非 JVM 项目也被带入该库术语、与归属层冲突
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「对象转换（多层嵌套对象的转换）」**："
+                   "多层嵌套对象之间的转换用 `MapStruct` 的 `@Mapper` 映射接口）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**对象转换**："
+                   "多层嵌套对象转换**优先用 MapStruct**、**建议不手写转换代码**）\n")
+        cm.check_conversion_guard()
+        self.assertIn("MapStruct", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑯：README 目录说明未同步（或仍写"不允许手写"）→ 公开面口径与条文不一致
+        self._write_valid()
+        self.write("README.adoc", "# README\n\n## 目录结构\n* 通用层：通用编码\n")
+        cm.check_conversion_guard()
+        self.assertIn("对象转换", self.error_texts())
+
+    def test_library_basis_missing_reports(self):
+        # 反例⑰：图书馆依据落点缺该条（依据只剩名称）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 图书馆依据\n\n== 别的主题\n* 略。\n")
+        cm.check_conversion_guard()
+        self.assertIn("library/sources.adoc", self.error_texts())
+
+    def test_library_adoption_note_removed_reports(self):
+        # 反例⑱：本集合取向未登记 → 读者会把本集合的建议读成标准规定
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 规范准入与自身取舍\n\n== 同义性差异\n* 略。\n")
+        cm.check_conversion_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+
 class TestCheckWiringGuard(CheckSpecsTestCase):
     """钉住『防线接线完整性』：每个 `check_*` 都必须被 main() 真正调用。
 
