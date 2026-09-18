@@ -3539,6 +3539,66 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.assertIn("README.adoc", self.error_texts())
 
 
+class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
+    """钉住『变更日志登记时机防线』（用户明确提出：changelog 仅在明确要求时追加）。
+
+    失效形态（本项目实证）：执行者把"我改动了东西"与"该记一条 changelog"画等号，
+    每轮改动都自行追加条目——而本仓库的 changelog 不是自动追加区。
+    """
+
+    def _write_valid(self):
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 登记时机：**changelog 条目仅在用户明确要求时追加**——"
+                   "用户未明确要求时**一律不写、不改**本文件（含为本次改动顺手补一条）。"
+                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        self.write("script/check_effective.py",
+                   "ROWS = [\n"
+                   "    (\"本仓库 changelog 条目仅在用户明确要求时追加\",\n"
+                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "     \"check_changelog_timing_guard 钉住登记时机条\"),\n"
+                   "]\n")
+
+    def _patch_root(self):
+        # check_effective.py 按 REPO_ROOT 解析，直接写入临时根即可
+        pass
+
+    def test_valid_changelog_timing_guard_passes(self):
+        self._write_valid()
+        cm.check_changelog_timing_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_timing_clause_reports(self):
+        # 反例：登记时机条被删（执行者重新把"改了东西"与"该记一条"画等号）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目入口\n\n* 统一变更日志：根目录 `CHANGELOG.adoc`。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("登记时机", self.error_texts())
+
+    def test_default_action_wording_removed_reports(self):
+        # 反例：只留"仅在明确要求时追加"、删掉"未明确要求时一律不写、不改"
+        # （默认动作缺位＝执行者仍可自称"我以为这属于明确要求"）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 登记时机：**changelog 条目仅在用户明确要求时追加**。"
+                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("一律不写、不改", self.error_texts())
+
+    def test_missing_agents_file_reports(self):
+        # 反例：项目规范入口被删（条目无处承载）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "AGENTS.adoc"))
+        cm.check_changelog_timing_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_effective_registry_missing_reports(self):
+        # 反例：check_effective 未登记该条（定义了却没抓手＝又变成靠自觉）
+        self._write_valid()
+        self.write("script/check_effective.py", "ROWS = []\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("check_effective.py", self.error_texts())
+
+
 class TestCheckChecklistGuard(CheckSpecsTestCase):
     """钉住"清单逐项"与"文档-脚本一致性"（补独立复核指出的两类漏检）。
 

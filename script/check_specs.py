@@ -100,6 +100,7 @@
      `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
      也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
      纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
+ 30b. 变更日志登记时机：`AGENTS.adoc` 须写明 **changelog 条目仅在用户明确要求时追加**、用户未明确要求时**一律不写不改**（含顺手补一条），且 `script/check_effective.py` 登记该条——防执行者把『改了东西』与『该记一条』画等号、条目随每轮任务自发生长（用户明确提出的口径；本仓库 changelog 不是自动追加区）。
  31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`），
      条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。
@@ -6209,6 +6210,59 @@ def check_delivery_guard():
     phase_done()
 
 
+def check_changelog_timing_guard():
+    """『变更日志登记时机防线』：changelog 条目**仅在用户明确要求时**追加（本仓库特有）。
+
+    背景（用户明确提出的口径）：执行者习惯把"我改动了东西"与"该记一条 changelog"画等号，
+    每轮改动都自行追加条目。而本仓库的 changelog **不是自动追加区**——追加与否由用户决定。
+    缺这条时：条目会随每轮任务自发生长（对外承诺被单方面扩写、版本线被自认推进），
+    且新条目本身又会被后手当成"对外已发布"继续加码。
+
+    本防线钉住（本仓库自己维护的文本，不触碰引用方工作区）：
+      * **登记时机条**（`AGENTS.adoc`「版本与变更记录（本仓库落点）」）：须写明
+        ①只在用户明确要求时追加；②未明确要求时**一律不写、不改**（含"顺手补一条"）；
+        ③由本防线的抓手钉住——防该条被删或被降级成建议；
+      * **抓手登记**：`script/check_effective.py` 须登记该条（定义写了却没抓手＝这条又变成
+        "靠自觉"，与它要治的失效同形）。
+
+    只钉"要求文本仍在"——"某次到底有没有自行追加"属运行时行为（提交内容与评论记录），
+    机械无法判定，交人/子 agent 复核。
+    """
+    phase("变更日志登记时机防线检查")
+    rel_agents = "AGENTS.adoc"
+    path_agents = os.path.join(REPO_ROOT, rel_agents)
+    if not os.path.isfile(path_agents):
+        err(f"缺少项目规范入口 {rel_agents}——changelog 登记时机条无处承载", rel_agents)
+    else:
+        atext = open(path_agents, encoding="utf-8").read()
+        for keys, desc in (
+            (("登记时机", "changelog 条目仅在用户明确要求时追加", "一律不写、不改",
+              "check_changelog_timing_guard"),
+             "须有『登记时机：changelog 条目仅在用户明确要求时追加』条，且写明"
+             "『用户未明确要求时一律不写、不改（含为本次改动顺手补一条）』与本防线抓手名"
+             "——防该条被删或被降级成建议（执行者会重新把『改了东西』与『该记一条』画等号，"
+             "条目随每轮任务自发生长）"),
+        ):
+            missing = [k for k in keys if k not in atext]
+            if missing:
+                err(f"变更日志登记时机防线被破坏：{rel_agents} 缺失要点 {missing}——{desc}",
+                    rel_agents)
+    rel_eff = os.path.join("script", "check_effective.py")
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_eff)):
+        etext = open(os.path.join(REPO_ROOT, rel_eff), encoding="utf-8").read()
+        for keys, desc in (
+            (("check_changelog_timing_guard", "仅在用户明确要求时追加"),
+             "须登记该条（定义了却没抓手＝这条又变成靠自觉，与它要治的失效同形）"),
+        ):
+            missing = [k for k in keys if k not in etext]
+            if missing:
+                err(f"变更日志登记时机防线被破坏：{rel_eff} 缺失要点 {missing}——{desc}",
+                    rel_eff)
+    else:
+        err(f"缺少 {rel_eff}——『定义未执行』登记处缺失，本条成为无抓手条款", rel_eff)
+    phase_done()
+
+
 # 『提示词取值路径与装配状态防线』要点（须同时命中多处要素，否则别处一句同名字样即可假绿）
 PROMPT_SURFACE_GUARD_KEYS = (
     (("查看与复制方式", "按取值路径判断", "只在 AsciiDoc 处理器", "不是"),
@@ -6477,6 +6531,7 @@ def main(argv=None) -> int:
     check_comment_dispatch_guard()
     check_self_dispatch_guard()
     check_delivery_guard()
+    check_changelog_timing_guard()
     check_prompt_delivery_surface_guard()
     check_prompts_index_guard()
     check_api_contract_reuse_guard()
