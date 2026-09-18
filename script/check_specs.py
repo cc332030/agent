@@ -269,6 +269,16 @@
      只有一处来源、结构变化不静默漏字段；无嵌套单层不在范围内）。`specs/general/coding.adoc`
      「对象转换（多层嵌套对象的转换）」只留跨语言抽象、**不得出现框架专名**；框架专名与写法落在
      `specs/stack/java.adoc`「对象转换（MapStruct）」。
+ 46. 构造方法不手写（优先 lombok）防线（**用户提出的规范调整**）：**无参、必参、全参构造
+     （所有参）一律优先用 lombok 而不是手写**——三种构造分别对应 `@NoArgsConstructor`、
+     `@RequiredArgsConstructor`、`@AllArgsConstructor`，同时需要多个即**同时标多个注解**；
+     判据是"类中出现手写的构造方法、而该构造可由注解表达"即违规。落点在
+     `specs/stack/java.adoc`「编码」（L1）：含三种构造注解、并存写法、判定标准、例外
+     （构造期校验/规范化/防御性拷贝这类注解表达不了的动作才可手写，须写明原因）与存量边界；
+     调度器（`AGENTS_COMMON.adoc` 的 Java 技术栈条目）与 `README.adoc` 目录说明须带识别特征——
+     缺则该条永不被触发加载。失效形态是"类上已标 `@Data`、仍另写无参/全参构造"：同一构造
+     出现两个来源、字段增删时改一处而另一处静默过期。只钉"条文、三种注解、判据、例外与
+     措辞是否仍在"——"某个具体类该不该手写构造"属语义判断，交人/子 agent 复核。
  47. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
      提到某个类型时**优先写类名 + `import`、不写类全名**（用户举例：
      `com.c332030.ctool4j.core.exception.CUnauthorizedException`）。通用层落点为
@@ -4655,6 +4665,98 @@ def check_reuse_precedent_guard():
     phase_done()
 
 
+# 无参/必参/全参构造优先用 lombok、不手写（`specs/stack/java.adoc`「编码」L1）：用户提出的
+# 规范调整——**无参、必参、所有参（全参）优先使用 lombok 而不是手写**。失效形态是"顺手手写
+# 构造方法"：`@Data` 已经在类上，却另写一个无参/全参构造——同一构造出现两个来源（改字段时
+# 只改一处，另一处静默过期），且样板代码遮蔽真实差异。缺这条时，lombok 注解反复被"手写更直观"
+# 顶掉，`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 形同虚设。
+# **本条为 L1 且不设存量一次性替换**（随动迁移），故防线只钉"条文、三种构造注解、判定标准、
+# 例外与存量边界仍在，且措辞未回退成'建议'"——"某个具体类该不该手写构造"属语义判断
+# （取决于该类是否需要在构造期做校验/规范化/防御性拷贝），交人/子 agent 复核。
+
+
+def check_lombok_constructor_guard():
+    """『构造方法不手写、优先 lombok 防线』：无参/必参/全参构造一律由 lombok 注解生成。
+
+    背景（用户提出的规范调整）：**无参、必参、所有参优先使用 lombok 而不是手写**。缺这条时，
+    类上已标 `@Data`，执行者仍会另写构造方法——**同一构造出现两个来源**（字段增删时改一处、
+    另一处静默过期），且样板代码把"这个类真正的差异在哪"遮住（ISO/IEC 25010 可维护性）。
+    最易被三件事冲掉：
+      * **条文被删或被降级成建议**——"尽量用 lombok"读起来无害，于是"手写更直观"重新成立；
+      * **三种构造注解只留一半**——只写 `@AllArgsConstructor` 而漏掉无参与必参的对应注解，
+        执行者遇到无参/必参构造时无处可依，只能手写；
+      * **例外被写宽**——"注解表达不了"若不限定在"构造期校验/规范化/防御性拷贝"这类动作上，
+        就变成随时可套用的豁免口（本集合既有失效形态）。
+
+    只钉"要求文本仍在、且落在该落点、三种注解与判据未丢、措辞未回退"——
+    "某个具体类该不该手写构造"属语义判断，交人/子 agent 复核。
+    """
+    phase("构造方法不手写（优先 lombok）防线检查")
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——『构造方法优先 lombok』的落点丢失"
+            "（该条是 Java 栈专属，须收在技术栈层而非通用层）", rel_java)
+    else:
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("无参 / 必参 / 全参构造优先用 lombok、不手写", "L1"),
+             "条文：须有该条并标 L1（防被降级成建议——『尽量用 lombok』读起来无害，"
+             "于是『手写更直观』重新成立）"),
+            (("@NoArgsConstructor",),
+             "无参构造：须点明用 `@NoArgsConstructor`，否则遇到无参构造时无落点"),
+            (("@RequiredArgsConstructor",),
+             "必参构造：须点明用 `@RequiredArgsConstructor`（用户明确要求『必参』这一档），"
+             "否则执行者只记得全参、必参构造仍手写"),
+            (("@AllArgsConstructor",),
+             "全参构造：须点明用 `@AllArgsConstructor`"),
+            (("同时标多个构造注解",),
+             "并存：须写明同时需要多个构造时**同时标多个注解**，"
+             "否则会为『合并成一个手写构造』而放弃注解"),
+            (("判定标准", "手写的构造方法"),
+             "判定标准：须写明『类中出现手写的构造方法且可由注解表达』即违规，"
+             "否则只剩一句口径、读者无法判断自己是否命中"),
+            (("例外（L2", "注释"),
+             "例外：须有例外条并限定在『注解表达不了的动作』（校验/规范化/防御性拷贝）、"
+             "且须写明原因；缺例外条会把既有正当做法一刀切"),
+            (("存量", "execution.adoc"),
+             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造）"),
+            (("依据", "ISO/IEC 25010"),
+             "依据行：须保留标准名/编号（依据不得只剩名称、也不得整段删除）"),
+        ):
+            missing = [k for k in keys if k not in jt]
+            if missing:
+                err(f"构造方法不手写防线被破坏：{rel_java} 缺失要点 {missing}——{desc}",
+                    rel_java)
+        # 措辞不得回退成建议（L1 是用户口径：优先 lombok 而不是手写）
+        for token in ("尽量用 lombok", "建议优先用 lombok", "可手写构造方法", "允许手写构造方法"):
+            if token in jt:
+                err(f"构造方法不手写防线被破坏：{rel_java} 出现回退措辞 `{token}`——"
+                    "MUST 级要求不得被压成『建议/尽量』", rel_java)
+    # 加载调度器：Java 技术栈登记须带该条识别特征（否则按栈登记加载时看不到这条）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        ctext = open(GENERIC_FILE, encoding="utf-8").read()
+        missing = [k for k in ("构造方法不手写", "NoArgsConstructor",
+                               "RequiredArgsConstructor", "AllArgsConstructor")
+                   if k not in ctext]
+        if missing:
+            err(f"构造方法不手写防线被破坏：{rel_common} 缺失要点 {missing}——"
+                "Java 技术栈登记须带该条识别特征（含三个构造注解），"
+                "否则 Java 项目按栈登记加载时看不到这条", rel_common)
+    # 公开说明同步（README 的目录说明）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(README_FILE):
+        err(f"缺少目录说明 {rel_readme}", rel_readme)
+    else:
+        rtext = open(README_FILE, encoding="utf-8").read()
+        if "构造方法不手写" not in rtext:
+            err(f"构造方法不手写防线被破坏：{rel_readme} 目录说明未同步该条——"
+                "读者从目录说明看不到这条存在", rel_readme)
+    phase_done()
+
+
 # 文档中类型指代的写法（`specs/general/doc.adoc`「文档中提及类型优先写类名 + import，
 # 不写类全名」L2 + `specs/stack/java.adoc`「javadoc」的 Java 落点）：用户提出的规范要求——
 # 文档里优先写**类名 + import**，而不是**类全名**（举例：`com.c332030.ctool4j.core.exception.CUnauthorizedException`）。
@@ -6668,6 +6770,7 @@ def main(argv=None) -> int:
     check_api_naming_guard()
     check_persistence_access_guard()
     check_conversion_guard()
+    check_lombok_constructor_guard()
     check_doc_type_notation_guard()
     check_dev_flow_guard()
     check_checklist_guard()
