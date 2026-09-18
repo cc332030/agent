@@ -210,6 +210,18 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
+ 44. 运行环境须与项目声明一致防线（**用户提出的硬性要求**）：`specs/general/ci-cd.adoc`
+     的「运行环境须与项目声明一致」须仍在且齐备 L1 标注、判据两句（"即使换一个版本也能跑通流程，
+     也不得换" + "所用版本与项目声明不一致即违规"）、**声明落点**（取项目已有声明、不得另立
+     第二真源）、**降级路径**（未声明先确认 / 声明环境不可得时如实说明并标未确证、不得记为通过 /
+     临时诊断结论须回声明环境复核）与依据行；必加载层 `specs/core/execution.adoc`、
+     `specs/general/verify.adoc`（验证）与 `specs/general/planning.adoc`（基线）各须有一处引用；
+     `AGENTS_COMMON.adoc` 调度器须有本条的加载项与识别特征（项目有声明运行环境的落点、要跑
+     构建/测试/脚本）；`AGENTS.adoc` 工具声明清单与 `library/adoption.adoc` 的同义性差异同步
+     ——防"按能跑通选版本""用等价/兼容版本顶替""声明不可得就用默认版本并把结论记成通过"
+     重回默认做法（用户提出的要求：开发与验证须严格使用项目声明的那一个运行环境，严禁用
+     别的版本，即使能正常跑通流程）。
+
  43. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
      同一文件在一次改动里既重命名、又改内容时，`specs/general/git.adoc` 的
      「重命名与内容修改须分两个提交（默认固定动作）」须整节齐备（一句话规则、适用对象与判定标准、
@@ -2899,6 +2911,17 @@ def check_checklist_guard():
 
 # 『重命名与内容修改须分两个提交防线』要点（每条须同时命中多处要素，否则别处一句同名字样即可假绿）
 # 本节的条目轴（小标题）——逐项须在，防"整条 bullet 被摘掉、正文并入相邻条目"这一形态
+# 『运行环境须与项目声明一致』（`specs/general/ci-cd.adoc`）——用户提出的硬性要求：
+# 项目里声明的运行环境（jdk1.8、python2 等）就是开发与验证**唯一**可用的环境，
+# **换个版本也能跑通也不得换**。本条最易被三条路径绕过——①"另一个版本也跑通了"（结果导向
+# 的自我豁免）、②用等价/兼容/近似版本顶替（大版本相同即可自圆其说）、③环境声明缺失或不可得
+# 时直接用环境默认版本开工并记作通过。故机械钉住：条文与 L1 标注、判据形态（"不一致即违规"
+# 与"能跑通不是理由"两句须在）、**声明落点**（取项目已有声明、不得另立第二真源）、
+# **降级路径**（未声明先确认 / 不可得时标未确证、不得记为通过）、依据行，以及三处引用
+# （必加载层、验证、基线）与调度器两处识别特征——它们缺一，本条就只在 CI 场景生效或读不到。
+# 判据能否覆盖"某个具体项目该怎么取版本"属语义判断，交人/子 agent 复核。
+RUNTIME_ENV_SECTION = "运行环境须与项目声明一致"
+
 RENAME_SPLIT_ITEM_LABELS = (
     "**一句话规则**",
     "**适用对象与判定标准（L1，默认固定动作）**",
@@ -3054,6 +3077,136 @@ def check_rename_split_guard():
                 "（清单被加了一项而概览未同步，读者按概览核对会漏项）", rel_priority)
     else:
         err(f"缺少 {rel_priority}——P7 的不可降级登记无从核对", rel_priority)
+    phase_done()
+
+
+def check_runtime_env_guard():
+    """『运行环境须与项目声明一致』防线：用户提出的硬性要求不得被删或降级。
+
+    背景（用户提出）：各项目都会声明自己使用的运行环境（如 jdk1.8、python2），**开发与验证
+    必须严格使用完全相同的环境**，**严禁**用别的版本——**即使换个版本也能正常跑通流程**。
+    缺这条时，执行者会按"能跑通就行"选版本（用环境默认版本或最新版本试探），产物与验证结论
+    都不可信；而"能用"恰恰是最难反驳的自我豁免理由，故须把判据与"能跑通不是理由"一起钉住。
+
+    本防线钉住**六处**（只钉"要求文本仍在"）：
+      * `specs/general/ci-cd.adoc`「运行环境须与项目声明一致」整节要点（L1 标注、判据两句、
+        声明落点、降级路径、依据行）；
+      * 必加载层 `specs/core/execution.adoc` 的一行引用（该层每次会话无条件加载）；
+      * `specs/general/verify.adoc`（验证）与 `specs/general/planning.adoc`（基线）各一处引用
+        ——缺则本条只在流水线场景生效；
+      * `AGENTS_COMMON.adoc` 的调度器识别特征（缺则该条永远不会被触发加载）；
+      * `AGENTS.adoc`（维护方工具声明）与 `library/adoption.adoc`（同义性差异）的落点。
+
+    "某次到底用了哪个版本"属运行时事实（引用方环境与提交记录），机械无法判定，交人/子 agent
+    复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("运行环境须与项目声明一致防线检查")
+    rel_ci = "specs/general/ci-cd.adoc"
+    path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel_ci}——『运行环境须与项目声明一致』失去权威定义落点", rel_ci)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"^== " + re.escape(RUNTIME_ENV_SECTION) + r".*?(?=\n== |\Z)",
+                  text, re.M | re.S)
+    if m is None:
+        err(f"{rel_ci} 未找到「{RUNTIME_ENV_SECTION}」一节——用户提出的"
+            "『严格使用项目声明的那一个运行环境、严禁用别的版本』失去落点"
+            "（不得删除、不得降级为建议）", rel_ci)
+        phase_done()
+        return
+    section = m.group(0)
+    for keys, desc in (
+        (("（L1）", "严禁"), "条文须标注 L1 并保留『严禁/不得』的强制用语"),
+        (("也能正常跑通流程，也不得换", "能跑通"),
+         "须写明『即使换个版本也能跑通也不得换』——缺这句则本条最易被「能跑通」合理化掉"),
+        (("判定标准", "与项目声明**不一致**", "任一命中即违规"),
+         "判定标准须可逐条核对（执行所用版本与项目声明不一致即违规 + 任一命中即不合规）"
+         "——只留一句口号则无法判定是否被遵守"),
+        (("声明落点", "不得**为满足本条另建一份版本声明"),
+         "声明落点须写明取项目**已有声明**、不得另立第二真源（多一份必然漂移，"
+         "且会出现两个互相冲突的版本来源）"),
+        (("降级路径", "未声明", "未确证", "不得记为通过"),
+         "须写明降级路径（未声明先确认 / 声明环境不可得时如实说明并把结论标未确证、"
+         "不得记为通过 / 临时诊断结论须回声明环境复核）——缺则本条会把引用方卡死在"
+         "装不出声明环境的场景上，或让「用别的版本跑绿」被记成通过"),
+        (("依据", "ISO/IEC/IEEE 29148", "The Twelve-Factor App"),
+         "依据行须在（依据可压成标准名/编号，但不得整段删除）"),
+    ):
+        missing = [k for k in keys if k not in section]
+        if missing:
+            err(f"运行环境防线被破坏：{rel_ci} 的「{RUNTIME_ENV_SECTION}」缺失要点 {missing}"
+                f"——{desc}；本条是用户明确提出的硬性要求（L1），不得删除、不得降级", rel_ci)
+
+    # 三处引用：必加载层、验证、基线
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
+    if os.path.isfile(exec_path):
+        with open(exec_path, encoding="utf-8") as fh:
+            exec_text = fh.read()
+        for keys, desc in ((("运行环境", "项目声明", "不得换"), rel_ci),
+                           ((RUNTIME_ENV_SECTION,), rel_ci)):
+            missing = [k for k in keys if k not in exec_text]
+            if missing:
+                err(f"运行环境防线被破坏：{rel_exec} 缺失 {missing}——必加载层须有一行引用"
+                    f"（该层每次会话无条件加载；缺则本条在非流水线场景读不到）：见 {desc}",
+                    rel_exec)
+    else:
+        err(f"缺少 {rel_exec}——运行环境条在必加载层的引用无从核对", rel_exec)
+
+    for rel, key, desc in (
+        ("specs/general/verify.adoc", RUNTIME_ENV_SECTION,
+         "验证侧须指向本条（验证时的环境一致性是验证成立的前提）"),
+        ("specs/general/planning.adoc", "基线",
+         "基线侧须指向本条（基线必须在项目声明的环境下取得，否则统计不可比）"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——运行环境条在该处的引用无从核对", rel)
+            continue
+        with open(fp, encoding="utf-8") as fh:
+            body = fh.read()
+        if RUNTIME_ENV_SECTION not in body:
+            err(f"运行环境防线被破坏：{rel} 未指向「{RUNTIME_ENV_SECTION}」——{desc}",
+                rel)
+
+    # 调度器识别特征：有声明落点/要跑构建测试即加载（缺则该条永远不会被触发加载）
+    common_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
+    if os.path.isfile(common_path):
+        with open(common_path, encoding="utf-8") as fh:
+            common = fh.read()
+        for keys, desc in ((("识别特征", RUNTIME_ENV_SECTION),
+                            "加载调度器须有本条的加载项与识别特征（如项目有声明运行环境的落点、"
+                            "要跑构建/测试/脚本）——缺则该条永远不会被加载，规则实际失效"),
+                           (("换个版本也能跑通",), "调度器条目须保留「换版本也能跑通也不得换」的口径"),
+                           (("java.version", ".nvmrc", "python-version"),
+                            "调度器条目须点出声明落点的常见形态（否则执行者不知道去哪取值）")):
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"运行环境防线被破坏：AGENTS_COMMON.adoc 缺失 {missing}——{desc}",
+                    "AGENTS_COMMON.adoc")
+    else:
+        err("缺少 AGENTS_COMMON.adoc——运行环境的调度器登记无从核对", "AGENTS_COMMON.adoc")
+
+    # 维护方落点：工具声明清单 + 依据入馆（同义性差异：本条严于标准）
+    for rel, keys, desc in (
+        ("AGENTS.adoc", (RUNTIME_ENV_SECTION, "运行环境防线"),
+         "维护方工具声明清单须登记该防线（文档↔脚本一致）"),
+        ("library/adoption.adoc", (RUNTIME_ENV_SECTION, "同义性差异"),
+         "依据图书馆须记该条的同义性差异（本条严于外部材料：标准未规定「必须使用声明的那一个"
+         "环境」，属本集合的判据化取舍）"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——运行环境条的落点无从核对", rel)
+            continue
+        with open(fp, encoding="utf-8") as fh:
+            body = fh.read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"运行环境防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
     phase_done()
 
 
@@ -6035,7 +6188,8 @@ def main(argv=None) -> int:
                     "历史来源/INSTALL 模板/文档注水/git mv/要点防线/规范准入/自检/来源/任务生命周期/"
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
                     "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作/"
-                    "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + AsciiDoc 语法）")
+                    "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + "
+                    "运行环境须与项目声明一致 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
@@ -6100,6 +6254,7 @@ def main(argv=None) -> int:
     check_dev_flow_guard()
     check_checklist_guard()
     check_rename_split_guard()
+    check_runtime_env_guard()
     check_wiring_guard()
     check_asciidoctor_syntax()
 
