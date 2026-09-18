@@ -33,7 +33,9 @@
      "外部标准只写名称/编号""不得编造""宁可不引"要点不得被删。
  16. Java 测试类命名防线：AGENTS_COMMON.adoc 的 Java 技术栈登记与 specs/stack/java-testing.adoc
      必须同时含四类后缀判据（`Tests`/`BootTests`/`PerfTests`/`IT`），防四类命名契约的口径在
-     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）。
+     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）；另钉测试类**拆分裁决**
+     三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不
+     得滥拆」是单一语义，只剩一半即会被读成"每个场景一个类"或"一个被测类一个类"。
  17. 换行符防线：specs/general/encoding.adoc 必须仍按解释器分流行尾——`LF` 基准、`.bat`/`.cmd`
      必须 `CRLF`，且保留检出归一（`core.autocrlf`）与 `.gitattributes`、`.editorconfig` 两个
      落盘约定；脚本技术栈文件（bash/python/powershell）也须各自写明行尾要求，防"Windows 批处理
@@ -260,6 +262,12 @@
      `library/adoption.adoc` 的「本集合自己承认的更严取舍」须登记两条——防「另建一套更省事」与
      「下划线与驼峰混用」重回默认做法（用户提出的真实失效：同一数据契约出现两个定义、路径风格混用）。
 
+ 45. 对象转换防线（**用户提出的建议层要求**）：多层嵌套对象之间的转换**优先**用**声明式映射**
+     完成、**建议不手写转换代码**，JVM 下优先 MapStruct——**不是强制、但是建议**（用户明确要求
+     不做强制性限制：深拷贝/结构复制工具、序列化中转等等价路径同样合规；判据按目标判——同一转换
+     只有一处来源、结构变化不静默漏字段；无嵌套单层不在范围内）。`specs/general/coding.adoc`
+     「对象转换（多层嵌套对象的转换）」只留跨语言抽象、**不得出现框架专名**；框架专名与写法落在
+     `specs/stack/java.adoc`「对象转换（MapStruct）」。
  40. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
      （也不得转由他人/其他执行者代发）——`specs/platform/cnb.adoc`「评论唤起新实例
      （平台侧的派发入口）」须有该 L1 条（含判定标准四态：新增评论指向本次唤起名 /
@@ -344,6 +352,14 @@ SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
 JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
 # 四类测试后缀（全项目统一命名契约，不得自创变体）
 JAVA_TEST_SUFFIXES = ("Tests", "BootTests", "PerfTests", "IT")
+# 测试类拆分裁决契约（一个被测类可拆多个类，但只按需求/分类拆、不得滥拆）：
+# 规范侧须留的三段判据——可拆声明 / 同分类同属性须归一类 / 禁止滥拆。
+# 这三段是**单一语义**（"可拆但不得滥拆"）的判据，被删或被改成"只准一个测试类"即口径漂移。
+JAVA_TEST_SPLIT_MARKERS = {
+    "可拆声明": ("可拆成多个测试类",),
+    "同分类或同属性须归一类": ("分类或属性相同", "归入同一个测试类"),
+    "禁止滥拆": ("禁止滥拆", "不得为"),
+}
 # 验证规范（通用层）：其「验证总纲」「规范验证」两节是**改完规范后的语义复核定式**——
 # 验证三视角（①完整性 / ②有效性与认知质量 / ③接纳面）、每视角的判定标准与标准出处、
 # ②的判据/依据/形态/性能四维、③的逐维判据，并定式化"三视角由同一个干净子 agent 一并
@@ -415,6 +431,8 @@ CONTRACT_REUSE_SECTION = "跨服务/对外调用的请求响应类优先移动�
 API_PATH_DASH_SECTION = "HTTP 接口路径优先用中划线（kebab-case）"
 EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）"
 JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
+CONVERSION_SECTION = "对象转换（多层嵌套对象的转换）"
+JAVA_CONVERSION_SECTION = "对象转换（MapStruct）"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
 JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
@@ -1738,16 +1756,22 @@ def check_line_ending_guard():
 
 
 def check_java_test_naming():
-    """『Java 测试类命名防线』：四类测试后缀的判据不得在任一处被删或漂移。
+    """『Java 测试类命名防线』：四类测试后缀与测试类拆分裁决的判据不得在任一处被删或漂移。
 
-    背景：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的执行边界绑定**——
-    `Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行（`IT` 还须与 Maven
-    Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：调度器的 Java 技术栈登记
-    （检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc` 正文；任一处漏掉某类后缀，
-    引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/误跳过）。故机械钉住**两侧都
-    含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据），防"精简/去重"时口径漂移。
+    背景一（后缀契约）：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的
+    执行边界绑定**——`Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行
+    （`IT` 还须与 Maven Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：
+    调度器的 Java 技术栈登记（检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc`
+    正文；任一处漏掉某类后缀，引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/
+    误跳过）。故机械钉住**两侧都含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据）。
 
-    只钉"四类后缀判据在两侧都存在"，后缀的语义与取舍是否被实质削弱仍由人/子 agent 复核承担。
+    背景二（拆分裁决）：一个被测类**不要求只有一个测试类**——可按需求/分类拆成多个，但
+    **分类或属性相同的用例必须归入同一个类**、不得按场景滥拆。这条是**单一语义**，写在
+    一处、漏一半即两边都会读错：只留"可拆"会放任"每个场景一个类"，只留"合并"会退回
+    "一个被测类一个测试类"。故规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）
+    与调度器侧的拆分口径一并钉住。
+
+    只钉"判据在两侧都存在"，后缀的语义、某次拆分是否真由分类驱动仍由人/子 agent 复核承担。
     """
     phase("Java 测试类命名防线检查")
     rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
@@ -1766,6 +1790,12 @@ def check_java_test_naming():
                           ("常规", "类别与执行阶段的绑定口径")):
             if key not in text:
                 err(f"Java 测试类命名防线被破坏：{rel} 缺失『{key}』（{desc}）", rel)
+        # 拆分裁决：一个被测类可拆多个测试类，但只按需求/分类拆、不得滥拆——三段判据缺一
+        # 即口径只剩一半（只剩"可拆"会放任滥拆，只剩"合并"会退回"一个被测类一个测试类"）。
+        for part, anchors in JAVA_TEST_SPLIT_MARKERS.items():
+            if not all(a in text for a in anchors):
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失拆分裁决『{part}』判据——"
+                    "『可拆但不得滥拆』只剩一半（要么放任滥拆、要么退回一个被测类一个测试类）", rel)
     # 调度器的 Java 技术栈登记须与该契约一致（只说一半会让引用方学不全）
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         generic = fh.read()
@@ -1779,6 +1809,11 @@ def check_java_test_naming():
             err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
                 f"『{'/'.join(missing)}』后缀——调度器与该命名契约口径漂移"
                 "（引用方照调度器学习会漏掉该类测试）", "AGENTS_COMMON.adoc")
+        if "滥拆" not in java_line or "多个测试类" not in java_line:
+            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
+                "「一个被测类可按需求/分类拆多个测试类、且不得滥拆」的口径——"
+                "调度器只传达后缀、不传达拆分裁决，引用方照调度器学习会把"
+                "「一个被测类一个测试类」当硬规定", "AGENTS_COMMON.adoc")
     phase_done()
 
 
@@ -4607,6 +4642,202 @@ def check_reuse_precedent_guard():
     phase_done()
 
 
+def check_conversion_guard():
+    """『对象转换防线』：多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径。
+
+    背景（用户提出的规范建议）：**多层嵌套对象转换时，优先使用 mapstruct（jvm 下），
+    不允许手写转换代码——不是强制、但是建议**。用户报告的失效形态是**手写逐字段搬运**——
+    对象含对象、集合含对象时，一层层 `new` + 逐个 `set`/`get` 地组装。它的代价不是
+    "写起来啰嗦"，而是**没有编译期保障**：模型加一个字段后既不报错也不提示，只在运行期
+    表现为"某个字段一直是空"（ISO/IEC 25010 可维护性）；且同一转换在不同调用点各写一遍。
+
+    **本防线按"建议"层口径钉住（不是强制面）**——用户明确要求不做强制性限制（深拷贝/结构
+    复制工具、JSON 中转等等价路径同样可行）。故钉的是：
+      * **优先路径仍在**（"优先声明式映射 / 优先用 MapStruct"）——被删或被写成"随便写"即回退；
+      * **不得被写成强制面**（"不允许手写转换代码""一律/必须"这类硬约束重新出现即报错，
+        否则与用户口径相抵）；
+      * **无嵌套（单层）不在本条范围内**（且不得被抄窄成按字段数判，如"三字段以内不管"）；
+      * **手写须备注原因**（除主动声明外，优先声明式映射；确需手写写明原因）；
+      * **等价路径合规**（深拷贝/序列化中转/手工构建器）与**判据是目标式**（同一转换只有
+        一处来源、结构变化不静默漏字段）——缺则"用没用某个库"重新变成判据；
+      * **例外与存量不被写宽或抽掉**；
+      * **技术栈落点仍在**——Java 执行者按栈文件学，通用层有、栈层没有等于没写；
+      * **通用层不被框架专名污染**——`coding.adoc` 明说适用于所有编程语言，
+        `MapStruct`/`@Mapper`/`@Mapping` 充当规则主语时替换主语测试即失败。
+
+    只钉"要求文本仍在、且落在该落点、措辞未回退成强制面"——"某个具体转换该不该用映射库、
+    该结构能否由映射声明表达"属语义判断（取决于该库版本与实际结构），交人/子 agent 复核。
+    """
+    phase("对象转换（多层嵌套对象优先声明式映射）防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「对象转换（多层嵌套对象的转换）」的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        text = open(CODING_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            ((CONVERSION_SECTION,),
+             "条文：须有「对象转换（多层嵌套对象的转换）」节，作为该条的抽象形态落点"),
+            (("首选声明式映射", "优先"),
+             "首选路径：须写明**优先**用声明式映射完成转换（去掉优先口径即退回「怎么顺手怎么写」）"),
+            (("达标判据", "一处来源", "静默"),
+             "判据：须写明判据是**目标式**的——同一份转换只有一处来源、结构变化时不静默漏字段"
+             "（缺则判据退回「用没用某个库」）"),
+            (("主动声明", "备注原因"),
+             "备注原因：须写明除主动声明外优先声明式映射、确需手写时备注原因"
+             "（缺则「手写须写理由」这一动作丢失）"),
+            (("等价路径同样合规",),
+             "多条路径：须写明深拷贝/结构复制工具、序列化中转、手工构建器等等价路径同样合规"
+             "（缺则该条易被读成「必须用某个库」、与用户「不做强制性限制」的口径相抵）"),
+            (("无嵌套（单层）的转换不在本条范围内",),
+             "范围：须写明**无嵌套（单层）的转换不在本条范围内**"
+             "（不是例外、是本条不管；口径按嵌套判、不得按字段数判）"),
+            (("纯数据结构类",),
+             "落点：须写明映射声明不塞进纯数据结构类（与「类设计」的纯数据结构类不写逻辑一致）"),
+            (("例外与边界（L2", "表达不了"),
+             "例外与边界：须写明映射声明表达不了的语义不适用本条"
+             "——例外被写宽即等于给出一个随时可套用的豁免口"),
+            (("存量边界", "随动迁移"),
+             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
+             "否则等于静默推翻引用方既有的手写转换"),
+            (("依据", "ISO/IEC 25010"),
+             "依据行：须标标准名/编号（防依据被整段删除后无从追溯）"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"对象转换防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户提出的规范建议（多层嵌套对象转换优先用 MapStruct、"
+                    "建议不手写转换代码），不得删除、不得回退成强制面",
+                    rel_coding)
+        # 建议层口径：条文与判据不得被写成强制面（用户明确要求不做强制性限制）
+        for token in ("不允许手写转换代码", "不得手写转换代码", "一律用既有转换库"):
+            if token in text:
+                err(f"对象转换防线被破坏：{rel_coding} 出现强制措辞 `{token}`——"
+                    "用户口径是「优先用、建议不手写」（不是强制，但是建议）；"
+                    "写成硬约束即与用户「不做强制性限制」相抵，且与判据的目标式口径不一致",
+                    rel_coding)
+        # 范围不得被抄窄成按字段数判（无嵌套＝本条不管，与字段数量无关）
+        if re.search(r"三(两|个)字段|两三个字段|字段数(量)?(少于|以内|不超过)", text):
+            err(f"对象转换防线被破坏：{rel_coding} 把取值范围写成了**按字段数判**——"
+                "用户口径是「无嵌套（单层）不管」，与字段数量无关；"
+                "按字段数判会把「扁平但字段多」的对象误判进范围、也会把「嵌套但字段少」的漏掉",
+                rel_coding)
+        # 通用层不得出现框架专名（替换主语测试：本文件适用于所有编程语言）
+        for token, desc in (
+            ("MapStruct",
+             "通用层不得点名 `MapStruct`——它是具体库名，充当规则主语时该规则对非 JVM 项目"
+             "不成立（替换主语测试），且会被无条件随「编写代码」带进非 JVM 项目的上下文"),
+            ("@Mapper",
+             "通用层不得点名 `@Mapper` 一类注解——具体框架写法归技术栈层"),
+            ("@Mapping",
+             "通用层不得点名 `@Mapping` 一类注解——具体框架写法归技术栈层"),
+        ):
+            if token in text:
+                err(f"对象转换防线被破坏：{rel_coding} 出现框架专名 `{token}`——{desc}；"
+                    "通用层只留跨语言抽象，框架专名与写法下沉到 `specs/stack/` 对应文件",
+                    rel_coding)
+    # Java 栈落点：优先 MapStruct（建议）+ 嵌套/集合表达 + 不并存两套 + 非强制 + 例外 + 存量
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——对象转换的 Java 技术栈落点丢失（框架专名的唯一落点）",
+            rel_java)
+    else:
+        jtext = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            ((JAVA_CONVERSION_SECTION, "coding.adoc"),
+             "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按"
+             "栈文件学仍会手写转换）"),
+            (("优先用 MapStruct",),
+             "条文：须点名**优先**用 MapStruct（用户口径「使用 mapstruct 的优先性」）"),
+            (("建议不手写转换代码",),
+             "条文：须写明**建议**不手写转换代码（用户原文口径，非强制）"),
+            (("不做强制性限制", "等价路径同样合规"),
+             "非强制：须写明不做强制性限制、等价路径（深拷贝/序列化中转等）同样合规"
+             "——写成强制面即与用户「不是强制，但是建议」相抵"),
+            (("@Mapper",),
+             "写法落点：须给出 `@Mapper` 映射接口这一声明形态，否则读者不知道「声明在哪写」"),
+            (("映射方法自动调用",),
+             "嵌套与集合：须写明对象含对象、集合含对象由**映射方法自动调用/集合映射方法**表达"
+             "（多层嵌套这一靶心的推荐写法落点）；并须写明手写循环不构成违规"),
+            (("不并存两套写法", "先例优先"),
+             "先例优先：须写明项目已有转换工具/既有 Converter 先例时跟随先例、不新增第二套写法"),
+            (("无嵌套（单层）的转换不在本条范围内",),
+             "范围：须同步写明单层转换不在本条范围内（与通用层同口径）"),
+            (("备注", "原因"),
+             "备注原因：须写明确需手写时在代码注释写明原因（与通用层同口径）"),
+            (("例外与边界（L2",),
+             "例外须标级并写明边界（无例外条文则把既有做法一刀切）"),
+            (("存量", "execution.adoc"),
+             "存量边界：须指向「规范变更的存量处理」（随动迁移）"),
+        ):
+            missing = [k for k in keys if k not in jtext]
+            if missing:
+                err(f"对象转换防线被破坏：{rel_java} 缺失要点 {missing}——{desc}", rel_java)
+        for token in ("不允许手写转换代码", "不得手写转换代码"):
+            if token in jtext:
+                err(f"对象转换防线被破坏：{rel_java} 出现强制措辞 `{token}`——"
+                    "本集合口径是「优先用、建议不手写」（不是强制，但是建议）",
+                    rel_java)
+    # 加载调度器：通用层（去框架专名）+ Java 栈（含 MapStruct 与建议口径）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        ctext = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("多层嵌套对象", "手写"),
+             "通用层『编写代码』条目须带该条的抽象识别特征（何时命中），否则读到它的场景"
+             "（写对象转换代码）不会触发加载"),
+            (("对象转换", "MapStruct"),
+             "Java 技术栈登记须带该条识别特征（含 MapStruct 与「建议不手写转换代码」），"
+             "否则 Java 项目按栈登记加载时看不到这条"),
+        ):
+            missing = [k for k in keys if k not in ctext]
+            if missing:
+                err(f"对象转换防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+        # 通用层调度条目不得带框架专名（识别特征要触发"写转换代码"而不是"Java 项目"）
+        start = ctext.find("  ** 编写代码 →")
+        end = ctext.find("\n  ** ", start + 1)
+        if start != -1 and end != -1:
+            entry = ctext[start:end]
+            for token in ("MapStruct", "@Mapper", "@Mapping"):
+                if token in entry:
+                    err(f"对象转换防线被破坏：{rel_common} 的通用层『编写代码』调度条目"
+                        f"出现框架专名 `{token}`——通用层识别特征不得点名具体库/注解"
+                        "（否则非 JVM 项目也被带入该库术语、且与归属层冲突）",
+                        rel_common)
+    # 公开面：README 目录说明（读者按 README 学习时须能看到这条存在、且两层口径一致）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rtext = open(README_FILE, encoding="utf-8").read()
+        missing = [k for k in ("对象转换", "优先", "建议不手写") if k not in rtext]
+        if missing:
+            err(f"{rel_readme} 的目录说明未同步对象转换条（缺 {missing}）——"
+                "公开面看不到这条，或口径与条文不一致（如仍写「不允许手写」）", rel_readme)
+    # 图书馆侧：依据落点（引文/同义性/实证须可查到，且如实标注取样状态）
+    rel_sources = "library/sources.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_sources)):
+        stext = open(os.path.join(REPO_ROOT, rel_sources), encoding="utf-8").read()
+        missing = [k for k in ("多层嵌套对象转换用声明式映射", "同义性", "未逐字取回")
+                   if k not in stext]
+        if missing:
+            err(f"对象转换防线被破坏：{rel_sources} 缺失要点 {missing}——"
+                "依据落点须有该条并写明同义性差异（标准只给方向与下限、"
+                "判据化取值属本集合取舍）与如实取样状态，不得让依据只剩名称",
+                rel_sources)
+    rel_adoption = "library/adoption.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_adoption)):
+        atext = open(os.path.join(REPO_ROOT, rel_adoption), encoding="utf-8").read()
+        missing = [k for k in ("多层嵌套对象转换", "mapstruct", "建议") if k not in atext]
+        if missing:
+            err(f"对象转换防线被破坏：{rel_adoption} 缺失要点 {missing}——"
+                "「本集合自己承认的取向」一节须登记该条（防读者把它读成标准规定，"
+                "也防口径回退成强制面）",
+                rel_adoption)
+    phase_done()
+
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -6251,6 +6482,7 @@ def main(argv=None) -> int:
     check_api_contract_reuse_guard()
     check_api_naming_guard()
     check_persistence_access_guard()
+    check_conversion_guard()
     check_dev_flow_guard()
     check_checklist_guard()
     check_rename_split_guard()

@@ -127,6 +127,14 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(
             statuses["依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空"], "has-grip")
 
+    def test_java_test_split_ruling_has_mechanical_grip(self):
+        # 测试类拆分裁决（可拆 + 同分类同属性须归一类 + 禁止滥拆）由 check_java_test_naming 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）"],
+            "has-grip")
+
     def test_config_class_guard_has_mechanical_grip(self):
         # "配置类不写逻辑"由 check_config_class_guard 钉住（条文/判定标准/识别特征/公开说明同步）
         self._mk("script/check_specs.py")
