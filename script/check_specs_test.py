@@ -3003,7 +3003,8 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
 
     JAVA_LINE = ("  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ "
                  "link:specs/stack/java.adoc[] + link:specs/stack/java-testing.adoc[]"
-                 "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端）")
+                 "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端；"
+                 "一个被测类可按需求/分类拆多个测试类、不得滥拆）")
 
     def setUp(self) -> None:
         super().setUp()
@@ -3019,7 +3020,9 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
                    "= Java 测试规范\n\n"
                    "== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n")
+                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n"
+                   "一个被测类可按需求/分类可拆成多个测试类；分类或属性相同的用例必须"
+                   "归入同一个测试类；不得为每个场景一个类而拆，禁止滥拆。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
 
     def test_valid_naming_contract_passes(self):
@@ -3057,6 +3060,45 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "= t")
         cm.check_java_test_naming()
         self.assertIn("未在加载调度器登记", self.error_texts())
+
+    def test_split_ruling_partial_reports(self):
+        # 反例：拆分裁决只剩"合并"那一半（退回"一个被测类一个测试类"）——即本次调整要修掉的口径
+        self.write("specs/stack/java-testing.adoc",
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
+                   "（被测类名 + 后缀、常规）\n批量测试同一被测类不同场景时仍合并为一个测试类。\n")
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
+        cm.check_java_test_naming()
+        self.assertIn("缺失拆分裁决", self.error_texts())
+
+    def test_split_ruling_only_allow_split_reports(self):
+        # 反例：只留"可拆"、不留"同分类须归一类 + 禁止滥拆"（放任每个场景一个类）
+        self.write("specs/stack/java-testing.adoc",
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
+                   "（被测类名 + 后缀、常规）\n一个被测类可按需求/分类可拆成多个测试类。\n")
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
+        cm.check_java_test_naming()
+        self.assertIn("缺失拆分裁决", self.error_texts())
+
+    def test_split_ruling_valid_passes(self):
+        # 正例：三段判据齐备（可拆 + 同分类同属性须归一类 + 禁止滥拆）
+        self._write_valid()
+        cm.check_java_test_naming()
+        self.assertEqual(cm.errors, [])
+
+    def test_dispatcher_without_split_ruling_reports(self):
+        # 反例：调度器只传达后缀、不传达拆分裁决 → 引用方把"一个被测类一个测试类"当硬规定
+        self.write("specs/stack/java-testing.adoc",
+                   "= t\n\n== 测试类命名（L1 强制）\n"
+                   "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
+                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n"
+                   "一个被测类可按需求/分类可拆成多个测试类；分类或属性相同的用例必须"
+                   "归入同一个测试类；不得为每个场景一个类而拆，禁止滥拆。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "  ** Java 项目 → link:specs/stack/java-testing.adoc[]"
+                   "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端）")
+        cm.check_java_test_naming()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        self.assertIn("滥拆", self.error_texts())
 
 
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
