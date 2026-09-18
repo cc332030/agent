@@ -196,5 +196,12 @@ class TestEvaluate(unittest.TestCase):
             statuses["不可逆操作先确认（删除/清空/强推，P5）"], "has-grip")
 
 
+    def test_performance_guard_has_mechanical_grip(self):
+        # 性能测试的测量与记录要点由 check_performance_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["性能测试：测量须可核对（离散度与样本量、公平比较、计时区间与消费结果）、记录须有落点（方案组合与成绩、优化日志、瓶颈归因与方向、迭代至收敛）"], "has-grip")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -7,6 +7,7 @@
   * check_link_refs        —— 链接格式（正：相对且合法；反：根绝对 / 越出仓库根）
   * check_section_refs     —— 节名引用存在性（正：节存在；反：节已改名/删除）
   * check_stack_consistency—— 技术栈双向一致（正：登记且存在；反：漏登记 / 登记不存在）
+  * check_dispatcher_layers—— 加载调度器分层结构（正：五层+维护层层头与条目齐备；反：层头被吞/空壳层头/节被改写）
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
   * check_filler_docs      —— 文档注水兜底（正：简短条目/标题词+内容/纯格式行不误报；反：占位段/完全重复段）
   * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
@@ -163,6 +164,76 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
         self.write("specs/core/execution.adoc", "= 执行原则")
         self.write("specs-project-maintainer/priority.adoc", "= 优先级")
         cm.check_budget_guard()
+        self.assertIn("分类与懒加载", self.error_texts())
+
+
+class TestCheckDispatcherLayers(CheckSpecsTestCase):
+    """钉住加载调度器的分层结构（层头 + 每层条目数）。
+
+    背景（本仓库实证）：按 `** ` 条目做"取到下一个条目"的替换时，会把夹在两条之间的
+    层头行（`* 技术栈层（…）：`）一并吞掉，条目遂挂到上一层、加载触发条件出错，而
+    **既有机械校验全绿**（登记/链接/体积都不看层头）。故机械钉住层头与"空壳层头"。
+    """
+
+    def _write(self, sec_body: str) -> None:
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n== 分类与懒加载（加载调度器）\n" + sec_body +
+                   "\n== 规范文件登记完整性\n")
+
+    def test_all_layers_present_passes(self):
+        self._write(
+            "* 必加载层（每次工作都须加载）：\n"
+            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
+            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+            "* 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
+            "  ** Java 项目 → link:specs/stack/java.adoc[]\n"
+            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "  ** 通用工具/库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "* 平台层（按使用平台加载）：\n"
+            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
+            "  ** 条目落点：说明\n")
+        cm.check_dispatcher_layers()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_layer_header_reports(self):
+        # 反例：技术栈层层头被吞掉（条目仍在，但挂到了通用层下）
+        self._write(
+            "* 必加载层（每次工作都须加载）：\n"
+            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
+            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "  ** Java 项目 → link:specs/stack/java.adoc[]\n"
+            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "  ** 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "* 平台层（按使用平台加载）：\n"
+            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
+            "  ** 条目落点：说明\n")
+        cm.check_dispatcher_layers()
+        self.assertIn("缺失「技术栈层」层头行", self.error_texts())
+
+    def test_empty_layer_header_reports(self):
+        # 反例：空壳层头（层头下无任何条目）
+        self._write(
+            "* 必加载层（每次工作都须加载）：\n"
+            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
+            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+            "* 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
+            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "  ** 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "* 平台层（按使用平台加载）：\n"
+            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
+            "  ** 条目落点：说明\n")
+        cm.check_dispatcher_layers()
+        self.assertIn("层头下没有任何条目", self.error_texts())
+
+    def test_dispatcher_section_missing_reports(self):
+        # 反例：调度器节被改写 → 结构防线失去抓手
+        self.write("AGENTS_COMMON.adoc", "= 入口\n\n== 别的节\n")
+        cm.check_dispatcher_layers()
         self.assertIn("分类与懒加载", self.error_texts())
 
 
@@ -8093,6 +8164,175 @@ class TestCheckThroughputGuard(CheckSpecsTestCase):
         self._write_platform(self.PLATFORM_SECTION.replace("AI 用量汇总", "用量信息"))
         cm.check_throughput_guard()
         self.assertIn("AI 用量汇总", self.error_texts())
+
+
+class TestCheckPerformanceGuard(CheckSpecsTestCase):
+    """钉住「性能测试」防线：测量那一半与记录那一半的要点、两处落点与依据主题。
+
+    实证（用户提出）：旧判据只有四条粗规则（独立性/对比测试/排除初始化干扰/结果分析），
+    "跑一次看看谁快"即可交差——成绩是单次采样、没有离散度与可比基线，结论只有一句
+    "快了 X 倍"；优化停在"改一版跑一次"，瓶颈不复测、失败方向不落盘，后来的人重踩同一个坑。
+    故反例逐条对应"最易被当废话砍掉"的字句：基准那一类、离散度与样本量、公平比较、
+    计时区间与消费结果、测量口径、必留证据、取数与组合矩阵、优化日志、闭环迭代、
+    瓶颈归因与方向、结论落点与时效、优化不得改变行为。
+    """
+
+    SECTION = (
+        "= 测试规范（通用层，跨语言）\n\n== 性能测试\n\n"
+        "=== 承载与触发\n"
+        "* 独立性（L1）：性能测试独立于单元测试。\n"
+        "* 何时需要性能测试（L1）：按性能敏感度判定，命中任一特征才做，"
+        "不得一律加、也不得漏掉真敏感点；多方案选型需要数据佐证。\n\n"
+        "=== 对比与测量\n"
+        "* 对比测试（L1）：类别至少 3 类，并含当前项目使用的那一类作基准。\n"
+        "* 排除初始化干扰（L1）：须测两次、第二次在全部初始化完成后。\n"
+        "* 测量口径须可核对（L1）：预热轮次、测量轮次、批量、计时口径、运行环境须写明。\n"
+        "* 离散度与样本量（L1）：至少 3 次有效采样并报离散度；差异小于离散度视为无显著差异。\n"
+        "* 公平比较（L1）：同一进程内交替测量、各自预热与迭代、同一份输入数据。\n"
+        "* 计时区间界定（L1）：只计被测逻辑，测完必须消费结果。\n\n"
+        "=== 记录（成绩与依据落在哪、记到什么程度）\n"
+        "* 落点（L1）：跨类级进独立性能测试文档，用例级进测试代码文档注释。\n"
+        "* 每次运行的必留证据（L1，四项缺一即不算测过）：测量口径、各方案成绩、结论、"
+        "未选方案为什么不选。\n"
+        "* 成绩怎么取数（L1）：每组方案记终值（均值或中位数）+ 离散度。\n"
+        "* 方案组合矩阵（L2）：`方案编号 | 组合 | 终值 | 离散度 | 与基线之比 | 结论`。\n"
+        "* 优化日志（L2）：每轮记改了什么与是否保留；不保留的改动也必须留一行。\n"
+        "* 只记结果不记过程（L1）：只留取值 + 来源 + 结论。\n\n"
+        "=== 迭代与收敛\n"
+        "* 闭环迭代（L1）：测出瓶颈后继续优化并复测，直至收敛。\n"
+        "* 收益判定用实测、不用估计（L1）。\n"
+        "* 瓶颈归因与方向（L1）：写明瓶颈判断、依据与下一步方向。\n"
+        "* 优化方向与思路（L1）：已试过的方向（含失败的）与尚未尝试的方向都须落盘。\n"
+        "* 结论的落点（L1）：选型理由进代码文档注释/设计文档。\n"
+        "* 结论的时效（L2）：环境或规模变化须重新核对。\n"
+        "* 结果分析须给出原因与对策（L1）：差异由哪些原因引起，并给出对应的解决方案。\n"
+        "* 优化不得改变行为（L1）：既有功能用例全绿。\n"
+        "* 结果反哺基线（L2）：新取值成为此后比对的基线。\n")
+
+    JAVA = (
+        "= Java 测试规范\n\n== 启动型与端到端测试\n"
+        "* **`PerfTests`（性能）**：测量与记录要求统一见 link:../general/testing.adoc[]"
+        "「性能测试」；不混入常规 `test` 阶段、仅显式触发。\n")
+
+    LIBRARY = (
+        "= 性能测试判据的依据（测量与记录）\n\n"
+        "== 当初要解决的失效（本项目实证）\n本项目实证。\n\n"
+        "== 外部材料：JMH 官方文档（OpenJDK，微基准的行业事实标准）\n"
+        "https://github.com/openjdk/jmh 未逐字取回（要点转述、非逐字摘录）。\n\n"
+        "== 同义性差异与覆盖点（本集合自己承认的）\n"
+        "ISO/IEC/IEEE 25010 / ISO/IEC/IEEE 29119-4；本集合自己的判据化取舍。\n")
+
+    def _write_all(self, section=None, java=None, common=None, library=None):
+        self.write("specs/general/testing.adoc",
+                   section if section is not None else self.SECTION)
+        self.write("specs/stack/java-testing.adoc",
+                   java if java is not None else self.JAVA)
+        self.write("library/performance.adoc",
+                   library if library is not None else self.LIBRARY)
+        self.write("AGENTS_COMMON.adoc",
+                   common if common is not None else
+                   "= 入口\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 跑测试/补测试，或做性能测试/性能优化（识别特征：判定某处是否需要性能测试、"
+                   "性能敏感场景、多方案选型需数据佐证） → link:specs/general/testing.adoc[]"
+                   "（性能测试的测量与记录判据、方案组合与成绩）\n")
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_performance_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_spec_reports(self):
+        self._write_all()
+        os.remove(os.path.join(self.root, "specs", "general", "testing.adoc"))
+        cm.check_performance_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self._write_all(section="= 测试规范\n\n== 单元测试\n* 别的\n")
+        cm.check_performance_guard()
+        self.assertIn("性能测试", self.error_texts())
+
+    def test_baseline_member_removed_reports(self):
+        # 缺"当前实现作基准"那一类：只剩候选方案之间的相对比较，"要不要换"无从判起
+        self._write_all(section=self.SECTION.replace(
+            "并含当前项目使用的那一类作基准", "并覆盖多种实现"))
+        cm.check_performance_guard()
+        self.assertIn("含当前项目使用的那一类作基准", self.error_texts())
+
+    def test_dispersion_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "至少 3 次有效采样并报离散度；差异小于离散度视为无显著差异",
+            "跑几次取平均即可"))
+        cm.check_performance_guard()
+        self.assertIn("至少 3 次有效采样", self.error_texts())
+
+    def test_fair_comparison_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "同一进程内交替测量、各自预热与迭代、同一份输入数据", "各自跑即可"))
+        cm.check_performance_guard()
+        self.assertIn("同一进程", self.error_texts())
+
+    def test_consume_result_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "测完必须消费结果", "不必管结果"))
+        cm.check_performance_guard()
+        self.assertIn("消费结果", self.error_texts())
+
+    def test_evidence_member_removed_reports(self):
+        # 必留证据被削成三项（少了"未选方案为什么不选"）即被拦下
+        self._write_all(section=self.SECTION.replace("、未选方案为什么不选", ""))
+        cm.check_performance_guard()
+        self.assertIn("未选方案为什么不选", self.error_texts())
+
+    def test_cause_analysis_removed_reports(self):
+        # 旧"结果分析"条（差异由哪些原因引起 + 给出解决方案）被整条抽掉即被拦下
+        self._write_all(section=self.SECTION.replace(
+            "* 结果分析须给出原因与对策（L1）：差异由哪些原因引起，并给出对应的解决方案。\n", ""))
+        cm.check_performance_guard()
+        self.assertIn("结果分析须给出原因与对策（L1）", self.error_texts())
+
+    def test_cause_analysis_removed_reports(self):
+        # 旧"结果分析"条（差异由哪些原因引起 + 给出解决方案）被整条抽掉即被拦下
+        self._write_all(section=self.SECTION.replace(
+            "* 结果分析须给出原因与对策（L1）：差异由哪些原因引起，并给出对应的解决方案。\n", ""))
+        cm.check_performance_guard()
+        self.assertIn("结果分析须给出原因与对策（L1）", self.error_texts())
+
+    def test_iteration_loop_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "闭环迭代（L1）：测出瓶颈后继续优化并复测，直至收敛。",
+            "跑一次即可。"))
+        cm.check_performance_guard()
+        self.assertIn("闭环迭代（L1）", self.error_texts())
+
+    def test_behavior_unchanged_removed_reports(self):
+        self._write_all(section=self.SECTION.replace(
+            "优化不得改变行为（L1）：既有功能用例全绿。", "优化可顺手改行为。"))
+        cm.check_performance_guard()
+        self.assertIn("优化不得改变行为（L1）", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 调度器无本条加载项：规则永远不会被触发加载
+        self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
+        cm.check_performance_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_java_carrier_removed_reports(self):
+        self._write_all(java="= Java 测试规范\n\n== 断言\n* 别的\n")
+        cm.check_performance_guard()
+        self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
+
+    def test_library_missing_reports(self):
+        self._write_all()
+        os.remove(os.path.join(self.root, "library", "performance.adoc"))
+        cm.check_performance_guard()
+        self.assertIn("library/performance.adoc", self.error_texts())
+
+    def test_library_anchor_removed_reports(self):
+        # 同义性差异被删：读者会把"至少 3 次采样"读成某标准的规定
+        self._write_all(library="= 性能测试判据的依据\n\n* JMH 见官方文档\n")
+        cm.check_performance_guard()
+        self.assertIn("同义性差异与覆盖点（本集合自己承认的）", self.error_texts())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
