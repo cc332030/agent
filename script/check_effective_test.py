@@ -203,5 +203,71 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(
             statuses["性能测试：测量须可核对（离散度与样本量、公平比较、计时区间与消费结果）、记录须有落点（方案组合与成绩、优化日志、瓶颈归因与方向、迭代至收敛）"], "has-grip")
 
+
+class TestNewQualityAndReviewGrips(unittest.TestCase):
+    """本轮新增五条的抓手判定（代码质量 / 生成效率 / token 纪律 / 改动后 review / 五件事）。
+
+    这五条都是"要点文本仍在"型抓手（`check_specs.py` 的三道新防线），故正例＝
+    `script/check_specs.py` 在；反例＝文件不存在时须判 `grip-missing`（不得冒充）。
+    """
+
+    def setUp(self) -> None:
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _mk(self, rel: str) -> None:
+        p = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("")
+
+    def test_quality_guard_has_mechanical_grip(self):
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["代码质量（新产出即高质）：十项逐条自检须可判定（坏味道/职责与嵌套/命名/"
+                     "可读性/失败与边界/资源/并发/性能退化/测试与文档/交付前自检）"],
+            "has-grip")
+
+    def test_generation_efficiency_has_mechanical_grip(self):
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["生成效率：先定完成判据、一次做对做完、延后验证一次到位、失败一次查根因、"
+                     "按需读取、不重做已做完的事"], "has-grip")
+
+    def test_token_discipline_has_mechanical_grip(self):
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["token 纪律：利用率与节省不是一回事；输入须被用到、约束放外部、"
+                     "少复述多引用、不重复读贴、只记结论与取值；"
+                     "以不损害功能完整性/代码质量/验证完整为前提"], "has-grip")
+
+    def test_change_review_has_mechanical_grip(self):
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["改动后的 review：每次改动都在同一轮内复核一次"
+                     "（按改动性质取值；规范类按五件事）"], "has-grip")
+
+    def test_after_change_five_things_has_mechanical_grip(self):
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["改完规范必做五件事：机械手段必跑全、干净子 agent 三视角复核不可漏"
+                     "（有了就忽略、没有就加）、三态台账、复核者不可用时的降级留证"],
+            "has-grip")
+
+    def test_grip_missing_is_reported_not_faked(self):
+        # 反例：抓手文件不存在时须判 grip-missing（不得冒充"有抓手"）
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["改完规范必做五件事：机械手段必跑全、干净子 agent 三视角复核不可漏"
+                     "（有了就忽略、没有就加）、三态台账、复核者不可用时的降级留证"],
+            "grip-missing")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
