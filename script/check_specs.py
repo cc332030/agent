@@ -101,6 +101,10 @@
      也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
      纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
  30b. 变更日志登记时机：`AGENTS.adoc` 须写明 **changelog 条目仅在用户明确要求时追加**、用户未明确要求时**一律不写不改**（含顺手补一条），且 `script/check_effective.py` 登记该条——防执行者把『改了东西』与『该记一条』画等号、条目随每轮任务自发生长（用户明确提出的口径；本仓库 changelog 不是自动追加区）。
+ 30c. Maven 仓库与镜像防线：`specs/stack/maven.adoc`「仓库与镜像」节须仍在，且含指定中央仓库地址、
+     两条触发前提（未配置过仓库/镜像、外网出口 IP 在中国大陆）、优先用该仓库、换源边界（仅当它不可用才可
+     改用其他**在境内**的镜像站）与『已配置过即不做』——防地址被换、前提被删或只留一半、
+     『不可用即换源』被读宽成『可自行另挑』（含换到境外源，等于白配）、既有配置被重配一遍。
  31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`）——
      仅对**流水式**条目适用；条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。采用**按版本分组 +
@@ -835,6 +839,45 @@ CHANGELOG_EVIDENCE_KEYS = (
 def _is_historical(rel: str) -> bool:
     """该仓库根相对路径是否属"历史记录文件"（不参与引用/节名/历史来源检查）。"""
     return rel in HISTORICAL_FILES
+
+
+def check_maven_mirror_guard():
+    """Maven「仓库与镜像」节防线：指定仓库与两条前提条件不得被删改。
+
+    判据（确定性）：`specs/stack/maven.adoc` 必须保留「仓库与镜像」节，且节内含
+    **本规范指定的中央仓库地址**、**前提条件**（外网出口 IP 在中国大陆）、
+    **已配置过即不做**（不覆盖引用方既有配置）与**降级边界**（仅当该地址不可用才可改用
+    其他镜像站、且所换镜像站须**在境内**）。少任一项，引用方就可能换成别的来源、
+    在已有配置的项目上被重配一遍，或把 `mirrorOf` 指向境外源（等于白配、外网出口受限时
+    照样取不到构件）。**配置方式不在本规范约定**，本条不钉配置形态。
+    """
+    phase("Maven 仓库与镜像防线检查")
+    rel = "specs/stack/maven.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    text = open(path, encoding="utf-8").read()
+    section = _section_text(text, "仓库与镜像") or ""
+    if not section:
+        err("maven.adoc 缺少「仓库与镜像」节", rel)
+        phase_done()
+        return
+
+    required = [
+        ("外网出口 IP 在中国大陆才触发", "外网出口 IP 在中国大陆"),
+        ("指定的中央仓库地址", "mirrors.cloud.tencent.com/nexus/repository/maven-public/"),
+        ("优先用该仓库（不得自行另挑）", "必须先用这个仓库"),
+        ("不可用才可换源（降级触发条件）", "仅当它不可用"),
+        ("换源也须在境内（其余不得放宽）", "其他在境内的镜像站"),
+        ("已配置过即不做（不覆盖既有配置）", "已配置过即不做"),
+        ("未配置过才做（前提条件）", "未配置过 Maven 仓库/镜像"),
+    ]
+    for name, token in required:
+        if token not in section:
+            err(f"「仓库与镜像」节缺少要点：{name}（应含 `{token}`）", rel)
+    phase_done()
 
 
 def check_asciidoctor_syntax():
@@ -4253,6 +4296,51 @@ def check_quote_line_guard():
     phase_done()
 
 
+def check_maven_mirror_guard():
+    """Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改。
+
+    背景：外网出口在中国大陆时直连中央仓库会取不到构件（实测 `Could not transfer` /
+    `Attempted read from closed stream`、`dependency:go-offline` 单次 10 分钟超时），
+    故本规范指定一个境内中央仓库。这条规则的**全部内容就是一句话**（用哪个仓库、什么
+    前提下用），所谓"精简"最易把前提与换源边界一起压掉：少了『外网出口 IP 在中国大陆』，
+    在境外的执行者也会被要求绕道境内源；少了『已配置过即不做』，引用方既有配置会被重配
+    一遍；把『仅当它不可用』读宽成『可自行另挑』、或把『在境内』抹掉，换到境外源等于白配。
+    故机械钉住这些字句，且**只钉要点本身**——节标题可带括号补充（如「（公有仓库在国内的
+    初始化）」）、仓库地址可改写成 `link:` 形态，均不触发报错。
+
+    配置方式（`settings.xml` 怎么写、`mirrorOf` 取值）**不在本规范约定**，本条不钉配置形态：
+    路径漏写会报"缺少指定中央仓库地址"（含 `link:https://…[\`https://…\`]` 形态，故真漏才报）、
+    前提与边界漏写会点名缺了哪一项，**漏一处错一处**都可被核对。
+    """
+    phase("Maven 仓库与镜像防线检查")
+    rel = "specs/stack/maven.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, "仓库与镜像")
+    if not section:
+        err("maven.adoc 缺少「仓库与镜像」节", rel)
+        phase_done()
+        return
+    required = [
+        ("指定的中央仓库地址", "mirrors.cloud.tencent.com/nexus/repository/maven-public/"),
+        ("触发前提之一：外网出口 IP 在中国大陆", "外网出口 IP 在中国大陆"),
+        ("触发前提之二：未配置过才做", "未配置过 Maven 仓库/镜像"),
+        ("优先用该仓库（不得自行另挑）", "必须先用这个仓库"),
+        ("换源触发条件：仅当它不可用", "仅当它不可用"),
+        ("换源边界：所换镜像站须在境内", "在境内的镜像站"),
+        ("已配置过即不做（不覆盖既有配置）", "已配置过即不做"),
+    ]
+    for name, token in required:
+        if token not in section:
+            err(f"「仓库与镜像」节缺少要点：{name}（应含 `{token}`）", rel)
+    phase_done()
+
+
 def _split_adoc_sections(text: str):
     """把一份 .adoc 文本按**二级节**切成 `[(节标题, 节正文含标题行), …]`。
 
@@ -4276,6 +4364,19 @@ def _split_adoc_sections(text: str):
     if cur_title is not None:
         sections.append((cur_title, "\n".join(cur_lines)))
     return sections
+
+
+def _section_text(text: str, keyword: str):
+    """按**节标题关键词**取某个二级节的正文（标题行 + 节内全部行）。
+
+    `_split_adoc_sections` 按完整标题匹配，而节标题常带括号补充（如
+    「仓库与镜像（公有仓库在国内的初始化）」），故这里按 `keyword in 标题` 取，
+    供防线函数在不依赖标题逐字不变的前提下定位节正文。
+    """
+    for title, body in _split_adoc_sections(text):
+        if keyword in title:
+            return body
+    return ""
 
 
 def _names_in_zone(zone_body: str, rel: str) -> bool:
@@ -6939,6 +7040,7 @@ def main(argv=None) -> int:
     check_rename_split_guard()
     check_runtime_env_guard()
     check_wiring_guard()
+    check_maven_mirror_guard()
     check_asciidoctor_syntax()
 
     print()

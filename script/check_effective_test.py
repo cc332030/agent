@@ -180,6 +180,14 @@ class TestEvaluate(unittest.TestCase):
                      "老用例不得为迁就改动而改判"],
             "has-grip")
 
+    def test_maven_mirror_guard_has_mechanical_grip(self):
+        # Maven 仓库与镜像（含不可用时的换源边界）由 check_maven_mirror_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["Maven 未配置过仓库/镜像且外网出口 IP 在中国大陆时，须用指定中央仓库"],
+            "has-grip")
+
     def test_destructive_op_has_mechanical_grip(self):
         # P5 的存在性与必加载层落点由 check_priority_guard 机械钉住
         self._mk("script/check_specs.py")
