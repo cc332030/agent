@@ -90,6 +90,13 @@
      指向该层即死链（该层不是公共入口的加载项：引用方按公共输入加载时取不到、其项目里
      也没有本仓库的文件）；要说明"本仓库另有一层只对维护方成立"
      用文字描述即可，不给可点开的私有路径。
+ 26b. 公共内容自足（`check_public_content_is_self_contained`）：**默认引用面内**的内容
+     （`AGENTS_COMMON.adoc` + `specs/**` + 会被复制到未知项目执行的 `prompts/*.adoc`）
+     也不得引用**图书馆 `library/`**——它与维护方自查层同属"不在默认引用面内"的落点
+     （无公共加载项、引用方项目里也没有本仓库的文件），公共内容里给了路径即死链；
+     只留**依据名 + 判据**，不给可点开的路径（口径见 `AGENTS.adoc`「依据图书馆」与
+     `library/README.adoc`）。本轮实测失效：新增的「包源与镜像源」条在三处写了
+     `link:../../library/mirrors.adoc[]`，而当时三条防线全绿放过，故本条补上图书馆一路。
  27. 图书馆防线：仓库根 `library/`（**不在默认引用面内**：本仓库内容全部会发布，
      区别只在"默认引用什么"——它没有公共加载项、引用方项目里也没有本仓库的文件）须存在，入口
      `library/README.adoc` 被项目规范入口 `AGENTS.adoc` 登记；入口主题登记与实际主题
@@ -118,6 +125,17 @@
      两条触发前提（未配置过仓库/镜像、外网出口 IP 在中国大陆）、优先用该仓库、换源边界（仅当它不可用才可
      改用其他**在境内**的镜像站）与『已配置过即不做』——防地址被换、前提被删或只留一半、
      『不可用即换源』被读宽成『可自行另挑』（含换到境外源，等于白配）、既有配置被重配一遍。
+ 30e. 包源与镜像源防线：`specs/general/dependency.adoc`「包源（包仓库/镜像站）的选用」须仍在，且
+     含**选源次序（就近/平台内 → 所在地区主流公共源 → 邻近境外源 → 更远境外源）**、**逐级降级不得跳级**、
+     **先实测可用再启用/一次配置到位**、**不覆盖引用方既有配置**、**推荐非强制**与**取值须可复核**；
+     技术栈/平台侧须有落点（Maven 的源与 `mirrorOf`、Python 的 pip 源、Clojars 构件的取源次序、
+     CI 的镜像/运行时/系统包取源、CNB 的平台内优先口径），图书馆须有 `library/mirrors.adoc` 并
+     **登记到入口表**（登记集合 ⊇ 磁盘实际主题文件集合——既有 `quality.adoc` 就不在 `LIBRARY_TOPICS`
+     下限常量里，故完整性只能靠入口表核对）、且该主题含**同义性差异 / 本站取舍 / 取样条件 / 复核实测 /
+     "按确定产物判可用性、不要只请求目录根" / 单次采样不构成结论**几条判据句
+     ——防"凭感觉挑一个源、直接跳到境外源、不实测就配、把引用方既有配置重配一遍"，也防把**实测不存在**
+     的目录（如"高校镜像站的 npm 目录"）当推荐源写进配置（本次用户要求 + 本项目实测；本轮复核又实测出
+     "聚合仓库已代理 Clojars"与"某镜像 `/npm/` 目录 404 但按包名可取"两类，故把这两条判据也钉住）。
  31. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`）——
      仅对**流水式**条目适用；条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。采用**按版本分组 +
@@ -655,6 +673,41 @@ _LIBRARY_LOCATING_SOURCE_MARKERS = (
     "The 206 (Partial Content) status code indicates that the server is",
     "**未实测**",
 )
+
+# 『包源与镜像源』防线（check_registry_mirror_guard）：
+# 规则本体在通用层（次序 + 逐级降级 + 先实测 + 不覆盖既有配置 + 推荐非强制），
+# 具体源地址在技术栈/平台层（属推荐与举例，可增删——故只钉载体与边界，不钉名单）。
+# 锚点须**能区分语义**：只留"已配置过**"这类任何措辞都会命中的片段，等于只拦得住
+# "整条被删"、拦不住"边界被改写"（正是本防线要防的失效形态），故每条的锚点取判据句。
+REGISTRY_SECTION = "包源（包仓库/镜像站）的选用"
+REGISTRY_ANCHORS = (
+    ("次序：就近/平台内 → 所在地区主流公共源 → 邻近境外源 → 更远境外源",
+     ("就近/平台内已优化的源", "主流公共源", "地理上邻近的其他境外源", "更远的境外源站"),
+     "次序被删后，'换源'重新退化成凭感觉挑一个"),
+    ("逐级降级、不得跳级", ("只有当上一级", "未配置过任何源时"),
+     "缺这条会把'优先次序'读成'必须用某一家'，或反过来直接跳到最远一级"),
+    ("先实测可用再启用、一次配置到位", ("先对候选源做一次**真实请求**", "一次配置到位", "不得**在每一轮里反复重试"),
+     "缺这条会'边构建边撞'或每轮重试同一个源（正是用户要求'先测试避免浪费时间'的落点）"),
+    ("不覆盖引用方既有配置、已配置过即沿用",
+     ("已配置过**包源时**一律沿用", "未配置过任何源\"时才动手配置", "**推荐源不是强制源**"),
+     "缺这条会把引用方既有私服/镜像配置重配一遍，或把推荐读成必须用某一家"),
+    ("推荐非强制、用户声明优先", ("**推荐源不是强制源**", "用户/项目声明的源永远优先"),
+     "缺这条会把推荐写成强制，与'用不了就换其他源'的初衷相反"),
+    ("实测取值与条件须可复核", ("结果须可复核", "取值与条件"),
+     "缺这条结论会只剩一句'已换国内源'，后人无法复核"),
+)
+# 『包源与镜像源』依据主题（library/mirrors.adoc）的要点锚点：该主题的价值全在
+# "外部材料与本站取舍分界 + 实测取值可复核"。锚点须能区分语义——只留"取样条件"
+# 四个字，任何写了这句话的文档都会命中（假绿）；故取判据句本身。
+REGISTRY_LIBRARY_ANCHORS = (
+    ("外部材料未规定源站次序（同义性差异）", "**未**规定源站的优先级次序"),
+    ("本站取舍", "本集合据此推出"),
+    ("实测取样条件", "**取样条件**"),
+    ("复核实测与首轮出入已在册", "复核实测"),
+    ("按确定产物判可用性（不按目录根）", "不要只请求站点/目录根"),
+    ("单次采样不构成结论", "不构成\"某源更快\"的结论"),
+)
+
 # 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
 # specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
 # 本文件是那份清单，也是 check_public_content_coverage 的核对对象。
@@ -3029,6 +3082,20 @@ def check_public_content_has_no_private_refs():
     phase_done()
 
 
+def _has_library_path_ref(line: str) -> bool:
+    """该行是否含指向图书馆的**路径型**引用（`link:../library/x[]`、`library/x.adoc` 等）。
+
+    只认路径形态（带 `library/` 目录前缀或 `link:` 指向它），不误伤"图书馆"这个词本身
+    （"依据落点在图书馆"属正当表述；给的是**依据名**而非可点开的路径）。
+    """
+    if "library/" not in line:
+        return False
+    # 反引号路径、link: 目标、裸路径三种写法都算——**先取"去掉 `../` 前缀"的形态**
+    # （公共内容里指图书馆要向上跳出 specs/，写作 `../../library/...`，
+    # 若只匹配 `library/` 紧跟在 link:/反引号/空白之后，这种真实写法会漏掉）
+    return bool(re.search(r"(?:link:|`|\s|^)(?:\.\./)*library/", line))
+
+
 def check_public_content_is_self_contained():
     """『公共内容自足性防线』：公共内容（`AGENTS_COMMON.adoc` + `specs/`）不得引用私有落点。
 
@@ -3053,6 +3120,15 @@ def check_public_content_is_self_contained():
     与 check_public_content_has_no_private_refs 的分工：那条拦"把本仓库私有物（脚本名、
     工具声明）当抓手引用"，本条拦"把私有**规范文件**当规则正文引用"（悬空引用）。
 
+    **图书馆（`library/`）同样不在默认引用面内**（见 `AGENTS.adoc`「依据图书馆」与
+    `library/README.adoc`：它没有公共加载项、引用方项目里也没有本仓库的文件），故公共内容
+    里指向 `library/**` 的路径同样是**引用方读不到的死链**——本轮实测失效：新增的
+    「包源与镜像源」条在 `specs/general/ci-cd.adoc`、`specs/general/dependency.adoc`、
+    `specs/platform/cnb.adoc` 三处写了 `link:../../library/mirrors.adoc[]`，而三条防线
+    （本条、`check_public_content_has_no_private_refs`、`check_library_guard`）**全绿**放过
+    ——本条此前只拦 `specs-project-maintainer/`，而图书馆是第二个"不在默认引用面内"的落点。
+    故本条把图书馆路径一并纳入，与维护方自查层同口径。
+
     只钉"引用指向的位置是否随公共内容分发"，该表述是否真需自足仍由人/子 agent 复核承担。
     """
     phase("公共内容自足性检查（不引用私有落点）")
@@ -3075,6 +3151,12 @@ def check_public_content_is_self_contained():
                         "该层不是公共入口的加载项，引用方按公共输入加载时看不到该文件"
                         "（读到的规则只成立一半）；"
                         "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
+                if _has_library_path_ref(line):
+                    err("公共内容不得引用图书馆『library/』——"
+                        "图书馆不在默认引用面内（无公共加载项、引用方项目里也没有本仓库的"
+                        "文件），引用方按公共输入加载时拿到的是死链；"
+                        "公共内容里只留**依据名 + 判据**，不给可点开的图书馆路径"
+                        "（口径见 AGENTS.adoc「依据图书馆」与 library/README.adoc）", rel, j)
     phase_done()
 
 
@@ -3842,6 +3924,110 @@ def check_runtime_env_guard():
         missing = [k for k in keys if k not in body]
         if missing:
             err(f"运行环境防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_registry_mirror_guard():
+    """『包源与镜像源防线』：推荐的包源地址**已实测可用**、且**换源有次序与降级边界**。
+
+    背景（本次用户要求 + 本项目实测）：用户要求"补充常见语言/工具的推荐国内源（优先腾讯，
+    用不了才换其他国内源，全都用不了才考虑境外源；境外还分近邻与美国等），**使用推荐源前
+    可以引入测试，避免浪费时间**"。手工测试发现两类"照抄文档就会踩"的形态：
+      * **地址根本不存在**：清华 TUNA 已不再提供 npm registry 目录（实测 404）、也不提供
+        Maven Central 目录（实测 404），而旧资料仍在流传——写进配置的后果是构建在取依赖
+        阶段失败；
+      * **把"慢"当"不可用"、或反之**：单次采样受出口与时段影响（本项目实测同一源在不同
+        项的耗时差一个量级），故规则要求"先实测再启用"，而不是"凭名声认定"。
+    故本条把**规则本体**钉住（三条 L1：按次序逐级降级、先实测再启用、不覆盖既有配置），
+    并要求图书馆如实记录实测取值与取样条件。
+
+    与 check_maven_mirror_guard 的分工：那条钉 **Maven 栈**的默认源与两条前提（配置方式不在
+    规范约定）；本条钉**通用层**的次序与边界（各语言/工具的具体源地址在技术栈层，栈文件里
+    的地址属**推荐与举例**，可增删——故本条只钉**载体与边界**，不钉具体名单）。
+
+    判定（全部为确定项，可机械核对）：
+      * `specs/general/dependency.adoc` 有「包源（包仓库/镜像站）的选用」节，且含次序、
+        逐级降级、先实测、不覆盖既有配置、推荐非强制这几条要点；
+      * 技术栈层至少有 Maven（link:../stack/maven.adoc[]）与 Python、CI/CD、CNB 平台四处
+        落点（缺则"具体有哪些源"无处承载，规则落不到使用现场）；
+      * 图书馆 `library/mirrors.adoc` 存在、被入口登记、且**外在材料与本站取舍分界**与
+        **实测/未确证**标注齐备（缺则读者会把"用腾讯云"读成某标准规定）。
+    """
+    phase("包源与镜像源防线检查")
+    rel = "specs/general/dependency.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——包源的选用次序与降级边界失去集中落点", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, REGISTRY_SECTION)
+    if not section:
+        err("依赖规范缺少「包源（包仓库/镜像站）的选用」节——"
+            "换源会重新变成'凭感觉挑一个'：不按次序、不先实测、覆盖引用方既有配置", rel)
+        phase_done()
+        return
+    for name, tokens, why in REGISTRY_ANCHORS:
+        for token in tokens:
+            if token not in section:
+                err(f"「包源（包仓库/镜像站）的选用」节缺少要点：{name}"
+                    f"（应含 `{token}`）——{why}", rel)
+    # 技术栈/平台侧落点：具体源地址与现场判据须有着落
+    for rel2, anchor, why in (
+            ("specs/stack/maven.adoc", "mirrors.cloud.tencent.com/nexus/repository/maven-public/",
+             "Maven 侧的具体源与 `mirrorOf` 写法须有落点（check_maven_mirror_guard 另钉其前提与边界）"),
+            ("specs/stack/python.adoc", "pypi/simple",
+             "Python 侧的 pip 源须有落点（否则本条只停在通用层、到不了使用现场）"),
+            ("specs/stack/java.adoc", "clojars",
+             "Clojars 等'中央仓镜像不能替代'的源须有落点（实测：坐标归属搞错会被误判为镜像失效）"),
+            ("specs/general/ci-cd.adoc", "包源（包仓库/镜像站）的选用",
+             "CI 侧的镜像/运行时/系统包取源须与通用层次序同源（缺则流水线仍会直连境外源）"),
+            ("specs/platform/cnb.adoc", "包源与镜像源",
+             "平台侧须写清'优先用平台内已优化的源 + 镜像加速地址以实测为准'"),
+            ("library/mirrors.adoc", "实测记录",
+             "依据图书馆须记录实测取值与取样条件（缺则'先实测'这条落不了地、后人无从复核）"),
+    ):
+        p2 = os.path.join(REPO_ROOT, *rel2.split("/"))
+        if not os.path.isfile(p2):
+            err(f"{rel2} 缺失——{why}", rel2)
+            continue
+        with open(p2, encoding="utf-8") as fh:
+            t2 = fh.read()
+        if anchor not in t2:
+            err(f"{rel2} 缺少『{anchor}』——{why}", rel2)
+    # 图书馆入口登记（写文件与登记是同一动作）
+    idx = os.path.join(REPO_ROOT, "library", "README.adoc")
+    if os.path.isfile(idx):
+        with open(idx, encoding="utf-8") as fh:
+            if "link:mirrors.adoc[]" not in fh.read():
+                err("图书馆入口未登记 mirrors.adoc——登记与实际不一致，"
+                    "读者按入口找不到这条依据（写文件与登记是同一个动作）", "library/README.adoc")
+    # 图书馆主题集合的登记一致性：新增主题时"写文件"须与"登记到入口表"同动作。
+    # 另核一件事——**入口表的登记集合 ⊇ 磁盘实际主题文件集合**（漏登记即"文件在、
+    # 读者按入口找不到"，而 check_library_guard 只在下限常量被改坏时才拦得住；
+    # 既有主题 `quality.adoc` 就不在下限常量里，正说明下限常量不能当完整性来源）。
+    lib_root = os.path.join(REPO_ROOT, "library")
+    if os.path.isdir(lib_root):
+        actual_topics = {f for f in os.listdir(lib_root)
+                         if f.endswith(".adoc") and f != "README.adoc"}
+        idx_txt = ""
+        if os.path.isfile(idx):
+            with open(idx, encoding="utf-8") as fh:
+                idx_txt = fh.read()
+        registered = set(re.findall(r"^\| link:([^\[\]]+\.adoc)\[", idx_txt, re.M))
+        for missing_topic in sorted(actual_topics - registered):
+            err(f"图书馆主题 {missing_topic} 未登记到入口表——"
+                "读者按入口找不到这条依据（写文件与登记是同一个动作）", "library/README.adoc")
+    # 图书馆依据主题本体：mirrors.adoc 的要点（同义性差异、本站取舍、实测/未确证标注）
+    lib = os.path.join(lib_root, "mirrors.adoc")
+    if os.path.isfile(lib):
+        with open(lib, encoding="utf-8") as fh:
+            lt = fh.read()
+        for name, token in REGISTRY_LIBRARY_ANCHORS:
+            if token not in lt:
+                err(f"library/mirrors.adoc 缺少要点：{name}（应含 `{token}`）——"
+                    "缺则本站取舍会被读成外部标准原文、或实测数字会被当成人人适用的结论", "library/mirrors.adoc")
     phase_done()
 
 
@@ -7887,6 +8073,7 @@ def main(argv=None) -> int:
     check_runtime_env_guard()
     check_wiring_guard()
     check_maven_mirror_guard()
+    check_registry_mirror_guard()
     check_throughput_guard()
     check_performance_guard()
     check_quality_guard()

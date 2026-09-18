@@ -28,7 +28,7 @@
 ** **同时需要多个**（如既有无参又要全参）：**同时标多个构造注解**，各自生成一个，不为「合并成一个手写构造方法」而放弃注解（lombok 允许多个构造注解共存于同一类，见 `lombok.config` 的实时读取条）。
 ** **判定标准（任一命中即违规）**：①类中出现手写的构造方法（写了参数列表或方法体），而该构造可由 `@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 之一表达；②同一类里手写与 lombok 生成的构造方法并存（同一构造的来源出现两处）；③以「lombok 表达不了」为由手写而未在代码注释写明原因（如需要做入参校验、规范化、防御性拷贝等构造期逻辑时，才可手写；此类例外须在注释写明何注解表达不了）。
 ** 例外（L2，须写清理由）**：构造期需要**注解表达不了的动作**（参数校验、字段规范化、防御性拷贝、调用父类/其他对象的初始化）时，可手写该构造方法（或改在 `@Builder` 的自定义 builder 方法里承接），须在代码注释写明「哪个注解表达不了、为何」。**存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
-** 依据（标准名/编号）：ISO/IEC 25010（可维护性：同一构造写两遍、样板代码遮蔽真实差异）；ISO/IEC/IEEE 29148（判定须可验证）；Project Lombok 官方文档（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 的职责与共存方式）。**「构造一律由 lombok 生成、不手写」是本集合的取向**（见 link:../../library/adoption.adoc[]）。
+** 依据（标准名/编号）：ISO/IEC 25010（可维护性：同一构造写两遍、样板代码遮蔽真实差异）；ISO/IEC/IEEE 29148（判定须可验证）；Project Lombok 官方文档（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 的职责与共存方式）。**「构造一律由 lombok 生成、不手写」是本集合的取向**（见 依据见图书馆「规范准入与自身取舍的依据」主题（**该库不在公共引用面内**，此处只留依据名与判据））。
 * 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 link:../general/coding.adoc[]「类设计」）
 * 配置类识别特征（`@ConfigurationProperties` 等，补充通用编码规范）：除通用编码规范中"以 Config/Properties/Options/Settings 等命名"的识别外，**标注 `@ConfigurationProperties` 的类一律属配置类**（无论类名如何）——只放配置项字段与 lombok 访问器注解，**不得含任何逻辑**（无例外），校验注解与绑定注解属声明、不属逻辑（通用规则与判定标准见 link:../general/coding.adoc[]「类设计」）
 * 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行
@@ -100,3 +100,8 @@ Java 里要执行**其他语言**的脚本时，须按通用编码规范「跨�
 * 测试类 javadoc 与主类对称：测试类类级 javadoc 同样"一句话定位 + 用例目录（覆盖场景清单）+ 该测试的整体设计思路与覆盖取舍"，方法级 javadoc 写该用例细节——**测试意图、该用例的设计思路与依据、边界与断言取舍、测试数据选择理由**（用例编号与文档对应见 link:../general/testing.adoc[]「测试文档」）；这些内容**须完整进代码、不得因放入注释而省略**（原写在测试文档的类/方法级用例设计思路等也一并迁入，见 link:../general/testing.adoc[]「测试文档」）
 * javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文件格式与编码」）
 * 非文档注释（`//` 行注释、`/* */` 块注释）仅限方法体内使用，用于说明局部逻辑实现；类、字段、方法签名等结构说明一律用 javadoc（`/** */`），不得用普通注释（通用注释定位规则见 link:../general/coding.adoc[]「注释」）
+
+== 依赖与仓库（Clojars）
+
+* **Clojure/Clojars 构件按次序实测取源（L2）**：Clojars 生态的第三方构件（如 `aaron-santos/clj-tiny-astar`）**可能已由中央仓镜像一并代理**——本环境实测：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/` 是一个**聚合仓库**（group repository），该构件的 `.jar`（10006 字节）与 `.pom`（3619 字节）**可直接取到**（200）；故**先按上条次序对该镜像实测**，**取不到时才另加 Clojars 源**，境内可用的 Clojars 镜像为清华 TUNA `https://mirrors.tuna.tsinghua.edu.cn/clojars/`（实测可取到同一构件）。**镜像是否有该构件要先实测、不得凭镜像名假定**：`org.clojure/clojure` 一类坐标**本就不在 Clojars**（它来自中央仓），在 Clojars 官方与其镜像上**都取不到**（实测均 404）——这是「坐标归属搞错」、**不是镜像失效**，不得据此判定 Clojars 源不可用。选源次序与降级条件见 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」，Maven 侧的源与 `mirrorOf` 写法见 link:maven.adoc[]「仓库与镜像」。
+* **JDK 与构建工具的二进制同样按次序取源（L2）**：JDK 发行包（Adoptium/Temurin 等）、Gradle/Maven 的发行包在国内环境**优先用就近的境内镜像**（实测：腾讯云 `gradle/`、华为云 `gradle/` 与 `nodejs/`、清华 TUNA `nodejs-release/` 取得到发行包；**TUNA 的 `gradle/` 与 `AdoptOpenJDK/` 实测 404**，别按旧资料写进配置），**不要**每次都从各项目官方源站直连下载；**版本仍以项目声明为准**（见 link:../general/ci-cd.adoc[]「运行环境须与项目声明一致」），源只影响"从哪取"，不影响"取哪个版本"。**Gradle Wrapper 的 `distributionUrl` 属项目内已配置的落点**——存在即沿用，不覆盖。
