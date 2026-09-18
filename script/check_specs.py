@@ -33,7 +33,9 @@
      "外部标准只写名称/编号""不得编造""宁可不引"要点不得被删。
  16. Java 测试类命名防线：AGENTS_COMMON.adoc 的 Java 技术栈登记与 specs/stack/java-testing.adoc
      必须同时含四类后缀判据（`Tests`/`BootTests`/`PerfTests`/`IT`），防四类命名契约的口径在
-     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）。
+     某一侧被删或漂移（两侧只说其中一半，别的项目按哪份都学不全）；另钉测试类**拆分裁决**
+     三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不
+     得滥拆」是单一语义，只剩一半即会被读成"每个场景一个类"或"一个被测类一个类"。
  17. 换行符防线：specs/general/encoding.adoc 必须仍按解释器分流行尾——`LF` 基准、`.bat`/`.cmd`
      必须 `CRLF`，且保留检出归一（`core.autocrlf`）与 `.gitattributes`、`.editorconfig` 两个
      落盘约定；脚本技术栈文件（bash/python/powershell）也须各自写明行尾要求，防"Windows 批处理
@@ -344,6 +346,14 @@ SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
 JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
 # 四类测试后缀（全项目统一命名契约，不得自创变体）
 JAVA_TEST_SUFFIXES = ("Tests", "BootTests", "PerfTests", "IT")
+# 测试类拆分裁决契约（一个被测类可拆多个类，但只按需求/分类拆、不得滥拆）：
+# 规范侧须留的三段判据——可拆声明 / 同分类同属性须归一类 / 禁止滥拆。
+# 这三段是**单一语义**（"可拆但不得滥拆"）的判据，被删或被改成"只准一个测试类"即口径漂移。
+JAVA_TEST_SPLIT_MARKERS = {
+    "可拆声明": ("可拆成多个测试类",),
+    "同分类或同属性须归一类": ("分类或属性相同", "归入同一个测试类"),
+    "禁止滥拆": ("禁止滥拆", "不得为"),
+}
 # 验证规范（通用层）：其「验证总纲」「规范验证」两节是**改完规范后的语义复核定式**——
 # 验证三视角（①完整性 / ②有效性与认知质量 / ③接纳面）、每视角的判定标准与标准出处、
 # ②的判据/依据/形态/性能四维、③的逐维判据，并定式化"三视角由同一个干净子 agent 一并
@@ -1738,16 +1748,22 @@ def check_line_ending_guard():
 
 
 def check_java_test_naming():
-    """『Java 测试类命名防线』：四类测试后缀的判据不得在任一处被删或漂移。
+    """『Java 测试类命名防线』：四类测试后缀与测试类拆分裁决的判据不得在任一处被删或漂移。
 
-    背景：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的执行边界绑定**——
-    `Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行（`IT` 还须与 Maven
-    Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：调度器的 Java 技术栈登记
-    （检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc` 正文；任一处漏掉某类后缀，
-    引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/误跳过）。故机械钉住**两侧都
-    含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据），防"精简/去重"时口径漂移。
+    背景一（后缀契约）：Java 测试类名为「被测类名 + 测试类型后缀」，后缀**与构建工具的
+    执行边界绑定**——`Tests`/`BootTests` 纳入常规 `test` 阶段，`PerfTests`/`IT` 独立执行
+    （`IT` 还须与 Maven Failsafe 的默认 includes 约定对齐）。命名契约由两处共同承载：
+    调度器的 Java 技术栈登记（检测到 Java 项目即加载）与 `specs/stack/java-testing.adoc`
+    正文；任一处漏掉某类后缀，引用方按另一处学习就会漏掉该类测试（写不出、或写错后误跑/
+    误跳过）。故机械钉住**两侧都含四类后缀判据**（含 `IT` 与 Maven Failsafe 的对齐依据）。
 
-    只钉"四类后缀判据在两侧都存在"，后缀的语义与取舍是否被实质削弱仍由人/子 agent 复核承担。
+    背景二（拆分裁决）：一个被测类**不要求只有一个测试类**——可按需求/分类拆成多个，但
+    **分类或属性相同的用例必须归入同一个类**、不得按场景滥拆。这条是**单一语义**，写在
+    一处、漏一半即两边都会读错：只留"可拆"会放任"每个场景一个类"，只留"合并"会退回
+    "一个被测类一个测试类"。故规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）
+    与调度器侧的拆分口径一并钉住。
+
+    只钉"判据在两侧都存在"，后缀的语义、某次拆分是否真由分类驱动仍由人/子 agent 复核承担。
     """
     phase("Java 测试类命名防线检查")
     rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
@@ -1766,6 +1782,12 @@ def check_java_test_naming():
                           ("常规", "类别与执行阶段的绑定口径")):
             if key not in text:
                 err(f"Java 测试类命名防线被破坏：{rel} 缺失『{key}』（{desc}）", rel)
+        # 拆分裁决：一个被测类可拆多个测试类，但只按需求/分类拆、不得滥拆——三段判据缺一
+        # 即口径只剩一半（只剩"可拆"会放任滥拆，只剩"合并"会退回"一个被测类一个测试类"）。
+        for part, anchors in JAVA_TEST_SPLIT_MARKERS.items():
+            if not all(a in text for a in anchors):
+                err(f"Java 测试类命名防线被破坏：{rel} 缺失拆分裁决『{part}』判据——"
+                    "『可拆但不得滥拆』只剩一半（要么放任滥拆、要么退回一个被测类一个测试类）", rel)
     # 调度器的 Java 技术栈登记须与该契约一致（只说一半会让引用方学不全）
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         generic = fh.read()
@@ -1779,6 +1801,11 @@ def check_java_test_naming():
             err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
                 f"『{'/'.join(missing)}』后缀——调度器与该命名契约口径漂移"
                 "（引用方照调度器学习会漏掉该类测试）", "AGENTS_COMMON.adoc")
+        if "滥拆" not in java_line or "多个测试类" not in java_line:
+            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
+                "「一个被测类可按需求/分类拆多个测试类、且不得滥拆」的口径——"
+                "调度器只传达后缀、不传达拆分裁决，引用方照调度器学习会把"
+                "「一个被测类一个测试类」当硬规定", "AGENTS_COMMON.adoc")
     phase_done()
 
 
