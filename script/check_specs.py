@@ -269,6 +269,18 @@
      只有一处来源、结构变化不静默漏字段；无嵌套单层不在范围内）。`specs/general/coding.adoc`
      「对象转换（多层嵌套对象的转换）」只留跨语言抽象、**不得出现框架专名**；框架专名与写法落在
      `specs/stack/java.adoc`「对象转换（MapStruct）」。
+ 47. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
+     提到某个类型时**优先写类名 + `import`、不写类全名**（用户举例：
+     `com.c332030.ctool4j.core.exception.CUnauthorizedException`）。通用层落点为
+     `specs/general/doc.adoc`「注释与文档」下的同名条目（**L2**：先短类名、需要解析时在就近
+     代码示例里写一条 `import`），须齐备"如果有必要"的**三个必要情形**（同名类冲突 / 无代码
+     示例可承载 import / 外部或他仓类型）、**三个例外边界**（路径与坐标不是类型名、
+     字符串与配置里必须全限定的场合（`@ConditionalOnClass` 类名、`main-class`、反射按名加载、
+     `import` 本身）、文档自身的文本引用）与"不做存量一次性替换"的存量口径；Java 落点为
+     `specs/stack/java.adoc`「javadoc」（含 `{@link}`/`@see` 成员引用与配置/反射照常全限定的
+     边界）；调度器（`AGENTS_COMMON.adoc` 的文档条目与 Java 技术栈条目）须带识别特征——
+     缺则该条永不被触发加载。**为 L2 且判据是语义的（`java.util.UUID` 一类外部类型全限定
+     属合规），故不扫存量文档**："某处到底该不该写全限定"交人/子 agent 复核。
  40. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
      （也不得转由他人/其他执行者代发）——`specs/platform/cnb.adoc`「评论唤起新实例
      （平台侧的派发入口）」须有该 L1 条（含判定标准四态：新增评论指向本次唤起名 /
@@ -4643,6 +4655,124 @@ def check_reuse_precedent_guard():
     phase_done()
 
 
+# 文档中类型指代的写法（`specs/general/doc.adoc`「文档中提及类型优先写类名 + import，
+# 不写类全名」L2 + `specs/stack/java.adoc`「javadoc」的 Java 落点）：用户提出的规范要求——
+# 文档里优先写**类名 + import**，而不是**类全名**（举例：`com.c332030.ctool4j.core.exception.CUnauthorizedException`）。
+# 失效形态是"包路径整条塞进句子"：一句话里出现两三个类全名即不可读，而包路径属"去哪找"的信息、
+# 只该出现一次（读者据此 import 一次即可按短名阅读）。缺这条时，文档会长期与"代码里写短名、
+# 只有 import 一处全限定"的形态相反。**本条为 L2、不做存量一次性替换**（随动调整），故防线
+# 只钉"条文与判据仍在、且三个必要例外与三处不属禁止对象的边界没被删"——**不扫存量文档**：
+# 存量里既有大量合法的外部类型全限定（如 `java.util.UUID`）与路径引用，机械扫会把合规写法
+# 误报成违规（判据是语义的，交人/子 agent 复核）。
+DOC_TYPE_NOTATION_SECTION = "文档中提及类型优先写类名 + import，不写类全名"
+
+
+def check_doc_type_notation_guard():
+    """『文档类型指代（类名 + import）防线』：文档里写类名、不写类全名。
+
+    背景（用户提出的规范要求）：**文档中优先使用 类名 + import（如果有必要），而不是类全名**
+    （举例：`com.c332030.ctool4j.core.exception.CUnauthorizedException`）。缺这条时，写文档
+    会顺手把包路径整条写进正文——长句里出现两三个类全名即不可读，而"这个类型在哪"本属
+    只写一次的信息（import 的语义就是"全限定只出现一次、其余按短名"），文档与代码的形态
+    于是相反。故落点为**通用层** `specs/general/doc.adoc`（该条语言无关）+ **技术栈层**
+    `specs/stack/java.adoc`「javadoc」（Java 的具体写法与例外）。
+
+    本防线钉住**四处要点**：
+      * **通用层条文与级别**：`specs/general/doc.adoc` 须有该节、**标 L2**，并写明
+        "先短名 + 必要时就近 `import`"与"不得用类全名当标识"（防被降级成建议或被删）；
+      * **"如果有必要"的判据**：须逐条给出**三个必要情形**（同名类冲突 / 无代码示例可承载
+        import / **该类型不在本仓库的 classpath 内**）——没有判据时"如果有必要"会被读成
+        "想写就写"，等于把禁则交回执行者自裁；第三条尤其不得被写成"不在本仓库/本项目内"
+        （用户口径是"**除非不在 classpath 才能写类全名**"，写成前者会让 classpath 内、
+        但他仓/外部依赖的类型也一律禁写全名——把"不在 classpath"偏严成"不在本仓库"）；
+      * **例外的边界**：须写明**路径与坐标不是类型名、照常写全**、**字符串与配置里必须全限定
+        的场合（`@ConditionalOnClass` 类名、`main-class`、反射按名加载、`import` 本身）不受本条
+        约束**、**`{@link}`/`@see` 的成员引用与文档路径照常写全**——否则会被读成"凡全限定皆禁"，
+        反而写出不合法的 javadoc 标签（`{@link com.x.Foo}` 必须全限定）；
+      * **栈落点与触发**：`specs/stack/java.adoc`「javadoc」须有 Java 落点并指向通用条；
+        `AGENTS_COMMON.adoc` 调度器须在**文档条目**与 **Java 技术栈条目**两处写识别特征
+        （文中出现"包名 + 类名"形态的指代）——缺则该条永远不会被触发加载（规则实际失效）。
+
+    **不扫存量**：判据是语义的（`java.util.UUID` 一类外部类型全限定属合规），机械扫会把合规
+    写法误报成违规；本条为 L2、不做一次性替换，"某处到底该不该写全限定"交人/子 agent 复核。
+    """
+    phase("文档类型指代（类名 + import）防线检查")
+    rel_doc = os.path.relpath(DOC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(DOC_FILE):
+        err(f"缺少文件 {rel_doc}——『文档中类型指代写类名 + import』的通用层落点丢失"
+            "（该条跨语言，须收在通用文档规范而非某一技术栈）", rel_doc)
+    else:
+        text = open(DOC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            ((DOC_TYPE_NOTATION_SECTION + "（L2）",),
+             "条文：须有该条并**在条目标题上标 L2**（防被删或降级成建议——降级后写类全名会"
+             "重新变成个人选择；级别与条目标题须在同一处，别处出现 L2 不算）"),
+            (("类名", "import", "不得"),
+             "正反两面：须同时写明『先短类名 + 必要时就近 import』与『不得用类全名充当标识』，"
+             "只写正面（要写类名）拦不住『包路径整条塞进句子』这一实际失效"),
+            (("同名类冲突",),
+             "判据：三个必要情形之一『同名类冲突』（两个短名相同的类型，短名无法区分时"
+             "限定到能区分的粒度）"),
+            (("无代码示例可承载", "import"),
+             "判据：三个必要情形之二『无代码示例可承载 import』（纯文档通篇没有代码块）"),
+            (("不在本仓库的 classpath 内",),
+             "判据：三个必要情形之三『该类型不在本仓库的 classpath 内』（读者无法据短名解析、"
+             "也给不出可解析的 import）——这正是用户口径的『除非不在 classpath 才能写类全名』，"
+             "被写成『只要在仓库/项目内就禁』即偏严、后半句失效"),
+            (("本仓库的依赖/可解析范围",),
+             "跨语言口径：通用层须写明 'classpath' 取『本仓库的依赖/可解析范围』、"
+             "各语言按等价依赖树理解，否则非 JVM 语言读到该词无法执行"),
+            (("路径与坐标", "不是类型名"),
+             "例外边界：须写明路径与坐标（link/@see 的文件路径）不是类型名、照常写全，"
+             "否则会被读成『凡全限定皆禁』而写出错误引用"),
+            (("@ConditionalOnClass", "main-class", "反射"),
+             "例外边界：须写明字符串与配置里必须全限定的场合（@ConditionalOnClass 类名、"
+             "main-class、反射按名加载、import 本身）属逻辑实现、不受本条约束"),
+            (("不做存量", "随动"),
+             "存量口径：须写明不做一次性替换、随动调整，否则会被扩成『全库扫一遍改全限定』"),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"文档类型指代防线被破坏：{rel_doc} 缺失要点 {missing}——{desc}；"
+                    "该条对应用户提出的规范要求，不得删除、不得降级为建议",
+                    rel_doc)
+    # Java 栈落点
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——『类名 + import』的 Java 落点丢失"
+            "（javadoc 里的具体写法与 {@link} 成员引用须全限定这条边界只在栈层说得清）",
+            rel_java)
+    else:
+        jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        missing = [k for k in ("全限定类名", "{@link", "import",
+                               "com.c332030.ctool4j.core.exception.CUnauthorizedException",
+                               "不在本仓库的 classpath 内")
+                   if k not in jt]
+        if missing:
+            err(f"文档类型指代防线被破坏：{rel_java} 缺失要点 {missing}——"
+                "Java 栈须给出具体写法（短类名 + import 语句）、用户给出的类全名实例，"
+                "并写明 {@link}/@see 的成员引用与配置/反射按名加载照常全限定",
+                rel_java)
+    # 加载调度器两处识别特征（缺则该条永远不会被加载）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(GENERIC_FILE):
+        ct = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("不写类全名", "包名 + 类名"),
+             "文档条目的识别特征：写注释/文档/格式条目须含『优先写类名 + import、不写类全名』"
+             "与『文中出现包名 + 类名形态的指代』，否则写文档时该条永不被触发加载"),
+            (("类型指代", "全限定类名", "classpath"),
+             "Java 技术栈条目的识别特征：Java 条目须含『类型指代：写类名 + import、"
+             "不写全限定类名』（含 {@link} 成员引用与配置/反射照旧的边界），"
+             "否则 Java 项目写 javadoc 时该条永不被触发加载"),
+        ):
+            missing = [k for k in keys if k not in ct]
+            if missing:
+                err(f"文档类型指代防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    phase_done()
+
+
 def check_conversion_guard():
     """『对象转换防线』：多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径。
 
@@ -6538,6 +6668,7 @@ def main(argv=None) -> int:
     check_api_naming_guard()
     check_persistence_access_guard()
     check_conversion_guard()
+    check_doc_type_notation_guard()
     check_dev_flow_guard()
     check_checklist_guard()
     check_rename_split_guard()

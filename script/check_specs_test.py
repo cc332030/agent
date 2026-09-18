@@ -7379,5 +7379,160 @@ class TestCheckPromptsIndexGuard(CheckSpecsTestCase):
         self.assertIn("PROMPTS.adoc", self.error_texts())
 
 
+class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
+    """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
+
+    该条为 **L2**、且判据是语义的（`java.util.UUID` 一类外部类型全限定属合规），故防线
+    **不扫存量文档**，只钉"条文与判据仍在、边界没被删"。最易被四件事冲掉：
+      * **"如果有必要"被读成"想写就写"** —— 三个必要情形（同名类冲突 / 无代码示例可承载
+        import / 外部或他仓类型）被抽掉后，禁则就交回执行者自裁；
+      * **被读成本条禁止一切全限定** —— 例外边界（路径与坐标不是类型名、字符串与配置里必须
+        全限定的场合、`{@link}`/`@see` 成员引用）被删，反而会写出不合法的 javadoc 标签；
+      * **存量口径被扩成全库改** —— "不做一次性替换、随动调整"被删，会被扩成"扫全库改全限定"；
+      * **调度器无识别特征** —— 规则写了却永不被触发加载（实际失效）。
+    故本组用例除正例外，逐条覆盖上述反例。
+    """
+
+    DOC = (
+        "= 文档规范\n\n== 注释与文档\n"
+        "* **文档中提及类型优先写类名 + import，不写类全名（L2）**：文档提到某个类型时，"
+        "**一律先直接写它的类名**（`CUnauthorizedException`），需要解析时在**就近的代码示例**里"
+        "写一条 `import com.c332030.ctool4j.core.exception.CUnauthorizedException;`——"
+        "**不得**用**类全名**充当标识。**\"如果有必要\"的判据**：①**同名类冲突**；"
+        "②**无代码示例可承载 import**（纯文档通篇没有代码块）；"
+        "③**该类型不在本仓库的 classpath 内**（不在本仓库依赖树里）。"
+        "\"classpath\"取\"本仓库的依赖/可解析范围\"。"
+        "**三个例外的边界**：①**路径与坐标**（文档里的链接与 `@see` 标签所引的文件路径）"
+        "**不是类型名**，照常写全；②**字符串与配置**里必须全限定的场合（Spring 的 "
+        "`@ConditionalOnClass`、`application.yml` 的 `main-class`、反射按名加载、`import` "
+        "语句本身）属逻辑实现；③**文档自身的文本引用**仍按上条的引用写法。"
+        "**本集合的自身取舍，属 L2**：**不做存量一次性替换、随动调整**。\n")
+
+    JAVA = (
+        "= Java 规范\n\n== javadoc\n"
+        "* 类型指代写短类名 + import、不写全限定类名：javadoc 里提到某个类时**先写短类名**"
+        "，需要解析时在**代码示例**里写一条 `import com.c332030.ctool4j.core.exception."
+        "CUnauthorizedException;`；**不得**写全限定类名（**除非该类型不在本仓库的 classpath "
+        "内**）。`{@link ...}` / `@see` 里按类全名做的"
+        "**成员引用**（javadoc 标签要求合法引用，须全限定）照常。\n")
+
+    COMMON = (
+        "= 通用规范\n"
+        "** 写注释/文档/格式（**文档里提到某个类型时优先写类名 + `import`、"
+        "不写类全名**（识别特征：文中出现\"包名 + 类名\"形态的指代））\n"
+        "** Java 项目（**类型指代**：javadoc/文档里写类名 + `import`、不写全限定类名"
+        "（除非该类型不在本仓库的 classpath 内；`{@link}` 成员引用与配置/反射按名加载"
+        "照旧全限定））\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_doc = cm.DOC_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.DOC_FILE = os.path.join(self.root, "specs", "general", "doc.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        self.write("specs/general/doc.adoc", self.DOC)
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+
+    def tearDown(self) -> None:
+        (cm.DOC_FILE, cm.JAVA_STACK_FILE) = (self._orig_doc, self._orig_java)
+        super().tearDown()
+
+    def test_positive_passes(self):
+        cm.check_doc_type_notation_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_deleted_reports(self):
+        # 反例①：整条被删（最简单的冲掉方式）
+        self.write("specs/general/doc.adoc", "= 文档规范\n\n== 注释与文档\n* 别的条目\n")
+        cm.check_doc_type_notation_guard()
+        self.assertIn("文档类型指代防线被破坏", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例②：级别被摘（L2 去掉后写类全名会重新变成个人选择）
+        self.write("specs/general/doc.adoc", self.DOC.replace("不写类全名（L2）", "不写类全名"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("文档类型指代防线被破坏", self.error_texts())
+
+    def test_necessary_cases_removed_reports(self):
+        # 反例③：三个必要情形被抽掉 → "如果有必要"变成想写就写
+        self.write("specs/general/doc.adoc",
+                   self.DOC.replace("①**同名类冲突**；", "①……；"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("同名类冲突", self.error_texts())
+
+    def test_exception_boundary_removed_reports(self):
+        # 反例④：例外边界（路径不是类型名）被删 → 会被读成本条禁止一切全限定
+        self.write("specs/general/doc.adoc",
+                   self.DOC.replace("**不是类型名**，照常写全", "也照常写全"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("路径与坐标", self.error_texts())
+
+    def test_conditional_on_class_boundary_removed_reports(self):
+        # 反例⑤：字符串/配置里必须全限定的边界被删
+        self.write("specs/general/doc.adoc",
+                   self.DOC.replace("@ConditionalOnClass", "某些注解"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("@ConditionalOnClass", self.error_texts())
+
+    def test_outside_classpath_case_hardened_reports(self):
+        # 反例⑥：第三条判据被写成"不在本仓库/本项目内"（把"不在 classpath"偏严成"不在本仓库"，
+        # 用户口径的后半句"除非不在 classpath 才能写类全名"失效）
+        self.write("specs/general/doc.adoc",
+                   self.DOC.replace("③**该类型不在本仓库的 classpath 内**（不在本仓库依赖树里）。",
+                                    "③**该类型不在本仓库/本项目内**。"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("classpath", self.error_texts())
+
+    def test_java_stock_scope_hardened_reports(self):
+        # 反例⑦：Java 落点的同一判据被写成"外部依赖或他仓类型"（不含 classpath 口径）
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("（**除非该类型不在本仓库的 classpath 内**）", ""))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("不在本仓库的 classpath 内", self.error_texts())
+
+    def test_stock_scope_removed_reports(self):
+        # 反例⑥：存量口径被删 → 会被扩成"扫全库改全限定"
+        self.write("specs/general/doc.adoc",
+                   self.DOC.replace("**不做存量一次性替换、随动调整**", "一律改齐"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("存量", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑦：Java 落点被删（接口/import 的具体写法只在栈层说得清）
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== javadoc\n* 别的要求\n")
+        cm.check_doc_type_notation_guard()
+        self.assertIn("全限定类名", self.error_texts())
+
+    def test_java_member_ref_boundary_removed_reports(self):
+        # 反例⑧：{@link}/@see 成员引用须全限定这条边界被删
+        self.write("specs/stack/java.adoc", self.JAVA.replace("{@link", "链接"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("Java 栈", self.error_texts())
+
+    def test_dispatcher_trigger_removed_reports(self):
+        # 反例⑨：调度器没有识别特征 → 规则永不被触发加载（实际失效）
+        self.write("AGENTS_COMMON.adoc", "= 通用规范\n** 写注释/文档/格式\n")
+        cm.check_doc_type_notation_guard()
+        self.assertIn("包名 + 类名", self.error_texts())
+
+    def test_java_trigger_removed_reports(self):
+        # 反例⑩：Java 栈条目的识别特征被删
+        self.write("AGENTS_COMMON.adoc",
+                   self.COMMON.replace("（**类型指代**：javadoc/文档里写类名 + `import`、"
+                                       "不写全限定类名"
+                                       "（除非该类型不在本仓库的 classpath 内；"
+                                       "`{@link}` 成员引用与配置/反射按名加载"
+                                       "照旧全限定））", ""))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("类型指代", self.error_texts())
+
+    def test_missing_doc_file_reports(self):
+        # 反例⑪：通用层落点文件缺失 → 必须报错、不得静默通过
+        os.remove(os.path.join(self.root, "specs", "general", "doc.adoc"))
+        cm.check_doc_type_notation_guard()
+        self.assertIn("specs/general/doc.adoc", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
