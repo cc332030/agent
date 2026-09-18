@@ -21,6 +21,14 @@
 * 局部变量强制使用 lombok val、var（硬性要求）：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃 val/var；val/var 仅适用于局部变量，字段不得使用；唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断等）等确需显式类型提示的场景可写显式类型，此类例外须克制使用
 * lombok.config 实时读取：lombok.config 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行，不得在规范或代码注释中固化其具体配置内容
 * 对象创建统一用 builder、构造器统一用 lombok：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 @SuperBuilder 而非 @Builder，支持继承场景）；无参、必参、全参构造方法一律用 lombok 注解生成，禁止手写任何构造器；实体类用 @Data、@NoArgsConstructor、@AllArgsConstructor；@AllArgsConstructor 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器
+* **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：构造方法一律由 lombok 注解生成，**不得手写**任何构造方法体或参数列表——
+** **无参构造**：用 `@NoArgsConstructor`（需要时配 `@NoArgsConstructor(access = AccessLevel.PRIVATE)` 一类访问级别）；
+** **必参构造**（只含必填/不变字段）：用 `@RequiredArgsConstructor`（字段以 `private final` 修饰，或在 `lombok.config` 里另行声明必填判据，按项目当前 `lombok.config` 执行）；
+** **全参构造**：用 `@AllArgsConstructor`；
+** **同时需要多个**（如既有无参又要全参）：**同时标多个构造注解**，各自生成一个，不为「合并成一个手写构造方法」而放弃注解（lombok 允许多个构造注解共存于同一类，见 `lombok.config` 的实时读取条）。
+** **判定标准（任一命中即违规）**：①类中出现手写的构造方法（写了参数列表或方法体），而该构造可由 `@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 之一表达；②同一类里手写与 lombok 生成的构造方法并存（同一构造的来源出现两处）；③以「lombok 表达不了」为由手写而未在代码注释写明原因（如需要做入参校验、规范化、防御性拷贝等构造期逻辑时，才可手写；此类例外须在注释写明何注解表达不了）。
+** 例外（L2，须写清理由）**：构造期需要**注解表达不了的动作**（参数校验、字段规范化、防御性拷贝、调用父类/其他对象的初始化）时，可手写该构造方法（或改在 `@Builder` 的自定义 builder 方法里承接），须在代码注释写明「哪个注解表达不了、为何」。**存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
+** 依据（标准名/编号）：ISO/IEC 25010（可维护性：同一构造写两遍、样板代码遮蔽真实差异）；ISO/IEC/IEEE 29148（判定须可验证）；Project Lombok 官方文档（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 的职责与共存方式）。**「构造一律由 lombok 生成、不手写」是本集合的取向**（见 link:../../library/adoption.adoc[]）。
 * 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 link:../general/coding.adoc[]「类设计」）
 * 配置类识别特征（`@ConfigurationProperties` 等，补充通用编码规范）：除通用编码规范中"以 Config/Properties/Options/Settings 等命名"的识别外，**标注 `@ConfigurationProperties` 的类一律属配置类**（无论类名如何）——只放配置项字段与 lombok 访问器注解，**不得含任何逻辑**（无例外），校验注解与绑定注解属声明、不属逻辑（通用规则与判定标准见 link:../general/coding.adoc[]「类设计」）
 * 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行

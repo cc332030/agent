@@ -7379,6 +7379,137 @@ class TestCheckPromptsIndexGuard(CheckSpecsTestCase):
         self.assertIn("PROMPTS.adoc", self.error_texts())
 
 
+class TestCheckLombokConstructorGuard(CheckSpecsTestCase):
+    """钉住『无参/必参/全参构造优先用 lombok、不手写』（用户提出的规范调整）。
+
+    该条对应"顺手手写构造方法"这一真实失效：类上已标 `@Data`，仍另写无参/全参构造——
+    同一构造出现两个来源（字段增删时改一处、另一处静默过期），样板代码遮蔽真实差异。
+    最易被三件事冲掉：
+      * **降级成建议** —— "尽量用 lombok"读起来无害，于是"手写更直观"重新成立；
+      * **三种构造注解只留一半** —— 漏掉 `@RequiredArgsConstructor`（用户明确要求的"必参"
+        这一档）后，执行者遇到必参构造无处可依、只能手写；
+      * **例外被写宽** —— "注解表达不了"不限定在构造期校验/规范化/防御性拷贝上，
+        就变成随时可套用的豁免口。
+    故本组用例覆盖"条文被删""降级成建议""注解缺失""例外被抽""调度器/README 未同步"。
+    """
+
+    JAVA = (
+        "= Java 规范\n"
+        "\n"
+        "== 编码\n"
+        "* **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：构造方法一律由 lombok 注解生成，"
+        "**不得手写**任何构造方法体或参数列表——\n"
+        "** **无参构造**：用 `@NoArgsConstructor`；\n"
+        "** **必参构造**：用 `@RequiredArgsConstructor`；\n"
+        "** **全参构造**：用 `@AllArgsConstructor`；\n"
+        "** **同时需要多个**：**同时标多个构造注解**，各自生成一个。\n"
+        "** **判定标准（任一命中即违规）**：①类中出现手写的构造方法，而该构造可由注解表达；"
+        "②同一类里手写与 lombok 生成的构造方法并存；③以「lombok 表达不了」为由手写而未写原因。\n"
+        "** 例外（L2，须写清理由）**：构造期需要注解表达不了的动作（校验/规范化/防御性拷贝）时，"
+        "可手写该构造方法，须在代码**注释**写明原因。**存量**按 link:../core/execution.adoc[]"
+        "「规范变更的存量处理」随动迁移。\n"
+        "** 依据（标准名/编号）：ISO/IEC 25010（可维护性）；ISO/IEC/IEEE 29148（判定须可验证）。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_common = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.JAVA_STACK_FILE, cm.GENERIC_FILE, cm.README_FILE) = (
+            self._orig_java, self._orig_common, self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("AGENTS_COMMON.adoc",
+                   "** 构造方法不手写**：无参/必参/全参构造用 lombok 注解"
+                   "（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）。\n")
+        self.write("README.adoc", "技术栈层：java（含**构造方法不手写**）。\n")
+
+    def test_valid_guard_passes(self):
+        self._write_valid()
+        cm.check_lombok_constructor_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：条文被删 → "手写更直观"重回默认做法
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== 编码\n* 强制优先使用 lombok。\n")
+        cm.check_lombok_constructor_guard()
+        self.assertIn("无参 / 必参 / 全参构造优先用 lombok、不手写", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：L1 被降级成建议 → "尽量用 lombok"读起来无害
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("不手写（L1）", "不手写（L2，建议）"))
+        cm.check_lombok_constructor_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_required_args_annotation_removed_reports(self):
+        # 反例：必参构造注解被抽掉（用户明确要求的"必参"这一档）→ 必参构造仍手写
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("@RequiredArgsConstructor", "省略"))
+        cm.check_lombok_constructor_guard()
+        self.assertIn("RequiredArgsConstructor", self.error_texts())
+
+    def test_judgement_standard_removed_reports(self):
+        # 反例：判定标准被删 → 只剩一句口径、读者无法判断是否命中
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("** **判定标准（任一命中即违规）**：①类中出现手写的构造方法，"
+                                     "而该构造可由注解表达；"
+                                     "②同一类里手写与 lombok 生成的构造方法并存；"
+                                     "③以「lombok 表达不了」为由手写而未写原因。\n", ""))
+        cm.check_lombok_constructor_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_exception_clause_removed_reports(self):
+        # 反例：例外条被删 → 既有正当做法（构造期校验）被一刀切
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("** 例外（L2，须写清理由）**", "** 说明**"))
+        cm.check_lombok_constructor_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_softening_wording_reports(self):
+        # 反例（关键词堆砌式假绿）：条文还在，但措辞回退成"尽量/可手写"
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("**不得手写**任何构造方法体或参数列表",
+                                     "尽量用 lombok，可手写构造方法"))
+        cm.check_lombok_constructor_guard()
+        self.assertIn("回退措辞", self.error_texts())
+
+    def test_java_stack_missing_reports(self):
+        # 反例：Java 栈落点缺失 → Java 执行者按栈文件学仍会手写
+        self._write_valid()
+        os.remove(cm.JAVA_STACK_FILE)
+        cm.check_lombok_constructor_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例：调度器未同步识别特征 → Java 项目按栈登记加载时看不到这条
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "= 入口\n\nJava 项目 → java.adoc\n")
+        cm.check_lombok_constructor_guard()
+        self.assertIn("AGENTS_COMMON", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：README 目录说明未同步 → 读者从目录说明看不到这条存在
+        self._write_valid()
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_lombok_constructor_guard()
+        self.assertIn("README", self.error_texts())
+
+
 class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
     """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
 
