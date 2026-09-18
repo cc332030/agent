@@ -210,6 +210,15 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
+ 43. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
+     同一文件在一次改动里既重命名、又改内容时，`specs/general/git.adoc` 的
+     「重命名与内容修改须分两个提交（默认固定动作）」须整节齐备（一句话规则、适用对象与判定标准、
+     分量不是理由、提交顺序、无损拆分、两个提交都进本次交付、例外、引用方自检命令），
+     必加载层 `specs/core/execution.adoc` 的 P7 重申行在，`AGENTS_COMMON.adoc` 的
+     「最高优先级铁律」仍登记 P7 并指向权威定义，`specs-project-maintainer/priority.adoc`
+     的 P7 条目在且级别与依据齐备——防"用对了 `git mv`、却把重命名与内容修改塞进同一个提交"
+     从 P1 与 P7 两条防线之间漏过去（用户原话："这是对丢失历史、重命名被识别为新增+删除的补充"）。
+
  42. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
      （动手前先摸清现状与最佳方案 / 不得绕开既有体系另写一套（三个允许条件、不留两套并存）/
      大范围改动先确认（不得替用户判定既有流程已废弃）/ 改动前先定基线（扫描既有校验手段、完整可用
@@ -2885,6 +2894,166 @@ def check_checklist_guard():
             elif name not in defined:
                 err(f"{rel} 点名了脚本中未定义的 `{name}`——"
                     "防线的声称与实现不一致（改名/删除后未同步文档）", rel)
+    phase_done()
+
+
+# 『重命名与内容修改须分两个提交防线』要点（每条须同时命中多处要素，否则别处一句同名字样即可假绿）
+# 本节的条目轴（小标题）——逐项须在，防"整条 bullet 被摘掉、正文并入相邻条目"这一形态
+RENAME_SPLIT_ITEM_LABELS = (
+    "**一句话规则**",
+    "**适用对象与判定标准（L1，默认固定动作）**",
+    "**分量大小不是理由（L1）**",
+    "**提交顺序（L1）**",
+    "**无损拆分（L1，判定标准）**",
+    "**两个提交都要进本次交付（L1）**",
+    "**例外（只有一条，L1）**",
+    "**可执行抓手（引用方项目自检）**",
+)
+
+RENAME_SPLIT_GUARD_KEYS = (
+    (("== 重命名与内容修改须分两个提交（默认固定动作）", "权威完整定义", "最高关注项 P7"),
+     "git 规范须有本节的**权威完整定义**（最高关注项 P7）——缺则拆两个提交只能靠执行者临场发挥"),
+    (("只做重命名、内容逐字节不变", "只改内容、不再动路径", "一律拆成两个提交"),
+     "一句话规则须在（第一个提交只做重命名、内容逐字节不变；第二个提交只改内容、不再动路径；"
+     "一律拆成两个提交）——只留小标题、正文被抽掉同样报错"),
+    (("每一个", "顺手重命名", "不存在"),
+     "适用对象须覆盖每一个既重命名又改内容的文件，并写明分量小/顺手重命名均不是例外"
+     "（否则少量引用的场景即可自圆其说）"),
+    (("不是逐字节不变", "只重命名", "任一命中即不合规", "同一个提交"),
+     "判定标准须可逐条核对（同一提交里 rename 与内容行改动并现 / 首个提交内容不逐字节不变 / "
+     "只重命名的提交缺失 + 任一命中即不合规）——只留一句口号或只留一个小标题则无法判定是否被遵守"),
+    (("分量大小不是理由",),
+     "须写明分量小、引用少不是合并的理由（本条最易被改动很小合理化掉）"),
+    (("先重命名、后改内容", "-M", "同时丢掉 rename 识别"),
+     "提交顺序须写明（先重命名、后改内容），并写明颠倒会连 rename 识别一起丢掉（相似度阈值机制）"),
+    (("提交仍能取到", "内容逐字节不变", "0 增 0 删"),
+     "无损拆分须给出判据形态（首个提交仍能取到内容逐字节不变的版本、改名提交 0 增 0 删）"),
+    (("无损拆分", "从未存在过", "可追溯"),
+     "无损拆分须写明：把改动留在工作区、只 git mv 新路径会让首个提交变成新路径加已改内容、"
+     "中间版本从未存在过"),
+    (("两个提交都要进本次交付", "同一个 PR"),
+     "两个提交须一并推送、落在同一个 PR（否则第二个提交留本地就让本条形同虚设）"),
+    (("为由把两者压回一个", "P7 不可降级"),
+     "与「压缩提交」的接口须写明：本条的两个提交不是临时中间提交、不得以压缩提交为由压回一个"
+     "（少这一条即会出现以压缩提交自我豁免的路径）"),
+    (("例外（只有一条", "用户明确声明"),
+     "例外须写清：只有用户明确声明合并成一个提交时才照其声明，声明是例外而非默认"),
+    (("可执行抓手（引用方项目自检）", "git log --follow --name-status"),
+     "须给出引用方自检命令（git log --follow --name-status 应见先 R 后 M 两条记录）"
+     "——规范集合看不到引用方工作区，抓手只能落在可执行的自检命令上"),
+)
+
+
+def check_rename_split_guard():
+    """『重命名与内容修改须分两个提交防线』：用户提出的 P7 要求不得被删或降级。
+
+    背景（用户提出的补充要求）：最高关注项 P1 只管"移动/重命名要用 `git mv`"（保住 rename
+    跟踪），管不到"**用对了命令、却把重命名与内容修改塞进同一个提交**"——那种形态下
+    `git log --follow` 虽认得出移动，重命名前后仍要再叠一次内容 diff 才能看出真实变更，
+    blame 与 review 同时失效。用户的要求是"当一个文件涉及到重命名及修改时，强制改成两个提交
+    （仅操作需要本文件），第一个提交先重命名，第二个提交再改内容（这是对丢失历史、重命名被
+    识别为新增+删除的补充）"——故拆成新的一道最高关注项 P7，与 P1 并列为同一目的的两道防线。
+
+    本防线钉住**四处**（只钉"要求文本仍在"）：
+      * `specs/general/git.adoc` 的「重命名与内容修改须分两个提交（默认固定动作）」整节要点齐备
+        （一句话规则、适用对象与判定标准、分量不是理由、提交顺序、无损拆分、两个提交都进本次
+        交付、例外、引用方自检命令）；
+      * 必加载层 `specs/core/execution.adoc` 的 P7 重申行在；
+      * `AGENTS_COMMON.adoc` 的「最高优先级铁律」仍登记 P7 并指向权威定义；
+      * `specs-project-maintainer/priority.adoc` 的 P7 条目在、且标明级别与依据。
+
+    "某次是否真的分成了两个提交"属运行时事实（提交历史），机械无法判定（引用方的工作区与历史
+    本仓库看不到），交人/子 agent 复核；但"要求被抽掉/被降级成建议"必须拦住。
+    """
+    phase("重命名与内容修改须分两个提交防线检查")
+    rel_git = "specs/general/git.adoc"
+    path = os.path.join(REPO_ROOT, *rel_git.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel_git}——『重命名与内容修改须分两个提交』失去权威定义落点", rel_git)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"^== 重命名与内容修改须分两个提交.*?(?=\n== |\Z)", text, re.M | re.S)
+    if m is None:
+        err(f"{rel_git} 未找到「重命名与内容修改须分两个提交」一节——"
+            "用户提出的 P7 要求失去权威定义落点（最高关注项不得被删除或降级）", rel_git)
+        phase_done()
+        return
+    section = m.group(0)
+    # 结构核对：本节的**每一项**（小标题）都须在——只删小标题而正文被并入别处、
+    # 或整条 bullet 被摘掉，都会让该项在读者侧消失，而上面按"内容关键词"的核对
+    # 可能被相邻条款的字样兜住（本防线必须对"整条被摘掉"这一最危险形态发声）。
+    for item in RENAME_SPLIT_ITEM_LABELS:
+        if item not in section:
+            err(f"重命名与内容修改防线被破坏：{rel_git} 的「重命名与内容修改须分两个提交」"
+                f"缺失条目『{item}』——条目的轴标题被整条摘掉/改写即等于该要求失效"
+                "（本条的每一项都是用户提出要求的一部分，不得删除、不得降级为建议）", rel_git)
+    for keys, desc in RENAME_SPLIT_GUARD_KEYS:
+        missing = [k for k in keys if k not in section]
+        if missing:
+            err(f"重命名与内容修改防线被破坏：{rel_git} 的「重命名与内容修改须分两个提交」"
+                f"缺失要点 {missing}——{desc}；本条是用户明确提出的最高关注项 P7，"
+                "不得删除、不得降级为建议", rel_git)
+    # 必加载层重申行
+    rel_exec = "specs/core/execution.adoc"
+    exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
+    if not os.path.isfile(exec_path):
+        err(f"缺少 {rel_exec}——P7 的必加载层重申失去落点", rel_exec)
+    else:
+        with open(exec_path, encoding="utf-8") as fh:
+            exec_text = fh.read()
+        for keys, desc in ((("重命名与内容修改须分两个提交（L1 最高关注项 P7）",),
+                            "必加载层须有 P7 的重申行（该层每次会话无条件加载）"),
+                           (("只做重命名、内容逐字节不变",),
+                            "重申行须保留判定形态（只做重命名、内容逐字节不变）")):
+            missing = [k for k in keys if k not in exec_text]
+            if missing:
+                err(f"重命名与内容修改防线被破坏：{rel_exec} 缺失 {missing}——{desc}",
+                    rel_exec)
+    # 公共入口的铁律登记
+    common_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
+    if os.path.isfile(common_path):
+        with open(common_path, encoding="utf-8") as fh:
+            common = fh.read()
+        iron = common.split("== 最高优先级铁律（先读）", 1)[-1].split("\n== ", 1)[0]
+        for keys, desc in ((("同一文件的重命名与内容修改必须分两个提交", "最高关注项 P7"),
+                            "「最高优先级铁律」须登记 P7（进门必读，缺则下次会话读不到）"),
+                           (("内容逐字节不变", "再改内容"),
+                            "铁律行须保留两提交与各自只做一件事的判据形态"),
+                           (("重命名与内容修改须分两个提交（默认固定动作）",),
+                            "铁律行须指向权威定义节名（否则读者只知道要拆两个提交、"
+                            "不知道判据与自检命令在哪）")):
+            missing = [k for k in keys if k not in iron]
+            if missing:
+                err(f"重命名与内容修改防线被破坏：AGENTS_COMMON.adoc 的「最高优先级铁律」"
+                    f"缺失 {missing}——{desc}", "AGENTS_COMMON.adoc")
+    else:
+        err("缺少 AGENTS_COMMON.adoc——P7 的进门必读登记无从核对", "AGENTS_COMMON.adoc")
+    # 维护方不可降级清单
+    rel_priority = "specs-project-maintainer/priority.adoc"
+    pri_path = os.path.join(REPO_ROOT, *rel_priority.split("/"))
+    if os.path.isfile(pri_path):
+        with open(pri_path, encoding="utf-8") as fh:
+            pri = fh.read()
+        pm = re.search(r"^=== P7\..*?(?=\n=== |\Z)", pri, re.M | re.S)
+        if pm is None:
+            err(f"{rel_priority} 未找到最高关注项 P7 条目——不可降级清单被少列一项", rel_priority)
+        else:
+            seg = pm.group(0)
+            for keys, desc in ((("要求（L1，最高",), "P7 须标明级别 L1、最高"),
+                               (("**依据**",), "缺失『**依据**』行——依据可压缩为标准名/编号，"
+                                "但不得整段删除"),
+                               (("判定标准",), "P7 须有可逐条核对的判定标准")):
+                missing = [k for k in keys if k not in seg]
+                if missing:
+                    err(f"重命名与内容修改防线被破坏：{rel_priority} 的 P7 缺失 {missing}"
+                        f"——{desc}", rel_priority)
+        if "P1-P7" not in pri and "P1/P2/P3/P5/P7" not in pri:
+            err(f"重命名与内容修改防线被破坏：{rel_priority} 的分级概览行未同步 P7"
+                "（清单被加了一项而概览未同步，读者按概览核对会漏项）", rel_priority)
+    else:
+        err(f"缺少 {rel_priority}——P7 的不可降级登记无从核对", rel_priority)
     phase_done()
 
 
@@ -5930,6 +6099,7 @@ def main(argv=None) -> int:
     check_persistence_access_guard()
     check_dev_flow_guard()
     check_checklist_guard()
+    check_rename_split_guard()
     check_wiring_guard()
     check_asciidoctor_syntax()
 
