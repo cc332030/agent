@@ -124,8 +124,9 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
     def _write_valid(self, filler=""):
         self.write("AGENTS_COMMON.adoc",
                    "= 入口\n\n== 分类与懒加载（加载调度器）\n"
-                   "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
-                   "== 规范文件登记完整性\n" + filler)
+                   "=== 必加载层（每次工作都只加载）：\n"
+                   "* 执行原则 → link:specs/core/execution.adoc[]\n"
+                   "== 技术栈扩展约定\n" + filler)
         self.write("specs/core/execution.adoc", "= 执行原则\n" + filler)
         self.write("specs-project-maintainer/priority.adoc", "= 优先级\n" + filler)
 
@@ -286,55 +287,54 @@ class TestCheckDispatcherLayers(CheckSpecsTestCase):
     def _write(self, sec_body: str) -> None:
         self.write("AGENTS_COMMON.adoc",
                    "= 入口\n\n== 分类与懒加载（加载调度器）\n" + sec_body +
-                   "\n== 规范文件登记完整性\n")
+                   "\n== 技术栈扩展约定\n")
 
     def test_all_layers_present_passes(self):
         self._write(
-            "* 必加载层（每次工作都须加载）：\n"
-            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
-            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
-            "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
-            "* 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
-            "  ** Java 项目 → link:specs/stack/java.adoc[]\n"
-            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
-            "  ** 通用工具/库类项目 → link:specs/general/doc-tool.adoc[]\n"
-            "* 平台层（按使用平台加载）：\n"
-            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
-            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
-            "  ** 条目落点：说明\n")
+            "=== 必加载层（每次工作都须加载）：\n"
+            "* 执行原则 → link:specs/core/execution.adoc[]\n"
+            "=== 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "* 编写代码 → link:specs/general/coding.adoc[]\n"
+            "=== 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
+            "* Java 项目 → link:specs/stack/java.adoc[]\n"
+            "=== 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "* 通用工具/库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "=== 平台层（按使用平台加载）：\n"
+            "* CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "=== 维护方层（只对维护共享内容的项目生效）：\n"
+            "* 条目落点：说明\n")
         cm.check_dispatcher_layers()
         self.assertEqual(cm.errors, [])
 
     def test_missing_layer_header_reports(self):
         # 反例：技术栈层层头被吞掉（条目仍在，但挂到了通用层下）
         self._write(
-            "* 必加载层（每次工作都须加载）：\n"
-            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
-            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
-            "  ** Java 项目 → link:specs/stack/java.adoc[]\n"
-            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
-            "  ** 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
-            "* 平台层（按使用平台加载）：\n"
-            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
-            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
-            "  ** 条目落点：说明\n")
+            "=== 必加载层（每次工作都须加载）：\n"
+            "* 执行原则 → link:specs/core/execution.adoc[]\n"
+            "=== 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "* Java 项目 → link:specs/stack/java.adoc[]\n"
+            "=== 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "* 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "=== 平台层（按使用平台加载）：\n"
+            "* CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "=== 维护方层（只对维护共享内容的项目生效）：\n"
+            "* 条目落点：说明\n")
         cm.check_dispatcher_layers()
         self.assertIn("缺失「技术栈层」层头行", self.error_texts())
 
     def test_empty_layer_header_reports(self):
         # 反例：空壳层头（层头下无任何条目）
         self._write(
-            "* 必加载层（每次工作都须加载）：\n"
-            "  ** 执行原则 → link:specs/core/execution.adoc[]\n"
-            "* 通用层（涉及对应活动时加载，不得跳过）：\n"
-            "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
-            "* 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
-            "* 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
-            "  ** 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
-            "* 平台层（按使用平台加载）：\n"
-            "  ** CNB 平台 → link:specs/platform/cnb.adoc[]\n"
-            "* 项目自身维护层（只对维护共享内容的项目生效）：\n"
-            "  ** 条目落点：说明\n")
+            "=== 必加载层（每次工作都须加载）：\n"
+            "* 执行原则 → link:specs/core/execution.adoc[]\n"
+            "=== 通用层（涉及对应活动时加载，不得跳过）：\n"
+            "=== 技术栈层（按项目实际使用的语言/技术栈加载）：\n"
+            "=== 项目类型层（按项目在其自身规范中的主动声明加载）：\n"
+            "* 工具库类项目 → link:specs/general/doc-tool.adoc[]\n"
+            "=== 平台层（按使用平台加载）：\n"
+            "* CNB 平台 → link:specs/platform/cnb.adoc[]\n"
+            "=== 维护方层（只对维护共享内容的项目生效）：\n"
+            "* 条目落点：说明\n")
         cm.check_dispatcher_layers()
         self.assertIn("层头下没有任何条目", self.error_texts())
 
@@ -4517,9 +4517,11 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
             "link:specs/general/git.adoc[]\u300c重命名与内容修改须分两个提交（默认固定动作）\u300d。\n")
         self.write(
             "specs-project-maintainer/priority.adoc",
-            "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P7，条款本身 L1）**：略。\n\n"
+            "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P6/P7，条款本身 L1）**：略。\n\n"
             "=== P7. 重命名与内容修改必须分两个提交\n"
-            "* **要求（L1，最高）**：分两个提交、先重命名后改内容。\n"
+            "* **要求（L1，最高）**：分两个提交、先重命名后改内容；本次涉及改名的文件全收在"
+            "**同一个改名提交**里、**不按文件个数分摊**；**「压缩提交」未点名本条**时只压"
+            "临时中间提交、本条两个提交**原样保留**。\n"
             "* **依据**：ISO 10007。\n"
             "* **判定标准**：`git log --follow --name-status` 应见先 R 后 M。\n")
 
@@ -4647,21 +4649,21 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         # 反例：删掉"压缩提交的请求不覆盖本条" -> "用户说要合并成一个提交"就成了本条失效的依据
         # （这正是用户点名不能照做的形态：合并/压缩的请求不解除重命名与内容修改要分两个提交）
         self._write_valid()
-        self._drop("* **「压缩提交」的请求不覆盖本条（L1，与「例外」并列的唯一另一条边界）**")
+        self._drop("* **「压缩提交」的请求不覆盖本条（L1）**")
         cm.check_rename_split_guard()
         self.assertIn("压缩提交", self.error_texts())
 
     def test_exemption_needs_named_declaration(self):
         # 反例：例外允许"只说合并/压缩"就算声明 -> 本条的例外被放宽成"共用一个词即可"
         self._write_valid()
-        self._drop("**点名重命名与内容修改**")
+        self._drop("点名重命名与内容修改")
         cm.check_rename_split_guard()
         self.assertIn("点名", self.error_texts())
 
     def test_compression_post_check_removed_reports(self):
         # 反例：删掉"压缩后核对" -> 压缩要求把本条的记录一并压掉时无抓手可核
         self._write_valid()
-        self._drop("④**压缩后核对")
+        self._drop("**压缩后核对**")
         cm.check_rename_split_guard()
         self.assertIn("压缩后核对", self.error_texts())
 
@@ -4729,15 +4731,139 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         cm.check_rename_split_guard()
         self.assertIn("P7", self.error_texts())
 
-    def test_maintainer_level_removed_reports(self):
-        # 反例：P7 条目的级别被静默降级（要求（L1，最高 -> L2）
+    def test_maintainer_p7_skeleton_reports(self):
+        # 反例（本轮实测缺口）：把维护方 P7 的『要求』压成两句骨架——"要求/依据/判定标准"
+        # 三个轴名都还在，而**可核对的判据**被抽掉（不按文件个数分摊、未点名本条时原样保留）。
+        # 旧判据只核轴名，故这种"轴名齐全、判据消失"的形态能全绿；读者按 P7 核对时，
+        # 批量改名与「压缩提交」的接口两处判据已无从判定。
+        self._write_valid()
+        self.write("specs-project-maintainer/priority.adoc",
+                   "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P6/P7，条款本身 L1）**：略。\n\n"
+                   "=== P7. 重命名与内容修改必须分两个提交\n"
+                   "* **要求（L1，最高）**：分两个提交、先重命名后改内容。\n"
+                   "* **依据**：ISO 10007。\n"
+                   "* **判定标准**：`git log --follow --name-status` 应见先 R 后 M。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("不按文件个数分摊", self.error_texts())
+        self.assertIn("原样保留", self.error_texts())
+
+    def test_maintainer_overview_omits_p6_reports(self):
+        # 反例（本轮实测缺口）：分级概览行回到旧口径 "P1/P2/P3/P5/P7"——把 P6（协作执行者
+        # 选择）漏在"条款本身 L1"的铁律之外。旧判据只找 "P7" 字样，故这一漏项能靠相邻字样
+        # 兜住而全绿；读者按概览核对时会漏项（尤其是抽去 P4/P6 的级别说明之后）。
         self._write_valid()
         self.write("specs-project-maintainer/priority.adoc",
                    "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P7，条款本身 L1）**：略。\n\n"
                    "=== P7. 重命名与内容修改必须分两个提交\n"
+                   "* **要求（L1，最高）**：分两个提交、先重命名后改内容。\n"
+                   "* **依据**：ISO 10007。\n"
+                   "* **判定标准**：`git log --follow --name-status` 应见先 R 后 M。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("P6", self.error_texts())
+
+    def test_maintainer_level_removed_reports(self):
+        # 反例：P7 条目的级别被静默降级（要求（L1，最高 -> L2）
+        self._write_valid()
+        self.write("specs-project-maintainer/priority.adoc",
+                   "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P6/P7，条款本身 L1）**：略。\n\n"
+                   "=== P7. 重命名与内容修改必须分两个提交\n"
                    "* **要求（L2）**：分两个提交。\n* **依据**：ISO 10007。\n* **判定标准**：略。\n")
         cm.check_rename_split_guard()
         self.assertIn("P7", self.error_texts())
+
+
+class TestCheckCriteriaNotAxisGuard(CheckSpecsTestCase):
+    """钉住『防线的核对对象是判据本体、不是轴名』这条通则**进了规范正文**。
+
+    本条是**下一轮维护者读得到、读不到**的问题，不是某次审核有没有发现的问题：
+    教训（「轴名齐全 ≠ 判据在」）原只写在 `script/check_specs.py` 与配套测试的注释里——
+    正例全绿只能说明防线不误报，**防线的实际效力全靠反例用例**；而「下一个人读规范时
+    看不看得到这条通则」只能靠正文存在性与要点齐备来钉。
+    故用例覆盖：整节被删（回到只活在注释里）、核对对象被抹成一句口号、判定标准被抽、
+    必配反例须报红被删、以及维护方入口未登记（通则不会被加载）。
+    """
+
+    CFG = LQ
+    CBR = RQ
+
+    SECTION = (
+        "== 强调的正确做法（避免" + LQ + "写两次" + RQ + "的误解）\n"
+        "\n"
+        "* **机械钉住**：对" + LQ + "任何时候都不得消失" + RQ + "的条目，用校验脚本钉住其**存在性**。\n"
+        "\n"
+        "=== 机械防线的核对对象是**判据本体**，不是轴名（L1）\n"
+        "\n"
+        "**" + LQ + "条目有要求/依据/判定标准三个轴" + RQ + "不等于" + LQ + "判据在" + RQ + "**。\n"
+        "\n"
+        "* **核对对象（L1）**：机械防线须钉**判据本体**——即**判定标准里能拿去核对的那句话**。"
+        "**只核" + LQ + "轴名/条目标题在不在" + RQ + "即为防线空转**。\n"
+        "* **判定标准（逐条可核对，任一命中即未做到）**：① 被钉的是**轴名**；② 抽掉判据句后"
+        "防线**仍不报红**；③ 靠**相邻条目的字样**兜住已消失的要求。\n"
+        "* **必配反例用例（L1）**：须有**一条" + LQ + "轴名齐全、判据被抽走" + RQ + "的反例用例**"
+        "——改造后防线**必须报红**。\n"
+    )
+
+    def _write(self, section: str = None, registered: bool = True) -> None:
+        self.write("specs-project-maintainer/priority.adoc", section or self.SECTION)
+        self.write("AGENTS.adoc",
+                   "= 项目规范\n\n"
+                   + ("* 维护方清单：`specs-project-maintainer/priority.adoc`\n"
+                      if registered else ""))
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_criteria_not_axis_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_priority_file_reports(self):
+        # 反例：维护方清单缺失 -> 通则失去落点
+        self._write()
+        os.remove(os.path.join(self.root, "specs-project-maintainer", "priority.adoc"))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("priority.adoc", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例（本轮实测形态）：通则整节被删、只剩在脚本注释里 -> 下一个维护者读规范看不到
+        self._write("== 强调的正确做法\n\n* **机械钉住**：钉住其**存在性**。\n")
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("注释", self.error_texts())
+
+    def test_axis_only_wording_removed_reports(self):
+        # 反例：只留"钉住存在性"、把"钉判据本体、不钉轴名"抹掉 -> 回到"轴名齐即通过"
+        self._write(self.SECTION.replace(
+            "* **核对对象（L1）**：机械防线须钉**判据本体**——即**判定标准里能拿去核对的那句话**。",
+            "* **核对对象（L1）**：机械防线须钉住条目形态是否齐备。"))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("判据本体", self.error_texts())
+
+    def test_idle_guard_wording_removed_reports(self):
+        # 反例：删掉"只核轴名即为防线空转"这一失效形态 -> 读者会把"轴名齐"当成"判据在"
+        self._write(self.SECTION.replace(
+            "**只核" + LQ + "轴名/条目标题在不在" + RQ + "即为防线空转**。", "。"))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("轴名", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准被抽 -> 本通则自身退化成一喊句口号，无法判定某道防线是否空转
+        self._write(self.SECTION.replace(
+            "* **判定标准（逐条可核对，任一命中即未做到）**：① 被钉的是**轴名**；② 抽掉判据句后"
+            "防线**仍不报红**；③ 靠**相邻条目的字样**兜住已消失的要求。\n", ""))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_counterexample_requirement_removed_reports(self):
+        # 反例：删掉"必配反例用例（轴名齐全、判据被抽走须报红）" -> 防线的实际效力无从证明
+        self._write(self.SECTION.replace(
+            "* **必配反例用例（L1）**：须有**一条" + LQ + "轴名齐全、判据被抽走" + RQ + "的反例用例**"
+            "——改造后防线**必须报红**。\n", ""))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("报红", self.error_texts())
+
+    def test_maintainer_entry_unregistered_reports(self):
+        # 反例：清单未在维护方入口登记 -> 不会被加载、通则实际失效
+        self._write(registered=False)
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
 
 
 class TestCheckSquashCommitGuard(CheckSpecsTestCase):
@@ -5995,34 +6121,34 @@ class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
     CHANGELOG_TEXT = (
         "= 变更日志编写规范\n\n"
         "== 组织形态（按版本分组；版本内按类型分组）\n\n"
-        "* **以发布版本为一级分组（默认）**：版本号即发布标识\n"
-        "* **按时间流水（次级形态，L2）**：仅无发布版本概念的项目使用\n"
+        "* **以发布版本为一级分组（默认**，L1）**：版本号即发布标识\n"
+        "* **按时间流水（次级形态，L2）**：仅在项目**没有\"发布版本\"概念**时使用\n"
         "* **排序方向恒为时间倒序**（最新在上）；**版本倒序与时间倒序**是同一件事，"
         "**不存在**正序形态；流水式**不得在条目之间插入版本分组**；"
-        "**两种分组口径不并存**（项目级唯一）\n"
-        "* **组内按类型分组**：类型取固定的闭集\n"
+        "**两种分组口径不并存**——**一个项目同一种日志只能用一种分组口径**\n"
+        "* **组内按类型分组**：类型取**固定的闭集**、同一项目内用词一致\n"
         "* **没有条目的分组不写**\n\n"
         "== 应当记录（有价值）\n\n"
         "* **对外可见的行为/接口/契约变更**\n\n"
-        "**要素齐备底线（L1）**：齐备类型、变更点、影响、标记四项要素\n\n"
-        "== 表格形态的判据（采用表格式时）\n\n"
+        "**要素齐备底线**：齐备类型、变更点、影响、标记四项要素\n\n"
+        "== 表格形态的判据\n\n"
         "* **列义：表格承载的字段**\n"
         "  ** **分组列 = 受影响的对象**\n"
         "  ** **类型列 = 变更类型**\n"
         "  ** **变更点 = 受影响的对外标识**\n"
         "  ** **影响 = 读者要做什么、能感知到什么**\n"
         "* **判据依赖关系**：不得用类型分级代替破坏性变更标注；"
-        "不得把影响写成变更点两列的同义重复；影响列写不出读者要做的动作时说明不该记\n"
-        "* **破坏性变更在表格中的标注**：逐行标注，不得只放在版本组的引文句里\n"
+        "不得把影响写成变更点两列的同义重复；影响列写不出读者要做的动作时**不该记**\n"
+        "* **破坏性变更在表格中的标注**：逐行标注，**不得只放在版本组的引文**\n"
         "* **条目下限（L1）**：表格里一条 = 一个变更点\n\n"
         "== 条目书写\n\n"
         "* **两种条目形态（择一，不得混用）**：流水式与表格式\n"
     )
 
     EVIDENCE_TEXT = (
-        "== 变更日志的形态（Keep a Changelog / Conventional Commits / "
-        "Conventional Changelog）\n\n"
-        "* 自述没有标准格式：\"Not really.\"——这是业界约定，不是标准\n"
+        "== 变更日志的形态\n\n"
+        "* Keep a Changelog、Conventional Commits、Conventional Changelog 三条依据齐备；"
+        "* 自述没有标准格式：\"Not really\"——属**约定**\n"
         "* 逐字：\"Changelogs are for humans, not machines.\"、"
         "\"The same types of changes should be grouped.\"\n"
         "* BREAKING CHANGES 分组与 scope/subject 分列\n"
@@ -6045,7 +6171,7 @@ class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
         # 反例：表格形态的判据节被删（加了列却没人知道每列该写什么）
         self._write_valid()
         self.write("specs/general/changelog.adoc",
-                   self.CHANGELOG_TEXT.replace("== 表格形态的判据（采用表格式时）", "== 其它"))
+                   self.CHANGELOG_TEXT.replace("== 表格形态的判据", "== 其它"))
         cm.check_changelog_structure_guard()
         self.assertIn("表格形态的判据", self.error_texts())
 
@@ -6081,7 +6207,7 @@ class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("specs/general/changelog.adoc",
                    self.CHANGELOG_TEXT.replace(
-                       "* **按时间流水（次级形态，L2）**：仅无发布版本概念的项目使用\n", ""))
+                       "* **按时间流水（次级形态，L2）**：仅在项目**没有\"发布版本\"概念**时使用\n", ""))
         cm.check_changelog_structure_guard()
         self.assertIn("按时间流水（次级形态，L2）", self.error_texts())
 
@@ -6129,7 +6255,7 @@ class TestCheckChangelogStructureGuard(CheckSpecsTestCase):
         # 反例：把业界约定写成标准（丢掉"没有标准格式"的如实标注）
         self._write_valid()
         self.write("library/sources.adoc", self.EVIDENCE_TEXT.replace(
-            "\"Not really.\"——这是业界约定，不是标准", "这是标准"))
+            "\"Not really\"——属**约定**", "这是标准"))
         cm.check_changelog_structure_guard()
         self.assertIn("Not really", self.error_texts())
 
@@ -8971,7 +9097,7 @@ class TestCheckQualityGuard(CheckSpecsTestCase):
 
     SECTION = (
         "= 通用编码规范\n\n== 代码质量（新产出即高质）\n"
-        "* 适用面：**新写的内容**与**本次改到的内容**适用；**存量**随动迁移。\n"
+        "* 适用面：**适用面（先读）**——**写任何新代码、改任何既有代码**时适用；**新增的那一部分永远按本节判**。\n"
         "* **新代码不得引入坏味道（L1）**：重复代码、过长函数、依恋情结、注释代替澄清。\n"
         "* **职责单一、结构清晰（L1）**：能不能**一句话说清**它做什么；嵌套**三层以内**。\n"
         "* **命名表意、不用缩写（L1）**：同一概念在项目中只有一个叫法；禁缩写与拼音。\n"
@@ -8981,7 +9107,7 @@ class TestCheckQualityGuard(CheckSpecsTestCase):
         "* **无并发隐患（L1）**：**共享可变状态**须有明确同步策略；锁范围与顺序写清。\n"
         "* **性能不写退化写法（L2）**：**循环内** IO 与查询、**N+1** 查询。\n"
         "* **测试与文档跟得上（L1）**：**新功能**必配用例；契约写进**文档注释**。\n"
-        "* **交付前质量自检（L1）**：**逐条自查**本节十项；**能过机械判据**是下限。\n"
+        "* **交付前质量自检（L1）**：**逐条自查**本节十项；**能过机械判据是下限**。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 12207、"
         "Martin Fowler《Refactoring》、Clean Code、SEI CERT。\n")
 
@@ -9093,37 +9219,37 @@ class TestCheckGenerationEfficiencyGuard(CheckSpecsTestCase):
 
     GEN = (
         "== 生成效率（同等质量下最少往返）\n"
-        "* **先定完成判据，再动手（L1）**：把**什么算做完**写成判据（**返工**根因）。\n"
+        "* **先定完成判据，再动手（L1）**：把**什么算做完**写成判据（**返工来源**）。\n"
         "* **一次做对一次做完（L1）**：**一次改到位**；不得**碎片推进**；"
         "判据：**本轮交付之后是否需要再改同一批文件**。\n"
         "* **延后验证、一次到位（L1）**：**攒到一处**；不得**重启一次构建**；"
         "**存在真实依赖**才逐步验证。\n"
         "* **失败一次就查根因，不靠重试撞对（L1）**：**反复重启同一构建**即违规；"
-        "**第二遍**无新认识即违规。\n"
+        "**同一问题上被执行第二遍**、且**新认识**缺位即违规。\n"
         "* **按需读取、不全量预处理（L1）**：**全量预读**即违规；**低信号**内容会降准确率。\n"
-        "* **批量化同类操作（L2）**：**一次做完**、能**脚本化**就脚本化。\n"
-        "* **任务边界一次说清（L2）**：避免**两段式**；不得**先做一版看看**。\n"
+        "* **批量化同类操作（L2）**：**批量一次做完**、能**脚本化**就脚本化。\n"
+        "* **任务边界一次说清（L2）**：**一次把边界与产物形态说清**；不得**先做一版看看**。\n"
         "* **依据名代替复述（L2）**：复述制造**第二真源**。\n"
         "* **不重做已做完的事（L2）**：不得**再确认一次**、**再跑一遍看看**。\n"
-        "* **收尾一次收敛（L2）**：汇报**一次写完**；不得**再补一条**。\n"
+        "* **收尾一次收敛（L2）**：汇报**一次写完**；不得**零散补齐**。\n"
         "* **效率不得越过质量（L1，本节的边界）**：都**不得用于减少**必要工作；"
         "效率不是**更少的质量**。\n"
-        "* 依据（标准名/编号）：ISO/IEC/IEEE 25010、Anthropic 工程博客 context engineering、"
-        "progressive disclosure。\n")
+        "* 依据（标准名/编号）：ISO/IEC/IEEE 25010、Anthropic 工程博客、"
+        "Agent Skills 开放规范。\n")
 
     TOKEN = (
         "== token 纪律（提高利用率与节省开销）\n"
         "* **先把两个概念分开**：**不是一回事**、但**手段大幅重叠**——"
         "**提高 token 利用率**是「每份输入产生的有效产出」，**节省 token** 是减少总量。\n"
-        "* **利用率判据：输入须「用到了」（L1）**：**答不出用途**的即**无效输入**。\n"
+        "* **利用率判据：输入须「**用到了**」（L1）**：**答不出用途**的即**无效输入**。\n"
         "* **约束放在外部、不进上下文（L1）**：能**落成文件**就不要复述；"
         "写在对话里每次请求都要重发。\n"
         "* **少复述、多引用（L1）**：不得**复述**已知内容，写**依据名**。\n"
-        "* **不重复读、不重复贴（L1）**：**只读一次**；不得**再确认一次**。\n"
+        "* **不重复读、不重复贴（L1）**：**只读一次**、**只贴一次**。\n"
         "* **只记结论与取值、不带原始日志（L1）**：不夹带**原始日志**；写**取值 + 来源**。\n"
         "* **三件事不得为省 token 让步（L1，本条的边界）**：**功能完整性**、**代码质量**、"
         "**验证完整**一件都不能省。\n"
-        "* **成本须可说明、不得以「不贵」带过（L2）**：须说出换来什么判断。\n"
+        "* **成本须可说明、不得以「不贵」带过（L2）**：**说不出来即应砍掉**。\n"
         "* **不设「必须量化 token」的要求**：**判据是**输入有没有被用上。\n"
         "* 依据（标准名/编号）：ISO/IEC/IEEE 25010、ISO/IEC Directives Part 2。\n")
 
@@ -9175,9 +9301,9 @@ class TestCheckGenerationEfficiencyGuard(CheckSpecsTestCase):
         self.assertIn("不是一回事", self.error_texts())
 
     def test_retry_rule_removed_reports(self):
-        self._write_all(gen=self.GEN.replace("**反复重启同一构建**即违规", "可反复试"))
+        self._write_all(gen=self.GEN.replace("**反复重启同一构建**即违规", "可反复试").replace("**同一问题上被执行第二遍**、且**新认识**缺位即违规。", "略。"))
         cm.check_generation_efficiency_guard()
-        self.assertIn("反复重启同一构建", self.error_texts())
+        self.assertIn("同一问题上被执行第二遍", self.error_texts())
 
     def test_dispatcher_entry_removed_reports(self):
         self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
@@ -10238,6 +10364,16 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
             self.TEMPLATE.replace("那是判据的唯一真源，本文件不重复其条文", "详见上文"))
         cm.check_entry_doc_manifest()
         self.assertIn("判据的真源", self.error_texts())
+
+    def test_platform_wording_swapped_reports(self):
+        # 反例（本轮实测缺口）：把"由平台缓存目录决定"换成"由系统缓存目录决定"——
+        # 旧判据只核"缓存目录"这一个词，换掉"平台"照样全绿，而要求恰恰是"外置落点**由平台
+        # 决定**"（新实例按平台自行定位，不是抄一个本机绝对路径进项目）。故本条钉住
+        # "『平台』与『缓存目录』须同现"，防该要求被换成别的说法而判据空转。
+        self._write_manifest_valid(
+            self.TEMPLATE.replace("位置由平台缓存目录决定", "位置由系统缓存目录决定"))
+        cm.check_entry_doc_manifest()
+        self.assertIn("缓存目录", self.error_texts())
 
     def test_info_section_without_hint_reports(self):
         # 反例：该节的提示行被删（既不提示、也不预填）→ 读者不知道该往这一节写什么
