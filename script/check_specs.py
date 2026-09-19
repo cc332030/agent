@@ -53,6 +53,14 @@
      每次会话无条件加载的常驻物）；且加载调度器"涉及即加载"条目数不得超过
      DISPATCHER_ITEMS_MAX（三者都是"越写越多、每次会话都付上下文"的机械抓手；
      体量与层级的语义判断仍由人复核）。
+ 20c. 单个规范文件的软阈值：**非必加载**的单个规范文件（specs/**、
+     specs-project-maintainer/**）超过 SOFT_FILE_SIZE_HINT（约 30 KB）时**打印提醒**，
+     但**不得进 errors、不得影响退出码**——它是"该评估优化了"的信号（先判归属与层级、
+     再判是否该拆），不是硬上限：用 err() 就成了硬上限，会逼出"为压体积删规则"或
+     "为达标拆出没人维护的空壳"，与 P2/P3 的完整性底线冲突。与第 20 项的分工：
+     第 20 项管必加载层"合计量"（硬、超限即报错），本项管"单个文件"（软、只提醒），
+     判据对象与强度都不同、不得互相替代；常驻层不吃本软阈值（防两条口径混淆）。
+     由 `check_file_size_hint` 钉住。
  20b. 加载调度器分层结构：调度器节内**五个公共加载层 + 项目自身维护层**的层头行
      （`* 必加载层（…）：` 一类）仍在，且每层至少有一个条目（防空壳层头）——层头定义
      "涉及即加载"的触发语义，层头被吞掉后其条目会挂到上一层、触发条件随之出错
@@ -416,6 +424,15 @@ PROJECT_ENTRY_BUDGET = 24000
 # 条目过多会让"该加载哪些"难以判全；当前约 30，留余量到 40。
 DISPATCHER_ITEMS_MAX = 40
 
+# 单个规范文件的**软阈值**（字节）：超过即"提醒该评估优化了"，**不报错、不阻断**。
+# 与 RESIDENT_BUDGET（必加载层"合计量"的硬天花板）判据对象与强度都不同：硬上限管
+# "每次会话无条件加载的合计量"、超限即失败，软阈值管"单个非必加载文件的体量提醒"、
+# 只打印提示。故二者**不得互相替代**，也不并入同一常量。
+# 阈值取值属本集合自身的判据化取舍（外部材料只给"上下文是有限注意力预算、按需加载"
+# 的方向，不定数值）；调整时须同步 specs-project-maintainer/spec-lifecycle.adoc
+# 「单个规范文件的软阈值」正文里的"约 30 KB"。
+SOFT_FILE_SIZE_HINT = 30000
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # AGENTS_COMMON.adoc 是通用规范入口，位于仓库根目录（引用方以仓库根为基准解析
 # 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
@@ -485,6 +502,7 @@ REVIEW_FILE = os.path.join(SPECS_DIR, "general", "review.adoc")
 LINE_ENDING_STACK_FILES = (
     os.path.join(SPECS_DIR, "stack", "bash.adoc"),
     os.path.join(SPECS_DIR, "stack", "python.adoc"),
+    os.path.join(SPECS_DIR, "stack", "batch.adoc"),
     os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
 )
 
@@ -524,6 +542,61 @@ CONTRACT_REUSE_SECTION = "跨服务/对外调用的请求响应类优先移动�
 # 不得用下划线或驼峰；服务路由/网关前缀与已发布且外部依赖的对外路径照旧。用户提出的口径：「**feign 接口地址
 # 优先使用中划线**」。本条**只在技术栈层**（「HTTP 路径」只在 Web 框架语境下有定义，通用层不写协议/框架专名）。
 API_PATH_DASH_SECTION = "HTTP 接口路径优先用中划线（kebab-case）"
+# 跨环境脚本（`specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）：
+# 同一份功能要在**多个操作系统**上跑（最典型 Windows 与 Linux）时，**逻辑只写一份**放
+# **跨平台逻辑层**（一份跨平台逻辑代码），`.bat`/`.cmd`/`.sh`/`.ps1` 只做**薄壳**（找解释器、
+# 原样透传参数、原样返回
+# 退出码）。用户给出的原文口径：「一个脚本的功能会需要在多个环境执行，最典型的就是 windows 和
+# linux，这种情况下**不要写两遍**，而是**再加一个跨平台的实际逻辑脚本写逻辑**，bat、sh 文件作为
+# 入口调用它」——**用户口语里的「逻辑脚本」指的正是「逻辑层那一份」**，落到条文里须按两层
+# 分别取名（逻辑层＝逻辑代码、入口层＝入口脚本），否则「脚本」一词同时指向两层），
+# 并要求给出**实现语言的推荐**（判据：适合写脚本、环境好搭建、代码不容易
+# 出错、效率还可以、好维护、兼容性不错）。
+# **本条最易被冲掉的两处**：①"入口里别写逻辑"退化成"入口也可以稍微处理一下参数"（于是参数解析、
+# 路径拼装又回到入口、两平台各写一遍）；②"只写一份"被"顺手再写个 sh 版本"绕过。故把三件可判定
+# 的事（薄壳三件事、参数与退出码原样传递、不得在另一平台重写逻辑）与语言取舍一并钉住。
+CROSS_PLATFORM_SCRIPT_SECTION = "跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）"
+SCRIPT_SPEC_FILE = os.path.join(SPECS_DIR, "general", "script.adoc")
+CROSS_PLATFORM_STACK_FILES = (
+    os.path.join(SPECS_DIR, "stack", "bash.adoc"),
+    os.path.join(SPECS_DIR, "stack", "python.adoc"),
+    os.path.join(SPECS_DIR, "stack", "batch.adoc"),
+    os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
+)
+# 批处理（`.bat`/`.cmd`）专属规则的**唯一落点**（`specs/stack/batch.adoc`）。用户指出的缺口：
+# 「好像没有看到 bat 脚本的规范文件」——此前 `.bat` 只在 powershell.adoc「启动脚本（同名 .bat）」
+# 里作为 PowerShell 的**附属**出现，`.bat`/`.cmd` 自身的栈文件不存在：于是"写一个批处理脚本"没有
+# 触发特征可命中、编码/行尾/块语句延迟展开/退出码这些专属规则无处承载（且 powershell.adoc 用
+# `link:specs/stack/powershell.adoc[]` 自己指自己的写法，实际落点不成立）。故按技术栈扩展约定
+# 补一个栈文件，并把**批处理专属规则从 powershell.adoc 收敛到该文件**（引用不复制）。
+BATCH_STACK_FILE = os.path.join(SPECS_DIR, "stack", "batch.adoc")
+# 批处理栈必须承载的要点（键元组须全部出现），逐条对应用户要的"bat 脚本规范"：
+#   ① 编码/行尾（`cmd.exe` 按字节读行尾、按系统 ANSI 代码页解析 → CRLF + 纯 ASCII + 不写 BOM）；
+#   ② 作为跨环境入口时的薄壳三件事与 `exit /b %errorlevel%`（不写则退出码是最后一条命令的）；
+#   ③ 批处理**自身语言**的坑：`@echo off`、块语句延迟展开（`%var%` 在解析期展开）、
+#      路径加引号、`%~1` 去引号判空、未定义变量当错误、`^` 续行不留尾随空格、不混写 PowerShell 语法。
+BATCH_STACK_KEYS = (
+    (("行尾", "CRLF", "纯 ASCII", "BOM"),
+     "批处理栈须写明编码与行尾（`cmd.exe` 按字节读行尾、按系统 ANSI 代码页解析，故 CRLF + "
+     "纯 ASCII + 不写 BOM）——缺则批处理按通用 LF/UTF-8 落盘、在 Windows 上直接执行失败"),
+    (("薄壳", "exit /b", "errorlevel"),
+     "批处理栈须写明作为跨环境入口时的薄壳三件事与 `exit /b %errorlevel%`——缺则批处理入口"
+     "又承载参数解析/路径拼装，或退出码恒为最后一条命令的（调用方/CI 看不到真实成败）"),
+    (("延迟展开", "enabledelayedexpansion"),
+     "批处理栈须写明块语句里 `%var%` 在**解析期**展开、须用延迟展开（`!var!`）——"
+     "缺则循环里累加/拼接取不到值，属批处理最常见的静默失效"),
+    (("引号", "%~1"),
+     "批处理栈须写明路径须加引号（Windows 路径常含空格）、可选参数用 `%~1` 去引号后判空——"
+     "缺则含空格的路径直接报错、参数判空判错"),
+    (("@echo off",),
+     "批处理栈须写明首行 `@echo off`——缺则每条命令都被回显、调用方与 CI 无法从输出判断实际执行了什么"),
+    (("未定义",),
+     "批处理栈须写明未定义变量不得静默容忍（`%var%` 未定义时被替换成空串、命令变残句）——"
+     "缺则错误被推到更难定位的地方"),
+    (("$", "cmdlet", "-eq"),
+     "批处理栈须写明不得把 PowerShell 语法写进 `.bat`（`$LASTEXITCODE`/cmdlet/`-eq` 在 "
+     "`cmd.exe` 里不存在，混写出来一条都跑不通）——缺则批处理里继续混写 PowerShell 语法"),
+)
 EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）"
 JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
 CONVERSION_SECTION = "对象转换（多层嵌套对象的转换）"
@@ -2364,8 +2437,13 @@ def check_line_ending_guard():
     "在 Unix 上编辑 Windows 批处理"又极常见，故这类规则最容易被"统一换行符、不用管平台"
     式的精简删成一句空话。故机械钉住 encoding.adoc 中的**分流判据**（LF 基准、`.bat`/`.cmd`
     必须 CRLF、`core.autocrlf`/`.gitattributes`/`.editorconfig` 落盘），并要求
-    bash/python/powershell 三个脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即
-    学不全）。
+    各脚本栈文件各自写明行尾要求（引用方按各自栈文件学习，漏一处即学不全）。
+
+    **补强（本轮扩展）**：`.bat`/`.cmd` 的**首行声明**（`@echo off`）与 `.ps1` 的同类声明都
+    要求"首行是字面意义的第一行"——**BOM 是唯一允许出现在首行之前的东西**，此前不得有空行
+    或注释；`.bat` 取纯 ASCII 时天然无 BOM，「纯 ASCII」与「不写 BOM」是同一件事的两面，
+    不得为了写中文改用 UTF-8 + BOM。故这些判据也一并机械钉住（实测：初稿写成"纯 ASCII 是
+    **不写 BOM 的子集**"，并把 BOM 与 LF 并列为"解析失败"的成因——那是反的）。
 
     只钉"判据存在"，不改写内容——行尾规则是否被实质削弱仍由人/子 agent 复核承担。
     """
@@ -2399,6 +2477,27 @@ def check_line_ending_guard():
         if "行尾" not in stext and "CRLF" not in stext:
             err(f"换行符防线被破坏：{srel} 未写明行尾要求——"
                 "引用方按该栈文件学习时学不到行尾规则", srel)
+    # BOM 与首行声明：BOM 是唯一允许出现在首行之前的东西（`.bat` 的 `@echo off`、`.ps1` 的
+    # 同类声明都依赖"首行就是第一行"）；`.bat` 取纯 ASCII 时天然无 BOM，二者是一件事。
+    for stack_file, keys, desc in (
+            (os.path.join(SPECS_DIR, "stack", "batch.adoc"),
+             (("天然不带 BOM",), ("首行",)),
+             "批处理栈须写明「纯 ASCII 天然不带 BOM」（二者是一件事的两面）与『首行』的字面口径"
+             "——缺则会被读成『纯 ASCII 是不写 BOM 的子集』，或任由空行/BOM 把 `@echo off` 挤下首行"),
+            (os.path.join(SPECS_DIR, "stack", "powershell.adoc"),
+             (("BOM 是唯一允许出现在首行之前",),),
+             "PowerShell 栈须写明 BOM 是唯一允许出现在首行之前的东西——"
+             "缺则空行/注释被写在 BOM 之前、首行声明失效")):
+        srel = os.path.relpath(stack_file, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(stack_file):
+            err(f"缺少脚本技术栈文件 {srel}——其 BOM/首行口径无处承载", srel)
+            continue
+        with open(stack_file, encoding="utf-8") as fh:
+            stext = fh.read()
+        for sk in keys:
+            missing = [k for k in sk if k not in stext]
+            if missing:
+                err(f"换行符/编码防线被破坏：{srel} 缺失要点 {missing}——{desc}", srel)
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         if rel not in set(extract_specs_refs(fh.read(), "")):
             err(f"编码与语言无关规范 {rel} 未在加载调度器登记（不会被加载、其中规则实际失效）",
@@ -2538,6 +2637,65 @@ def check_git_mv_selfcheck():
             "须改用 `git mv`（最高关注项 P1：delete+create 会使历史永久断链）；"
             "若确为真删真增（非移动），用 `git diff --cached -M10% --summary` 复核后可忽略本提示",
             "git 暂存区")
+    phase_done()
+
+
+def check_file_size_hint():
+    """『单个规范文件的软阈值』：超线只提醒、不报错、不阻断（**刻意不用 err()**）。
+
+    背景（本仓库实证）：内容会被一路往既有文件里丢——单个规范文件越大，按需加载越
+    退化成"整份读完"，与本次任务无关的规则同样占满读取预算（多读挤上下文），
+    而"这一处该归到哪一层、哪一节"也失去了触发点。必加载层另有"合计量硬上限"
+    （`check_budget_guard`），但**非必加载的单个文件此前没有任何提醒机制**。
+
+    与硬上限的分工（两条都不得替代对方）：
+      * `check_budget_guard`：必加载层（入口 + `specs/core/`）**合计量**的机械上限，
+        超限**报错**——它最直接地消耗每次会话的注意力预算，必须有天花板。
+      * 本条：**单个规范文件**的**软阈值**，超出**只提醒**——是否拆由
+        `spec-lifecycle`「一条规范何时该拆分」的三条硬条件判定，**默认不拆**；
+        硬上限会逼出"为压体积删规则"或"为达标拆出没人维护的空壳"，故此处只给信号。
+
+    提醒形态（不新增错误通道）：打印一行提示清单，**不进 errors**、不影响退出码——
+    提醒不阻断提交，符合"软阈值"的语义（用 err() 就成了硬上限）。
+
+    范围：公共规范（入口 `AGENTS_COMMON.adoc` 与 `specs/**`）与维护方自查层
+    （`specs-project-maintainer/**`）；其中**常驻层**（入口 + `specs/core/`）**排除**
+    ——它由硬上限 `check_budget_guard` 负责，两条都覆盖同一份文件会让"该处理哪条"分不清。
+    图书馆（`library/**`，无体量上限、按主题取用）与说明类文档（README/CHANGELOG 等）
+    **不吃**本软阈值：它们不是"按需加载即整份读完"的对象，误伤只会制造噪音。
+    """
+    phase("单个规范文件软阈值（提醒，不报错）")
+    # 现场推导（不直接引用可能被单测重定向的模块常量）：只收仓库内的规范文件
+    root_dir = os.path.abspath(REPO_ROOT)
+    targets = []
+    entry = os.path.join(root_dir, "AGENTS_COMMON.adoc")
+    if os.path.isfile(entry):
+        targets.append(entry)
+    for sub in ("specs", "specs-project-maintainer"):
+        d = os.path.join(root_dir, sub)
+        for dirpath, _, files in os.walk(d):
+            for f in files:
+                if f.endswith(".adoc"):
+                    targets.append(os.path.join(dirpath, f))
+    # 常驻层由硬上限（check_budget_guard）负责，不再重复提醒：否则同一份文件
+    # 同时出现在"超限报错"与"超线提醒"两处，读者会分不清哪条是需要处理的
+    resident = {_rel_of(entry), _rel_of(os.path.join(root_dir, "specs", "core", "execution.adoc"))}
+    hints = []
+    for path in sorted(set(targets)):
+        rel = _rel_of(path)
+        if rel in resident:
+            continue
+        size = os.path.getsize(path)
+        if size > SOFT_FILE_SIZE_HINT:
+            hints.append((rel, size))
+    if hints:
+        # 刻意不用 err()：软阈值不进 errors、不影响退出码
+        log(f"  ! {len(hints)} 个规范文件超过软阈值 "
+            f"{SOFT_FILE_SIZE_HINT} 字节（**提醒、不阻断**——先按 "
+            "specs-project-maintainer/spec-lifecycle.adoc「单个规范文件的软阈值」判归属与层级，"
+            "再按「一条规范何时该拆分」判是否该拆；都不成立即不做）：")
+        for rel, size in hints:
+            print(f"      * {rel}  {size} 字节")
     phase_done()
 
 
@@ -5968,6 +6126,296 @@ def check_external_script_guard():
     phase_done()
 
 
+def check_cross_platform_script_guard():
+    """『跨环境脚本防线』：一份逻辑 + 薄入口不得被删或降级为"入口里也能写点逻辑"。
+
+    背景（用户报告的失效与要求）：同一份脚本功能要在多个操作系统上跑（最典型 Windows 与
+    Linux）时，常见做法是**把逻辑写两遍**——`.bat` 一份、`.sh` 一份；两套行为慢慢漂移，改了
+    一处漏另一处。用户的方案是**逻辑只写一份**：再加一份**跨平台逻辑代码**写逻辑，`bat`/`sh`
+    只作为入口调用它；并要求给出**实现语言的推荐**（判据：适合写脚本、环境好搭建、代码不容易
+    出错、效率还可以、好维护、兼容性不错）。
+
+    最易被冲掉的两处：①**"入口里不得写逻辑"退化成"入口也可以稍微处理一下参数"**——参数解析、
+    路径拼装、错误处理又回到入口，于是两平台各写一遍（这正是本条要防的对象）；②**"只写一份"
+    被"顺手再写个 sh 版本更快"绕过**（`.sh` 里再写一遍 Linux 用的逻辑）。
+
+    故本条钉住**四处要点**（都只看"要求文本仍在、且落在该落点"；"某个项目的脚本是否真的这么分层"
+    属引用方项目代码，本仓库看不到，交人/子 agent 复核承担）：
+      * **通用层条目**：`specs/general/script.adoc` 须有该节，且**薄壳三件事**（定位解释器 /
+        参数原样透传 / 退出码原样返回）、**入口不承载逻辑的可判定判据**、**不得在另一平台重写
+        逻辑**、**入口文件按各自平台规范落盘**四条 L1 齐全——缺"入口不承载逻辑"，本条剩下的
+        只是"文件放哪"，逻辑照样写两遍；
+      * **语言取舍仍在且级别如实**：须有**实现语言取舍**（默认优先级：纯标准库即可的 Python 3
+        与 Node.js 并列首选、编译型语言留给单文件分发、**不拿裸 shell 当逻辑层**）且标 **L2**
+        ——它是建议而非硬约束，被删则执行者只能凭"哪个顺手"选语言（回到本条要解决的失效）；
+      * **工作目录约定**：须写明逻辑代码**不假设自身所处目录**（入口以绝对路径调用、不 `cd`），
+        否则入口一 `cd`、逻辑里的相对路径在 CI 与本地行为就不同；
+      * **入口语言与落点、无前置命令**（用户后续追加要求）：须写明**入口语言按平台默认具备者选**
+        （Windows 取 `.bat`/`.cmd`、Linux/macOS 取 `.sh`；**不得**为一侧入口引入对方平台要另装的
+        运行时）、**入口与逻辑代码同处一目录、主名相同**（不许把入口另放 `bin/`/`script/`/
+        `windows/`）、**调用方不加前后命令**（只给脚本名即可跑，不得要求 `bash foo.sh` /
+        `python3 foo.py` / `powershell -File foo.ps1`；脚本功能参数属"必要参数"例外）、
+        **入口不得为跑逻辑自加命令或塞参数**——缺这几条，用户"不希望脚本执行前后加命令和参数"
+        的要求就落不了地（入口要么跑不起来、要么把平台差异推回给调用方）；
+      * **入口与公开说明同步**：加载调度器的脚本加载项须含本条的**识别特征**（多个 OS 上跑、
+        `.bat`/`.cmd` 与 `.sh` 成对），`README.adoc` 的目录说明须让读者知道这条存在。
+    """
+    phase("跨环境脚本防线检查")
+    rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SCRIPT_SPEC_FILE):
+        err(f"缺少文件 {rel_script}——『跨环境脚本』的通用层落点丢失"
+            "（该条跨语言、跨平台，须收在通用脚本规范而非某一技术栈）", rel_script)
+        phase_done()
+        return
+    text = open(SCRIPT_SPEC_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(CROSS_PLATFORM_SCRIPT_SECTION) + r"(?:\s|$).*?(?=^== |\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"跨环境脚本防线被破坏：{rel_script} 缺少"
+            f"「{CROSS_PLATFORM_SCRIPT_SECTION}」节——同一功能要在 Windows 与 Linux 上都跑时，"
+            "又会退化成「两个平台各写一份脚本」（逻辑写两遍、改一处漏一处）", rel_script)
+        phase_done()
+        return
+    section = m.group(0)
+    for keys, desc in (
+        (("入口层不得承载逻辑", "判定标准"),
+         "须写明**入口层不得承载逻辑**并给可判定判据（整份入口可逐行解释为"
+         "'定位逻辑代码 → 转交全部参数 → 返回退出码'三件事）——缺这句，入口又会变成"
+         "'顺便处理一下参数'，两平台各写一遍是本条要防的核心失效"),
+        (("入口层不为逻辑层添第二套选项语义", "例外", "转义"),
+         "须写明入口**不为逻辑层添第二套选项语义**（只转交、不解释参数、不设默认值、"
+         "不吞参数），并写明 `cmd.exe`/PowerShell 需转义时的例外——"
+         "缺则'不得自行解析参数'会被读成'连必要的转义都禁止'（那是做不到的："
+         "`cmd.exe` 承载不了某些字符），或反过来留下'入口可以自己定默认值'的口子"),
+        (("入口层须让退出码可判定", "exit /b", "LASTEXITCODE"),
+         "须写明入口**让退出码可判定**并给三平台的可核对写法——"
+         "`cmd.exe` 不写 `exit /b %errorlevel%` 时退出码是最后一条命令的（不等于逻辑代码的），"
+         "这是'看起来在转交、实际丢失成败'的最常见形态"),
+        (("不得**在 `.sh` 里再写一遍", "只允许**一份薄壳", "该平台版本"),
+         "须写明**不得在另一平台的入口里重写逻辑**——'Windows 的我可以不写、顺手写个 sh 版本"
+         "更快'正是本条的失效形态"),
+        (("跨平台逻辑层", "一份"),
+         "须写明逻辑**只写一份**放在跨平台逻辑层（一份跨平台逻辑代码）里——"
+         "缺则'分两层'退化成'两个入口各写一份'。**此处刻意不用「跨平台逻辑脚本」这个说法**："
+         "它把「脚本」一词同时给了入口与逻辑两层，读者会据此把跨平台的那一份也当成「脚本」、"
+         "进而按脚本的可执行要求去要求它（那正是让用户敲 `python3 foo.py` 的由来）——"
+         "故两层分别称「逻辑代码」与「入口脚本」，名字本身即区分二者"),
+        (("CRLF", "LF", "纯 ASCII"),
+         "入口文件须**按各自平台规范落盘**（`.bat`/`.cmd` 与 `.ps1` 用 CRLF、`.sh` 用 LF、"
+         "`.bat` 纯 ASCII）——入口是平台专属文件，行尾/编码错则入口本身就跑不起来"),
+        (("实现语言取舍", "Python", "Node.js", "Go", "Rust"),
+         "须给出**实现语言取舍**（环境好搭建/不易出错/好维护/兼容性/效率的默认取向："
+         "Python 3 与 Node.js 优先、单文件分发用 Go/Rust）——"
+         "缺则执行者只能凭'哪个顺手'选语言"),
+        (("同处一目录", "同名", "主名"),
+         "须写明入口与逻辑代码**同处一目录、主名相同**（逻辑 `foo.py` → 入口 `foo.sh`/"
+         "`foo.bat`，不另建 `bin/`/`script/`/`windows/`）——缺则入口一分散，改逻辑时连带改"
+         "入口、又改出第二份；也是用户明确要求的落点约定"),
+        (("不加前后命令", "必要参数", "直接执行"),
+         "须写明入口**须由解释器原生可执行、调用方不加前后命令**（只给脚本名即可跑；"
+         "`bash foo.sh` / `python3 foo.py` / `powershell -File foo.ps1` 属违规），"
+         "并写明'脚本自身功能参数属必要参数'的例外——缺则用户'不希望脚本执行前后加命令和参数'"
+         "的要求无法判定（要么入口跑不起来、要么被读成连功能参数也不许加）"),
+        (("入口语言取舍", ".bat`/`.cmd`", "`.sh`"),
+         "须写明**入口语言取舍**（入口语言按平台默认具备者选：Windows 取 `.bat`/`.cmd`、"
+         "Linux/macOS 取 `.sh`；不得为一侧入口引入对方平台要另装的运行时；编译型单文件分发时"
+         "同一二进制兼作两平台入口）——缺则执行者会按'逻辑层用什么语言'给入口选语言"
+         "（逻辑用 Python 就写 `.py` 当入口），把安装步骤推给调用方"),
+        (("不得要求调用方先做前置动作", "请先"),
+         "须写明**入口不设前置步骤**（不要求调用方先 `cd`/设环境变量/`chmod +x`/装依赖）——"
+         "缺则入口把配置责任推给用户，'拿来就能跑'落空"),
+        (("不得为“跑逻辑”自加命令", "一一对应"),
+         "须写明入口**不得为跑逻辑自加命令、也不得给逻辑代码塞参数**（调用前的 `cd`/`mkdir`/"
+         "安装/下载/校验，或转交时多加了固定参数）——缺则'只转交'被绕过，入口又开始做别的事"),
+        (("不拿裸 shell 当逻辑层",),
+         "须写明**不拿裸 shell 当逻辑层**（bash 在 Windows 上不可得或来自 Git Bash/WSL、"
+         "cmd 在 Linux 上不可用）——缺则逻辑又被写进 shell，平台差异回到逻辑层"),
+        (("不得假设自身所处目录", "cd"),
+         "须写明逻辑代码**不得假设自身所处目录**（入口以绝对路径调用、不 `cd`）——"
+         "缺则入口一 `cd`，逻辑代码里的相对路径在本地与 CI 下行为不同"),
+        (("（L1）",),
+         "条文须标注级别——本条的'薄壳/不写两遍'是不可豁免的底线，标成建议即等于没有"),
+    ):
+        missing = [k for k in keys if k not in section]
+        if missing:
+            err(f"跨环境脚本防线被破坏：{rel_script}「{CROSS_PLATFORM_SCRIPT_SECTION}」"
+                f"缺失要点 {missing}——{desc}；本条是用户明确要求的跨平台约定，"
+                "不得删除、不得降级为建议", rel_script)
+    # 技术栈侧：三个脚本栈文件须各自指向本条的入口约定（引用不复制）+ 各栈的落点/命名与
+    # 入口语言取值（用户在通用层之外明确要求"各平台入口的语言选择也要选好、脚本执行前后不加
+    # 命令和参数、逻辑代码和入口脚本放一个位置下且名字相同"——只写通用层，各栈执行者读不到）
+    stack_keys = {
+        "bash.adoc": (("同处一目录", "主名"), ("#!/usr/bin/env bash",),
+                      ("入口语言选择",)),
+        "powershell.adoc": (("同处一目录", "主名"), ("执行策略", "Bypass"),
+                            ("入口语言选择",)),
+        "python.adoc": (("同处一目录", "主名"), ("只作逻辑层", "前置命令"),),
+        "batch.adoc": (("同处一目录", "主名"), ("入口语言选择",),
+                       ("退出码", "exit /b"), ("PowerShell",)),
+    }
+    for fp in CROSS_PLATFORM_STACK_FILES:
+        rel = os.path.relpath(fp, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(fp):
+            err(f"缺少脚本技术栈文件 {rel}——跨环境脚本的入口约定在该栈无处承接", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        if CROSS_PLATFORM_SCRIPT_SECTION not in body:
+            err(f"{rel} 未指向「{CROSS_PLATFORM_SCRIPT_SECTION}」——该栈的脚本被用作跨环境"
+                "入口时读不到'薄壳、不写逻辑、原样透传'的口径（规则被指向，不复制）", rel)
+        name = os.path.basename(fp)
+        for keys in stack_keys.get(name, ()):
+            missing = [k for k in keys if k not in body]
+            if missing:
+                err(f"跨环境脚本防线被破坏：{rel} 缺失要点 {missing}——各栈须写明本栈入口的"
+                    "落点与命名（与逻辑代码同处一目录、主名相同）、入口语言取值与其'可直接执行、"
+                    "不加前后命令'的要求——缺则通用层条文在本栈无处落地（用户要求"
+                    "'各平台入口的语言选择也要选好'、'脚本执行前后不加命令和参数'）", rel)
+    # 批处理栈（`.bat`/`.cmd` 的专属规则唯一落点）：文件须存在、须指向本节的入口约定，
+    # 且**批处理自身的要点**（编码/行尾、薄壳与退出码、延迟展开、引号与 `%~1`、`@echo off`、
+    # 未定义变量、不混写 PowerShell 语法）齐备——用户指出的缺口就是"没有 bat 脚本的规范文件"，
+    # 故这里不只核"文件在不在"，还要核它真的承载了 bat 的专属规则。
+    brel = os.path.relpath(BATCH_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(BATCH_STACK_FILE):
+        err("缺少批处理技术栈文件 specs/stack/batch.adoc——`.bat`/`.cmd` 的专属规则无处承载"
+            "（写一个批处理脚本时既没有触发特征可命中、也没有编码/行尾/块语句/退出码的落点）；"
+            "该文件的唯一落点生效由「技术栈一致性检查」同时核对", "AGENTS_COMMON.adoc")
+    else:
+        btext = open(BATCH_STACK_FILE, encoding="utf-8").read()
+        if CROSS_PLATFORM_SCRIPT_SECTION not in btext:
+            err(f"{brel} 未指向「{CROSS_PLATFORM_SCRIPT_SECTION}」——Windows 入口被用作"
+                "跨环境入口时读不到'薄壳、不写逻辑、原样透传参数与退出码'的口径", brel)
+        for keys, desc in BATCH_STACK_KEYS:
+            missing = [k for k in keys if k not in btext]
+            if missing:
+                err(f"批处理栈缺失要点 {missing}——{desc}", brel)
+    # 批处理栈不得被 powershell.adoc 复制（引用不复制）：`.bat` 的编码/行尾条文只该有一处
+    ps_path = os.path.join(SPECS_DIR, "stack", "powershell.adoc")
+    if os.path.isfile(ps_path):
+        ps_text = open(ps_path, encoding="utf-8").read()
+        if "batch.adoc" not in ps_text:
+            err("specs/stack/powershell.adoc 未指向批处理栈 specs/stack/batch.adoc——"
+                "`.ps1` 的同名 `.bat` 启动脚本其编码/行尾/落点属批处理栈，"
+                "不指向则该栈执行者按 PowerShell 文件学不到 `.bat` 的规则", "specs/stack/powershell.adoc")
+    # 调度器识别特征：多个 OS 上跑 / 入口成对出现即加载
+    common_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
+    if os.path.isfile(common_path):
+        common = open(common_path, encoding="utf-8").read()
+        for keys, desc in ((("跨环境脚本", "`.bat`/`.cmd` 与 `.sh` 成对"),
+                            "加载调度器的脚本加载项须有本条的识别特征——"
+                            "缺则该条永远不会被触发加载，规则实际失效"),
+                           (("specs/stack/batch.adoc",),
+                            "加载调度器的技术栈层须登记批处理栈——"
+                            "缺则'写一个批处理脚本'没有触发特征、`.bat` 的专属规则实际失效"),):
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"跨环境脚本防线被破坏：AGENTS_COMMON.adoc 缺失 {missing}——{desc}",
+                    "AGENTS_COMMON.adoc")
+    else:
+        err("缺少 AGENTS_COMMON.adoc——跨环境脚本的调度器登记无从核对", "AGENTS_COMMON.adoc")
+    # 公开说明同步（README 的目录说明）+ 依据入馆（同义性差异）
+    for rel, keys, desc in (
+        ("README.adoc", ("跨环境脚本", "薄壳"),
+         "README 的目录说明须同步『跨环境脚本』——本条新增了通用层条文，"
+         "读者按 README 学习时无从知道有这条规则"),
+        ("library/adoption.adoc", (CROSS_PLATFORM_SCRIPT_SECTION, "同义性差异"),
+         "依据图书馆须记该条的同义性差异（外部材料只给平台语义差异与运行时能力，"
+         "未规定「同一功能必须只写一份逻辑」「入口必须是薄壳」「必须用某语言」，"
+         "属本集合的判据化取舍）"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——跨环境脚本条在该处的落点无从核对", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"跨环境脚本防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_comment_preservation_guard():
+    """『评论不得删除防线』：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）。
+
+    背景（用户明确要求）：「任何情况下，不得删除 issue、pr 的评论（包括 npc 生成的）」。
+    这条在本仓库**正是一处失效面**：既有体系里已有"过程性叙述不得作为独立评论发出"的
+    交付纪律，那条要求最容易被读成"发错的那条删掉就行"；而评论串正是**派发的对象钉定
+    与留证落点**（这一轮收到什么要求、回了什么、当时钉的哪个 commit sha 全靠它），
+    删除**不可逆**——删掉即事后无法复核，**编辑掉原话与删除同效**。故把"不得删除"写成
+    一条独立禁令，并在三处落点同时钉住：
+      * **平台层** `specs/platform/cnb.adoc`「评论不得删除（L1）」——禁令本体（含 NPC 生成的
+        评论）、理由、**正当处置**（再发一条更正 / 回复补充，不抹掉）、**四条判定标准**
+        （调接口删 / 编辑使与原话不一致 / 转交他人代删 / 自我豁免）、与「临时产物清理」
+        和「NPC 禁合并」两条边界；
+      * **通用层** `specs/general/collab.adoc`「派发入口」——平台无关的同口径条
+        （"评论是留证落点、删除不可逆、编辑同效、边界是本地临时产物"）；
+      * **必加载层** `specs/core/execution.adoc`「破坏性操作」——本条与"不可逆操作先确认"
+        **不是同一档**：评论**没有"先确认就能删"的路径**，属禁令；
+      * 另须在调度器与 README 两处登记同步（缺则该条永远不会被加载 / 读者找不到）。
+
+    只钉"要求文本仍在、没有被降级成'先确认即可删'"——"某次是否真的删了评论"属运行时行为
+    （平台评论列表），机械无法判定，交人/子 agent 复核。
+    """
+    phase("评论不得删除防线检查")
+    for rel, keys, desc in (
+            ("specs/platform/cnb.adoc",
+             (("评论不得删除",),
+              ("不得删除", "NPC", "判定标准"),
+              ("不可逆", "留证落点"),
+              ("编辑", "同效"),
+              ("再发一条更正",),
+              ("临时产物", "合并"),
+              ("调用", "删除评论的接口")),
+             "平台层须有「评论不得删除」条：禁令本体（含 NPC 生成的评论）、不可逆与留证落点的"
+             "理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界"),
+            ("specs/general/collab.adoc",
+             (("评论不得删除", "平台无关"),
+              ("不得删除", "留证落点", "不可逆"),
+              ("编辑", "同效"),
+              ("再发一条更正",),
+              ("cnb.adoc", "评论不得删除")),
+             "通用层「派发入口」须有平台无关的同口径条（评论不得删除、编辑同效、更正而非抹掉、"
+             "并指向平台层判定标准）——只写平台层则非 CNB 环境读不到"),
+            ("specs/core/execution.adoc",
+             (("不得删除平台任务单",),
+              ("没有", "先确认", "一律不删"),
+              ("编辑", "同效"),
+              ("再发一条更正",),
+              ("临时产物",)),
+             "必加载层「破坏性操作」须写明本条**不是**『先确认即可执行』的一类"
+             "（没有先确认就能删的路径），否则会被读成『确认过就能删』"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少文件 {rel}——『评论不得删除』在该层无处承载", rel)
+            continue
+        text = open(path, encoding="utf-8").read()
+        for sk in keys:
+            missing = [k for k in sk if k not in text]
+            if missing:
+                err(f"评论不得删除防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
+                    "本条是用户明确要求的禁令（任何情况下不得删除 Issue/PR 的评论），"
+                    "不得删除、不得降级为『先确认即可删』", rel)
+    # 调度器识别特征与公开说明同步（缺则该条永远不会被加载 / 找不到）
+    if os.path.isfile(GENERIC_FILE):
+        gtext = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("评论不得删除",), "调度器须有本条的识别特征（否则该禁令永远不会被触发加载）"),
+        ):
+            missing = [k for k in keys if k not in gtext]
+            if missing:
+                err(f"评论不得删除防线被破坏：AGENTS_COMMON.adoc 缺失要点 {missing}——{desc}",
+                    "AGENTS_COMMON.adoc")
+    else:
+        detail("  跳过：未找到 AGENTS_COMMON.adoc，『评论不得删除』的调度器识别特征未校验"
+               "（不代表通过）")
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "评论不得删除" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『评论不得删除』——"
+            "读者按 README 学习时无从知道有这条禁令", rel_readme)
+    phase_done()
+
+
 def check_reuse_precedent_guard():
     """『既有实现与先例优先防线』：先查项目已有能力与先例，禁止用手写原生写法绕过。
 
@@ -8141,6 +8589,7 @@ def main(argv=None) -> int:
     check_self_check_guard()
     check_git_mv_selfcheck()
     check_budget_guard()
+    check_file_size_hint()
     check_delegation_guard()
     check_verify_guard()
     check_lifecycle_guard()
@@ -8173,6 +8622,8 @@ def main(argv=None) -> int:
     check_abstraction_adoption_guard()
     check_reuse_precedent_guard()
     check_external_script_guard()
+    check_cross_platform_script_guard()
+    check_comment_preservation_guard()
     check_comment_dispatch_guard()
     check_self_dispatch_guard()
     check_delivery_guard()
