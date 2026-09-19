@@ -1643,6 +1643,28 @@ class TestCheckSectionRefs(CheckSpecsTestCase):
         cm.check_section_refs()
         self.assertEqual(cm.errors, [])
 
+    def test_list_item_ref_passes(self):
+        # 正例：指向**列表条目名**（`* **条目名（L1）**：…`）——规范里大量判据是条目而非节，
+        # 引用方更常这么指；原实现只采集 `=` 起头的节标题，会把这类正确指向误判为悬空
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/stack/bash.adoc",
+                   "= Bash 规范\n\n== 文件头与解释器\n\n"
+                   "* **入口语言选择（L1）**：Linux/macOS 入口取 `.sh`\n")
+        self.write("specs/general/script.adoc",
+                   "见 link:../stack/bash.adoc[]「入口语言选择」")
+        cm.check_section_refs()
+        self.assertEqual(cm.errors, [])
+
+    def test_list_item_ref_still_checks_existence(self):
+        # 反例：条目名不存在（改名/删除）时仍须报——放开条目名不等于放开一切
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/stack/bash.adoc",
+                   "= Bash 规范\n\n* **入口语言选择（L1）**：取 `.sh`\n")
+        self.write("specs/general/script.adoc",
+                   "见 link:../stack/bash.adoc[]「入口语言取舍」")
+        cm.check_section_refs()
+        self.assertIn("不存在的节名", self.error_texts())
+
     def test_intra_file_section_ref_dangling_reports(self):
         # 反例：写"同文件「节名」"但本文件无此节（节实际在另一个文件）—— 须报悬空
         # （曾实测：verify.adoc 写"见同文件「规范集合的自身重构」"，而该节在
@@ -9282,6 +9304,11 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
         "转交须与调用方给的一一对应。\n"
         "* **入口脚本不得要求调用方先做前置动作（L1）**：不设前置步骤，"
         "不得写“请先……”这类对调用方的要求。\n"
+        "* **薄壳之外不得多做，但可以做“把逻辑层当命令直接跑”的薄壳（L1）**："
+        "薄壳里允许出现与逻辑层调用等价的形态；**判定标准**：出现与"
+        "“把调用方给的参数交给逻辑代码”**不等价**的动作即违规。\n"
+        "* **入口不得为“让逻辑跑起来”改变系统状态（L1）**：安装/下载/解压任何运行时、"
+        "包或依赖都**不属**薄壳；**代为获取运行时**不是入口的职责。\n"
         "\n"
         "**入口语言取舍（L1）**：Windows 取 `.bat`/`.cmd`、Linux/macOS 取 `.sh`。\n"
         "**实现语言取舍（L2）**：优先 **Python 3** 或 **Node.js**；单文件分发用 **Go**/**Rust**。\n"
@@ -9422,6 +9449,23 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
             "* **逻辑代码不得假设自身所处目录（L1）**：入口以绝对路径调用、不 `cd`。\n", ""))
         cm.check_cross_platform_script_guard()
         self.assertIn("不得假设自身所处目录", self.error_texts())
+
+    def test_bootstrap_clause_removed_reports(self):
+        # 反例：'入口不得安装/下载运行时'被删 → 入口退化成"自己想办法搞一个解释器"
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口不得为“让逻辑跑起来”改变系统状态（L1）**：安装/下载/解压任何运行时、"
+            "包或依赖都**不属**薄壳；**代为获取运行时**不是入口的职责。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("代为获取运行时", self.error_texts())
+
+    def test_equivalence_clause_removed_reports(self):
+        # 反例：'可以做把逻辑层当命令直接跑的薄壳'被删 → 正当形态被一起禁掉
+        self._write_valid(self.SCRIPT.replace(
+            "* **薄壳之外不得多做，但可以做“把逻辑层当命令直接跑”的薄壳（L1）**："
+            "薄壳里允许出现与逻辑层调用等价的形态；**判定标准**：出现与"
+            "“把调用方给的参数交给逻辑代码”**不等价**的动作即违规。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("薄壳之外不得多做", self.error_texts())
 
     def test_stack_pointer_missing_reports(self):
         # 反例：栈文件未指向本条的入口约定 → 该栈执行者读不到"薄壳、不写逻辑"
@@ -10056,6 +10100,14 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'SPECS_REF_RE = "specs/"\n'
         'def check_out_dir(p):\n'
         '    """落点必须位于当前工作目录之下"""\n'
+        'def shared_cache_dir():\n'
+        '    """XDG_CACHE_HOME / LOCALAPPDATA 下的 Cache"""\n'
+        'def cache_slot_dir(d, b):\n'
+        '    """按来源地址分槽（urllib.parse.urlsplit）"""\n'
+        'def is_local_base(b):\n'
+        '    """本机来源不缓存: localhost / 127."""\n'
+        'AGENT_SPECS_CACHE = "--cache-dir"\n'
+        'LOCAL_FLAG = "--local"\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -10064,7 +10116,15 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     SCRIPT_SH = (
         '#!/usr/bin/env bash\n'
         'set -u\n'
-        'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n'
+        'if command -v python3 >/dev/null 2>&1; then\n'
+        '  runtime="python3"\n'
+        'elif command -v python >/dev/null 2>&1; then\n'
+        '  runtime="python"\n'
+        'else\n'
+        '  echo "错误: 未找到解释器 python3/python，无法运行 fetch-specs.py" >&2\n'
+        '  exit 127\n'
+        'fi\n'
+        'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
     )
 
     def setUp(self) -> None:
@@ -10082,11 +10142,25 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY)
         self.write("script/fetch-specs.sh", self.SCRIPT_SH)
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
-            fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n'
+            fh.write(b'@echo off\r\n'
+                     b'where py >nul 2>nul && set "FETCH_SPECS_RUNTIME=py -3"\r\n'
+                     b'if not defined FETCH_SPECS_RUNTIME where python3 >nul 2>nul && '
+                     b'set "FETCH_SPECS_RUNTIME=python3"\r\n'
+                     b'if not defined FETCH_SPECS_RUNTIME where python >nul 2>nul && '
+                     b'set "FETCH_SPECS_RUNTIME=python"\r\n'
+                     b'if not defined FETCH_SPECS_RUNTIME (\r\n'
+                     b'  echo Error: no python interpreter found 1>&2\r\n'
+                     b'  exit /b 127\r\n'
+                     b')\r\n'
+                     b'%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
                      b'exit /b %errorlevel%\r\n')
-        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
-        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs。\n")
-        self.write("README.adoc", "工具 fetch-specs。\n")
+        self.write("INSTALL.adoc",
+                   "见 fetch-specs 与 tmp/agent-specs 落点。兜底：没有 python3 时取 python，"
+                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。"
+                   "默认落平台用户级缓存目录、本机所有项目共用一份，要项目内副本加 --local。\n")
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落用户级缓存目录、"
+                                        "本机所有项目共用一份。\n")
+        self.write("README.adoc", "工具 fetch-specs：默认落共享缓存、本机所有项目共用一份。\n")
 
     def test_valid_passes(self):
         self._write_valid()
@@ -10150,3 +10224,149 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("INSTALL.adoc", "把规范下载到 tmp。\n")
         cm.check_spec_fetch_guard()
         self.assertIn("INSTALL.adoc", self.error_texts())
+
+    # ---- 解释器兜底（本仓库实证：入口原先只调 python3，"没有 python 的机器装不上"）----
+
+    def test_sh_hardcodes_python3_reports(self):
+        # 反例：.sh 把 python3 写死成前提 → 只装 python2 的发行版（CentOS/RHEL 8 及更早）直接失败
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\nset -u\n'
+                   'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("command -v python", self.error_texts())
+
+    def test_sh_missing_python_fallback_reports(self):
+        # 反例：.sh 探测了 python3/python，但两者都没有时静默继续（未报错退出）
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\n'
+                   'if command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
+                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("未找到解释器", self.error_texts())
+
+    def test_bat_hardcodes_python3_reports(self):
+        # 反例：.bat 把 python3 写死成前提 → 只有 py 启动器 / Store 别名的 Windows 上失败
+        self._write_valid()
+        with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
+            fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n'
+                     b'exit /b %errorlevel%\r\n')
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("where python", self.error_texts())
+
+    def test_lookup_order_regression_reports(self):
+        # 反例：次序写反（python 排在 python3 前）→ 该分支把 python3 永久遮住，等于没有兜底
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\n'
+                   'if command -v python >/dev/null 2>&1; then runtime="python";\n'
+                   'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
+                   'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
+                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("探测次序", self.error_texts())
+
+    def test_install_without_fallback_note_reports(self):
+        # 反例：安装文档不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
+        self._write_valid()
+        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+
+    def test_install_without_next_step_reports(self):
+        # 反例（用户追问"没有 python 也要下载啊"）：只写"报错退出"不写"接下来怎么办"
+        # → 引用方看到失败仍不知道下一步（装一个？谁装？能不能不装？）
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
+                   "只装 python2 的发行版同样可用。\n")
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("处置次序", self.error_texts())
+
+    def test_entry_allowed_to_install_runtime_reports(self):
+        # 反例：安装文档把"装一个运行时"写成脚本/入口的一步（而非人的一步）
+        # → 入口从"门"变成"装门的施工队"（改系统状态、要权限、对调用方不可预期）
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
+                   "只装 python2 的发行版同样可用；没有就装一个 python 3 再重跑；"
+                   "不装解释器的替代路径是直接读远程入口地址，"
+                   "`curl | python3 -` 同样要 python。\n")
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("代为安装", self.error_texts())
+
+    def test_order_check_not_fooled_by_substring_overlap(self):
+        # 反例：次序写反 + 判别键互相包含（`command -v python` 命中 `command -v python3` 的子串）
+        # → 旧实现 find 两次返回同一位置、把写反的次序判成正确（本仓库实测漏报），
+        # 故防线须用**互不包含**的判别串（带判空后缀）。
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\n'
+                   'if command -v python >/dev/null 2>&1; then runtime="python";\n'
+                   'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
+                   'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
+                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("探测次序", self.error_texts())
+
+    def test_install_missing_python2_case_reports(self):
+        # 反例：只提 python3/python，不覆盖"只有 python2"与"连 python 都没有"两个真实环境
+        self._write_valid()
+        self.write("INSTALL.adoc", "兜底：没有 python3 时取 python。\n")
+        cm.check_interpreter_fallback_guard()
+        self.assertIn("python2", self.error_texts())
+
+
+    # ---- 共享缓存落点（用户实测诉求：别每个项目都下载一遍同几份文件）----
+
+    def test_shared_cache_guard_passes(self):
+        # 正例：默认落平台用户级缓存目录 + 保留 --local/--cache-dir + 按来源分槽 + 本机来源不缓存 + 三处文档同步
+        self._write_valid()
+        cm.check_shared_cache_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_install_without_shared_cache_note_reports(self):
+        # 反例：安装文档不提共享缓存 → 引用方仍按"每个项目各下载一份"执行（重复流量）
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "见 fetch-specs 与 tmp/agent-specs 落点。兜底：没有 python3 时取 python，"
+                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。\n")
+        cm.check_shared_cache_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+
+    def test_common_entry_without_shared_cache_note_reports(self):
+        # 反例：公共入口不提落点 → 按入口加载的引用方不知道副本不必逐项目各存一份
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs。\n")
+        cm.check_shared_cache_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_local_copy_path_removed_reports(self):
+        # 反例：去掉 --local → 需要项目内副本（随项目清理、便于隔离）时无路可走
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('LOCAL_FLAG = "--local"\n', ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("--local", self.error_texts())
+
+    def test_cache_dir_override_removed_reports(self):
+        # 反例：去掉 --cache-dir/AGENT_SPECS_CACHE → 缓存落点不可显式指定（磁盘布局不同就没法用）
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace('AGENT_SPECS_CACHE = "--cache-dir"\n', ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("AGENT_SPECS_CACHE", self.error_texts())
+
+    def test_cache_slot_removed_reports(self):
+        # 反例：去掉"按来源分槽" → 换过来源的副本互相覆盖（同一份规范内容说不清是哪来的）
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("urlsplit", ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("urlsplit", self.error_texts())
+
+    def test_local_base_caching_removed_reports(self):
+        # 反例：去掉"本机来源不缓存" → 本地服务端改完再取仍拿缓存里的旧副本（内容每次在变）
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('127.', ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("127.", self.error_texts())
