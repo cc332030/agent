@@ -71,6 +71,10 @@ class CheckSpecsTestCase(unittest.TestCase):
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
         self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
                       cm.INSTALL_FILE, cm.PROJECT_FILE)
+        # 行段核对的读文件缓存以"仓库根相对路径"为键，而 REPO_ROOT 每个用例都换，
+        # 故必须清空——否则上一个用例的夹具内容会被下一个用例读到（本仓库实测：整类
+        # 一起跑时 `.bat` 的判据用了别的用例的文件内容，单跑却通过）。
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
@@ -81,6 +85,7 @@ class CheckSpecsTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         cm.errors.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
         (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
          cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
@@ -912,6 +917,10 @@ class TestCheckInstallCodeblock(CheckSpecsTestCase):
 
 https://agent.c332030.com/AGENTS_COMMON.adoc
 
+https://agent.c332030.com/INSTALL.adoc
+
+https://agent.c332030.com/script/fetch-specs.py
+
 读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。
 
 规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。
@@ -944,11 +953,15 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
         collapsed = self.TEMPLATE.replace(
             "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+            "https://agent.c332030.com/INSTALL.adoc\n\n"
+            "https://agent.c332030.com/script/fetch-specs.py\n\n"
             "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
             "= Agent 规范入口\n本项目的 agent 执行规范入口为：\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+            "https://agent.c332030.com/INSTALL.adoc\n"
+            "https://agent.c332030.com/script/fetch-specs.py\n"
             "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。")
-        self.write("INSTALL.adoc", collapsed)
+        self.write("INSTALL.adoc", collapsed + self.FILENAME_RULES)
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
         self.assertIn("缺少空行", self.error_texts())
@@ -962,6 +975,21 @@ https://agent.c332030.com/AGENTS_COMMON.adoc
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
         self.assertIn("缺失或行被合并", self.error_texts())
+
+    def test_missing_install_doc_path_reports(self):
+        # 反例：模板不给安装文档路径 → 新实例不知道去哪儿读安装/更新的做法
+        doc = self.TEMPLATE.replace("https://agent.c332030.com/INSTALL.adoc\n", "")
+        self.write("INSTALL.adoc", doc + self.FILENAME_RULES)
+        cm.check_install_codeblock()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+
+    def test_missing_fetch_script_path_reports(self):
+        # 反例（用户点名形态）：模板不给取规范脚本路径 → 新实例不知道如何去下载规范
+        doc = self.TEMPLATE.replace(
+            "https://agent.c332030.com/script/fetch-specs.py\n", "")
+        self.write("INSTALL.adoc", doc + self.FILENAME_RULES)
+        cm.check_install_codeblock()
+        self.assertIn("fetch-specs.py", self.error_texts())
 
     def test_missing_delimiters_reports(self):
         # 反例：代码块定界符不完整
@@ -10080,6 +10108,146 @@ class TestCheckCommentPreservationGuard(CheckSpecsTestCase):
         self.assertIn("天然不带 BOM", self.error_texts())
 
 
+class TestCheckEntryDocManifest(CheckSpecsTestCase):
+    """钉住『入口文档持久化防线』：入口文档须给"隔一次会话还认得回来"的清单。
+
+    对应用户实测点名的形态：安装把入口文档落到目标项目，它是**唯一持久化到项目里的产物**，
+    而原模板只写"入口地址 + 遵守要求"——"规范副本落在哪、怎么再取一次"只存在于本人的会话里，
+    **新开实例即丢失**。故反例逐项覆盖：两节被删、副本三件事缺一项、缓存落点不说明由平台
+    决定、承载判据的通用层文件被删。
+    """
+
+    TEMPLATE = (
+        "= 安装\n\n判据见 `specs/general/entry-doc.adoc`（那是判据的唯一真源，本文件不重复其条文）。\n\n"
+        "[source,asciidoc]\n----\n"
+        "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+        "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+        "== 规范与安装文档的位置（这条链要能一站直达）\n\n"
+        "* **规范路径**：https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+        "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n"
+        "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n\n"
+        "== 规范副本的位置（可用脚本名 `fetch-specs` 直接再取一次）\n\n"
+        "* 默认落点：本机**用户级缓存**（位置由平台缓存目录决定），其下 `agent-specs/<来源槽>/` "
+        "即本规范集合；同一台机器上的所有项目共用这一份。\n"
+        "* 本项目内落点：`tmp/agent-specs/`（缓存不可得时退回，也可用 `--local` 指定）\n"
+        "* 取回与更新：在项目根目录**再运行一次** `fetch-specs` 即可。\n\n"
+        "== 本项目持久化到入口文档的信息\n\n"
+        "凡要跨会话保留的本项目信息追加在本节。\n"
+        "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n"
+        "----\n"
+    )
+    SPEC = ("入口文档是**唯一持久化到项目里的产物**；一次会话结束后，下一个会话"
+            "（或另开的新实例）只能看到落到项目里的文件。\n"
+            "临时产物按 `tmp/` 约定存放、**不写进入口文档**。\n"
+            "**项目自身规范优先**：项目自己的规则不因重新执行安装被改写。\n"
+            "本文件是这一判据的**唯一真源**；本文件不抄那几条路径的字面值。\n")
+
+    def _write_manifest_valid(self, install_text=None):
+        self.write("INSTALL.adoc", install_text or self.TEMPLATE)
+        self.write("specs/general/entry-doc.adoc", self.SPEC)
+
+    def test_entry_doc_manifest_passes(self):
+        # 正例：两节齐备 + 副本三件事 + 缓存落点说明由平台缓存目录决定 + 承载文件在
+        self._write_manifest_valid()
+        cm.check_entry_doc_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_template_sections_removed_reports(self):
+        # 反例（用户点名的形态）：模板只剩"入口地址 + 遵守要求"→ 新开实例不知道副本在哪
+        self._write_manifest_valid("= 安装\n\n[source,asciidoc]\n----\n"
+                                  "= Agent 规范入口\n\n"
+                                  "https://agent.c332030.com/AGENTS_COMMON.adoc\n----\n")
+        cm.check_entry_doc_manifest()
+        self.assertIn("规范副本的位置", self.error_texts())
+        self.assertIn("本项目持久化到入口文档的信息", self.error_texts())
+
+    def test_copy_points_removed_reports(self):
+        # 反例：副本那节只剩默认落点 → 缓存不可用的机器上无处落副本、也不知道怎么再取一次
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "* 本项目内落点：`tmp/agent-specs/`（缓存不可得时退回，也可用 `--local` 指定）\n",
+                "").replace(
+                "* 取回与更新：在项目根目录**再运行一次** `fetch-specs` 即可。\n", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("tmp/agent-specs", self.error_texts())
+        self.assertIn("再运行一次", self.error_texts())
+
+    def test_platform_cache_dir_note_removed_reports(self):
+        # 反例：写死本机绝对路径、不说明落点由平台缓存目录决定 → 项目里抄进只对本机成立的路径
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "本机**用户级缓存**（位置由平台缓存目录决定），",
+                "`/root/.cache/agent-specs/`，"))
+        cm.check_entry_doc_manifest()
+        self.assertIn("缓存目录", self.error_texts())
+
+    def test_path_chain_removed_reports(self):
+        # 反例（用户点名形态）：模板不给安装文档路径与取规范脚本路径 → 新实例不知道如何下载规范
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n", "").replace(
+                "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+        self.assertIn("fetch-specs.py", self.error_texts())
+
+    def test_path_section_removed_reports(self):
+        # 反例：整节被删 → 三条路径无处承载
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "== 规范与安装文档的位置（这条链要能一站直达）\n\n"
+                "* **规范路径**：https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+                "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n"
+                "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n\n", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("规范与安装文档的位置", self.error_texts())
+
+    def test_spec_file_removed_reports(self):
+        # 反例：承载判据的通用层文件被删 → 最小集与临时产物的分界无处可查
+        self._write_manifest_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "entry-doc.adoc"))
+        cm.check_entry_doc_manifest()
+        self.assertIn("entry-doc.adoc", self.error_texts())
+
+    def test_info_section_prefilled_reports(self):
+        # 反例（本轮实测缺口）：把「本项目持久化到入口文档的信息」这一节**预填成待填清单**
+        # → 每个照着模板装出来的项目都带着一份与它无关的空白清单，且与项目已填内容打架。
+        # 旧实现只核"这一节的标题在不在"，预填后仍报绿。
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n", "")
+            .replace(
+                "凡要跨会话保留的本项目信息追加在本节。\n",
+                "凡要跨会话保留的本项目信息追加在本节。\n"
+                "* [ ] 构建与测试命令\n* [ ] 部署方式\n* [ ] 负责人\n"))
+        cm.check_entry_doc_manifest()
+        self.assertIn("待填清单", self.error_texts())
+
+    def test_single_source_declaration_removed_reports(self):
+        # 反例：判据侧不再声明"本文件是唯一真源"→ 同一件事可被别处再复述一遍，
+        # 两处必然各自漂移（本仓库实测：入口模板与 entry-doc.adoc 曾逐句重复整段）
+        self._write_manifest_valid()
+        self.write("specs/general/entry-doc.adoc",
+                   self.SPEC.replace("本文件是这一判据的**唯一真源**；", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("唯一真源", self.error_texts())
+
+    def test_install_pointer_removed_reports(self):
+        # 反例：工序侧不再指向判据真源 → "该不该写"只能在本文件里再写一套
+        self._write_manifest_valid(
+            self.TEMPLATE.replace("那是判据的唯一真源，本文件不重复其条文", "详见上文"))
+        cm.check_entry_doc_manifest()
+        self.assertIn("判据的真源", self.error_texts())
+
+    def test_info_section_without_hint_reports(self):
+        # 反例：该节的提示行被删（既不提示、也不预填）→ 读者不知道该往这一节写什么
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("尚无", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
@@ -10107,17 +10275,17 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '    """--keep：不动本地那份；判定标准：不得把本地副本删掉"""\n'
         'DEFAULT_OUT = "tmp/agent-specs"\n'
         'def check_out_dir(p):\n'
-        '    """落点必须位于当前工作目录之下（默认落项目内临时目录）"""\n'
+        '    """项目内落点必须位于当前工作目录之下（仅 --local 时用）"""\n'
         'def resolve_out_dir(args):\n'
-        '    """默认落项目内临时目录；if not args.cache 时不碰共享缓存"""\n'
+        '    """if not root: return check_out_dir(args.out)；默认落用户级缓存，--local 才取项目内"""\n'
         'def shared_cache_dir():\n'
-        '    """XDG_CACHE_HOME / LOCALAPPDATA 下的 Cache"""\n'
+        '    """默认落点：XDG_CACHE_HOME / LOCALAPPDATA 下的 .cache（本机所有项目共用一份）"""\n'
         'def cache_slot_dir(d, b):\n'
         '    """按来源地址分槽（urllib.parse.urlsplit）"""\n'
         'def is_local_base(b):\n'
         '    """本机来源不缓存: localhost / 127."""\n'
         'AGENT_SPECS_CACHE = "--cache-dir"\n'
-        'CACHE_FLAG = "--cache"\n'
+        'LOCAL_FLAG = "--local"\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -10164,18 +10332,52 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                      b')\r\n'
                      b'%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
                      b'exit /b %errorlevel%\r\n')
-        self.write("INSTALL.adoc",
-                   "见 fetch-specs 与 tmp/agent-specs 落点（默认落到项目内临时目录）。"
-                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
-                   "只装 python2 的发行版同样可用。"
-                   "要本机所有项目共用一份加 --cache、落平台用户级缓存目录。"
-                   "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
-                   "要不动本地那份加 --keep。\n")
-        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落项目内临时目录，"
-                                        "要本机所有项目共用一份时加 --cache、落用户级缓存目录；"
+        # INSTALL.adoc：既有各节要点 + 入口模板代码块（后者承载"怎么取/取不到怎么办/怎么更新"三要点）
+        self.write("INSTALL.adoc", self.INSTALL_BODY)
+
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落用户级缓存（本机所有"
+                                        "项目共用一份），缓存不可用时退回项目内临时目录 "
+                                        "tmp/agent-specs/、要项目内副本加 --local；"
                                         "默认以远程为准、以 --keep 保留本地那份。\n")
-        self.write("README.adoc", "工具 fetch-specs：默认落项目内临时目录；"
-                                 "加 --cache 落共享缓存（本机所有项目共用一份）。\n")
+        self.write("README.adoc", "工具 fetch-specs：默认落用户级缓存（本机所有项目共用一份）；"
+                                 "缓存不可用时退回项目内临时目录 tmp/agent-specs/。\n")
+        self.write("PUBLIC.adoc", "抓取工具：默认取到用户级缓存；退回项目内临时目录 "
+                                  "tmp/agent-specs/。\n")
+
+    # 安装文档夹具：模板代码块里放"入口占位那一行"（三要点齐备；个别用例替换它跑反例）
+    INSTALL_BODY = (
+        "= 安装\n\n同时将 tmp* 加入到 .gitignore\n\n"
+        "[source,asciidoc]\n----\n"
+        "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+        "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+        "优先取到本地副本（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
+        "它会把本入口与其引用的 specs/ 规范一并取全（只给脚本名即可，"
+        "无需逐条下载）。**需要最新规范时再运行一次即可更新**；取不到时直接读远程入口。\n\n"
+        "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。\n\n"
+        "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。\n"
+        "----\n\n"
+        "== 取规范到本地副本\n\n见 fetch-specs：副本默认落到用户级缓存（本机所有项目共用一份）、"
+        "缓存不可用时退回项目内临时目录 tmp/agent-specs/（要项目内副本加 --local）；取不到时直接读远程入口。"
+        "默认入口文件名 AGENTS.adoc；已存在 AGENTS.md 时就地融合、不重命名、不另建。"
+        "默认取到平台用户级缓存目录；"
+        "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
+        "要不动本地那份加 --keep。\n\n"
+        "== 取规范时连 python 都没有\n\n"
+        "按下面的次序走：\n\n"
+        "这里说的是**一个都没有**：只装 python2 的发行版不算，上一条的次序会取到 `python`。\n"
+        "* **先按本平台既有的软件分发方式装一个 python 3**：这是**人**的一步，"
+        "入口**不得**代为安装运行时（改系统状态、要权限、对调用方不可预期）。\n"
+        "* 取不到时脚本报错、退出码非 0，**不得静默继续**。\n"
+        "* 不建议改用 `curl … | python3 -`：它同样要 python。\n")
+
+    ENTRY_LINE = (
+        "优先取到本地副本（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
+        "它会把本入口与其引用的 specs/ 规范一并取全（只给脚本名即可，"
+        "无需逐条下载）。**需要最新规范时再运行一次即可更新**；取不到时直接读远程入口。")
+
+    def _write_install_with_entry_line(self, entry_line: str) -> None:
+        """把给定的"入口占位那一行"替进模板代码块（其余要点照旧）——用于跑反例。"""
+        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(self.ENTRY_LINE, entry_line))
 
     def test_valid_passes(self):
         self._write_valid()
@@ -10241,34 +10443,9 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("INSTALL.adoc", self.error_texts())
 
     # ---- 解释器兜底（本仓库实证：入口原先只调 python3，"没有 python 的机器装不上"）----
-
-    def test_sh_hardcodes_python3_reports(self):
-        # 反例：.sh 把 python3 写死成前提 → 只装 python2 的发行版（CentOS/RHEL 8 及更早）直接失败
-        self._write_valid()
-        self.write("script/fetch-specs.sh",
-                   '#!/usr/bin/env bash\nset -u\n'
-                   'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n')
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("command -v python", self.error_texts())
-
-    def test_sh_missing_python_fallback_reports(self):
-        # 反例：.sh 探测了 python3/python，但两者都没有时静默继续（未报错退出）
-        self._write_valid()
-        self.write("script/fetch-specs.sh",
-                   '#!/usr/bin/env bash\n'
-                   'if command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
-                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("未找到解释器", self.error_texts())
-
-    def test_bat_hardcodes_python3_reports(self):
-        # 反例：.bat 把 python3 写死成前提 → 只有 py 启动器 / Store 别名的 Windows 上失败
-        self._write_valid()
-        with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
-            fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n'
-                     b'exit /b %errorlevel%\r\n')
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("where python", self.error_texts())
+    # 只保留两条机械可核对的：①探测次序写反（后写的会被前面的分支永久遮住）；
+    # ②判别串互相包含导致次序判错。安装文档的兜底措辞与"入口不得代为安装运行时"
+    # 属文档口径、无对应的机械核对，故不再单设用例（该职责由 `INSTALL.adoc` 正文承担）。
 
     def test_lookup_order_regression_reports(self):
         # 反例：次序写反（python 排在 python3 前）→ 该分支把 python3 永久遮住，等于没有兜底
@@ -10279,37 +10456,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
                    'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
                    'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
-        cm.check_interpreter_fallback_guard()
+        cm.check_spec_fetch_guard()
         self.assertIn("探测次序", self.error_texts())
-
-    def test_install_without_fallback_note_reports(self):
-        # 反例：安装文档不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
-        self._write_valid()
-        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
-
-    def test_install_without_next_step_reports(self):
-        # 反例（用户追问"没有 python 也要下载啊"）：只写"报错退出"不写"接下来怎么办"
-        # → 引用方看到失败仍不知道下一步（装一个？谁装？能不能不装？）
-        self._write_valid()
-        self.write("INSTALL.adoc",
-                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
-                   "只装 python2 的发行版同样可用。\n")
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("处置次序", self.error_texts())
-
-    def test_entry_allowed_to_install_runtime_reports(self):
-        # 反例：安装文档把"装一个运行时"写成脚本/入口的一步（而非人的一步）
-        # → 入口从"门"变成"装门的施工队"（改系统状态、要权限、对调用方不可预期）
-        self._write_valid()
-        self.write("INSTALL.adoc",
-                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
-                   "只装 python2 的发行版同样可用；没有就装一个 python 3 再重跑；"
-                   "不装解释器的替代路径是直接读远程入口地址，"
-                   "`curl | python3 -` 同样要 python。\n")
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("代为安装", self.error_texts())
 
     def test_order_check_not_fooled_by_substring_overlap(self):
         # 反例：次序写反 + 判别键互相包含（`command -v python` 命中 `command -v python3` 的子串）
@@ -10322,31 +10470,144 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
                    'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
                    'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
-        cm.check_interpreter_fallback_guard()
+        cm.check_spec_fetch_guard()
         self.assertIn("探测次序", self.error_texts())
 
-    def test_install_missing_python2_case_reports(self):
-        # 反例：只提 python3/python，不覆盖"只有 python2"与"连 python 都没有"两个真实环境
+    def test_sh_hardcodes_python3_reports(self):
+        # 反例：`.sh` 把 python3 写死成前提（直接调它、不做探测）→ 只装 python2 的发行版
+        # （CentOS/RHEL 8 及更早）直接失败。删这道防线的反例时，本条也随之消失过——
+        # 故连同"防线被并进别处"一起由 `check_guard_manifest` 记账兜住。
         self._write_valid()
-        self.write("INSTALL.adoc", "兜底：没有 python3 时取 python。\n")
-        cm.check_interpreter_fallback_guard()
-        self.assertIn("python2", self.error_texts())
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\nset -u\n'
+                   'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("command -v python3", self.error_texts())
 
+    def test_install_without_fallback_note_reports(self):
+        # 反例：安装文档不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
+        self._write_valid()
+        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
+        cm.check_spec_fetch_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+        self.assertIn("取规范时连 python 都没有", self.error_texts())
+
+    def test_install_without_next_step_reports(self):
+        # 反例（用户追问"没有 python 也要下载啊"）：只写"报错退出"、不写"接下来怎么办"
+        # → 引用方看到失败仍不知道下一步（装一个？谁装？能不能不装？）
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "== 取规范时连 python 都没有\n\n"
+                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。\n")
+        cm.check_spec_fetch_guard()
+        self.assertIn("装一个 python 3", self.error_texts())
+
+    def test_entry_allowed_to_install_runtime_reports(self):
+        # 反例：把"装一个运行时"写成脚本/入口的一步（而非人的一步）
+        # → 入口从"门"变成"装门的施工队"（改系统状态、要权限、对调用方不可预期）
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "== 取规范时连 python 都没有\n\n"
+                   "装一个 python 3 再重跑（脚本会自己下载安装）；只装 python2 的发行版同样可用；"
+                   "报错、退出码非 0 不得静默继续；`curl | python3 -` 同样要 python。\n")
+        cm.check_spec_fetch_guard()
+        self.assertIn("代为安装", self.error_texts())
+
+    def test_install_runtime_note_removed_reports(self):
+        # 反例：把"报错退出非 0、不得静默继续"这条抽掉 → "没取到规范"被混进"取到了"
+        self._write_valid()
+        self.write("INSTALL.adoc",
+                   "== 取规范时连 python 都没有\n\n"
+                   "装一个 python 3 再重跑。这是**人**的一步，入口**不得**代为安装运行时；"
+                   "只装 python2 的发行版同样可用；`curl | python3 -` 同样要 python。\n")
+        cm.check_spec_fetch_guard()
+        self.assertIn("非 0", self.error_texts())
+
+    def test_bat_hardcodes_python3_reports(self):
+        # 反例：`.bat` 不探 py 启动器（Windows 上最常见的那一个）→ 大半个 Windows 装机量被挡在门外。
+        # 合法形态的键取"整份文件文本就能满足"（`where py` 写在注释里也算）时，本反例**不会报红**
+        # ——本仓库实测复现，故改按**行段**核（键须落在同一条可执行行上）。
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'rem Interpreter lookup: py launcher first, then python3, then python\r\n'
+                   'where python3 >nul 2>nul && set "FETCH_SPECS_RUNTIME=python3"\r\n'
+                   'where python >nul 2>nul && set "FETCH_SPECS_RUNTIME=python"\r\n'
+                   '%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
+                   'exit /b %errorlevel%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("fetch-specs.bat", self.error_texts())
+        self.assertIn("解释器兜底", self.error_texts())
+
+    def test_bat_probe_only_in_comment_reports(self):
+        # 反例：探测分支只写在注释里（"先探 py 启动器"）→ 分支并不存在，读者以为有兜底
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'rem where py >nul 2>nul\r\n'
+                   'rem where python3 >nul 2>nul\r\n'
+                   '%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
+                   'exit /b %errorlevel%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("解释器兜底", self.error_texts())
+
+    def test_sh_missing_python_fallback_reports(self):
+        # 反例：`.sh` 只探 python3、不探 python → 只装 python 的发行版上取不到规范
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\n'
+                   '# 回退分支写得像"有"，但真正可执行的那条探测已经不在了\n'
+                   'rem elif command -v python >/dev/null 2>&1; then runtime="python"\n'
+                   'if command -v python3 >/dev/null 2>&1; then\n'
+                   '  runtime="python3"\n'
+                   'else\n'
+                   '  echo "错误: 未找到解释器 python3/python" >&2\n'
+                   '  exit 127\n'
+                   'fi\n'
+                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("解释器兜底", self.error_texts())
+
+    def test_install_no_python_section_removed_reports(self):
+        # 反例：把「取规范时连 python 都没有」整节删掉 → 旧实现只核全文关键词，仍报绿
+        # （本仓库实测复现），故改为**先按节标题定位整节、再在节内逐条核对**。
+        self._write_valid()
+        import re as _re
+        self.write("INSTALL.adoc", _re.sub(
+            r"^== 取规范时连 python 都没有.*?(?=\Z)", "", self.INSTALL_BODY, flags=_re.S | _re.M))
+        cm.check_spec_fetch_guard()
+        self.assertIn("取规范时连 python 都没有", self.error_texts())
+
+    def test_install_without_no_runtime_note_reports(self):
+        # 反例：节还在，但"入口不得代为安装/不得静默继续"这两条被抽掉 → 读者会以为入口会自己搞定
+        self._write_valid()
+        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
+            "* **先按本平台既有的软件分发方式装一个 python 3**：这是**人**的一步，"
+            "入口**不得**代为安装运行时（改系统状态、要权限、对调用方不可预期）。\n", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("不得**代为安装", self.error_texts())
+
+    def test_install_missing_python2_case_reports(self):
+        # 反例：删掉"只装 python2 的发行版同样可用"→ 该分支的收益没人知道（CentOS/RHEL 8 及更早）
+        self._write_valid()
+        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
+            "\n这里说的是**一个都没有**：只装 python2 的发行版不算，上一条的次序会取到 `python`。", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("python2", self.error_texts())
 
     # ---- 共享缓存落点（用户实测诉求：别每个项目都下载一遍同几份文件）----
 
     def test_shared_cache_guard_passes(self):
-        # 正例：默认落项目内临时目录 + --cache 才切共享缓存（--cache-dir/按来源分槽/本机来源不缓存）+ 四处文档同步
+        # 正例：默认落用户级缓存 + --local 才取项目内（--cache-dir/按来源分槽/本机来源不缓存）+ 四处文档同步
         self._write_valid()
         cm.check_shared_cache_guard()
         self.assertEqual([], cm.errors)
 
     def test_install_without_shared_cache_note_reports(self):
-        # 反例：安装文档不提共享缓存 → 引用方仍按"每个项目各下载一份"执行（重复流量）
+        # 反例：安装文档不提默认落点 → 引用方仍按"每个项目各下载一份"执行（重复流量）
         self._write_valid()
         self.write("INSTALL.adoc",
-                   "见 fetch-specs 与 tmp/agent-specs 落点。兜底：没有 python3 时取 python，"
-                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。\n")
+                   "见 fetch-specs 与 tmp/agent-specs 落点（默认取到用户级缓存目录）。\n")
         cm.check_shared_cache_guard()
         self.assertIn("INSTALL.adoc", self.error_texts())
 
@@ -10358,23 +10619,21 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_project_copy_path_removed_reports(self):
-        # 反例：**默认落点不再是项目内临时目录**（改回"共享缓存优先"）→ 与安装文档入口模板
-        # 第一条「优先取到临时目录 tmp」互相矛盾：按模板理解会去找 `tmp/agent-specs/` 而找不到
+        # 反例：项目内临时目录这条路径被去掉（只剩缓存）→ 缓存不可用的机器上无处落副本
         self._write_valid()
         self.write("script/fetch-specs.py",
-                   self.SCRIPT_PY.replace("if not args.cache", "if False")
-                   .replace("os.path.isfile(dest)", ""))
+                   self.SCRIPT_PY.replace('--local', ''))
         cm.check_shared_cache_guard()
-        self.assertIn("默认落点", self.error_texts())
+        self.assertIn("--local", self.error_texts())
 
-    def test_shared_cache_flag_removed_reports(self):
-        # 反例：去掉 --cache → 想"本机所有项目共用一份"的引用方无路可走、每个项目各存一份
+    def test_shared_cache_fallback_removed_reports(self):
+        # 反例：去掉"缓存不可用时退回项目内落点"→ 缓存取不到的机器上直接失败（静默改语义）
         self._write_valid()
         self.write("script/fetch-specs.py",
-                   self.SCRIPT_PY.replace('if not args.cache', 'if False'))
+                   self.SCRIPT_PY.replace("if not root: return check_out_dir(args.out)",
+                                          ""))
         cm.check_shared_cache_guard()
-        self.assertIn("--cache", self.error_texts())
-        self.assertIn("共享缓存", self.error_texts())
+        self.assertIn("退回项目内落点", self.error_texts())
 
     def test_cache_dir_override_removed_reports(self):
         # 反例：去掉 --cache-dir/AGENT_SPECS_CACHE → 缓存落点不可显式指定（磁盘布局不同就没法用）
@@ -10397,6 +10656,42 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('127.', ""))
         cm.check_shared_cache_guard()
         self.assertIn("127.", self.error_texts())
+
+    # ---- 入口占位三要点（用户两次点名"还是没改"：模板那行被改写/合并后既有抓手全都不报错）----
+
+    def test_install_entry_placeholder_passes(self):
+        # 正例：三要点齐备（取到项目内临时目录 / 取不到读远程 / 再运行一次即是更新）
+        self._write_valid()
+        cm.check_shared_cache_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_install_entry_placeholder_line_reverted_reports(self):
+        # 反例（用户两次点名的那个形态）：把"需要最新规范再更新"并进"一并取到 tmp/agent-specs/"
+        # → 脚本更新了用户也不知道，且已按旧模板装过的项目重跑安装会被判成"逐字一致"而不更新
+        # （正是"还是没改"：既有抓手只核"每行独立成行 + 空行完好"，这句删掉也不报错）
+        self._write_valid()
+        self._write_install_with_entry_line(
+            "优先取到临时目录 tmp（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
+            "它会把本入口与其引用的 specs/ 规范一并取到 `tmp/agent-specs/`（只给脚本名即可，"
+            "无需逐条下载）。")
+        cm.check_shared_cache_guard()
+        self.assertIn("需要最新规范", self.error_texts())
+
+    def test_install_entry_placeholder_tmp_removed_reports(self):
+        # 反例：把那行换成"直接下载即可" → 网络不可达时本地那一份（用户点名的那条收益）没了
+        self._write_valid()
+        self._write_install_with_entry_line(
+            "需要最新规范时再运行一次即可更新：直接下载规范到本地即可。")
+        cm.check_shared_cache_guard()
+        self.assertIn("优先取到临时目录", self.error_texts())
+
+    def test_install_entry_placeholder_fallback_removed_reports(self):
+        # 反例：只写"优先取到临时目录"、不写"取不到就读远程" → 把可选的一步读成前置条件
+        self._write_valid()
+        self._write_install_with_entry_line(
+            "优先取到临时目录 tmp（避免网络原因无法访问）；需要最新规范时再运行一次即可更新。")
+        cm.check_shared_cache_guard()
+        self.assertIn("取不到", self.error_texts())
 
     # ---- 以远程为准（用户实测诉求：安装脚本经常更新，重跑安装要能更新现有的那份）----
 
@@ -10595,3 +10890,152 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    self.SCRIPT_PY.replace("不得把本地副本删掉", "落盘前先清空本地"))
         cm.check_spec_fetch_guard()
         self.assertIn("把本地副本删掉", self.error_texts())
+
+
+class TestCheckGuardManifest(CheckSpecsTestCase):
+    """钉住『防线清单与删除记账』（防"删了却全绿"）。
+
+    本仓库实测的三条失效路径：①一道防线被从 `main()` 摘掉（代码并进别的防线）、它的
+    反例用例一并被删，脚本报 OK、单测全通过、台账上的"抓手数"也没变；②台账里点名的
+    防线名改成不存在的名字仍报"有抓手"；③脚本头部清单条目被整条删掉时编号断开、
+    而清单描述不参与一致性核对。故本条把三件事变成可核对的：接线数、反例用例数、
+    台账点名的防线名。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_baseline = (cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE)
+        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
+
+    def tearDown(self) -> None:
+        cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
+        super().tearDown()
+
+    _SRC = (
+        'def check_alpha_guard():\n'
+        '    """甲。"""\n'
+        '\n'
+        '\n'
+        'def check_beta_guard():\n'
+        '    """乙。"""\n'
+        '\n'
+        '\n'
+        'def main(argv=None):\n'
+        '    """入口。"""\n'
+        '    check_alpha_guard()\n'
+        '    check_beta_guard()\n'
+        '    return 0\n'
+        '\n'
+        '\n'
+        'if __name__ == "__main__":\n'
+        '    main()\n'
+    )
+    # 台账逐条声明：`(条款名, 来源, 抓手路径, 声明的抓手, 备注)`——第 4 段是**必填**的
+    # 「这条规范由哪一道钉住」（有抓手＝防线名、无抓手＝`NO_GRIP_DECLARED`）。
+    _LEDGER = ("MECHANISMS = [\n"
+               "    (\"甲\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_alpha_guard\", \"备注甲\"),\n"
+               "    (\"乙\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_beta_guard\", \"备注乙\"),\n"
+               "]\n")
+
+    def _write_valid(self, src=None, ledger=None, tests=4):
+        self.write("script/check_specs.py", src if src is not None else self._SRC)
+        self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
+        body = "".join(f"    def test_case_{i}(self):\n        pass\n" for i in range(tests))
+        self.write("script/check_specs_test.py",
+                   "import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
+        self.write("script/check_effective_test.py",
+                   "import unittest\n\n\nclass E(unittest.TestCase):\n    def test_x(self):\n        pass\n")
+        cm.GUARD_WIRING_BASELINE = 2
+        cm.GUARD_TEST_BASELINE = 5
+
+    def test_valid_passes(self):
+        # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
+        self._write_valid()
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_guard_unwired_reports(self):
+        # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
+        # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
+        self._write_valid(src=self._SRC.replace("    check_beta_guard()\n", ""))
+        cm.check_guard_manifest()
+        self.assertIn("防线接线数", self.error_texts())
+
+    def test_guard_defined_but_never_called_reports(self):
+        # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
+        # → 看起来还在、却永远不会执行
+        self._write_valid(src=self._SRC.replace("    check_beta_guard()\n", ""))
+        cm.check_guard_manifest()
+        self.assertIn("check_beta_guard", self.error_texts())
+
+    def test_tests_removed_without_note_reports(self):
+        # 反例②：反例用例被整批删掉（防线随之失效力）→ 用例数减少必须报红
+        self._write_valid(tests=1)
+        cm.check_guard_manifest()
+        self.assertIn("反例用例数", self.error_texts())
+
+    def test_ledger_names_missing_guard_reports(self):
+        # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
+        self._write_valid(ledger=self._LEDGER.replace("check_beta_guard",
+                                                      "check_gone_guard"))
+        cm.check_guard_manifest()
+        self.assertIn("check_gone_guard", self.error_texts())
+
+    def test_checklist_gap_reports(self):
+        # 反例④：脚本头部清单出现断号（条目被整条删掉）→ 清单描述不参与一致性核对、
+        # 写死不报红（本仓库实测），故按编号连续性核对
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 2. 乙\n 4. 丙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("断号", self.error_texts())
+
+    def test_checklist_duplicate_number_reports(self):
+        # 反例⑤：清单编号出现**重号**（重排时把两条并成同一个号）→ 只核"有没有断号"时
+        # 两种写法都能过：编号仍是连通的 1..N，而"第 3 项"同时指向两条条目——本仓库实测
+        # （新增「防线清单与删除记账」时把原有的「性能测试防线」也编成 27，此后编号所指的
+        # 那一项随重排静默错位）。故按**严格递增**核对。
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 2. 乙\n 2. 丙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("重号", self.error_texts())
+
+    def test_ledger_without_declaration_reports(self):
+        # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字
+        # 可以靠把备注里的防线名删掉来维持（删名字比删防线容易得多），读者却以为还有抓手。
+        # 故声明为必填：缺了即报红（旧实现只核"点名的名字存在"，没点名就没核对）。
+        self._write_valid(
+            ledger=self._LEDGER.replace(
+                '     "check_beta_guard", "备注乙"),\n', '     "check_beta_guard"),\n'))
+        cm.check_guard_manifest()
+        self.assertIn("未声明抓手", self.error_texts())
+
+    def test_ledger_declares_no_grip_but_has_path_reports(self):
+        # 反例⑦：条目声明为「无机械抓手」、却填了抓手路径 → 声明与实现不一致
+        self._write_valid(
+            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
+                                        '"%s", "备注乙"' % cm.NO_GRIP_DECLARED))
+        cm.check_guard_manifest()
+        self.assertIn("声明与实现不一致", self.error_texts())
+
+    def test_ledger_declares_guard_but_unwired_reports(self):
+        # 反例⑧：台账声明的防线**定义了却没人调用** → 它看起来还在、却永远不会执行；
+        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出 main()"形态）
+        self._write_valid(
+            src=self._SRC.replace("    check_beta_guard()\n", ""),
+            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
+                                        '"check_beta_guard", "备注乙"'))
+        cm.check_guard_manifest()
+        self.assertIn("check_beta_guard", self.error_texts())
+
+    def test_missing_script_reports(self):
+        # 反例⑤：防线清单本体被删 → 无从核对
+        self._write_valid()
+        os.remove(os.path.join(self.root, "script", "check_specs.py"))
+        cm.check_guard_manifest()
+        self.assertIn("check_specs.py", self.error_texts())

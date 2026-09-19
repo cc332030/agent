@@ -46,6 +46,25 @@ class TestEvaluate(unittest.TestCase):
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(statuses["内部链接须用相对路径、禁根绝对"], "grip-missing")
 
+    def test_every_entry_declares_its_grip(self):
+        # 每条台账都须**逐条声明**抓手：有抓手＝具体防线名（或工具/测试文件路径）、
+        # 无抓手＝`NO_GRIP_DECLARED`。旧形态只有四段（没有声明段）时本测试报红——
+        # 缺了它，"有抓手"这个数字可以靠把备注里的防线名删掉来维持。
+        for name, _src, grip, grip_name, note in eff.MECHANISMS:
+            with self.subTest(name=name):
+                if grip is None:
+                    self.assertEqual(eff.NO_GRIP_DECLARED, grip_name)
+                else:
+                    self.assertTrue(grip_name)
+                    self.assertNotEqual(eff.NO_GRIP_DECLARED, grip_name)
+
+    def test_guard_entries_declare_the_guard_they_name(self):
+        # 有抓手条目若声明的是防线名，该名声须在备注里可复核（同一条不写两处相互矛盾的名）
+        for name, _src, grip, grip_name, note in eff.MECHANISMS:
+            if grip is not None and grip_name.startswith("check_"):
+                with self.subTest(name=name):
+                    self.assertIn(grip_name, note)
+
     def test_none_grip_is_no_grip(self):
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(statuses["测试文件后缀式命名（禁 test_ 前戳）"], "no-grip")

@@ -8,15 +8,14 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   目标项目无需自己拼文件清单、也无需逐条下载。
 
   文件清单**从入口自身解析**（解析 AGENTS_COMMON.adoc 加载调度器里登记的 specs/... 条目），
-  故新增一份规范时**不需要改本脚本**、也不会漏取（手工清单的典型失效正是"漏了 specs/"）。
-
-  副本**默认落在共享缓存**（见下「共享缓存」），不在每个项目里各存一份。
+  故新增一份规范时**不需要改本脚本**、也不会漏取。取到的副本**落本机用户级缓存目录**
+  （见下「落点」），不在每个项目里各存一份。
 
 用法（在目标项目根目录执行，入口名随平台而异、只给脚本名即可）：
-  fetch-specs                          # **优先取到项目内 <DEFAULT_OUT>/（临时目录）**，见下「落点」
-  fetch-specs --cache                  # 改取到共享缓存（本机所有项目共用一份；不在项目里落副本）
+  fetch-specs                          # 取到用户级缓存（见下「落点」；缓存不可用时退回项目内 tmp）
+  fetch-specs --local                  # 强制取到项目内 <DEFAULT_OUT>/（临时目录语义）
   fetch-specs --out tmp/specs          # 项目内落点换目录（相对当前工作目录）
-  fetch-specs --cache-dir <目录>       # 共享缓存换落点（与 --cache 同用，显式指定优先）
+  fetch-specs --cache-dir <目录>       # 换缓存落点（须位于本机缓存目录之下）
   fetch-specs --base <URL>             # 换规范来源（默认 https://agent.c332030.com，同源镜像可用）
   fetch-specs --keep                   # 保留本地已有的非空副本（不动已取到的那一份）
   fetch-specs --force                  # 同默认（保留写法，与 --keep 相反）
@@ -24,45 +23,41 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 
 环境变量：
   AGENT_SPECS_BASE   规范来源地址，等价于 --base（默认取仓库站点）
-  AGENT_SPECS_CACHE  共享缓存落点，等价于 --cache-dir（显式参数优先）
+  AGENT_SPECS_CACHE  缓存落点，等价于 --cache-dir（显式参数优先）
 
-落点（**默认项目内临时目录**；理由与放弃的备选做法见下）：
-  - 默认落 **<当前工作目录>/<DEFAULT_OUT>/**，即项目内临时目录（`tmp/` 语义）：安装文档
-    要求的第一件事就是"优先取到临时目录 tmp"——网络不可达时本地得有一份可读的副本，
-    项目内的落点跟着项目走、可随项目一起清理；
-  - 加 `--cache` 改取**共享缓存**：落平台用户级缓存目录（见 `shared_cache_dir`），按平台取
-    **该平台公认的缓存位置**；同一台机器上的**所有项目共用一份**——同一个文件不因项目数
-    而下载多遍，代价是副本落在项目外（项目内的引用与清理都不再覆盖它）；
-  - 共享缓存--按来源地址分目录`cache_slot_dir`——换过 `--base` 取到的不同来源副本互不覆盖，
-    也不会被后续运行静默改写--且**只进不出**：本脚本不删除缓存里的任何文件（含换源留下的
-    旧副本），要清理由人来做（清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）；
-  - 明确不缓存的一类（有意如此，不当缺陷）：`--base` 指向**本机**时（服务端内容可能每次
-    都在变，缓存会给出过期副本）——此时即使加了 `--cache` 也退回项目内落点。
+落点（**默认用户级缓存**；理由与放弃的备选做法见下）：
+  - 默认落 `shared_cache_dir()` 给出的**平台用户级缓存目录**（见该函数），本机所有项目
+    共用一份——同一个文件不因项目数而重复下载，副本也不随各项目各自过期与清理；
+  - 加 `--local` 改取**项目内临时目录**（`<当前工作目录>/<DEFAULT_OUT>/`）：落点跟着项目
+    走、可随项目一起清理，代价是每个项目各存一份；
+  - 缓存按来源地址分目录（见 `cache_slot_dir`）——换过 `--base` 取到的不同来源副本互不覆盖；
+    且**只进不出**：本脚本不删除缓存里的任何文件（含换源留下的旧副本），要清理由人来做
+    （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）；
+  - 缓存不可得（环境变量与家目录都取不到）或来源是本机时**退回项目内落点**，并在输出里
+    说明——**不静默改变语义**。
 
 行为与副作用：
-  - 只写「落点目录」（默认项目内临时目录，或 `--cache` 时共享缓存落点），不写项目里其他位置；
+  - 只写「落点目录」，不写项目里其他位置；
   - **默认以远程为准**：每份清单内文件都按"取回的字节与本地不同才落盘"核对，远端改过就刷新
     （安装脚本会更新，重复执行安装时须能拿到最新的一份）；取回失败时**保留本地已有的那一份**
     并如实报失败，**不得**把本地副本删掉换成没有；
   - `--keep` 反过来：本地已有且非空即不动（只补缺失项），要最新内容就别加它；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
-  - `--keep` 之外**不做备份**：落点是那份文件自己的位置（项目内副本或共享缓存，均由本脚本
-    自己写入），被改动过的副本按"以远程为准"覆盖掉——**须留本地改动时用 `--keep` 或 `--out`
-    换个落点**，本条在头部与输出里都写明（判据：不给回滚路径的覆盖不算可预期）；
+  - `--keep` 之外**不做备份**：落点是那份文件自己的位置，被改动过的副本按"以远程为准"覆盖掉
+    ——**须留本地改动时用 `--keep` 或 `--out` 换个落点**；
   - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满。
 
 安全保证：
   - 只读远端、只写落点目录内：项目内落点必须位于当前工作目录之下（拒绝 `--out ../x`
-    一类越界）；共享缓存落点只接受平台缓存目录**之下**的路径（拒绝借 `--cache-dir` 写到
+    一类越界）；缓存落点只接受平台缓存目录**之下**的路径（拒绝借 `--cache-dir` 写到
     任意位置），两处落点互不越界；
   - 不删除任何既有文件（含落点目录里的多余文件）——清理走项目的清理脚本。
 
 已知限制：
-  - 缓存不做时间维度的过期判断：判据是**内容**而不是时间——每份文件都先把远端内容取到内存、
+  - 不做时间维度的过期判断：判据是**内容**而不是时间——每份文件都先把远端内容取到内存、
     与本地逐字节比较后才决定落不落盘，故没有"本地那份看起来还新、实际已经过期"这条失效；
-    代价是每次运行都要把清单内文件取一遍（判据换成"内容一致即不变"，见 specs 的
-    「以远程为准」与「取不到不该是终点」两条口径）；
+    代价是每次运行都要把清单内文件取一遍；
   - `--keep` 下本地副本可能落后于远端，此时**以落点里的旧副本为读到的内容**——是否要最新
     由调用方按任务判（安装流程一律按默认的"以远程为准"走）；
   - 内容比对只看字节：远端对同一份规范做格式等价改写（如仅换行/顺序）同样会落盘刷新。
@@ -78,10 +73,9 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_BASE = "https://agent.c332030.com"
-# 默认落点目录（项目内临时目录，相对调用方的工作目录；`--cache` 时不生效）；
-# docstring 按常量名引用、不抄字面值
+# 项目内落点目录（相对调用方的工作目录，仅 `--local` 时用）；docstring 按常量名引用、不抄字面值
 DEFAULT_OUT = "tmp/agent-specs"
-# 共享缓存目录名：POSIX 落在 $XDG_CACHE_HOME 下、Windows 落在 %LOCALAPPDATA%\Cache 下
+# 缓存目录名：POSIX 落在 $XDG_CACHE_HOME 下、Windows 落在 %LOCALAPPDATA%\.cache 下
 CACHE_APP_DIR = "agent-specs"
 # 入口 + 顶层说明文件；specs/ 下的文件从入口的调度器登记解析得到
 MANIFEST_FILE = "AGENTS_COMMON.adoc"
@@ -103,13 +97,13 @@ def parse_args(argv=None):
     parser.add_argument("--base",
                         default=os.environ.get("AGENT_SPECS_BASE", DEFAULT_BASE),
                         help="规范来源地址（默认 https://agent.c332030.com）")
-    parser.add_argument("--cache", action="store_true",
-                        help="落点改为共享缓存（本机所有项目共用一份）；默认落项目内临时目录")
+    parser.add_argument("--local", action="store_true",
+                        help="落点改为项目内临时目录（临时产物语义）；默认落用户级缓存")
     parser.add_argument("--out", default=DEFAULT_OUT,
-                        help="项目内落点目录，相对当前工作目录（默认见 DEFAULT_OUT；--cache 时不用）")
+                        help="项目内落点目录，相对当前工作目录（默认见 DEFAULT_OUT，仅 --local 时用）")
     parser.add_argument("--cache-dir",
                         default=os.environ.get("AGENT_SPECS_CACHE", ""),
-                        help="共享缓存落点（默认按平台取用户级缓存目录；与 --cache 同用）")
+                        help="缓存落点（默认按平台取用户级缓存目录；须位于该目录之下）")
     parser.add_argument("--keep", action="store_true",
                         help="保留本地已有的非空副本（不动已取到的那一份、只补缺失项）")
     parser.add_argument("--force", action="store_true",
@@ -247,13 +241,13 @@ def shared_cache_dir():
     """平台公认的用户级缓存目录（本机所有项目共用一份副本的最外层落点）。
 
     取值按各平台自己的约定，不另造一套：POSIX 用 `XDG_CACHE_HOME`、未设时用 `~/.cache`
-    （XDG Base Directory Specification）；Windows 用 `LOCALAPPDATA` 下的 `Cache`（Microsoft
+    （XDG Base Directory Specification）；Windows 用 `LOCALAPPDATA` 下的 `.cache`（Microsoft
     收窄后的 Local 应用数据约定；**不用** `APPDATA` 漫游目录——缓存是机器本地物、不该被同步）。
     两者都取不到（环境变量被清空、也没有家目录）时返回 None，由调用方退回项目内落点。
     """
     if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA")
-        return os.path.join(base, "Cache") if base else None
+        return os.path.join(base, ".cache") if base else None
     base = os.environ.get("XDG_CACHE_HOME") or (
         os.path.join(os.path.expanduser("~"), ".cache") if os.path.expanduser("~") else None)
     return base or None
@@ -276,14 +270,14 @@ def cache_slot_dir(cache_dir, base):
 
 
 def resolve_out_dir(args):
-    """定出本次落点。返回 (落点, 是否共享缓存)。
+    """定出本次落点。返回 (落点, 是否缓存)。
 
-    **默认落项目内临时目录**（`--out`，`tmp/` 语义）：安装文档要求的第一件事就是"优先取到
-    临时目录 tmp"——网络原因不可访问时本地得有一份可读的副本，且这份副本跟着项目走、可随
-    项目一起清理。加 `--cache` 才改取共享缓存（本机所有项目共用一份；代价是副本落在项目外，
-    项目内的引用与清理都覆盖不到它）。
+    默认落**用户级缓存**（`shared_cache_dir` + `cache_slot_dir`）：同一台机器上的**所有项目
+    共用一份**——同一个文件不因项目数而下载多遍，副本也不随各项目各自过期与清理。加
+    `--local` 才改取项目内临时目录（`--out`，`tmp/` 语义）：落点跟着项目走、可随项目一起清理，
+    代价是每个项目各存一份。
 
-    共享缓存不可得（环境变量与家目录都取不到）或来源是本机时**退回项目内落点**，并在调用方
+    缓存不可得（环境变量与家目录都取不到）或来源是本机时**退回项目内落点**，并在调用方
     打印相应说明——**不静默改变语义**。
     退回的判据是本机来源：`localhost`/回环 IP 上的服务端内容可能每次都在变（本地开发时
     改完即取），拿缓存副本会给出过期内容。
@@ -298,7 +292,7 @@ def resolve_out_dir(args):
             raise ValueError(
                 f"--cache-dir 必须位于本机缓存目录 {root} 之下、不能借用它写到任意位置，拒绝: {dest}")
         return cache_slot_dir(dest, args.base), True
-    if not args.cache:
+    if args.local:
         return check_out_dir(args.out), False
     if is_local_base(args.base):
         return check_out_dir(args.out), False
@@ -343,7 +337,7 @@ def main(argv=None):
         for rel in sorted(targets + optional):
             print(rel)
         print(f"# 共 {len(targets)} 份（必取）+ {len(optional)} 份（有则取），来源 {base}")
-        print(f"# 落点: {out_dir}（{'共享缓存' if shared else '项目内副本'}）")
+        print(f"# 落点: {out_dir}（{'用户级缓存（本机所有项目共用一份）' if shared else '项目内副本'}）")
         return EXIT_OK
 
     # `--force` 与默认同为"以远程为准"，此处只保留它的写法（与 `--keep` 相反）；
@@ -364,11 +358,11 @@ def main(argv=None):
     failed = [r for r in results if r[1] == "fail"]
 
     if shared:
-        print(f"落点: {out_dir}（共享缓存：本机所有项目共用这一份）")
+        print(f"落点: {out_dir}（用户级缓存：本机所有项目共用这一份）")
     else:
         print(f"落点: {out_dir}（项目内副本）")
-        if args.cache and not args.cache_dir:
-            print("说明: 未落到共享缓存——来源是本机地址，或本机取不到用户级缓存目录"
+        if not args.local and not args.cache_dir:
+            print("说明: 未落到用户级缓存——来源是本机地址，或本机取不到用户级缓存目录"
                   "（可用 --cache-dir 显式指定）", file=sys.stderr)
     print(f"来源: {base}")
     if args.keep:
