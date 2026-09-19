@@ -13,47 +13,59 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   副本**默认落在共享缓存**（见下「共享缓存」），不在每个项目里各存一份。
 
 用法（在目标项目根目录执行，入口名随平台而异、只给脚本名即可）：
-  fetch-specs                          # 取到共享缓存（默认；不在当前项目里落副本）
-  fetch-specs --local                  # 取到 <当前工作目录>/<DEFAULT_OUT>/（项目内副本）
-  fetch-specs --local --out tmp/specs  # 项目内副本换落点（相对当前工作目录）
-  fetch-specs --cache-dir <目录>       # 共享缓存换落点（显式指定优先）
+  fetch-specs                          # **优先取到项目内 <DEFAULT_OUT>/（临时目录）**，见下「落点」
+  fetch-specs --cache                  # 改取到共享缓存（本机所有项目共用一份；不在项目里落副本）
+  fetch-specs --out tmp/specs          # 项目内落点换目录（相对当前工作目录）
+  fetch-specs --cache-dir <目录>       # 共享缓存换落点（与 --cache 同用，显式指定优先）
   fetch-specs --base <URL>             # 换规范来源（默认 https://agent.c332030.com，同源镜像可用）
-  fetch-specs --force                  # 忽略本地副本、强制重取（需最新规范时用）
+  fetch-specs --keep                   # 保留本地已有的非空副本（不动已取到的那一份）
+  fetch-specs --force                  # 同默认（保留写法，与 --keep 相反）
   fetch-specs --list                   # 只打印将要取的文件清单，不下载
 
 环境变量：
   AGENT_SPECS_BASE   规范来源地址，等价于 --base（默认取仓库站点）
   AGENT_SPECS_CACHE  共享缓存落点，等价于 --cache-dir（显式参数优先）
 
-共享缓存（默认行为，推荐；理由与放弃的备选做法见下）：
-  - 落点：平台用户级缓存目录（见 `shared_cache_dir`），按平台取**该平台公认的缓存位置**；
-  - 目的：同一台机器上的**所有项目共用一份**——同一个文件不因项目数而下载多遍，缓存
-    **跨项目复用**（项目一多，逐项目下载是纯重复流量与重复等待）；
-  - 缓存内容按来源地址分目录（见 `cache_slot_dir`）：换过 `--base` 取到的不同来源副本
-    互不覆盖，也不会被后续运行静默改写；
-  - 缓存**只进不出**：本脚本不删除缓存里的任何文件（含换源留下的旧副本），要清理由人来做
-    （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）；
-  - 明确不缓存的两类（有意如此，不当缺陷）：`--base` 指向**本机**时（服务端内容可能每次
-    都在变，缓存会给出过期副本）、以及 `--local/--out` 指定的项目内落点（临时产物语义、
-    按项目清理）。
+落点（**默认项目内临时目录**；理由与放弃的备选做法见下）：
+  - 默认落 **<当前工作目录>/<DEFAULT_OUT>/**，即项目内临时目录（`tmp/` 语义）：安装文档
+    要求的第一件事就是"优先取到临时目录 tmp"——网络不可达时本地得有一份可读的副本，
+    项目内的落点跟着项目走、可随项目一起清理；
+  - 加 `--cache` 改取**共享缓存**：落平台用户级缓存目录（见 `shared_cache_dir`），按平台取
+    **该平台公认的缓存位置**；同一台机器上的**所有项目共用一份**——同一个文件不因项目数
+    而下载多遍，代价是副本落在项目外（项目内的引用与清理都不再覆盖它）；
+  - 共享缓存--按来源地址分目录`cache_slot_dir`——换过 `--base` 取到的不同来源副本互不覆盖，
+    也不会被后续运行静默改写--且**只进不出**：本脚本不删除缓存里的任何文件（含换源留下的
+    旧副本），要清理由人来做（清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）；
+  - 明确不缓存的一类（有意如此，不当缺陷）：`--base` 指向**本机**时（服务端内容可能每次
+    都在变，缓存会给出过期副本）——此时即使加了 `--cache` 也退回项目内落点。
 
 行为与副作用：
-  - 只写「落点目录」（共享缓存落点，或 `--local` 时当前工作目录下的落点），不写项目里其他位置；
-  - 默认**增量**：本地已有且非空的文件跳过，只补缺失项（想刷新用 `--force`）；
+  - 只写「落点目录」（默认项目内临时目录，或 `--cache` 时共享缓存落点），不写项目里其他位置；
+  - **默认以远程为准**：每份清单内文件都按"取回的字节与本地不同才落盘"核对，远端改过就刷新
+    （安装脚本会更新，重复执行安装时须能拿到最新的一份）；取回失败时**保留本地已有的那一份**
+    并如实报失败，**不得**把本地副本删掉换成没有；
+  - `--keep` 反过来：本地已有且非空即不动（只补缺失项），要最新内容就别加它；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
+  - `--keep` 之外**不做备份**：落点是那份文件自己的位置（项目内副本或共享缓存，均由本脚本
+    自己写入），被改动过的副本按"以远程为准"覆盖掉——**须留本地改动时用 `--keep` 或 `--out`
+    换个落点**，本条在头部与输出里都写明（判据：不给回滚路径的覆盖不算可预期）；
   - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满。
 
 安全保证：
-  - 只读远端、只写落点目录内：`--local` 落点必须位于当前工作目录之下（拒绝 `--out ../x`
+  - 只读远端、只写落点目录内：项目内落点必须位于当前工作目录之下（拒绝 `--out ../x`
     一类越界）；共享缓存落点只接受平台缓存目录**之下**的路径（拒绝借 `--cache-dir` 写到
     任意位置），两处落点互不越界；
   - 不删除任何既有文件（含落点目录里的多余文件）——清理走项目的清理脚本。
 
 已知限制：
-  - 缓存不做过期与重新校验：远端规范更新后，默认的增量语义仍会跳过已有的那份，需要最新
-    内容须显式 `--force`（放弃"按时间过期"是因为它会把"取到旧副本"变成间歇性故障，
-    排查成本更高）。
+  - 缓存不做时间维度的过期判断：判据是**内容**而不是时间——每份文件都先把远端内容取到内存、
+    与本地逐字节比较后才决定落不落盘，故没有"本地那份看起来还新、实际已经过期"这条失效；
+    代价是每次运行都要把清单内文件取一遍（判据换成"内容一致即不变"，见 specs 的
+    「以远程为准」与「取不到不该是终点」两条口径）；
+  - `--keep` 下本地副本可能落后于远端，此时**以落点里的旧副本为读到的内容**——是否要最新
+    由调用方按任务判（安装流程一律按默认的"以远程为准"走）；
+  - 内容比对只看字节：远端对同一份规范做格式等价改写（如仅换行/顺序）同样会落盘刷新。
 """
 
 import argparse
@@ -66,7 +78,8 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_BASE = "https://agent.c332030.com"
-# 项目内落点目录（相对调用方的工作目录，仅 --local 时用）；docstring 按常量名引用、不抄字面值
+# 默认落点目录（项目内临时目录，相对调用方的工作目录；`--cache` 时不生效）；
+# docstring 按常量名引用、不抄字面值
 DEFAULT_OUT = "tmp/agent-specs"
 # 共享缓存目录名：POSIX 落在 $XDG_CACHE_HOME 下、Windows 落在 %LOCALAPPDATA%\Cache 下
 CACHE_APP_DIR = "agent-specs"
@@ -90,15 +103,17 @@ def parse_args(argv=None):
     parser.add_argument("--base",
                         default=os.environ.get("AGENT_SPECS_BASE", DEFAULT_BASE),
                         help="规范来源地址（默认 https://agent.c332030.com）")
-    parser.add_argument("--local", action="store_true",
-                        help="落点取当前项目内的 --out（临时产物语义），不写共享缓存")
+    parser.add_argument("--cache", action="store_true",
+                        help="落点改为共享缓存（本机所有项目共用一份）；默认落项目内临时目录")
     parser.add_argument("--out", default=DEFAULT_OUT,
-                        help="项目内落点目录，相对当前工作目录（默认见 DEFAULT_OUT，仅 --local 时用）")
+                        help="项目内落点目录，相对当前工作目录（默认见 DEFAULT_OUT；--cache 时不用）")
     parser.add_argument("--cache-dir",
                         default=os.environ.get("AGENT_SPECS_CACHE", ""),
-                        help="共享缓存落点（默认按平台取用户级缓存目录；仅在不写 --local 时用）")
+                        help="共享缓存落点（默认按平台取用户级缓存目录；与 --cache 同用）")
+    parser.add_argument("--keep", action="store_true",
+                        help="保留本地已有的非空副本（不动已取到的那一份、只补缺失项）")
     parser.add_argument("--force", action="store_true",
-                        help="忽略本地副本、强制重取（需要最新规范时用）")
+                        help="忽略本地副本、强制重取（与 --keep 相反，即默认行为）")
     parser.add_argument("--list", action="store_true",
                         help="只打印将要取的文件清单，不下载")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
@@ -148,26 +163,64 @@ def target_path(out_dir, rel):
     return os.path.join(out_dir, *rel.split("/"))
 
 
-def download_one(base, rel, out_dir, force):
-    """取一份文件；已存在且非空时默认跳过。返回 (rel, 状态, 说明)。
+def local_bytes(dest):
+    """本地副本的字节（不存在或读不到时按"没有本地副本"处理）。
+
+    读不到**不等于失败**：默认语义是"以远程为准"，读不到就走"本地没有、按新取落盘"，
+    报错只该出现在"远端也取不到"那一侧（否则一次权限问题会把可自愈的情形报成失败）。
+    """
+    try:
+        with open(dest, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return b""
+
+
+def download_one(base, rel, out_dir, keep):
+    """取一份文件、按**内容**决定落不落盘。返回 (rel, 状态, 说明)。
+
+    状态取值：`new`（本地没有，新落盘）/ `updated`（远端内容不同，已刷新）/ `same`
+    （内容一致，不动）/ `keep`（`--keep` 下本地已有非空，未核内容）/ `fail`。
+
+    **默认以远程为准**（安装脚本会更新，重复执行安装时须能拿到最新的一份）：先把远端内容
+    取到内存、与本地逐字节比较，不同才落盘。放弃"本地已有就跳过"是因为它把安装的**结果**
+    绑在"本地以前取过什么"上——远端修好了、加了一节规范，重复执行安装仍旧什么都不做
+    （本仓库实证：安装规则与抓取脚本本身都在持续更新）。判据因此是**内容**、不是时间。
 
     **先取到内存、再原子落盘**（临时文件 + `os.replace`）：直接以 `wb` 覆盖既有文件时，
     取到一半失败会把原本完好的本地副本截断成半份——那比"没更新"更坏（副本看起来在、
-    内容却是坏的）。原子替换保证**要么整份新内容、要么原样保留旧内容**。
+    内容却是坏的）。原子替换保证**要么整份新内容、要么原样保留旧内容**；再加上"取回失败
+    即保留本地那一份、只报失败"，故脚本在任何一次失败下都不会把副本变小或变没。
+
+    **注意原子替换抵不住的那条路径（本仓库实证）**：调用方若用 `fetch-specs > tmp/x.adoc`
+    把**落点里的某一份文件**当成命令的 stdout（重定向先清空目标、再执行命令），失败时
+    命令没写出新内容——本地那份被 shell 截断成 `0 B`，且 `0 B` 在后续任何 `open()` 里
+    都读得通、不像"没有"。这是调用方的用法问题，故：①判据取"本地**存在**"而不是"本地
+    非空"（如上），`0 B` 那份同样算"以前取到过的那一份"、失败时照样只报失败、不被当成
+    "新取"；②输出里如实写明失败项"本地已有那一份原样保留"，让 `0 B` 的成因一眼可查。
+
+    `--keep` 恢复旧的增量语义（本地已有且非空即不取、只补缺失项）：需要"不动我本地那份"
+    时用；要最新内容按默认走即可。
     """
     dest = target_path(out_dir, rel)
-    if not force and os.path.isfile(dest) and os.path.getsize(dest) > 0:
-        return rel, "skip", "已存在"
+    # 本地已有那份（不是"非空"那份）：判据是**本地存在**——空文件同样是"以前取到过的那一份"
+    # 的位置，取回失败必须把它保住（否则 `> dest` 截断留下的空文件会被当成"本地没有"，
+    # 失败一次即把副本变成 `0 B`，而 `0 B` 的文件在任何 `open()` 里都读得通、不像"没有"）
+    before = local_bytes(dest) if os.path.isfile(dest) else None
+    if keep and before:
+        return rel, "keep", "已存在（--keep）"
     last_err = None
     for attempt in (1, 2):          # 失败重试一次，避免偶发抖动让整批失败
         try:
             data = fetch_text(base, rel).encode("utf-8")
+            if before is not None and data == before:
+                return rel, "same", f"{len(data)} B（与远程一致）"
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             tmp = f"{dest}.part"
             with open(tmp, "wb") as fh:
                 fh.write(data)
             os.replace(tmp, dest)
-            return rel, "ok", f"{len(data)} B"
+            return rel, ("updated" if before is not None else "new"), f"{len(data)} B"
         except OSError as e:        # 网络类错误统一按 OSError 处理
             last_err = e
             try:
@@ -177,7 +230,8 @@ def download_one(base, rel, out_dir, force):
                 pass
             if attempt == 2:
                 break
-    return rel, "fail", str(last_err)
+    return rel, "fail", (f"{last_err}（本地已有那一份原样保留）" if before is not None
+                         else str(last_err))
 
 
 def check_out_dir(out_dir):
@@ -224,10 +278,12 @@ def cache_slot_dir(cache_dir, base):
 def resolve_out_dir(args):
     """定出本次落点。返回 (落点, 是否共享缓存)。
 
-    共享缓存是**默认**：默认落点若取项目内目录，同一台机器上每个项目各存一份、项目一多
-    就是同一批文件的重复下载（用户实测诉求：别每个项目都下载一遍）。故默认取平台的用户级
-    缓存目录，由所有项目共用；要项目内副本（可随项目一起清理、便于隔离）时显式 `--local`。
-    共享缓存不可得（环境变量与家目录都取不到）或来源是本机时退回项目内落点，并在调用方
+    **默认落项目内临时目录**（`--out`，`tmp/` 语义）：安装文档要求的第一件事就是"优先取到
+    临时目录 tmp"——网络原因不可访问时本地得有一份可读的副本，且这份副本跟着项目走、可随
+    项目一起清理。加 `--cache` 才改取共享缓存（本机所有项目共用一份；代价是副本落在项目外，
+    项目内的引用与清理都覆盖不到它）。
+
+    共享缓存不可得（环境变量与家目录都取不到）或来源是本机时**退回项目内落点**，并在调用方
     打印相应说明——**不静默改变语义**。
     退回的判据是本机来源：`localhost`/回环 IP 上的服务端内容可能每次都在变（本地开发时
     改完即取），拿缓存副本会给出过期内容。
@@ -242,7 +298,7 @@ def resolve_out_dir(args):
             raise ValueError(
                 f"--cache-dir 必须位于本机缓存目录 {root} 之下、不能借用它写到任意位置，拒绝: {dest}")
         return cache_slot_dir(dest, args.base), True
-    if args.local:
+    if not args.cache:
         return check_out_dir(args.out), False
     if is_local_base(args.base):
         return check_out_dir(args.out), False
@@ -275,6 +331,10 @@ def main(argv=None):
         targets, optional = manifest_targets(base)
     except Exception as e:                                  # noqa: BLE001 - 网络与解析都按同一路径报错
         print(f"错误: 取入口清单失败（{base}/{MANIFEST_FILE}）: {e}", file=sys.stderr)
+        # 同一次失败里也要说清"本地那份还在不在"——只报"取清单失败"时，调用方无法判断
+        # 落点里那份是"过期的旧副本"还是"根本没取到过"（见脚本头部「取回失败保留本地那一份」）
+        print("说明: 本地落点里已有的那一份**原样保留**（本次未落盘任何文件）；"
+              "要确认它是哪一版可对比远端内容，重试本脚本即可补取。", file=sys.stderr)
         return EXIT_USAGE
 
     # 顶层说明文件是"有则取"：取不到不算失败（仓库未放该文件时站点会回落到首页 HTML，
@@ -286,34 +346,56 @@ def main(argv=None):
         print(f"# 落点: {out_dir}（{'共享缓存' if shared else '项目内副本'}）")
         return EXIT_OK
 
+    # `--force` 与默认同为"以远程为准"，此处只保留它的写法（与 `--keep` 相反）；
+    # `--keep` 下 `download_one` 自己判"本地已有即不动"
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = [pool.submit(download_one, base, rel, out_dir, args.force)
+        futures = [pool.submit(download_one, base, rel, out_dir, args.keep)
                    for rel in sorted(targets)]
         for fut in concurrent.futures.as_completed(futures):
             results.append(fut.result())
     for rel in optional:
-        results.append(download_one(base, rel, out_dir, args.force))
+        results.append(download_one(base, rel, out_dir, args.keep))
 
-    ok = [r for r in results if r[1] == "ok"]
-    skipped = [r for r in results if r[1] == "skip"]
+    fresh = [r for r in results if r[1] == "new"]
+    updated = [r for r in results if r[1] == "updated"]
+    same = [r for r in results if r[1] == "same"]
+    kept = [r for r in results if r[1] == "keep"]
     failed = [r for r in results if r[1] == "fail"]
 
     if shared:
         print(f"落点: {out_dir}（共享缓存：本机所有项目共用这一份）")
     else:
         print(f"落点: {out_dir}（项目内副本）")
-        if not args.local and not args.cache_dir:
+        if args.cache and not args.cache_dir:
             print("说明: 未落到共享缓存——来源是本机地址，或本机取不到用户级缓存目录"
                   "（可用 --cache-dir 显式指定）", file=sys.stderr)
     print(f"来源: {base}")
-    print(f"结果: 新取 {len(ok)}、已有跳过 {len(skipped)}、失败 {len(failed)}"
-          f"（共 {len(results)}）")
+    if args.keep:
+        # `--keep` 下"新取"是**没取回来**的那些（本地没有、只留了个空文件占位）：不并进
+        # "已有保留"里，否则 `--keep` 结果会把"一份都没拿到"报成"全部保留"（本仓库实证）
+        print(f"结果: 已保留 {len(kept) + len(same)}、新取 {len(fresh)}、失败 {len(failed)}"
+              f"（共 {len(results)}；--keep：不动已取到的那些）")
+        for rel, _, why in fresh:
+            print(f"  [新取] {rel} -- {why}（本地原本没有）")
+    else:
+        print(f"结果: 新取 {len(fresh)}、刷新 {len(updated)}、内容一致 {len(same)}、"
+              f"失败 {len(failed)}（共 {len(results)}；以远程为准）")
+    if updated:
+        for rel, _, why in updated:
+            print(f"  [刷新] {rel} -- {why}")
     if failed:
         for rel, _, why in failed:
             print(f"  [失败] {rel} -- {why}", file=sys.stderr)
-        print("提示: 重试本脚本即可补取缺失项；需要最新内容加 --force。", file=sys.stderr)
+        print("提示: 失败项**保留本地已有的那一份**（本地原本没有才算真缺）、重试本脚本即可补取；"
+              "失败项若显示为 `0 B`，先见脚本头部「原子替换抵不住的那条路径」"
+              "（多为把落点里的文件当成命令 stdout 的用法所致）。", file=sys.stderr)
         return EXIT_INCOMPLETE
+    if not fresh and not updated and not args.keep:
+        print("说明: 清单内文件与远程逐字节一致，落点未改动（判据是内容，不是时间）。")
+    if updated:
+        print("提示: 本地副本**已被远程内容覆盖**（落点是本脚本自己的那份）——"
+              "要留本地改动请先备份、或下次加 --keep / 用 --out 换个落点。")
     print("规范已就绪：读取落点下的 AGENTS_COMMON.adoc 及其引用的 specs/ 规范，并持续遵守。")
     return EXIT_OK
 

@@ -78,4 +78,4 @@
 * `.github/workflows/check-specs.yml` — 本仓库 CI：在 push/PR 上运行上述校验及配套测试（**只做确定性校验**；语义审查交人 review，不在 CI 中调用外部 AI）
 
 [quote]
-注：`script/` 下的 `clean_tmp.py`、`fetch-specs.py`（+ 同名入口）是**供引用方项目**使用、随通用规范分发的工具（见 `specs/core/execution.adoc`「临时产物」与 `AGENTS_COMMON.adoc`「访问与解析」），虽在本仓库 `script/` 下，但**不属于**本项目自身规范（抓手 `check_spec_fetch_guard`）。
+注：`script/` 下的 `clean_tmp.py`、`fetch-specs.py`（+ 同名入口）是**供引用方项目**使用、随通用规范分发的工具（见 `specs/core/execution.adoc`「临时产物」与 `AGENTS_COMMON.adoc`「访问与解析」），虽在本仓库 `script/` 下，但**不属于**本项目自身规范；安装脚本会更新，故该抓手**默认以远程为准**（重复执行即是更新）（抓手 `check_spec_fetch_guard`）。
