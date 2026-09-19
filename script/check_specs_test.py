@@ -44,6 +44,8 @@
 import importlib.util
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -10095,11 +10097,19 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     SCRIPT_PY = (
         '#!/usr/bin/env python3\n'
         '"""fetch 脚本：清单从 AGENTS_COMMON.adoc 解析。\n'
+        '默认以远程为准：内容不同才落盘、取回失败保留本地那一份，--keep 才不动本地那份。\n'
         '退出码：0 成功 / 1 有文件没取到 / 2 参数或前置条件错误。\n'
         '"""\n'
         'SPECS_REF_RE = "specs/"\n'
+        'def local_bytes(p):\n'
+        '    """本地副本的字节；读不到按没有本地副本处理"""\n'
+        'def keep_local(dest):\n'
+        '    """--keep：不动本地那份；判定标准：不得把本地副本删掉"""\n'
+        'DEFAULT_OUT = "tmp/agent-specs"\n'
         'def check_out_dir(p):\n'
-        '    """落点必须位于当前工作目录之下"""\n'
+        '    """落点必须位于当前工作目录之下（默认落项目内临时目录）"""\n'
+        'def resolve_out_dir(args):\n'
+        '    """默认落项目内临时目录；if not args.cache 时不碰共享缓存"""\n'
         'def shared_cache_dir():\n'
         '    """XDG_CACHE_HOME / LOCALAPPDATA 下的 Cache"""\n'
         'def cache_slot_dir(d, b):\n'
@@ -10107,7 +10117,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'def is_local_base(b):\n'
         '    """本机来源不缓存: localhost / 127."""\n'
         'AGENT_SPECS_CACHE = "--cache-dir"\n'
-        'LOCAL_FLAG = "--local"\n'
+        'CACHE_FLAG = "--cache"\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -10155,12 +10165,17 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                      b'%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
                      b'exit /b %errorlevel%\r\n')
         self.write("INSTALL.adoc",
-                   "见 fetch-specs 与 tmp/agent-specs 落点。兜底：没有 python3 时取 python，"
-                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。"
-                   "默认落平台用户级缓存目录、本机所有项目共用一份，要项目内副本加 --local。\n")
-        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落用户级缓存目录、"
-                                        "本机所有项目共用一份。\n")
-        self.write("README.adoc", "工具 fetch-specs：默认落共享缓存、本机所有项目共用一份。\n")
+                   "见 fetch-specs 与 tmp/agent-specs 落点（默认落到项目内临时目录）。"
+                   "兜底：没有 python3 时取 python，连 python 都没装时报错退出；"
+                   "只装 python2 的发行版同样可用。"
+                   "要本机所有项目共用一份加 --cache、落平台用户级缓存目录。"
+                   "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
+                   "要不动本地那份加 --keep。\n")
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落项目内临时目录，"
+                                        "要本机所有项目共用一份时加 --cache、落用户级缓存目录；"
+                                        "默认以远程为准、以 --keep 保留本地那份。\n")
+        self.write("README.adoc", "工具 fetch-specs：默认落项目内临时目录；"
+                                 "加 --cache 落共享缓存（本机所有项目共用一份）。\n")
 
     def test_valid_passes(self):
         self._write_valid()
@@ -10321,7 +10336,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     # ---- 共享缓存落点（用户实测诉求：别每个项目都下载一遍同几份文件）----
 
     def test_shared_cache_guard_passes(self):
-        # 正例：默认落平台用户级缓存目录 + 保留 --local/--cache-dir + 按来源分槽 + 本机来源不缓存 + 三处文档同步
+        # 正例：默认落项目内临时目录 + --cache 才切共享缓存（--cache-dir/按来源分槽/本机来源不缓存）+ 四处文档同步
         self._write_valid()
         cm.check_shared_cache_guard()
         self.assertEqual([], cm.errors)
@@ -10342,12 +10357,24 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         cm.check_shared_cache_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
-    def test_local_copy_path_removed_reports(self):
-        # 反例：去掉 --local → 需要项目内副本（随项目清理、便于隔离）时无路可走
+    def test_project_copy_path_removed_reports(self):
+        # 反例：**默认落点不再是项目内临时目录**（改回"共享缓存优先"）→ 与安装文档入口模板
+        # 第一条「优先取到临时目录 tmp」互相矛盾：按模板理解会去找 `tmp/agent-specs/` 而找不到
         self._write_valid()
-        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('LOCAL_FLAG = "--local"\n', ""))
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("if not args.cache", "if False")
+                   .replace("os.path.isfile(dest)", ""))
         cm.check_shared_cache_guard()
-        self.assertIn("--local", self.error_texts())
+        self.assertIn("默认落点", self.error_texts())
+
+    def test_shared_cache_flag_removed_reports(self):
+        # 反例：去掉 --cache → 想"本机所有项目共用一份"的引用方无路可走、每个项目各存一份
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace('if not args.cache', 'if False'))
+        cm.check_shared_cache_guard()
+        self.assertIn("--cache", self.error_texts())
+        self.assertIn("共享缓存", self.error_texts())
 
     def test_cache_dir_override_removed_reports(self):
         # 反例：去掉 --cache-dir/AGENT_SPECS_CACHE → 缓存落点不可显式指定（磁盘布局不同就没法用）
@@ -10370,3 +10397,201 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('127.', ""))
         cm.check_shared_cache_guard()
         self.assertIn("127.", self.error_texts())
+
+    # ---- 以远程为准（用户实测诉求：安装脚本经常更新，重跑安装要能更新现有的那份）----
+
+    def _run_fetch(self, base, out_dir=None, extra=(), cwd=None):
+        """按仓库真实的抓取脚本跑一次（spawn 子进程、按 stdout/stderr 断言）。
+
+        `out_dir` 为 None 时**不给 `--out`**，跑的就是"只给脚本名"的默认路径——用来验证
+        默认落点确实落在项目内临时目录（`DEFAULT_OUT`），而不是项目外的共享缓存。
+        """
+        # 脚本与工作目录都用**真实仓库**（`cm.REPO_ROOT` 在用例里被指向临时夹具，脚本不在那儿）
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        # 不带 `--cache`：默认落点即项目内临时目录（`--out` 指到本次用例专属子目录）
+        cmd = [sys.executable, script, "--base", base, *(["--out", out_dir] if out_dir else []),
+               *extra]
+        proc = subprocess.run(cmd, cwd=cwd or real_root, capture_output=True, text=True,
+                              timeout=120)
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def _serve(self, served):
+        """起一个本机 HTTP 服务当"远端"（返回 base 与其容器，退出时关掉）。
+
+        用本机来源是为了**不缓存**（脚本对 `localhost` 自动退回项目内落点）——这正是本条
+        要测的默认路径。用户实测的原始形态也是本地服务端（"避免网络原因无法访问"）。
+        """
+        import http.server
+        import socketserver
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                rel = self.path.lstrip("/")
+                body = served.get(rel)
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        return socketserver.TCPServer(("127.0.0.1", 0), Handler)
+
+    def test_default_out_is_project_tmp(self):
+        """端到端（默认落点）：**只给脚本名**时（不带 `--out`/`--cache`）副本必须落在项目内的
+        临时目录 `<cwd>/<DEFAULT_OUT>`——这是安装文档入口模板的第一条要求（"优先取到临时目录
+        tmp（避免网络原因无法访问）"）。落在项目外（共享缓存）即与模板矛盾：按模板去找
+        `tmp/agent-specs/` 会找不到，网络不可达时也就没有那一份。
+        """
+        import threading
+        entry = b"= test\n\nspecs/core/execution.adoc\n"
+        served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": b"e1\n"}
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        proj = tempfile.mkdtemp(prefix="fetch-default-out-")
+        with self._serve(served) as httpd:
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{httpd.server_address[1]}"
+            rc, so, se = self._run_fetch(base, cwd=proj)          # 不给 --out：走默认落点
+            self.assertEqual(0, rc, se + so)
+            default_rel = "tmp/agent-specs"
+            landed = os.path.join(proj, default_rel, "AGENTS_COMMON.adoc")
+            self.assertTrue(os.path.isfile(landed), f"默认落点未见副本: {landed}\n{so}{se}")
+            with open(landed, "rb") as fh:
+                self.assertEqual(entry, fh.read())
+            self.assertIn(default_rel, so)
+        shutil.rmtree(proj, ignore_errors=True)
+
+    def test_failure_keeps_local_copy_bytes(self):
+        """端到端（失败不得把副本变小或变没）：远端不可达时，落点里已有的那一份必须**逐字节
+        原样**保留，且结果三态里的"新取"为 0（不得把"没取到"报成"新取"）。
+
+        边界（本仓库实证）：把**落点里的某一份文件**当成命令的 stdout（`fetch-specs > tmp/x.adoc`）
+        时，shell 会先把该文件截断成 `0 B`——这是调用方的用法问题，脚本侧能保证的是：`0 B`
+        也算"以前取到过的那一份"占位、失败时不判"新取"、并如实写明"本地已有那一份原样保留"。
+        """
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = os.path.join("tmp", "agent-specs-failtest")
+        dest = os.path.join(real_root, out, "AGENTS_COMMON.adoc")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "wb") as fh:
+            fh.write(b"= old\n")
+        try:
+            rc, so, se = self._run_fetch("http://127.0.0.1:1", out)   # 不可达
+            self.assertNotEqual(0, rc)
+            with open(dest, "rb") as fh:
+                self.assertEqual(b"= old\n", fh.read())             # 逐字节原样
+            self.assertIn("保留", se)
+        finally:
+            shutil.rmtree(os.path.join(real_root, out), ignore_errors=True)
+
+    def test_reinstall_refreshes_when_remote_changed(self):
+        """端到端行为（本防线的机制侧）：**以远程为准**——只改远端、本地只有旧副本时，
+        重跑抓取脚本必须把本地刷新成远端内容；未改动的文件一个字节都不落盘。
+
+        正例夹具用本文件所在工作区当"远端"（无网络依赖）：`--base` 指到 file 服务不可用，
+        故改用本机临时 HTTP 服务托管两个文件，验证"远端改了 → 客户端刷新"。
+        """
+        import http.server
+        import socketserver
+        import threading
+
+        entry = b"= test\n\nspecs/core/execution.adoc\n"
+        served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": b"e1\n"}
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = os.path.join("tmp", "agent-specs-refresh-test")
+        out_dir = out
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                rel = self.path.lstrip("/")
+                body = served.get(rel)
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+            port = httpd.server_address[1]
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{port}"
+
+            rc, so, se = self._run_fetch(base, out_dir)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("新取", so)
+            local = os.path.join(real_root, out_dir, "AGENTS_COMMON.adoc")
+            with open(local, "rb") as fh:
+                self.assertEqual(entry, fh.read())
+
+            # 第二次：远端没改 → 全部命中"内容一致"、不落盘
+            rc, so, se = self._run_fetch(base, out_dir)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("内容一致", so)
+
+            # 第三次：**只改远端** → 必须刷新本地（这正是"重新执行安装拿到最新"的判据）
+            served["AGENTS_COMMON.adoc"] = entry.replace(b"= test", b"= v2")
+            rc, so, se = self._run_fetch(base, out_dir)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("刷新", so)
+            with open(local, "rb") as fh:
+                self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
+
+            # 第四次：远端改了、加 `--keep` → 不动本地那份（保留"别覆盖我的"这条路径）
+            served["AGENTS_COMMON.adoc"] = entry.replace(b"= test", b"= v3")
+            rc, so, se = self._run_fetch(base, out_dir, ("--keep",))
+            self.assertEqual(0, rc, se + so)
+            with open(local, "rb") as fh:
+                self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
+
+            # 第五次：远端不可达（换端口）→ 本地那一份必须还在（不得把副本删掉换成没有）
+            rc, so, se = self._run_fetch("http://127.0.0.1:1", out_dir)
+            self.assertNotEqual(0, rc)
+            with open(local, "rb") as fh:
+                self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
+
+        # 用例自清：落点是本次用例专属的子目录（临时产物，见 specs/core/execution.adoc「临时产物」）
+        shutil.rmtree(os.path.join(real_root, out_dir), ignore_errors=True)
+
+    def test_refresh_is_default_passes(self):
+        # 正例：默认以远程为准（内容不同才落盘）+ --keep 保留本地那份 + 失败保留本地
+        self._write_valid()
+        cm.check_spec_fetch_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_incremental_skip_regression_reports(self):
+        # 反例（**本条要防的失效形态**）：退回「本地已有且非空即跳过、只有 --force 才刷新」
+        # → 远端修好了、加了一节规范，用户重跑安装**拿不到最新的一份**（安装脚本自己在更新，
+        # 重跑即是为了更新；用户实测诉求：重新执行安装时需要能更新现有的、以远程为准）。
+        self._write_valid()
+        script = (self.SCRIPT_PY
+                  .replace('def local_bytes(p):\n'
+                           '    """本地副本的字节；读不到按没有本地副本处理"""\n', '')
+                  .replace('def keep_local(dest):\n'
+                           '    """--keep：不动本地那份；判定标准：不得把本地副本删掉"""\n', ''))
+        self.write("script/fetch-specs.py", script)
+        cm.check_spec_fetch_guard()
+        self.assertIn("以远程为准", self.error_texts())
+
+    def test_failure_wiping_local_copy_reports(self):
+        # 反例：取回失败时把本地副本删掉/清空 → 把「没更新」变成「没有」（比不更新更坏）
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("不得把本地副本删掉", "落盘前先清空本地"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("把本地副本删掉", self.error_texts())
