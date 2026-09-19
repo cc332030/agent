@@ -8,7 +8,6 @@
 
 [source,asciidoc]
 ----
-= Agent 规范入口
 
 本项目的 agent 执行规范入口为：
 
