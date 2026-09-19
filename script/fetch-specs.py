@@ -11,7 +11,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   故新增一份规范时**不需要改本脚本**、也不会漏取（手工清单的典型失效正是"漏了 specs/"）。
 
 用法（在目标项目根目录执行，入口名随平台而异、只给脚本名即可）：
-  fetch-specs                    # 取到 <当前工作目录>/tmp/agent-specs/
+  fetch-specs                    # 取到 <当前工作目录>/<DEFAULT_OUT>/
   fetch-specs --out tmp/specs    # 换落点（相对当前工作目录）
   fetch-specs --base <URL>       # 换规范来源（默认 https://agent.c332030.com，同源镜像可用）
   fetch-specs --force            # 忽略本地副本、强制重取（需最新规范时用）
@@ -24,7 +24,8 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 只写「当前工作目录下的落点目录」（默认 tmp/，相对调用方的工作目录，不假设脚本自身所在目录）；
   - 默认**增量**：本地已有且非空的文件跳过，只补缺失项（想刷新用 --force）；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
-  - 网络请求带超时、失败重试一次；并发受限（默认 4），不把对端打满。
+  - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
+  - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满。
 
 安全保证：
   - 只读远端、只写落点目录内；落点必须位于当前工作目录之下（拒绝 --out ../x 一类越界）；
@@ -39,6 +40,8 @@ import sys
 import urllib.request
 
 DEFAULT_BASE = "https://agent.c332030.com"
+# 落点目录（相对调用方的工作目录）；docstring 里按常量名引用、不抄字面值
+DEFAULT_OUT = "tmp/agent-specs"
 # 入口 + 顶层说明文件；specs/ 下的文件从入口的调度器登记解析得到
 MANIFEST_FILE = "AGENTS_COMMON.adoc"
 OPTIONAL_FILES = ("README.adoc",)
@@ -56,8 +59,8 @@ def parse_args(argv=None):
         prog="fetch-specs",
         description="把 agent 规范集合（AGENTS_COMMON.adoc + specs/）取到当前项目的临时目录",
     )
-    parser.add_argument("--out", default="tmp/agent-specs",
-                        help="落点目录，相对当前工作目录（默认 tmp/agent-specs）")
+    parser.add_argument("--out", default=DEFAULT_OUT,
+                        help="落点目录，相对当前工作目录（默认见 DEFAULT_OUT）")
     parser.add_argument("--base",
                         default=os.environ.get("AGENT_SPECS_BASE", DEFAULT_BASE),
                         help="规范来源地址（默认 https://agent.c332030.com）")

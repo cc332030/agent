@@ -25,6 +25,9 @@
                              反：文件或节被删、次序被抹平、先实测被删、覆盖既有配置、推荐被读成强制、栈侧落点或图书馆记录缺失）
   * check_index_page_guard —— 索引页触发判据防线（正：触发判据/空壳不建/只做导航/模块 README 齐备；
                              反：doc.adoc 判据被删、doc-module.adoc 按需口径被删、文件被删）
+  * check_script_header_guard —— 脚本头部注释（文档头）防线（正：先行/条目含设计决策/取值写常量名/决策不落方法体/"
+     "超容量移交/行数不设限/入口注释边界 + 栈侧与公开面依据齐备；"
+     "反：整节被删、逐条要点被抽、栈侧落点缺失、调度器与 README 未同步）
 
 范围：只校验本仓库维护的规范/模板文本，**不检查 git 工作区状态、不检查引用方项目**
 （引用方项目内部的 delete+create 等操作对本仓库校验不可见，详见 check_specs.py 文件头）。
@@ -9568,6 +9571,349 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
         cm.check_cross_platform_script_guard()
         self.assertIn("specs/stack/batch.adoc", self.error_texts())
 
+
+
+
+class TestCheckScriptHeaderGuard(CheckSpecsTestCase):
+    """钉住『脚本头部注释（文档头）防线』：文档头先行 + 细节不随维护丢失。
+
+    对应用户要求：「需要呢，脚本很多细节可能随着维护丢失，文档先行也适用于脚本」。
+    该条最易被冲掉的两处：①"文档先行"退化成"写完顺手补一段"（交付时文档头与实现已不同步）；
+    ②注释里抄实现取值（"超时 30 秒"）——改代码不改注释即"文档说谎"，比不写更坏。
+    故反例逐项覆盖：先行句、决策条目、取值条、入口注释边界、超容量移交、行数不设限、
+    方法体边界、栈侧落点与公开面/依据登记。
+    """
+
+    SCRIPT = (
+        "= 脚本规范\n"
+        "\n"
+        "== 脚本头部注释（文档头）\n"
+        "\n"
+        "* **文档头先行（头部注释必须先行，L1）**：动手先把内容写进文档头，"
+        "**不得只留待办占位**；改动后在同一提交内同步。\n"
+        "* **脚本必须写文档头（L2）**：承担实际功能的脚本都要有条目化文档头。\n"
+        "* 条目化写明：\n"
+        "  ** 脚本名称与用途；\n"
+        "  ** **关键约定与设计决策**（**不得省略**）：约定与出处、"
+        "**为什么这么做**与**放弃了哪些备选做法**；\n"
+        "* **设计决策写成可核对的记录，不写成叙述（L1）**："
+        "每条取舍写成**决策 + 理由 + 边界**；**判定标准**：只写决定不写理由即未达要求。\n"
+        "* **注释里的取值：写抽象描述或常量名、不写硬编码数值（L1）**："
+        "写 `TIMEOUT_SECONDS`，不写“超时 30 秒”；判定标准：两处真源。\n"
+        "* **决策进头部/文件级文档注释，不写进方法体（L1）**：方法体只记局部决策。\n"
+        "* **超过头部块注释容量的内容移交独立文档（L1）**："
+        "**判据**：该移交而未移交。\n"
+        "* **头部注释写在承载文档注释的位置，行数不设限（L1）**：篇幅按内容定。\n"
+        "* **入口的注释边界（L1）**：入口注释**不得复述**逻辑层的参数语义与默认值。\n"
+        "\n"
+        "== 与编码规范的关系\n"
+        "* x。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_script = cm.SCRIPT_SPEC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.SCRIPT_SPEC_FILE = os.path.join(self.root, "specs", "general", "script.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.SCRIPT_SPEC_FILE, cm.README_FILE) = (self._orig_script, self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self, script: str = None) -> None:
+        self.write("specs/general/script.adoc", script if script is not None else self.SCRIPT)
+        self.write("specs/stack/python.adoc",
+                   "= Python\n\n== 文件头\n"
+                   "* 文档头写在模块 **docstring** 里、**不另起块注释**："
+                   "docstring 是该语言的**文档注释机制**。\n"
+                   "* docstring 里写**抽象描述或常量名**、**不抄实现取值**。\n")
+        for n in ("bash.adoc", "batch.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{n}",
+                       "= 栈\n\n== 入口\n"
+                       "* **入口的注释只写入口自己（L1）**：**不得复述**逻辑层的参数与默认值。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "脚本：**文档头先行**（取值写**常量名**）；识别特征：新写或改脚本。\n")
+        self.write("README.adoc", "目录：脚本（含**文档头先行**与**跨环境脚本**）。\n")
+        self.write("library/adoption.adoc",
+                   "* **「脚本头部注释（文档头）先行、细节有落点」是本站取舍**："
+                   "同义性差异见下，如实标注**未确证**。\n")
+        self.write("library/sources.adoc",
+                   "== 脚本头部注释（文档头）与决策记载\n"
+                   "* PEP 257（**要点转述、非逐字摘录**）；**同义性**差异见下。\n")
+
+    def test_valid_script_header_guard_passes(self):
+        self._write_valid()
+        cm.check_script_header_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 脚本的定位/用法/设计决策又只剩代码里可读，细节随维护丢失
+        self._write_valid("= 脚本规范\n\n== 与编码规范的关系\n* x。\n")
+        cm.check_script_header_guard()
+        self.assertIn("脚本头部注释（文档头）", self.error_texts())
+
+    def test_first_clause_removed_reports(self):
+        # 反例："文档先行"被抽掉 → 退回成"要写文档"，交付时文档头与实现早已不同步
+        self._write_valid(self.SCRIPT.replace(
+            "* **文档头先行（头部注释必须先行，L1）**：动手先把内容写进文档头，"
+            "**不得只留待办占位**；改动后在同一提交内同步。\n", "* 写完顺手补一段说明即可。\n"))
+        cm.check_script_header_guard()
+        self.assertIn("文档头先行", self.error_texts())
+
+    def test_design_decision_item_removed_reports(self):
+        # 反例：条目清单去掉"设计决策" → 本条要防的失效（为什么这么取边界、放弃了什么）原样存在
+        self._write_valid(self.SCRIPT.replace(
+            "  ** **关键约定与设计决策**（**不得省略**）：约定与出处、"
+            "**为什么这么做**与**放弃了哪些备选做法**；\n", "  ** 用法与参数；\n"))
+        cm.check_script_header_guard()
+        self.assertIn("关键约定与设计决策", self.error_texts())
+
+    def test_design_decision_judgement_removed_reports(self):
+        # 反例：决策写成"决策 + 理由 + 边界"的判据被抽 → "记录设计思路"退化成一段叙述
+        self._write_valid(self.SCRIPT.replace(
+            "* **设计决策写成可核对的记录，不写成叙述（L1）**："
+            "每条取舍写成**决策 + 理由 + 边界**；**判定标准**：只写决定不写理由即未达要求。\n", "* 有想法就写。\n"))
+        cm.check_script_header_guard()
+        self.assertIn("决策", self.error_texts())
+
+    def test_constant_value_clause_removed_reports(self):
+        # 反例：'取值写常量名、不写硬编码数值'被抽 → 改代码不改注释的"文档说谎"重回默许
+        self._write_valid(self.SCRIPT.replace(
+            "* **注释里的取值：写抽象描述或常量名、不写硬编码数值（L1）**："
+            "写 `TIMEOUT_SECONDS`，不写“超时 30 秒”；判定标准：两处真源。\n", "* 取值按实际写。\n"))
+        cm.check_script_header_guard()
+        self.assertIn("常量名", self.error_texts())
+
+    def test_method_body_boundary_removed_reports(self):
+        # 反例：决策落点（头部 vs 方法体）被删 → 方案取舍抄进每个方法、改一处必漏一处
+        self._write_valid(self.SCRIPT.replace(
+            "* **决策进头部/文件级文档注释，不写进方法体（L1）**：方法体只记局部决策。\n", ""))
+        cm.check_script_header_guard()
+        self.assertIn("方法体", self.error_texts())
+
+    def test_overflow_handoff_clause_removed_reports(self):
+        # 反例：超容量移交独立文档被删 → 要么文档头堆成长文、要么内容被"写短点"删掉
+        self._write_valid(self.SCRIPT.replace(
+            "* **超过头部块注释容量的内容移交独立文档（L1）**："
+            "**判据**：该移交而未移交。\n", "* 内容多就多写点。\n"))
+        cm.check_script_header_guard()
+        self.assertIn("移交独立文档", self.error_texts())
+
+    def test_no_length_limit_clause_removed_reports(self):
+        # 反例：'行数不设限'被删 → "简洁"被读成篇幅配额、内容要求被折成字数
+        self._write_valid(self.SCRIPT.replace(
+            "* **头部注释写在承载文档注释的位置，行数不设限（L1）**：篇幅按内容定。\n", ""))
+        cm.check_script_header_guard()
+        self.assertIn("不设限", self.error_texts())
+
+    def test_entry_comment_boundary_removed_reports(self):
+        # 反例：入口注释边界被删 → 同一份契约写两处（改逻辑不改入口注释）
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口的注释边界（L1）**：入口注释**不得复述**逻辑层的参数语义与默认值。\n", ""))
+        cm.check_script_header_guard()
+        self.assertIn("入口", self.error_texts())
+
+    def test_python_docstring_clause_removed_reports(self):
+        # 反例：Python 侧不再用模块 docstring 承载 → 有文档注释机制却另起块注释（两处各写一半）
+        self._write_valid()
+        self.write("specs/stack/python.adoc", "= Python\n\n== 文件头\n* 随便写点说明。\n")
+        cm.check_script_header_guard()
+        self.assertIn("specs/stack/python.adoc", self.error_texts())
+
+    def test_bash_entry_comment_clause_removed_reports(self):
+        # 反例：bash 入口不再写"注释只写入口自己" → Windows/Linux 入口各抄一份逻辑层契约
+        self._write_valid()
+        self.write("specs/stack/bash.adoc", "= 栈\n\n== 入口\n* 见「跨环境脚本」。\n")
+        cm.check_script_header_guard()
+        self.assertIn("specs/stack/bash.adoc", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例：调度器识别特征被删 → 该条永远不会被触发加载、规则实际失效
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "脚本：行尾按类型取值。\n")
+        cm.check_script_header_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_entry_removed_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时不知道有这条要求
+        self._write_valid()
+        self.write("README.adoc", "目录：脚本。\n")
+        cm.check_script_header_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_library_adoption_removed_reports(self):
+        # 反例：图书馆未登记"本站取舍" → 本站口径会被读成某标准原文
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 取舍\n* 其它。\n")
+        cm.check_script_header_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_library_sources_removed_reports(self):
+        # 反例：图书馆缺对应主题段 → 依据链断在这里（PEP 257/25010/29148 的方向失去落点）
+        self._write_valid()
+        self.write("library/sources.adoc", "= 来源\n* 其它。\n")
+        cm.check_script_header_guard()
+        self.assertIn("library/sources.adoc", self.error_texts())
+
+
+
+class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
+    """钉住『脚本自述文档防线』：脚本单打独斗、文档随脚本落盘。
+
+    对应用户口径：「脚本比较特殊，大部分情况下都是单打独斗…各脚本之间也是独立的…
+    否则文档直接以多行文档注释（优先级-高）/多行普通注释（优先级-中）/普通注释（优先级-低）
+    的方式写在脚本里」。该条最易被冲掉的两处：①"文档"被外推到脚本之外（为每个脚本另建
+    独立文档）；②承载方式降格（有文档注释机制却用普通注释、文档头散落成单行注释）。
+    """
+
+    SCRIPT = (
+        "= 脚本规范\n"
+        "\n"
+        "== 脚本文档的承载位置与协作粒度（默认写进脚本自身）\n"
+        "\n"
+        "* **脚本默认单打独斗（L1）**：拆成多个脚本时**各脚本相互独立**；"
+        "文档**默认直接写在脚本里、不另建独立文档**，有文档注释机制的语言一律用**文档注释**承载，"
+        "按**多行文档注释 → 多行普通/块注释 → 普通注释**的优先级取值。命中即违规。\n"
+        "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档，**判定标准**："
+        "该移交而未移交。\n"
+        "* **大规模团队式协作是例外，不是默认（L2）**。\n"
+        "\n"
+        "== 脚本头部注释（文档头）\n"
+        "\n"
+        "* 文档头先行。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_script = cm.SCRIPT_SPEC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.SCRIPT_SPEC_FILE = os.path.join(self.root, "specs", "general", "script.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        (cm.SCRIPT_SPEC_FILE, cm.README_FILE) = (self._orig_script, self._orig_readme)
+        super().tearDown()
+
+    def _write_valid(self, script: str = None) -> None:
+        self.write("specs/general/script.adoc", script if script is not None else self.SCRIPT)
+        self.write("specs/general/coding.adoc",
+                   "= 编码\n\n== 注释\n"
+                   "* 注释定位：**脚本的落点与粒度**：脚本默认**单打独斗**，"
+                   "按**多行文档注释 → 多行普通/块注释 → 普通注释**取值。\n")
+        self.write("specs/stack/python.adoc",
+                   "= Python\n\n== 文件头\n"
+                   "* **单打独斗的 `.py` 脚本同样用模块 docstring**、默认**不另建**独立文档。\n")
+        self.write("specs/stack/bash.adoc",
+                   "= 栈\n\n== 文件头\n"
+                   "* **无文档注释机制，文档头用多行块注释**（连续 `#` 行）承载。\n")
+        self.write("specs/stack/batch.adoc",
+                   "= 栈\n\n== 注释与文档头\n"
+                   "* 批处理的注释只有 `rem` 与 `::`；**文档头用连续的 `rem` 行**。\n")
+        self.write("specs/stack/powershell.adoc",
+                   "= 栈\n\n== 注释与文档头\n"
+                   "* **用基于注释的帮助（comment-based help）承载文档头**。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "脚本：**文档默认写进脚本自身**（脚本单打独斗，按多行文档注释→**多行块注释**"
+                   "→普通注释取值）。\n")
+        self.write("README.adoc",
+                   "目录：脚本（含**文档默认写进脚本自身**与**跨环境脚本**）。\n")
+
+    def test_valid_script_selfdoc_guard_passes(self):
+        self._write_valid()
+        cm.check_script_selfdoc_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 文档承载位置又回到"逐脚本另建独立文档"的默认读法
+        self._write_valid("= 脚本规范\n\n== 脚本头部注释（文档头）\n* x。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("脚本文档的承载位置与协作粒度", self.error_texts())
+
+    def test_lone_wolf_clause_removed_reports(self):
+        # 反例："单打独斗/各脚本相互独立"被抽 → 多脚本被当成多模块项目、每个脚本各建一篇文档
+        self._write_valid(self.SCRIPT.replace(
+            "* **脚本默认单打独斗（L1）**：拆成多个脚本时**各脚本相互独立**；", "* 脚本。"))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("单打独斗", self.error_texts())
+
+    def test_priority_ladder_removed_reports(self):
+        # 反例：三级优先级被删 → "写在脚本里"没有可判定形态，文档头降格成零散单行注释
+        self._write_valid(self.SCRIPT.replace(
+            "按**多行文档注释 → 多行普通/块注释 → 普通注释**的优先级取值。", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("多行普通/块注释", self.error_texts())
+
+    def test_no_side_doc_clause_removed_reports(self):
+        # 反例："不另建独立文档/有机制须用文档注释"被抽 → 为脚本另建 .adoc 重回默许形态
+        self._write_valid(self.SCRIPT.replace(
+            "文档**默认直接写在脚本里、不另建独立文档**，有文档注释机制的语言一律用**文档注释**承载，", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("不另建独立文档", self.error_texts())
+
+    def test_exception_clause_removed_reports(self):
+        # 反例：唯一例外（超容量移交）被删 → "能拆成两处写"被当成另建文档的理由
+        self._write_valid(self.SCRIPT.replace(
+            "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档，**判定标准**："
+            "该移交而未移交。\n", "* 想拆就拆。\n"))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("超出头部块注释的容量", self.error_texts())
+
+    def test_team_exception_clause_removed_reports(self):
+        # 反例：'大规模团队式协作是例外'被删 → 例外外推成所有脚本的默认文档组织
+        self._write_valid(self.SCRIPT.replace(
+            "* **大规模团队式协作是例外，不是默认（L2）**。\n", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("大规模团队式协作", self.error_texts())
+
+    def test_coding_note_location_exception_removed_reports(self):
+        # 反例：coding 的注释定位条不带脚本例外 → 原文会被读成"脚本也要按类/方法那套、文档另建"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 编码\n\n== 注释\n* 注释定位：详细设计进文档注释。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/general/coding.adoc", self.error_texts())
+
+    def test_python_clause_removed_reports(self):
+        # 反例：Python 侧不再写"单文件脚本不另建文档" → 仍会被各建一篇文档
+        self._write_valid()
+        self.write("specs/stack/python.adoc", "= Python\n\n== 文件头\n* 随便写点说明。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/stack/python.adoc", self.error_texts())
+
+    def test_bash_clause_removed_reports(self):
+        # 反例：bash 侧不写"无文档注释机制、用多行块注释" → 文档头散落成行尾零散注释
+        self._write_valid()
+        self.write("specs/stack/bash.adoc", "= 栈\n\n== 文件头\n* 见通用脚本规范。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/stack/bash.adoc", self.error_texts())
+
+    def test_batch_clause_removed_reports(self):
+        # 反例：批处理侧不写 rem 承载 → 文档头写成 ::、或在括号块内失效
+        self._write_valid()
+        self.write("specs/stack/batch.adoc", "= 栈\n\n== 注释\n* 见通用脚本规范。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_powershell_clause_removed_reports(self):
+        # 反例：PowerShell 侧不写 comment-based help → 有文档注释机制却用普通 # 块注释
+        self._write_valid()
+        self.write("specs/stack/powershell.adoc", "= 栈\n\n== 注释\n* 随便写点说明。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/stack/powershell.adoc", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例：调度器识别特征被删 → 该条永远不会被触发加载、规则实际失效
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "脚本：行尾按类型取值。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_entry_removed_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时不知道该写在哪
+        self._write_valid()
+        self.write("README.adoc", "目录：脚本。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("README.adoc", self.error_texts())
 
 
 class TestCheckCommentPreservationGuard(CheckSpecsTestCase):

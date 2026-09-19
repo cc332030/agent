@@ -10,6 +10,11 @@
 
 * shebang 用 `#!/usr/bin/env python3`（明确用 python3，不用 python）（通用 shebang 与可执行要求见 link:../general/script.adoc[]「文件格式与编码」）
 * 兼容终端编码：脚本可能在不同平台终端运行，涉及中文输出/读取时，在入口统一按 UTF-8 配置 stdout/stderr（如 `sys.stdout.reconfigure(encoding="utf-8")`），避免 Windows GBK 等非 UTF-8 终端乱码
+* **文档头写在模块 docstring 里、不另起块注释（L1）**：脚本的定位、用法、参数、环境变量、行为与副作用、关键约定与设计决策、兜底与限制写进**模块 docstring**（shebang 之后的第一个语句），**不另用 `#` 块注释重复**（两处各写一半＝同一事实两个来源）——docstring 是 Python 的文档注释机制，按 link:../general/coding.adoc[]“有文档注释机制须用文档注释”执行（通用条目清单见 link:../general/script.adoc[]「脚本头部注释（文档头）」）。
+* **docstring 里不抄实现取值（L1）**：`TIMEOUT_SECONDS`/`DEFAULT_BASE`/`DEFAULT_WORKERS` 一类取值在 docstring 里写**抽象描述或常量名**，不写“超时 30 秒”“并发 4”这类字面数值（改常量不改 docstring 即产生“文档说谎”），默认值以模块级常量为唯一来源（判据见 link:../general/script.adoc[]「脚本头部注释（文档头）」同名条）。
+* **docstring 与实现同改、决策不落进函数体（L1）**：改动使 docstring 失真时在**同一提交内**改过来；文件级的方案取舍、适用范围与已知限制留在模块 docstring，**不塞进函数体**内的普通注释（函数体注释只记该函数内部的局部决策与边界，见 link:../general/doc-design.adoc[]「信息归属」）。
+* **单打独斗的 `.py` 脚本同样用模块 docstring、默认不另建独立文档（L1）**：作为**单文件脚本**存在的 `.py`（不是被 import 的应用模块）也按本节用**模块 docstring** 承载文档；它的定位、用法、参数与边界**默认写在 docstring 里**，**不另建**独立 `.adoc`/`.md`（依据见 link:../general/script.adoc[]「脚本文档的承载位置与协作粒度（默认写进脚本自身）」——脚本默认单打独斗、彼此独立；**唯一例外**是内容确已超出 docstring 容量时的移交，届时在 docstring 里留一行链接）。
+* **一次性的临时 `.py` 片段（L2）**：只有一次性、几行的临时命令可省条目化文档头，但仍须在文件头（或模块 docstring 首行）写一行用途说明。
 
 == 入口与结构
 

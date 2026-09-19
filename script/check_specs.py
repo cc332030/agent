@@ -369,6 +369,19 @@
      图书馆，却**只用它支撑变更日志的展示形态**——同一条链的"上游"（一次提交改了什么）空着，
      "下游"（按类型分组）只能靠人工归类。
 
+ 50. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
+     （文档头）」须仍在且九条齐备——**文档头先行**（动手第一步就写、不得只留待补占位、改动后
+     同提交同步）、**脚本必须写文档头**、条目清单含**关键约定与设计决策**（不得省略）、
+     **设计决策写成决策 + 理由 + 边界**（含判定标准）、**取值写抽象描述或常量名**
+     （不写硬编码数值、不制造两处真源）、**决策留头部/文件级文档注释、不落进方法体**、
+     **超出块注释容量的内容移交独立文档**并一行回指（含判定标准）、**篇幅不设上限**
+     （内容不因"写短点"删减）、**入口注释不复述逻辑层契约**；技术栈侧 `specs/stack/python.adoc`
+     须写明文档头写在**模块 docstring**（不另起块注释、与实现同改、不抄取值），
+     bash/batch/powershell 三个入口栈须各写明**入口注释只写入口自己**；调度器与 `README.adoc`
+     须带识别特征，`library/adoption.adoc` 须登记其为**本站取舍**、`library/sources.adoc`
+     须有对应依据主题段（如实标注要点转述与同义性差异）——防"写完顺手补一段文档"与
+     "注释里抄实现取值（改代码不改注释即文档说谎）"重回默许形态（用户要求：脚本很多细节
+     可能随着维护丢失，文档先行也适用于脚本）。
  49. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
      「HTTP 接口语义」须仍在且齐备三处——①条文与**级别**（安全方法不得产生状态变更 **L1**、
      幂等与状态码 **L2**、Problem Details **L3 可选**；级别不得被顺手改动，把可选格式升成 L1
@@ -420,11 +433,18 @@ except AttributeError:
 #     归并入「分级与最高关注项」；
 #   * 下调后余量约 10%，下一次"往常驻层加实质内容"仍应先归位、再决定要不要抬这个数；
 #     该数属本仓库自身的机械天花板，不写入公共内容。
-RESIDENT_BUDGET = 58000
+# 2026-09 上调为 60000：用户口径（脚本单打独斗、文档直接写在脚本里）落地时，调度器的
+# 脚本加载项要新增"文档默认写进脚本自身"的识别特征（该特征属**加载判据**、不是规则正文，
+# 须留在调度器）；同时按同一条口径**压缩**了原脚本条目（跨环境脚本的细项只留落点、规则正文
+# 本就归 specs/general/script.adoc）。实测 58225 字节，上调后余量约 3%，下一次仍应先归位。
+RESIDENT_BUDGET = 60000
 # 项目自身入口 AGENTS.adoc 的体积上限（字节）：它**同为每次会话无条件加载的常驻物**
 # （项目根入口，先于 AGENTS_COMMON.adoc 被读），故须与本仓库自己的必加载层一并设限。
 # 它是项目自身规范、不是公共内容（引用方不使用），故单列一个上限、不与 RESIDENT_BUDGET 合并。
-PROJECT_ENTRY_BUDGET = 24000
+# 2026-09 由 24000 上调为 24500：`script/check_specs.py` 的工具声明须登记本次新增的
+# **脚本文档（自述文档与文档头）**防线名（工具声明是"校验范围可核对"的落点，不能只加防线
+# 不登记）；实测 23998 → 24071 字节，上调后余量约 1.7%，下一次仍应先归位、再考虑抬数。
+PROJECT_ENTRY_BUDGET = 24500
 # 加载调度器「涉及即加载」条目数上限（通用层/技术栈层/项目类型层/平台层合计）。
 # 条目过多会让"该加载哪些"难以判全；当前约 30，留余量到 40。
 DISPATCHER_ITEMS_MAX = 40
@@ -6458,6 +6478,292 @@ def check_cross_platform_script_guard():
     phase_done()
 
 
+
+SCRIPT_HEADER_SECTION = "脚本头部注释（文档头）"
+
+
+def check_script_header_guard():
+    """『脚本头部注释（文档头）防线』：文档头先行与"细节不随维护丢失"的条文不得被删或降级。
+
+    背景（用户要求）：用户先问"写脚本时会不会先写文档？写完会不会把设计思路写到注释"，
+    随后明确「**需要呢，脚本很多细节可能随着维护丢失，文档先行也适用于脚本**」。
+    既有条文只要求"头部注释说明定位、用法与关键约定"，缺三件最容易丢的东西：
+    ①**先行**（它是动手的第一步、不是收尾动作）；②**设计决策要有记录**（只写"怎么做"、
+    不写"为什么这么做、放弃了什么"＝细节丢失的第一现场）；③**边界分工**（决策写头部还是
+    方法体、超出块注释容量往哪放、入口注释要不要复述逻辑层契约）。缺这三件时，
+    实现改了几轮之后"当初为什么这么取边界"已无处可查，下一次维护只能靠猜。
+
+    最易被冲掉的两处：①**"文档先行"退化成"写完顺手补一段"**——交付时文档头与实现已经不同步；
+    ②**注释里抄实现取值**（"超时 30 秒""并发 4"）——改代码不改注释即产生"文档说谎"，
+    比不写注释更坏。故本条钉住六处要点（都只看"要求文本仍在、且落在该落点"）：
+      * **通用层条目**：`specs/general/script.adoc` 须有本节，且 ①**文档头先行**（含"不得只留
+        待办占位"与"同提交同步"判据）、②**脚本必须写文档头**、③条目清单含**关键约定与设计
+        决策**（不得省略）、④**决策的判定标准**（只写怎么做不算）、⑤**取值写抽象描述或常量名**
+        （含"注释与代码各写一遍＝两处真源"）、⑥**决策留头部/不落进方法体**、⑦**超容量移交独立
+        文档并一行回指**、⑧**行数不设上限**、⑨**入口注释不复述逻辑层契约** 九条齐备——缺"先行"
+        该条只是"要写文档"，缺"设计决策"则本条要防的失效（细节随维护丢失）原样存在；
+      * **技术栈落点**：`specs/stack/python.adoc` 须写明文档头写在**模块 docstring**里、
+        **不另起块注释**、docstring 与实现同改、不抄取值（有文档注释机制的语言须用文档注释）；
+        bash/batch/powershell 三个入口栈须各有一条**入口注释不复述逻辑层契约**的条文；
+      * **入口登记**：加载调度器的脚本加载项须含本条的**识别特征**（要新写或改脚本时触发）、
+        `README.adoc` 的目录说明须让读者知道这条存在；
+      * **依据入馆**：`library/adoption.adoc` 须登记该取向属**本站更严取舍**（否则会被读成
+        某标准原文）；`library/sources.adoc` 须有对应的依据主题段。
+    """
+    phase("脚本头部注释（文档头）防线检查")
+    rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SCRIPT_SPEC_FILE):
+        err(f"缺少文件 {rel_script}——『{SCRIPT_HEADER_SECTION}』的通用层落点丢失"
+            "（该条跨语言，须收在通用脚本规范而非某一技术栈）", rel_script)
+        phase_done()
+        return
+    text = open(SCRIPT_SPEC_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(SCRIPT_HEADER_SECTION) + r"(?:\s|$).*?(?=^== |\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"脚本头部注释防线被破坏：{rel_script} 缺少「{SCRIPT_HEADER_SECTION}」节——"
+            "脚本的定位、用法、参数与设计决策又只剩代码里可读，细节随维护丢失", rel_script)
+        phase_done()
+        return
+    section = m.group(0)
+    for keys, desc in (
+        (("文档头先行", "头部注释必须先行", "待办占位"),
+         "须写明**头部注释先行**（动手第一步就写、不是收尾补；不得只留 `TODO`/待补占位；"
+         "改动后同提交同步）——缺这句，本条退回成'要写文档'，交付时文档头与实现早已不同步"),
+        (("脚本必须写文档头",),
+         "须写明**脚本必须写文档头**（承担实际功能的脚本都要有条目化文档头；只有一次性几行的"
+         "临时命令可省并仍须一行用途）——缺则'没有文档头的脚本'仍是默许形态"),
+        (("**关键约定与设计决策**（**不得省略**）", "放弃了哪些备选"),
+         "条目清单须含**关键约定与设计决策**（约定与出处、为什么这么做与放弃了哪些备选做法、"
+         "兜底与已知限制）并写明**不得省略**——只要求'定位、用法、环境变量、副作用'时，"
+         "本条要防的失效（为什么这么取边界、放弃了什么，事后无从查）原样存在"),
+        (("设计决策写成可核对的记录", "决策 + 理由 + 边界"),
+         "须写明设计决策写成**决策 + 理由 + 边界**、并给判定标准（只见'怎么做'没有'为什么'、"
+         "记了备选方案却不说不选的理由、只写决定不写依据）——缺则'记录设计思路'会被写成一段"
+         "叙述，读者仍无法据此判断'这条约定今天还成不成立'"),
+        (("不写硬编码数值", "抽象描述或常量名", "两处真源"),
+         "须写明**取值写抽象描述或常量名、不写硬编码数值**并给判定标准（注释出现与常量重复的"
+         "字面数值／抄死的目录名与默认值／同一取值两处各写一遍）——缺则'改代码不改注释'的"
+         "文档说谎重新成为默许形态（用户报告：脚本很多细节随维护丢失）"),
+        (("不写进方法体", "文件级文档注释"),
+         "须写明**决策留头部/文件级文档注释、不落进方法体**（方法体只记内部局部决策与边界）"
+         "——缺则方案取舍被抄进每个方法，改一处必漏另一处"),
+        (("内容移交独立文档（L1）", "该移交而未移交"),
+         "须写明**超出头部块注释容量的内容移交独立文档**并一行链接回指、给判定标准——"
+         "缺则要么文档头堆成长文（正文规范又变成没人读的墙），要么内容被'写短点'删掉"),
+        (("行数不设限",),
+         "须写明头部注释**篇幅不设上限**（内容不因'写短点'删减、也不因超长判不合格）——"
+         "缺则'简洁'会被读成篇幅配额，把内容要求折成字数"),
+        (("入口的注释边界", "不得复述"),
+         "须写明**入口注释只写入口自己、不复述逻辑层契约**（参数语义、默认值、行为与副作用）"
+         "——缺则同一份契约写两处（改逻辑不改入口注释，按入口注释用会得到错误结论）"),
+    ):
+        missing = [k for k in keys if k not in section]
+        if missing:
+            err(f"脚本头部注释防线被破坏：{rel_script}「{SCRIPT_HEADER_SECTION}」"
+                f"缺失要点 {missing}——{desc}；本条是用户明确要求的'文档先行也适用于脚本，"
+                "脚本很多细节可能随着维护丢失'，不得删除、不得降级为建议", rel_script)
+
+    # 技术栈侧：Python 用模块 docstring 承载文档头；三个入口栈写明入口注释边界
+    for name, keys, desc in (
+        ("python.adoc", ("docstring", "不另起块注释", "文档注释机制"),
+         "Python 有文档注释机制，须写明文档头写在**模块 docstring**、不另起块注释"
+         "（否则同一份说明两处各写一半，改一处必漏另一处，也违反 coding 规范的"
+         "'有文档注释机制须用文档注释'）"),
+        ("python.adoc", ("不抄实现取值", "常量"),
+         "Python 侧须写明 docstring 里写**抽象描述或常量名**、不抄实现取值——"
+         "缺则'超时 30 秒'一类数值与模块常量各写一遍"),
+        ("bash.adoc", ("入口的注释只写入口自己", "不得复述"),
+         "bash 入口须写明注释**只写入口自己**、不复述逻辑层契约——缺则跨环境时入口注释"
+         "成为逻辑层参数/默认值的第二份说明"),
+        ("batch.adoc", ("入口的注释只写入口自己", "不得复述"),
+         "批处理入口须写明注释**只写入口自己**、不复述逻辑层契约——缺则 Windows 入口注释"
+         "与逻辑层各写一份契约"),
+        ("powershell.adoc", ("入口的注释只写入口自己", "不得复述"),
+         "PowerShell 入口须写明注释**只写入口自己**、不复述逻辑层契约（`.ps1` 本身即入口，"
+         "容易顺手把逻辑层的用法抄进来）"),
+    ):
+        fp = os.path.join(SPECS_DIR, "stack", name)
+        rel = os.path.relpath(fp, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(fp):
+            err(f"缺少脚本技术栈文件 {rel}——『{SCRIPT_HEADER_SECTION}』在该栈无处承接", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"脚本头部注释防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+
+    # 公开面与依据：加载调度器识别特征、README 目录说明、图书馆依据（取舍与引文）
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——脚本头部注释条的调度器登记无从核对", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        missing = [k for k in ("文档头先行", "常量名")
+                   if k not in common]
+        if missing:
+            err(f"脚本头部注释防线被破坏：{rel_common} 缺失要点 {missing}——"
+                "加载调度器的脚本加载项须有本条的识别特征（要新写或改脚本、文档头只剩一句用途、"
+                "注释里写死与常量重复的取值），缺则该条永远不会被触发加载、规则实际失效",
+                rel_common)
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rd = open(README_FILE, encoding="utf-8").read()
+        if "文档头先行" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『{SCRIPT_HEADER_SECTION}』——"
+                "读者按 README 学习时无从知道有这条要求", rel_readme)
+    else:
+        err(f"缺少 {rel_readme}——{SCRIPT_HEADER_SECTION} 条的公开说明无从核对", rel_readme)
+    for rel, keys, desc in (
+        ("library/adoption.adoc", ("脚本头部注释（文档头）先行", "同义性差异", "未确证"),
+         "依据图书馆须记该条属**本集合自己的判据化取舍**（外部材料只给方向与下限、"
+         "未规定'写脚本必须文档先行'），并如实标注未确证——缺则本站取舍会被读成标准原文"),
+        ("library/sources.adoc", ("脚本头部注释（文档头）与决策记载", "要点转述", "同义性"),
+         "依据图书馆须有对应主题段：PEP 257 的 docstring 机制、ISO/IEC/IEEE 25010 的可维护性、"
+         "ISO/IEC/IEEE 29148 的可验证性与 MADR/AWS 的决策记载方向，并如实标注"
+         "'要点转述、非逐字摘录'与同义性差异（这些材料**未**规定'文档先行也适用于脚本'）"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——{SCRIPT_HEADER_SECTION} 条在该处的落点无从核对", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"脚本头部注释防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+SCRIPT_SELFDOC_SECTION = "脚本文档的承载位置与协作粒度（默认写进脚本自身）"
+
+
+def check_script_selfdoc_guard():
+    """『脚本自述文档防线』：脚本默认单打独斗、文档随脚本落盘（不逐脚本另建独立文档）。
+
+    背景（用户口径）："脚本比较特殊，大部分情况下都是**单打独斗**，除非设计大规模团队式的
+    协作时（有的时候拆成多个脚本，各脚本之间也是**独立**的，只是在一个任务的不同阶段会用到
+    而已），否则文档直接以**多行文档注释（优先级-高）/ 多行普通注释（优先级-中）/ 普通注释
+    （优先级-低）**的方式写在脚本里"。
+
+    本条要防的两处失效：①**把"文档"外推到脚本之外**——为单个脚本另建 `.adoc`/`.md`（文档与
+    代码离得越远越易失同步），或反过来把"多脚本"读成"一个多模块项目"、按模块给每个脚本各建
+    一篇文档；②**承载方式降格**——有文档注释机制的语言（Python/JS）用普通注释或块注释承载
+    文档头，或把文档头拆散成零散单行注释。
+
+    只核文本与落点（该条对**引用方项目**的脚本同样成立，"某个项目的脚本实际怎么写"本仓库
+    不可见，交人/子 agent 复核）。钉住四处：
+      * **通用层条目**：`specs/general/script.adoc` 须有本节，且①默认单打独斗、多脚本彼此独立、
+        文档随脚本落盘；②**三级优先级**（多行文档注释 → 多行普通/块注释 → 普通注释）；③唯一
+        例外（内容超容量移交）与判定标准；④"大规模团队式协作"是例外而非默认；
+      * **通用编码侧**：`specs/general/coding.adoc`「注释」的注释定位条须带**脚本例外**并指回本节
+        （否则"普通注释仅限方法体内""详细设计进文档注释"两条会被读成'脚本也要另建文档'）；
+      * **技术栈落点**：Python 用模块 docstring 且单文件脚本同样不另建文档；bash/batch/powershell
+        三个无文档注释机制的栈各写明"用多行块注释/连续行注释承载"（bat 另限 `rem`）；
+      * **公开面**：加载调度器的脚本加载项与 `README.adoc` 的目录说明须同步（缺则读者与执行者
+        都不知道有这条）。
+    """
+    phase("脚本自述文档（承载位置与协作粒度）防线检查")
+    rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SCRIPT_SPEC_FILE):
+        err(f"缺少文件 {rel_script}——『{SCRIPT_SELFDOC_SECTION}』的通用层落点丢失", rel_script)
+        phase_done()
+        return
+    text = open(SCRIPT_SPEC_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(SCRIPT_SELFDOC_SECTION) + r"(?:\s|$).*?(?=^== |\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"脚本自述文档防线被破坏：{rel_script} 缺少「{SCRIPT_SELFDOC_SECTION}」节——"
+            "脚本的文档承载位置又回到'逐脚本另建独立文档'的默认读法", rel_script)
+        phase_done()
+        return
+    section = m.group(0)
+    for keys, desc in (
+        (("单打独斗", "相互独立"),
+         "须写明脚本**默认单打独斗**、拆成多个脚本时**各脚本相互独立**（不是同一模块）——"
+         "缺则多脚本会被当成'一个多模块项目'、按模块给每个脚本各建一篇文档"),
+        (("多行文档注释", "多行普通/块注释", "普通注释"),
+         "须写明承载方式的**三级优先级**（多行文档注释 → 多行普通/块注释 → 普通注释）——"
+         "缺则'写在脚本里'没有可判定的形态，文档头会被降格成零散单行注释"),
+        (("不另建独立文档", "一律用**文档注释**承载"),
+         "须写明文档**默认写在脚本里、不另建独立文档**，并写明有文档注释机制的语言一律用"
+         "文档注释承载——缺则'为脚本另建 .adoc'重新成为默许形态"),
+        (("超出头部块注释的容量", "命中即违规"),
+         "须写明**唯一例外**是内容确已超出头部块注释容量时的移交，并给判定标准——"
+         "缺则'能拆成两处写'会被当成另建文档的理由（判据是内容量、不是能不能拆）"),
+        (("大规模团队式协作", "例外，不是默认"),
+         "须写明**大规模团队式协作是例外、不是默认**——缺则该例外会外推成所有脚本的默认文档组织"),
+    ):
+        missing = [k for k in keys if k not in section]
+        if missing:
+            err(f"脚本自述文档防线被破坏：{rel_script}「{SCRIPT_SELFDOC_SECTION}」"
+                f"缺失要点 {missing}——{desc}；本条依据用户口径（脚本单打独斗、文档直接写在脚本里、"
+                "多行文档注释/多行普通注释/普通注释三级优先级），不得删除或降级", rel_script)
+
+    # 通用编码侧：注释定位条须带脚本例外并指回本节
+    coding = os.path.join(SPECS_DIR, "general", "coding.adoc")
+    rel_coding = os.path.relpath(coding, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(coding):
+        err(f"缺少 {rel_coding}——『注释』的注释定位条无从核对", rel_coding)
+    else:
+        body = open(coding, encoding="utf-8").read()
+        missing = [k for k in ("脚本的落点与粒度", "单打独斗", "多行普通/块注释")
+                   if k not in body]
+        if missing:
+            err(f"脚本自述文档防线被破坏：{rel_coding}「注释」的注释定位条缺失 {missing}——"
+                "该条原文说'普通注释仅限方法体内、详细设计一律进文档注释'，缺脚本例外时"
+                "会被读成'脚本也要按类/方法那套走、文档头得另建文档'", rel_coding)
+
+    # 技术栈侧：Python 用 docstring 且单文件脚本不另建文档；三个无机制栈用多行块注释承载
+    for name, keys, desc in (
+        ("python.adoc", ("单打独斗", "不另建"),
+         "Python 侧须写明**单文件脚本同样用模块 docstring**、默认**不另建**独立文档"
+         "（否则'有文档注释机制'只被读成'注释形态要求'，脚本仍会被各建一篇文档）"),
+        ("bash.adoc", ("多行块注释", "无文档注释机制"),
+         "bash 须写明**无文档注释机制、文档头用多行块注释（连续 `#` 行）承载**——"
+         "缺则文档头会散落成行尾零散注释（普通注释是第三优先级）"),
+        ("batch.adoc", ("rem", "文档头"),
+         "批处理须写明**注释只有 `rem`/`::` 与文档头用连续 `rem` 承载**——"
+         "缺则文档头会被写成 `::` 或散落单行注释（`::` 在括号块内不可靠）"),
+        ("powershell.adoc", ("基于注释的帮助", "文档头"),
+         "PowerShell 须写明**用基于注释的帮助（comment-based help）承载文档头**——"
+         "该语言有文档注释机制，按 coding 规范不得改用普通 `#` 块注释"),
+    ):
+        fp = os.path.join(SPECS_DIR, "stack", name)
+        rel = os.path.relpath(fp, REPO_ROOT).replace("\\", "/")
+        if not os.path.isfile(fp):
+            err(f"缺少脚本技术栈文件 {rel}——『{SCRIPT_SELFDOC_SECTION}』在该栈无处承接", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"脚本自述文档防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+
+    # 公开面：调度器识别特征 + README 目录说明
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——脚本自述文档条的调度器登记无从核对", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        missing = [k for k in ("脚本单打独斗", "多行块注释")
+                   if k not in common]
+        if missing:
+            err(f"脚本自述文档防线被破坏：{rel_common} 缺失要点 {missing}——"
+                "加载调度器的脚本加载项须有本条的识别特征（要为脚本另建独立文档、"
+                "脚本的定位用法写在代码之外），缺则该条永远不会被触发加载、规则实际失效",
+                rel_common)
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE):
+        rd = open(README_FILE, encoding="utf-8").read()
+        if "文档默认写进脚本自身" not in rd:
+            err(f"{rel_readme} 的目录说明未同步『{SCRIPT_SELFDOC_SECTION}』——"
+                "读者按 README 学习时无从知道脚本的文档该写在哪", rel_readme)
+    else:
+        err(f"缺少 {rel_readme}——{SCRIPT_SELFDOC_SECTION} 条的公开说明无从核对", rel_readme)
+    phase_done()
+
+
 def check_comment_preservation_guard():
     """『评论不得删除防线』：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）。
 
@@ -8749,6 +9055,8 @@ def main(argv=None) -> int:
     check_reuse_precedent_guard()
     check_external_script_guard()
     check_cross_platform_script_guard()
+    check_script_header_guard()
+    check_script_selfdoc_guard()
     check_comment_preservation_guard()
     check_comment_dispatch_guard()
     check_self_dispatch_guard()
