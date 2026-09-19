@@ -23,7 +23,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      /* 底部固定「源文件」栏占位，避免正文末尾被其遮挡 */
+      /* 底部固定页脚占位，避免正文末尾被其遮挡 */
       padding-bottom: 56px;
       background: var(--bg);
       color: var(--text);
@@ -87,15 +87,15 @@
     .card h1[id], .card h2[id], .card h3[id], .card h4[id], .card h5[id], .card h6[id] {
       scroll-margin-top: 76px;
     }
-    /* 底部「源文件」地址：固定在视口底部，滚动时不隐藏 */
-    .doc-source {
+    /* 唯一的页脚：固定在视口底部，滚动时不隐藏
+       内含「源文件地址」（随当前文档动态更新）+ 站点说明 */
+    footer {
       position: fixed;
       left: 0;
       right: 0;
       bottom: 0;
       z-index: 100;
-      margin: 0;
-      padding: 12px 20px;
+      padding: 11px 20px;
       background: var(--card);
       border-top: 1px solid var(--border);
       box-shadow: 0 -1px 4px rgba(0,0,0,0.08);
@@ -103,14 +103,9 @@
       font-size: 13px;
       text-align: center;
     }
-    footer {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 20px;
-      color: var(--muted);
-      font-size: 13px;
-      text-align: center;
-    }
+    footer a { color: var(--accent); }
+    /* 源文件地址为空（加载中/出错）时不显示分隔符 */
+    footer .doc-source:not(:empty)::after { content: " · "; margin: 0 2px; }
   </style>
 </head>
 <body>
@@ -135,7 +130,7 @@
   </div>
 
   <footer>
-    <span>本页面由 Asciidoctor.js 动态解析仓库内的 .adoc 文档生成。</span>
+    <span id="doc-source" class="doc-source"></span><span class="note">本页面由 Asciidoctor.js 动态解析仓库内的 .adoc 文档生成。</span>
   </footer>
 
   <script>
@@ -147,6 +142,7 @@
       var COPY_ICON_RE = /[⬆⮐↑]/;   // 从站点复制 AsciiDoc 时可能被带上的"回到顶部"图标字符
 
       var output = document.getElementById('output');
+      var sourceEl = document.getElementById('doc-source');   // 页脚里的「源文件地址」
       var currentDoc = null;      // 当前文档的仓库根相对路径（如 specs/general/git.adoc）
       var docDir = '';            // 当前文档的目录（如 specs/general/），link: 目标按其解析
       var navLinks = Array.prototype.slice.call(document.querySelectorAll('.topbar a'));
@@ -223,11 +219,22 @@
 
       // ---- 页面渲染 ----------------------------------------------------
 
+      // 更新页脚里的源文件地址；path 为空时清空（加载中 / 解析出错）
+      function setSource(path, url) {
+        if (!sourceEl) return;
+        sourceEl.innerHTML = path
+          ? '源文件：<a href="' + url + '" target="_blank" rel="noopener">' +
+            escapeHtml(path) + '</a>'
+          : '';
+      }
+
       function showLoading(path) {
+        setSource(null);
         output.innerHTML = '<div class="loading">正在加载并解析 ' + escapeHtml(path) + '…</div>';
       }
 
       function showError(message) {
+        setSource(null);
         output.innerHTML = '<p class="error">' + message + '</p>';
       }
 
@@ -278,9 +285,8 @@
             }
             currentDoc = normalized;
             docDir = normalized.indexOf('/') >= 0 ? normalized.slice(0, normalized.lastIndexOf('/') + 1) : '';
-            output.innerHTML = '<div class="doc-body">' + html + '</div>' +
-              '<div class="doc-source">源文件：<a href="' + url + '" target="_blank" rel="noopener">' +
-              escapeHtml(normalized) + '</a></div>';
+            output.innerHTML = '<div class="doc-body">' + html + '</div>';
+            setSource(normalized, url);   // 源文件地址统一显示在页脚
             bindDocLinks();
             syncNav();
             applyFragment(fragment);
