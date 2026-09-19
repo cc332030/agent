@@ -1,46 +1,46 @@
 = 包源与镜像源（推荐次序与实测记录）
 
-本文件是依据图书馆的主题之一：**"包源按次序选、逐级降级"这条规则的依据**——外部材料给的是什么（质量特性与环境一致性要求）、**本站自己的判据化取舍是什么**、以及**本项目在 CNB 环境实测到的可用性与延迟取值**（含"哪些源当时可用、哪些不可用、取样条件是什么"）。
+本文件是依据图书馆的主题之一：**"包源按次序选、逐级降级"这条规则的依据**——外部材料给的是什么、**本站自己的判据化取舍是什么**、以及**本项目在 CNB 环境实测到的可用性与延迟取值**。
 
 == 外部材料支撑什么、不支撑什么
 
-外部材料给的是**方向与下限**，**不给源站名单、也不给次序**（依据材料与判据的完整口径见 link:sources.adoc[]）：
+外部材料给的是**方向与下限**，**不给源站名单、也不给次序**：
 
 * **ISO/IEC/IEEE 25010**（性能效率）：时间行为与资源利用是**可度量的质量特性**——故"取源快慢"是质量取舍，须用实测说话，不能凭观感。
 * **ISO 9241-110**（人机交互原则：可控、符合预期）：换源要**可预期、可关闭、不阻断**——故"已配置过即沿用、不覆盖引用方配置"。
 * **The Twelve-Factor App**（Dependencies / dev-prod parity）：依赖须**显式声明**、开发与运行环境一致——故"版本以项目声明为准，源只影响从哪取"。
 * **ISO 10007 / ISO/IEC/IEEE 29148**（配置管理、判定须可验证）：取值与条件须**可追溯**——故报告里要带"哪个源、什么环境、实测结果"。
 
-**须注意的语义差异（同义性）**：上述材料**未**规定"必须用某一家源"、**未**规定源站的优先级次序、**未**规定"先实测再启用"。本集合据此推出的是**自己的判据化取舍**：**就近/平台内源 → 受访者所在国家/地区主流公共源 → 邻近境外源 → 更远境外源**，且"每级先实测可用、不跳级、不覆盖既有配置"（规则本体在 link:../specs/general/dependency.adoc[]「包源（包仓库/镜像站）的选用」，本文件**不复制规则**）。**不得**把本节读成"某标准规定了用腾讯云的源"。
+**须注意的语义差异（同义性）**：上述材料**未**规定"必须用某一家源"、**未**规定源站的优先级次序、**未**规定"先实测再启用"。本集合据此推出的是**自己的判据化取舍**：**就近/平台内源 → 受访者所在国家/地区主流公共源 → 邻近境外源 → 更远境外源**，且"每级先实测可用、不跳级、不覆盖既有配置"（规则本体在 `specs/general/dependency.adoc`「包源（包仓库/镜像站）的选用」）。**不得**把本节读成"某标准规定了用腾讯云的源"。
 
-**为什么推荐次序以腾讯云为首选**：任务多在 CNB（腾讯云环境）执行，**平台内/同云内网路径通常最短**（实测量级见下）；这是**本站取舍**（性价比最优者优先），不是平台要求。
+**为什么推荐次序以腾讯云为首选**：任务多在与该云同环境的平台执行，**平台内/同云内网路径通常最短**（实测量级见下）；这是**本站取舍**（性价比最优者优先），不是平台要求。
 
-== 实测记录（2026-09 于 CNB 任务环境，出口经代理；取样时间随任务执行日）
+== 实测记录（CNB 任务环境，出口经代理；取样时间随任务执行日）
 
-* **取样条件**：CNB 任务环境内实测；每项发一次 HTTPS 请求（`Range: bytes=0-…`，只取响应头与前若干字节），记录 HTTP 状态、耗时（毫秒）与响应服务器标识；**单次采样、同一时段**，**只作"可用性判定"与量级参考，不构成"谁更快"的结论**（本集合的性能判据见 link:performance.adoc[]：单次采样不构成结论、差异小于离散度视为无显著差异）。
-* **复核实测（2026-09 评审当轮，同环境）**：对下列几条**逐项重新取过确定存在的产物**，结论与首轮有出入，已按本轮取值修正：腾讯云 `nexus/repository/maven-public/` 是**聚合仓库**，`aaron-santos/clj-tiny-astar` 0.1.1 的 `.jar`/`.pom` 可直接取到（200）——即"中央仓镜像不能替代 Clojars"在本环境**不成立**；`org/clojure/clojure` 1.11.1 在中央仓镜像 200、在 Clojars 官方与 TUNA 镜像均 404；`https://mirrors.cloud.tencent.com/npm/lodash` 200（packument）、而 `https://mirrors.tuna.tsinghua.edu.cn/npm/lodash` 404；TUNA 的 `gradle/` 与 `AdoptOpenJDK/` 均 404、`nodejs-release/index.json` 200；华为云 `gradle/`、`nodejs/`、`openjdk/` 200；`https://mirrors.aliyun.com/rubygems/` 200。**本条即为"首轮取值会被下一轮推翻"的实证**——它支持规则里"先实测再启用"与"结论要带取样条件"两条，而不是支持"一次实测即可写死"。
-* **环境特征（须如实标注）**：本环境出口**经代理**（DNS 解析到 `169.254.0.0/16` 的代理地址，如 `mirrors.cloud.tencent.com`→`169.254.0.3`、`repo1.maven.org`→`198.18.0.12`），故**延迟数字反映的是"该环境的代理与就近缓存路径"、不能直接搬用到其他网络环境**（换环境须重新实测——这正是"先实测再启用"这条规则的理由）。
+* **取样条件**：CNB 任务环境内实测；每项发一次 HTTPS 请求（`Range: bytes=0-…`，只取响应头与前若干字节），记录 HTTP 状态、耗时（毫秒）与响应服务器标识；**单次采样、同一时段**，**只作"可用性判定"与量级参考，不构成"谁更快"的结论**（本集合的性能判据见 `library/performance.adoc`：单次采样不构成结论、差异小于离散度视为无显著差异）。
+* **复核实测（同环境）**：对下列几条**逐项重新取过确定存在的产物**，结论与首轮有出入，已按本轮取值修正：腾讯云 `nexus/repository/maven-public/` 是**聚合仓库**，某 Clojars 构件的 `.jar`/`.pom` 可直接取到（200）——即"中央仓镜像不能替代 Clojars"在本环境**不成立**；`org/clojure/clojure` 在中央仓镜像 200、在 Clojars 官方与 TUNA 镜像均 404；腾讯云 `npm/lodash` 200（packument）、而清华 TUNA `npm/lodash` 404；TUNA 的 `gradle/` 与 `AdoptOpenJDK/` 均 404、`nodejs-release/index.json` 200；华为云 `gradle/`、`nodejs/`、`openjdk/` 200；阿里云 `rubygems/` 200。**本条即为"首轮取值会被下一轮推翻"的实证**——它支持规则里"先实测再启用"与"结论要带取样条件"两条，而不是支持"一次实测即可写死"。
+* **环境特征（须如实标注）**：本环境出口**经代理**（DNS 解析到代理地址段），故**延迟数字反映的是"该环境的代理与就近缓存路径"、不能直接搬用到其他网络环境**（换环境须重新实测——这正是"先实测再启用"这条规则的理由）。
 
 === 语言包源（按实测可用性与量级）
 
-* **Maven / Gradle / SBT（Java 生态构件）**：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`（可取 `slf4j-api` 的 `.pom`）、阿里云 `https://maven.aliyun.com/repository/public/`、华为云 `https://repo.huaweicloud.com/repository/maven/` **均可用**（量级 27–70 ms）；中央仓源站 `https://repo1.maven.org/maven2/` 亦可用（响应携带 CDN 标识，量级 229 ms）——**属更远一级的兜底**。**注意**：清华 TUNA、中科大等高校镜像站**没有** Maven Central 目录（实测无 `maven`/`maven-central` 路径），故不要把它们当中央仓镜像写进配置。
-* **Clojars（Clojure 生态）**：**先实测中央仓镜像是否已代理该构件，再决定要不要另加 Clojars 源**——本环境实测：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/` 是**聚合仓库**（`group repository`），`aaron-santos/clj-tiny-astar` 0.1.1 的 `.jar`（10006 字节，`application/java-archive`）与 `.pom`（3619 字节）**可直接取到**（200）；清华 TUNA `https://mirrors.tuna.tsinghua.edu.cn/clojars/` 同样可取到（200），是可用的 Clojars 镜像；而阿里云 `maven.aliyun.com/repository/public/` 对该构件返回 404——故"某镜像能不能替代 Clojars"**按镜像实测，不按镜像名假定**。**注意** `org/clojure/clojure` 一类坐标**本就不在 Clojars**（它来自中央仓）：实测中央仓镜像 200，而 Clojars 官方 `repo.clojars.org` 与 TUNA 镜像**均 404**——这是"坐标归属搞错"、不是镜像失效，不得据此判定 Clojars 源不可用。
-* **npm（Node / 前端）**：腾讯云 `https://mirrors.cloud.tencent.com/npm/`（**目录路径 `/npm/` 本身返回 404 属该镜像的正常形态**，按包名取 `https://mirrors.cloud.tencent.com/npm/lodash` 返回 200 的完整 packument——**判可用性要取确定存在的包、不要只请求站点/目录根**）、npmmirror（阿里）`https://registry.npmmirror.com/`、华为云 `https://repo.huaweicloud.com/repository/npm/` **均可用**（量级 104–265 ms）；npm 官方源 `https://registry.npmjs.org/` 亦可用（响应携带 CDN 标识，246 ms）。**注意**：清华 TUNA 与中科大已**不再**提供 npm registry 目录（两者按包名实测均 404，TUNA 镜像清单中亦无 npm 目录），不要按旧资料写入配置。
-* **pip / PyPI**：腾讯云 `https://mirrors.cloud.tencent.com/pypi/simple/`、阿里云 `https://mirrors.aliyun.com/pypi/simple/`、华为云 `https://repo.huaweicloud.com/repository/pypi/simple/`、清华 `https://pypi.tuna.tsinghua.edu.cn/simple/` **均可用**（量级 91–290 ms）；PyPI 官方源 `https://pypi.org/simple/` 亦可用（188 ms）。
-* **Rust / Cargo**：清华稀疏索引 `https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/` 可用（`config.json` 200）；字节 `https://rsproxy.cn/index/` 可用（325 ms）；官方稀疏索引 `https://index.crates.io/` 与静态包 `https://static.crates.io/` 可用（373–380 ms）——**官方侧本身就是 CDN 前置**（响应服务器为云存储/CDN 标识），故"境外源一定慢"不成立，只成立"更远一级"这个次序。
-* **Go modules**：`https://goproxy.cn/`（七牛，境内）可用（458 ms）；阿里云 `https://mirrors.aliyun.com/goproxy/` 可用但**当时抖动明显**（2931 ms，同类里并非最快）；`https://goproxy.io/`（CDN 前置）可用（1061 ms）——**同站不同时段差异大**，再次说明"单次采样不能当结论"。
-* **RubyGems**：腾讯云 `https://mirrors.cloud.tencent.com/rubygems/`（38 ms）、阿里云 `https://mirrors.aliyun.com/rubygems/`、官方 `https://rubygems.org/` **均可用**（184–303 ms）。
+* **Maven / Gradle / SBT**：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`、阿里云 `https://maven.aliyun.com/repository/public/`、华为云 `https://repo.huaweicloud.com/repository/maven/` **均可用**；中央仓源站 `https://repo1.maven.org/maven2/` 亦可用（响应携带 CDN 标识）——**属更远一级的兜底**。**注意**：清华 TUNA、中科大等高校镜像站**没有** Maven Central 目录（实测无 `maven`/`maven-central` 路径），不要把它们当中央仓镜像写进配置。
+* **Clojars（Clojure 生态）**：**先实测中央仓镜像是否已代理该构件，再决定要不要另加 Clojars 源**——本环境实测腾讯云 `maven-public/` 是**聚合仓库**，某 Clojars 构件的 `.jar`/`.pom` **可直接取到**（200）；清华 TUNA `https://mirrors.tuna.tsinghua.edu.cn/clojars/` 同样可取到（200）；而阿里云 `maven.aliyun.com/repository/public/` 对该构件返回 404——故"某镜像能不能替代 Clojars"**按镜像实测，不按镜像名假定**。**注意** `org/clojure/clojure` 一类坐标**本就不在 Clojars**（它来自中央仓）：实测中央仓镜像 200，而 Clojars 官方与 TUNA 镜像**均 404**——这是"坐标归属搞错"、不是镜像失效。
+* **npm（Node / 前端）**：腾讯云 `https://mirrors.cloud.tencent.com/npm/`（**目录路径 `/npm/` 本身返回 404 属该镜像的正常形态**，按包名取 `https://mirrors.cloud.tencent.com/npm/lodash` 返回 200 的完整 packument——**判可用性要取确定存在的包、不要只请求站点/目录根**）、npmmirror（阿里）`https://registry.npmmirror.com/`、华为云 `https://repo.huaweicloud.com/repository/npm/` **均可用**；npm 官方源 `https://registry.npmjs.org/` 亦可用。**注意**：清华 TUNA 与中科大已**不再**提供 npm registry 目录（两者按包名实测均 404），不要按旧资料写入配置。
+* **pip / PyPI**：腾讯云 `https://mirrors.cloud.tencent.com/pypi/simple/`、阿里云 `https://mirrors.aliyun.com/pypi/simple/`、华为云 `https://repo.huaweicloud.com/repository/pypi/simple/`、清华 `https://pypi.tuna.tsinghua.edu.cn/simple/` **均可用**；PyPI 官方源亦可用。
+* **Rust / Cargo**：清华稀疏索引 `https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/` 可用；字节 `https://rsproxy.cn/index/` 可用；官方稀疏索引 `https://index.crates.io/` 与静态包 `https://static.crates.io/` 可用——**官方侧本身就是 CDN 前置**，故"境外源一定慢"不成立，只成立"更远一级"这个次序。
+* **Go modules**：`https://goproxy.cn/`（境内）可用；阿里云 `https://mirrors.aliyun.com/goproxy/` 可用但**当时抖动明显**；`https://goproxy.io/` 可用——**同站不同时段差异大**，再次说明"单次采样不能当结论"。
+* **RubyGems**：腾讯云 `https://mirrors.cloud.tencent.com/rubygems/`、阿里云、官方 `https://rubygems.org/` **均可用**。
 
 === 容器镜像与系统包（CI/CD 场景）
 
-* **容器镜像**：**平台内/云厂商内网 registry mirror 是首选**——本项目实测腾讯云内网镜像加速地址（`mirror.ccs.tencentyun.com`，解析到内网地址）在 **19 ms** 量级返回；Docker Hub 官方端点返回 `401`（**属正常鉴权行为**，需 token 流程，本项**未测速**，标**未确证**）。**镜像加速地址属平台配置、会随环境变化**，故规则要求"以当前环境实测可取到为准、不得写死"（见 link:../specs/platform/cnb.adoc[]「包源与镜像源（平台侧优先口径）」）。
-* **Linux 系统包（`apt`/`apk`，CI 镜像内换源）**：腾讯云（`debian`/`ubuntu`/`alpine`，34–43 ms）、阿里云（218–315 ms）、中科大（apk 941 ms）**均可用**——**镜像内换源是"未配置过源"的典型场景**，故规则把"按次序选源"适用到 CI 装配步骤。
-* **语言运行时/SDK 二进制**：腾讯云 `nodejs-release`（214 ms）、腾讯云 `gradle`（50 ms）、华为云 `nodejs`/`gradle`（97–102 ms）、清华 `nodejs-release` 可用；npmmirror 的二进制目录 `https://registry.npmmirror.com/-/binary/` 可用（333 ms）——**JDK/Gradle/Node 这类发行包同样按次序取源**（规则见技术栈文件，如 link:../specs/stack/java.adoc[]）。
-* **GitHub 资源**：清华 TUNA 提供 `github-release`/`github-raw` 目录（存在于其镜像清单）；`raw.githubusercontent.com`（349 ms）与 `codeload.github.com`（405 ms）可用——**raw/release 属境外源，按次序为兜底**；**注意**：第三方 GitHub 加速域名不在本集合推荐面内（来源与稳定性不可控，且违反"来源可信"）。
+* **容器镜像**：**平台内/云厂商内网 registry mirror 是首选**——本项目实测腾讯云内网镜像加速地址在 **19 ms** 量级返回；Docker Hub 官方端点返回 `401`（**属正常鉴权行为**，需 token 流程，本项**未测速**，标**未确证**）。**镜像加速地址属平台配置、会随环境变化**，故规则要求"以当前环境实测可取到为准、不得写死"（见 `specs/platform/cnb.adoc`「包源与镜像源（平台侧优先口径）」）。
+* **Linux 系统包（`apt`/`apk`，CI 镜像内换源）**：腾讯云（`debian`/`ubuntu`/`alpine`）、阿里云、中科大 **均可用**——**镜像内换源是"未配置过源"的典型场景**，故规则把"按次序选源"适用到 CI 装配步骤。
+* **语言运行时/SDK 二进制**：腾讯云 `nodejs-release`、腾讯云 `gradle`、华为云 `nodejs`/`gradle`、清华 `nodejs-release` 可用；npmmirror 的二进制目录可用——**JDK/Gradle/Node 这类发行包同样按次序取源**。
+* **GitHub 资源**：清华 TUNA 提供 `github-release`/`github-raw` 目录；`raw.githubusercontent.com` 与 `codeload.github.com` 可用——**raw/release 属境外源，按次序为兜底**；**注意**：第三方 GitHub 加速域名不在本集合推荐面内（来源与稳定性不可控，且违反"来源可信"）。
 
 === 已知限制（如实标注，避免读成硬结论）
 
-* **单次采样**：上列延迟均为**单次采样**，**不构成"某源更快"的结论**（外部材料与本站判据见 link:performance.adoc[]）——本篇的用途是**记录"当时哪些源可用、量级如何"**，供后来者复核"这条推荐今天还成立吗"。
-* **环境相关**：本环境经代理化出口、且与所用云为同一家，**换网络/换云/换时段须重新实测**；"先实测再启用"这条规则正是为这条限制而设（不是不信任文档，而是文档记录的时点与你的时点不同）。
+* **单次采样**：上列延迟均为**单次采样**，**不构成"某源更快"的结论**——本篇的用途是**记录"当时哪些源可用、量级如何"**，供后来者复核"这条推荐今天还成立吗"。
+* **环境相关**：本环境经代理化出口、且与所用云为同一家，**换网络/换云/换时段须重新实测**。
 * **未确证项**：Docker Hub 端点的**速度**未测（返回 401 鉴权响应）；第三方镜像加速站的稳定性未评估（本集合不推荐来源不明的加速域名）。
 * **取样方式（可复取）**：对目标地址发一次 `curl -sS -o /dev/null -w "%{http_code} %{time_total}" --max-time 12 <确定的产物 URL>`（或 `Range: bytes=0-N` 只取一段）；**每一项都要取"确定存在的产物"**，不要只请求站点根（根路径 404 不代表镜像不可用）。

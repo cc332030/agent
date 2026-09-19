@@ -1,24 +1,21 @@
 = Maven 规范（技术栈层）
 
-以下规范适用于 **Maven 构建**。加载触发特征：项目存在 `pom.xml`、`mvnw`/`mvnw.cmd`。构建/依赖调整前须加载本文件。Node 等其它构建工具按对应栈文件规范。
+适用于 **Maven 构建**。加载触发特征：项目存在 `pom.xml`、`mvnw`/`mvnw.cmd`。构建/依赖调整前须加载本文件。Node 等其它构建工具按对应栈文件规范。
 
 == 仓库与镜像
 
-=== 可选源与取舍
-
-* **推荐源（同一级里可互换）**：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`（**首选，见下条**）、阿里云 `https://maven.aliyun.com/repository/public/`、华为云 `https://repo.huaweicloud.com/repository/maven/`。**中央仓的官方源**（`repo1.maven.org`，经由全球边缘加速）属**更远一级的兜底**，仅在境内源全部实测不可用时才用；**Clojars 的构件**另见下条。
-* **先实测可用再启用、一次配置到位（L1）**：动手构建前对候选源做一次真实请求（取一个确定存在的构件，如某坐标的 `.pom`）确认可取；**已配置过即沿用**（不覆盖、不重配）；**不得**每轮重试同一个源。判定标准、选源次序与降级条件见 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」。
+* **未配置过 Maven 仓库/镜像、且外网出口 IP 在中国大陆时（L1）**：**动手构建前**，用腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/` 作为 Maven 中央仓库。**必须先用这个仓库**，不得自行另挑镜像站；**仅当它不可用**（连不上、代理不到、报错取不到构件，配置后实测确认）才允许改用**其他在境内的镜像站**。**已配置过即不做**：沿用引用方既有配置，不覆盖、不重配。
+* **推荐源（同一级里可互换）**：腾讯云（首选，见上条）、阿里云 `https://maven.aliyun.com/repository/public/`、华为云 `https://repo.huaweicloud.com/repository/maven/`。**中央仓的官方源**（`repo1.maven.org`，经由全球边缘加速）属**更远一级的兜底**，仅在境内源全部实测不可用时才用。**注意**：清华 TUNA、中科大等高校镜像站**没有** Maven Central 目录（实测无 `maven`/`maven-central` 路径），不要把它们当中央仓镜像写进配置。
+* **先实测可用再启用、一次配置到位（L1）**：动手构建前对候选源做一次真实请求（取一个确定存在的构件，如某坐标的 `.pom`）确认可取；**已配置过即沿用**；**不得**每轮重试同一个源。判定标准、选源次序与降级条件见 `specs/general/dependency.adoc`「包源（包仓库/镜像站）的选用」。
 * **`<mirrorOf>` 取值（L1）**：镜像代理中央仓时 `mirrorOf` 写 `central` 或 `*`；**已经指向私服/其他源的 `repository` 不得被 `*` 整体吞掉**（`mirrorOf` 写成 `*` 会把私服也镜像走，导致私有构件取不到）——私服存在时按 `<mirrorOf>central</mirrorOf>` 或 `external:*` 一类写法把它排除在外。
-* **Clojure/Clojars 构件**：`clojure`、`clojars` 的第三方构件（如 `clj-tiny-astar` 一类坐标）不在中央仓，须另加 Clojars 源；境内可用的镜像见 link:../stack/java.adoc[]「依赖与仓库（Clojars）」（**中央仓镜像不能替代 Clojars**）。
-
-* **未配置过 Maven 仓库/镜像、且外网出口 IP 在中国大陆时（L1）**：**动手构建前**，让 AI 使用 link:https://mirrors.cloud.tencent.com/nexus/repository/maven-public/[`https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`] 作为 Maven 中央仓库。**必须先用这个仓库**，不得自行另挑镜像站；**仅当它不可用**（连不上、代理不到、报错取不到构件，配置后实测确认）才允许改用**其他在境内的镜像站**。**已配置过即不做**：沿用引用方既有配置，不覆盖、不重配。
+* **Clojure/Clojars 构件**：`clojure`、`clojars` 的第三方构件不在中央仓，须另加 Clojars 源；境内可用的镜像与实测结论见 `specs/stack/java.adoc`「依赖与仓库（Clojars）」（**中央仓镜像不能替代 Clojars**，但可能已代理该构件——先实测）。
 
 == 依赖
 
-* 严禁私自调整依赖（依赖声明与传递依赖解析规则见 Maven 官方文档的依赖机制一章）
-* 除非有必要（如避免传递依赖版本漂移、传递路径可能失效），否则不重复声明依赖；传递依赖已满足时不显式声明
+* **严禁私自调整依赖**（依赖声明与传递依赖解析规则见 Maven 官方文档的依赖机制一章）。
+* **除非有必要**（避免传递依赖版本漂移、传递路径可能失效），否则不重复声明依赖；传递依赖已满足时不显式声明。
 
 == 构建与验证
 
-* 同一 Maven 模块禁止并行构建（通用规则见 link:../general/testing.adoc[]「执行与验证」）；多 agent 协作时同一模块分阶段执行（先写测试文件，再串行执行验证），避免构建冲突
-* 验证以 Maven 结果为准：Windows cmd 下编译失败 exit code 可能为 0，不得仅凭 exit code 判断，必须依据 surefire 的 Tests run/Failures/Errors/Skipped 统计判断是否通过；输出重定向到文件、"获取统计一步到位"等通用验证规则见 link:../general/verify.adoc[]「编译/运行验证」
+* **同一 Maven 模块禁止并行构建**（通用规则见 `specs/general/testing.adoc`「执行与验证」）；多 agent 协作时同一模块分阶段执行（先写测试文件，再串行执行验证），避免构建冲突。
+* **验证以 Maven 结果为准**：Windows cmd 下编译失败 exit code 可能为 0，不得仅凭 exit code 判断，必须依据 surefire 的 `Tests run/Failures/Errors/Skipped` 统计判断是否通过；输出重定向到文件、"获取统计一步到位"等通用验证规则见 `specs/general/verify.adoc`「编译/运行验证」。

@@ -5,15 +5,15 @@
 == 使用与核对
 
 * **怎么用**：规范正文或项目决策引用了某标准时，在本文件按标准名查原文，确认"这条标准确实支持这条规则"（`specs/general/verify.adoc`「规范验证」②要求核对"引用的标准**确实支持该条**"，不得只验证依据行还在）；原文也是**举一反三**的入口。
-* **怎么核对**：正文数字编号、字面词、声称类条目附的原文片段都是**逐字摘录**，可追溯到所标来源；本仓库由机械校验核对其中关键片段仍在（见 `specs/general/verify.adoc`「规范验证」）。摘录是**节选**（标注"摘"），不替代标准原文。
-* **校对边界（怎么判断"逐字"是否可信）**：每条依据都带**取样来源标记**，可据此复核——①标"**官方文本已取回**"者（RFC 系列、SemVer、Maven 插件文档、SemVer/git 官方文档等），是用命令实际取回官方文本后比对，**可复取**：例如 `curl -s https://www.rfc-editor.org/rfc/rfc2119.txt` 即得到该文件引文所在原文；②标"**官方网页已取回**"者（IEEE/ISO 的题名页），是同法取回题名后比对（**仅题名与版本号**可逐字核对）；③标"**未逐字取回**"者（编写时该官方页返回的是 JS 壳、正文不可取），已**如实标注且不引用其字句**，只保留静态可查的题名/版本/状态。
+* **怎么核对**：正文数字编号、字面词、声称类条目附的原文片段都是**逐字摘录**，可追溯到所标来源；本仓库由机械校验核对其中关键片段仍在。摘录是**节选**（标注"摘"），不替代标准原文。
+* **校对边界（怎么判断"逐字"是否可信）**：每条依据都带**取样来源标记**，可据此复核——① 标"**官方文本已取回**"者（RFC 系列、SemVer、Maven 插件文档、git 官方文档等），是用命令实际取回官方文本后比对，**可复取**：例如 `curl -s https://www.rfc-editor.org/rfc/rfc2119.txt` 即得到该文件引文所在原文；② 标"**官方网页已取回**"者（IEEE/ISO 的题名页），是同法取回题名后比对（**仅题名与版本号**可逐字核对）；③ 标"**未逐字取回**"者（编写时该官方页返回的是 JS 壳、正文不可取），已**如实标注且不引用其字句**，只保留静态可查的题名/版本/状态。
 * **复核的动作（可执行）**：抽查任一条——先看它的取样来源标记，命中 ①/② 时按上述方式取回官方文本比对引文；命中 ③ 时核对"是否确实没有引用字句"（若引用了字句却没标可复取来源，即为不合格）。
 
 == IEEE 1028（软件评审与审查）
 
 * 正式题名（IEEE 标准**摘要页**官方网页已取回）：Software Reviews and Audits。
-* 版本与状态：IEEE Std 1028-2008（由 IEEE Std 1028-1997 修订）。**状态信息（静态可查、官方摘要素材来源）**：该标准摘要页标注为 Inactive-Reserved（非现行保留），并已由 **ISO/IEC/IEEE 1028:2025** 取代——引用时须知道它已不是现行版本（`specs/general/source.adoc`「引用现行版本」）。本集合引用时**只写标准名/编号**（`specs/general/source.adoc`「只写标准名/编号、不附链接」），用途为**评审这一手段的依据**，不涉版本条款比对（见本文件「关于标准版本年份」）。
-* 使用位置：`specs/general/review.adoc`、`specs/general/testing.adoc`「验证总纲」「规范验证」、`specs/general/collab.adoc`（作为"须另起独立上下文复核"的依据）。
+* 版本与状态：IEEE Std 1028-2008（由 IEEE Std 1028-1997 修订）。**状态信息（静态可查、官方摘要素材来源）**：该标准摘要页标注为 Inactive-Reserved（非现行保留），并已由 **ISO/IEC/IEEE 1028:2025** 取代——引用时须知道它已不是现行版本（`specs/general/source.adoc`「引用现行版本」）。本集合引用时**只写标准名/编号**，用途为**评审这一手段的依据**，不涉版本条款比对。
+* 使用位置：`specs/general/review.adoc`、`specs/general/verify.adoc`「验证总纲」「规范验证」、`specs/general/collab.adoc`（作为"须另起独立上下文复核"的依据）。
 
 == IEEE 1016（软件设计描述）
 
@@ -24,60 +24,60 @@
 == ISO/IEC/IEEE 29119-4（软件测试——测试技术）
 
 * 标准名（ISO 官方网页已取回）：Software and systems engineering — Software testing — Part 4: Test techniques。
-* 官方页（`iso.org/standard/81291.html`，2026-09-12 取回）标注：**Edition 2, 2021-10**（取代 Edition 1, 2015），国际标准分类号 35.080。
+* 官方页标注：**Edition 2, 2021-10**（取代 Edition 1, 2015），国际标准分类号 35.080。
 * **未逐字取回摘要**：编写时该页返回的是 JS 壳（无摘要文本），故**不引用其摘要字句**；此处只保留题名/版本/状态这类取自官方页的元信息。要点"测试技术分为黑盒、白盒与经验型"由标准题名与范围表述（Test techniques）静态可查，如需逐字比对，请以标准第 1 章 Scope 与第 4 章为对照面。
 * 用途：`specs/general/testing.adoc`「设计方法」的白盒/黑盒/经验补充分类与边界值、等价类划分、判定/条件覆盖、决策表等技术的依据。
 
 == ISO/IEC/IEEE 25010（系统与软件质量模型）
 
 * 标准名（ISO 官方网页已取回）：Systems and software engineering — Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model。
-* 版本：ISO/IEC 25010:2023（**Edition 2**，2023-11 发布，取代 2011 年版）；官方页（`iso.org/standard/78176.html`）标国际标准分类号 35.080。
+* 版本：ISO/IEC 25010:2023（**Edition 2**，2023-11 发布，取代 2011 年版）；官方页标国际标准分类号 35.080。
 * **未逐字取回摘要**：编写时该页返回 JS 壳，故此处**不引用其特性清单的字句**；"性能效率""信息安全性"是 25010 质量特性的通用名称（静态可查），如需逐字比对，请以标准第 5 章 Product quality model 为对照面。
-* 用途：`specs/general/testing.adoc`「运行契约」②成本（"不得以不贵含糊带过"）、`specs/general/testing.adoc`「规范验证」②第⑥维性能、`specs/general/security.adoc` 的安全底线。
-* **须注意的语义差异**：258 页级术语是**产品质量特性**，本集合用作"性能/安全是**质量特性**、其代价须说得清"的依据，**未**声称某项目须通过某项 25010 评估（同义性要求见 `specs/general/source.adoc`「外部引用」）。
+* 用途：`specs/general/verify.adoc`「运行契约」②成本、`specs/general/security.adoc` 的安全底线、`specs/general/coding.adoc`「代码质量」的十项判据方向。
+* **须注意的语义差异**：该标准是**产品质量特性**模型，本集合用作"性能/安全是**质量特性**、其代价须说得清"的依据，**未**声称某项目须通过某项 25010 评估。
 
 == ISO/IEC/IEEE 29148（需求工程）
 
 * 标准名（ISO 官方网页已取回）：Systems and software engineering — Life cycle processes — Requirements engineering。
 * 版本：ISO/IEC/IEEE 29148:2018（**Edition 2**，2018-11 发布）。
-* **未逐字取回摘要**：编写的 2026-09-12 该页（`iso.org/standard/72089.html`）返回 JS 壳（无摘要文本），故此处**不引用摘要字句**（宁可标"未确证"也不编：`specs/general/source.adoc`「无法确证时的正确做法」）。
-* 可静态确证的要点（标准题名的范围表述：Requirements engineering）：需求须**单一、无歧义、可验证、可追溯**——本集合据此用于 「如何给一条规范定级」「归属谁」与 `specs/general/testing.adoc`「验证总纲」。如需逐字比对，请以标准第 5 章（Requirements engineering processes）与附录 A（需求书写特性）为对照面。
-* 用途：可追溯（`specs/general/source.adoc`、`specs/general/testing.adoc`「验证总纲」）、需求须单一/无歧义/可验证/可追溯（「如何给一条规范定级」「归属谁」）、干系人需求（`specs/general/testing.adoc`「运行契约」）。
+* **未逐字取回摘要**：编写时该页返回 JS 壳（无摘要文本），故此处**不引用摘要字句**（宁可标"未确证"也不编）。
+* 可静态确证的要点（标准题名的范围表述：Requirements engineering）：需求须**单一、无歧义、可验证、可追溯**——本集合据此用于「如何给一条规范定级」「归属谁」与 `specs/general/verify.adoc`「验证总纲」。如需逐字比对，请以标准第 5 章与附录 A（需求书写特性）为对照面。
+* 用途：可追溯（`specs/general/source.adoc`、`specs/general/verify.adoc`「验证总纲」）、需求须单一/无歧义/可验证/可追溯（定级口径与归属谁）、干系人需求（`specs/general/verify.adoc`「运行契约」）。
 
 == ISO/IEC Directives Part 2（规则起草与表述）
 
 * 标准名：ISO/IEC Directives, Part 2 — Principles and rules for the structure and drafting of ISO and IEC documents。
 * 版本：**Edition 9.0, 2021**（题名与版本号静态可查；编写时 ISO/IEC 官方页返回 JS 壳，未逐字取回正文）。
-* 用途：要求（shall）与建议（should）不得混用、**要求须可验证**、说明性内容不构成要求——见 `specs/core/execution.adoc`「分级与最高关注项」、「与条款类型一一对应」「定级口径四问」。
+* 用途：要求（shall）与建议（should）不得混用、**要求须可验证**、说明性内容不构成要求——见 `specs/core/execution.adoc`「分级与最高关注项」与定级口径的条款类型判定表。
 * 说明：本集合**引用其原则**（"要求须可验证""要求与建议不混用"），未逐条比对 2021 版条款原文；如需逐字比对，可以该版第 3 章（Verbal forms）与附录 H 为对照面。
 
 == ISO 10007（配置管理指南）
 
 * 标准名：Quality management — Guidelines for configuration management。
 * 版本：**ISO 10007:2017**（Edition 3）。
-* 用途：变更控制与可追溯（ P1/P2/P3/P5 的依据、`specs/general/testing.adoc`「验证总纲」①完整性）；「改动范围边界」条所引的"变更须有明确的对象与范围、受控可追溯"；以及「**改动前先定基线**」（`specs/general/planning.adoc`）——基线＝变更前既有行为的可追溯状态，改完与基线逐项比对即该标准的变更控制动作。**注意同义性差异**：该标准**未**规定"执行者只允许修改某一份工作空间/某一个项目"，也**未**规定"动手前必须先跑通既有校验手段并留证"（后者是本集合按该标准变更控制要求做的判据化取舍，见 `library/adoption.adoc`「开发流程」条）。
+* 用途：变更控制与可追溯（P1/P2/P3/P5 的依据、`specs/general/verify.adoc`「验证总纲」①完整性）；「改动范围边界」条所引的"变更须有明确的对象与范围、受控可追溯"；以及「**改动前先定基线**」（`specs/general/planning.adoc`）——基线＝变更前既有行为的可追溯状态。**注意同义性差异**：该标准**未**规定"执行者只允许修改某一份工作空间/某一个项目"，也**未**规定"动手前必须先跑通既有校验手段并留证"（后者是本集合按该标准变更控制要求做的判据化取舍）。
 
 == ISO 9001（质量管理体系——要求）
 
 * 标准名：Quality management systems — Requirements。
 * 版本：**ISO 9001:2015**（Edition 5）。
-* 用途：**文件化信息的控制**（成文信息须受控、可追溯）——`specs/general/testing.adoc`「验证总纲」。
-* 说明：标准正式用语是"**documented information**（成文信息）"；本集合多处写作"文件信息控制"，指的是 ISO 9001 中这一类控制要求，**同义性已在此说明**（`specs/general/source.adoc`「外部引用」）。
+* 用途：**成文信息的控制**（成文信息须受控、可追溯）——`specs/general/verify.adoc`「验证总纲」。
+* 说明：标准正式用语是"**documented information**（成文信息）"；本集合多处写作"文件信息控制"，指的是 ISO 9001 中这一类控制要求，**同义性已在此说明**。
 
 == ISO 9241-110（交互原则）
 
 * 标准名（ISO 官方网页已取回）：Ergonomics of human-system interaction — Part 110: Interaction principles。
 * 版本：**ISO 9241-110:2020**（Edition 2）。
-* 作用（按官方题名与通用说明，**未逐字取回摘要**）：该部分规定人机交互原则（通用名称含**可控性与符合预期**等）；本集合据此论证"公共内容被未知项目加载时须**可预期、可关闭、能自行执行、不得阻断**"（`specs/general/testing.adoc`「运行契约」③可控性）。
-* **须注意的语义差异（同义性）**：9241-110 的对象是**人机交互**，本集合把它**类推**到"规范被未知项目加载"这一"人与规则的交互"，属**借用其原则**而非声称标准直接规定软件规范；此处的映射关系须如实说明，不得当成标准原文（`specs/general/source.adoc`「外部引用」）。
+* 作用（按官方题名与通用说明，**未逐字取回摘要**）：该部分规定人机交互原则（通用名称含**可控性与符合预期**等）；本集合据此论证"公共内容被未知项目加载时须**可预期、可关闭、能自行执行、不得阻断**"（`specs/general/verify.adoc`「运行契约」③可控性）。
+* **须注意的语义差异（同义性）**：9241-110 的对象是**人机交互**，本集合把它**类推**到"规范被未知项目加载"这一"人与规则的交互"，属**借用其原则**而非声称标准直接规定软件规范；此处的映射关系须如实说明，不得当成标准原文。
 
 == RFC 2119 / RFC 8174（要求级别的用语）
 
 * **RFC 2119**（BCP 14）：Key words for use in RFCs to Indicate Requirement Levels。官方文本已取回，两处逐字摘：
-  ** 用语清单："The key words `"MUST"`, `"MUST NOT"`, `"REQUIRED"`, `"SHALL"`, `"SHALL NOT"`, `"SHOULD"`, `"SHOULD NOT"`, `"RECOMMENDED"`, `"MAY"`, and `"OPTIONAL"`"（原文用双引号包裹各词）。
-  ** 强度语义："1. MUST   This word, or the terms `"REQUIRED"` or `"SHALL"`, mean that the definition is an absolute requirement of the specification."、"2. MUST NOT   This phrase, or the phrase `"SHALL NOT"`, mean that the definition is an absolute prohibition of the specification."（另注："Note that the force of these words is modified by the requirement level of the document in which they are used."）
+** 用语清单："The key words `"MUST"`, `"MUST NOT"`, `"REQUIRED"`, `"SHALL"`, `"SHALL NOT"`, `"SHOULD"`, `"SHOULD NOT"`, `"RECOMMENDED"`, `"MAY"`, and `"OPTIONAL"`"（原文用双引号包裹各词）。
+** 强度语义："1. MUST   This word, or the terms `"REQUIRED"` or `"SHALL"`, mean that the definition is an absolute requirement of the specification."、"2. MUST NOT   This phrase, or the phrase `"SHALL NOT"`, mean that the definition is an absolute prohibition of the specification."（另注："Note that the force of these words is modified by the requirement level of the document in which they are used."）
 * **RFC 8174**（BCP 14 的澄清，2017-05）：Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words。官方文本已取回，逐字摘（第 2 节 NEW 文本）："In many IETF documents, several words, **when they are in all capitals as shown below**, are used to signify the requirements in the specification."（要点：**只有全大写且本身是规范用语时**才具约束力）。
-* 用途：`specs/core/execution.adoc`「分级与最高关注项」（L1/L2/L3 的用语归并）、「与条款类型一一对应」、`prompts/_common.txt` 的 `priority-rules`。
+* 用途：`specs/core/execution.adoc`「分级与最高关注项」、定级口径的条款类型表、`prompts/_common.txt` 的 `priority-rules`。
 
 == RFC 3629（UTF-8）
 
@@ -95,7 +95,7 @@
 
 * RFC 6749（OAuth 2.0 授权框架）：The OAuth 2.0 Authorization Framework。用途：`specs/general/security.adoc`「认证、授权与会话」。
 * RFC 9700（OAuth 2.0 安全最佳实践；**2025-01 发布，取代 RFC 6819**）：Best Current Practice for OAuth 2.0 Security。用途：同上——引用时写 **RFC 9700**，不写已被取代的 RFC 6819。
-* RFC 7617（HTTP Basic 认证）：The 'Basic' HTTP Authentication Scheme。用途：同上（凭据传输与会话标识不得进 URL/日志的同类依据）。
+* RFC 7617（HTTP Basic 认证）：The 'Basic' HTTP Authentication Scheme。用途：同上。
 * RFC 8018（PKCS #5 口令基密钥派生）：PKCS #5: Password-Based Cryptography Specification Version 2.1。用途：`specs/general/security.adoc`「不自行发明加密与认证」中口令存储（慢哈希/KDF）的依据。
 
 == NIST SP 800-63B（数字身份指南——认证与生命周期）
@@ -105,47 +105,46 @@
 
 == OWASP 与 CWE（安全风险与弱点）
 
-* OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据、`specs/general/review.adoc`「安全视角」。
-* OWASP ASVS（Application Security Verification Standard，应用安全验证标准）：应用安全验证要求清单；现行主线为 **ASVS 5.0**（2025）。用途：同上。
+* OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据。
+* OWASP ASVS（Application Security Verification Standard）：应用安全验证要求清单；现行主线为 **ASVS 5.0**（2025）。用途：同上。
 * CWE（Common Weakness Enumeration）：软件弱点编号体系。被点名编号：**CWE-502**（Deserialization of Untrusted Data）、**CWE-208**（Observable Timing Discrepancy）、**CWE-209**（Generation of Error Message Containing Sensitive Information）、**CWE-489**（Active Debug Code）。用途：`specs/general/security.adoc` 各条末尾的编号标注——编号即"这条要求针对哪一类已知弱点"的锚点。
 
 == Semantic Versioning 2.0.0
 
-* 标准名：Semantic Versioning 2.0.0（作者 Tom Preston-Werner）。逐字摘（官方文本已取回）："Given a version number MAJOR.MINOR.PATCH, increment the: MAJOR version when you make incompatible API changes, MINOR version when you add functionality in a backwards compatible manner, and PATCH version when you make backwards compatible bug fixes."，以及标题句"…'v1.2.3'…"所定义的版本形态。
-* 用途：`specs/general/doc-design.adoc`「版本与变更记录」（版本号递增语义）。**本集合的取舍**：只采用其主/次版本递增语义，**不采用**完整三段式与预发布标识要求——规则与标准不一致处须显式覆盖（`specs/general/source.adoc`「外部引用」）。
+* 标准名：Semantic Versioning 2.0.0（作者 Tom Preston-Werner）。逐字摘（官方文本已取回）："Given a version number MAJOR.MINOR.PATCH, increment the: MAJOR version when you make incompatible API changes, MINOR version when you add functionality in a backwards compatible manner, and PATCH version when you make backwards compatible bug fixes."，以及标题句"'v1.2.3'"所定义的版本形态。
+* 用途：`specs/general/doc-design.adoc`「版本与变更记录」（版本号递增语义）。**本集合的取舍**：只采用其主/次版本递增语义，**不采用**完整三段式与预发布标识要求。
 
 == 变更日志的形态（Keep a Changelog 1.1.0 / Conventional Commits 1.0.0 / Conventional Changelog）
 
-**官方文本已全部取回**（`https://keepachangelog.com/en/1.1.0/`、`https://www.conventionalcommits.org/en/v1.0.0/`、`conventional-changelog` 仓库的 `packages/conventional-changelog-conventionalcommits/src/constants.js` 与 `packages/template/src/templates.ts`）——**注意这是业界约定（convention）而非 ISO/IEC 标准**：Keep a Changelog 自述 **"Is there a standard changelog format? Not really."**（"没有真正的标准格式"，它只"a better changelog convention"，即从开源社区的好做法里归纳出的约定），故本条**只作依据、不作强制面**。
+**官方文本已全部取回**——**注意这是业界约定（convention）而非 ISO/IEC 标准**：Keep a Changelog 自述 **"Is there a standard changelog format? Not really."**（"没有真正的标准格式"），故本条**只作依据、不作强制面**。
 
 * **Keep a Changelog 1.1.0 —— 逐字（Guiding Principles）**："Changelogs are for humans, not machines."、"There should be an entry for every single version."、"The same types of changes should be grouped."、"Versions and sections should be linkable."、"The latest version comes first."、"The release date of each version is displayed."、"Mention whether you follow Semantic Versioning."
-* **Keep a Changelog 1.1.0 —— 逐字（Types of changes，即类型闭集）**："Added for new features."、"Changed for changes in existing functionality."、"Deprecated for soon-to-be removed features."、"Removed for now removed features."、"Fixed for any bug fixes."、"Security in case of vulnerabilities."
+* **Keep a Changelog 1.1.0 —— 逐字（Types of changes）**："Added for new features."、"Changed for changes in existing functionality."、"Deprecated for soon-to-be removed features."、"Removed for now removed features."、"Fixed for any bug fixes."、"Security in case of vulnerabilities."
 * **Keep a Changelog 1.1.0 —— 逐字（Bad Practices 两段）**："Using commit log diffs as changelogs is a bad idea: they're full of noise."；以及 **Inconsistent Changes** 段："A changelog which only mentions some of the changes can be as dangerous as not having a changelog."、"By inconsistently applying changes, your users may mistakenly think that the changelog is the single source of truth. It ought to be."（**"它本该是"**——这句是本集合把"内容不减少"写成条目的依据）。
-* **Keep a Changelog 1.1.0 —— 逐字（FAQ，两处与本集合取舍直接相关）**："Should you ever rewrite a changelog? Sure. There are always good reasons to improve a changelog."（**重写日志是正当动作**，本集合据此允许"按组织方式重组、但不改事实"）；"It's difficult, because people follow wildly different formats and file names."（**机器解析困难**——故本集合的"机械抓手"只钉形态与要素，不指望自动生成）。
-* **Conventional Changelog（preset）—— 逐字（分组与类型映射）**：`constants.js` 里 `group_by` 默认 `"Type"`、`sort_by` 默认 `"Title"`（**该默认是组内再排序、不涉及版本之间**——"最新版本在最上"是全工具链的默认方向），类型表 `DEFAULT_COMMIT_TYPES` 逐条形如 `{ type: 'feat', section: 'Features', effect: 'bump' }`、`{ type: 'fix', section: 'Bug Fixes', ... }`、`{ type: 'perf', section: 'Performance Improvements', ... }`，并对 `docs`/`style`/`chore`/`refactor`/`test`/`build`/`ci` 标 `effect: 'hidden'`（**对外无感知者不显示**）。
-* **Conventional Changelog（preset）—— 逐字（破坏性变更的两处落点）**：`templates.ts` 的 `BREAKING_CHANGE_KEYWORDS = ['BREAKING CHANGE', 'BREAKING-CHANGE']`、`BREAKING_CHANGES_TITLE = 'BREAKING CHANGES'`，且 `formatNoteIcon` 对破坏性变更分组返回图标 `'⚠'`；`commitPartial`/`note` 渲染把 `scope` 与 `subject` 分列（`**{{scope}}:** {{subject}}`）。**这就是"表格形态的判据"里『变更点（scope）与影响（正文）分列』以及『破坏性变更逐条成组、不得只写在段首说明里』的出处**。
+* **Keep a Changelog 1.1.0 —— 逐字（FAQ，两处）**："Should you ever rewrite a changelog? Sure. There are always good reasons to improve a changelog."（**重写日志是正当动作**，本集合据此允许"按组织方式重组、但不改事实"）；"It's difficult, because people follow wildly different formats and file names."（**机器解析困难**——故本集合的"机械抓手"只钉形态与要素）。
+* **Conventional Changelog（preset）—— 逐字（分组与类型映射）**：`constants.js` 里 `group_by` 默认 `"Type"`、`sort_by` 默认 `"Title"`（**该默认是组内再排序、不涉及版本之间**），类型表 `DEFAULT_COMMIT_TYPES` 逐条形如 `{ type: 'feat', section: 'Features', effect: 'bump' }`、`{ type: 'fix', section: 'Bug Fixes', ... }`、`{ type: 'perf', section: 'Performance Improvements', ... }`，并对 `docs`/`style`/`chore`/`refactor`/`test`/`build`/`ci` 标 `effect: 'hidden'`。
+* **Conventional Changelog（preset）—— 逐字（破坏性变更的两处落点）**：`templates.ts` 的 `BREAKING_CHANGE_KEYWORDS = ['BREAKING CHANGE', 'BREAKING-CHANGE']`、`BREAKING_CHANGES_TITLE = 'BREAKING CHANGES'`，且 `formatNoteIcon` 对破坏性变更分组返回图标 `'⚠'`；`commitPartial`/`note` 渲染把 `scope` 与 `subject` 分列（`**{{scope}}:** {{subject}}`）。**这就是"表格形态的判据"里『变更点与影响分列』以及『破坏性变更逐条成组』的出处。**
 * **Conventional Commits 1.0.0 —— 逐字（摘要与规范条款）**："<type>[optional scope]: <description>"、"The commit message should be structured as follows: <type>[optional scope]: <description> [optional body] [optional footer(s)]"、**逐字（Specification 一节）**："Commits **MUST** be prefixed with a type, which consists of a noun, `feat`, `fix`, etc., followed by the OPTIONAL scope, OPTIONAL `!`, and REQUIRED terminal colon and space."、"The type `feat` MUST be used when a commit adds a new feature to your application or library."、"The type `fix` MUST be used when a commit represents a bug fix for your application."；"feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning)."、"fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning)."、"BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning)."、"A BREAKING CHANGE can be part of commits of any type."（**破坏性变更可以与任何类型组合**——本集合据此写明"不得把某个类型默认为破坏性的"）。
-* **它支撑什么**：`specs/general/git.adoc`「提交信息」（`<type>[(scope)]: <subject>` 首行形态、破坏性变更用 `!` 或 `BREAKING CHANGE:` 页脚、正文写"为什么"与边界——**这是"上游"那一半**）；`specs/general/changelog.adoc`「组织形态」（按版本分组、组内按类型分组、**排序方向恒为时间倒序（版本倒序即时间倒序）**、类型闭集、空分组不写）与「表格形态的判据」（分组列按对象、类型列、变更点与影响分列、破坏性变更逐行标注、与 `scope→subject→正文` 的同构）；`specs/general/doc-design.adoc`「版本与变更记录」（**排序方向恒为时间倒序、分组口径择一**、版本号即发布标识、"重组属正当动作但不改事实"）。
+* **它支撑什么**：`specs/general/git.adoc`「提交信息」（`<type>[(scope)]: <subject>` 首行形态、破坏性变更用 `!` 或 `BREAKING CHANGE:` 页脚、正文写"为什么"与边界——**这是"上游"那一半**）；`specs/general/changelog.adoc`「组织形态」（按版本分组、组内按类型分组、**排序方向恒为时间倒序**、类型闭集、空分组不写）与「表格形态的判据」（分组列按对象、类型列、变更点与影响分列、破坏性变更逐行标注、与 `scope→subject→正文` 的同构）；`specs/general/doc-design.adoc`「版本与变更记录」。
 * **须注意的同义性差异与抽样状态（L1，逐条如实标注）**：
-  ** **排序方向**：外部材料只说"最新版本在最上"（Keep a Changelog）、"标题排序"（Conventional Changelog 的 `sort_by` 默认）；**没有任何材料**把"按版本分组"与"时间倒序"写成两种可择一的排序——**"版本倒序即时间倒序"是本集合的判据化表述**（成立前提是版本号单调递增，那也是本集合的取值）。
-  ** **提交信息与变更日志是两条不同对象**：Conventional Commits 只约束**提交信息**（谁的提交改了什么），Keep a Changelog / Conventional Changelog 面向**变更日志的展示**（发给使用者的那一版里有什么、要跟进什么）——"上游没有类型、下游按类型分组人工归类"的失效（见 `specs/general/git.adoc`「提交信息」引言）是本集合据此补上提交信息条文的理由。
-  ** **两者都是业界约定、不是强制性标准**：Keep a Changelog 自己否认存在标准格式（`doc-design`/`changelog` 中**不得**把它写成"依据某标准要求"）；Conventional Commits 是"a lightweight convention on top of commit messages"，只约束**提交信息**、**不约束 changelog 的展示形态**（它**没有**规定要用表格）——本集合的"表格形态"是**借用其 `scope/subject/body` 分列与破坏性变更分组**的**本集合取舍**。
-  ** **版本方向**：Keep a Changelog 的 "The latest version comes first." 是**版本之间最新在最上**（即按版本倒序，与时间倒序一致）；它**未**规定"版本号必须单调递增"——**递增是本集合对"版本号即发布标识"的取值**（SemVer 同理要求版本有序）。本集合据此把"按版本分组要按版本倒序"写在本集合自己的判据里。
-  ** **`Unreleased` 区段**：Keep a Changelog **推荐**在顶部维护 `Unreleased` 一节（"Keep an Unreleased section at the top to track upcoming changes."）——**本集合不采用**（见 `specs/general/changelog.adoc`「组织形态」末条），理由是本集合的登记时机是"做完才落笔"，属**本集合更严取舍**、外部材料**未**要求如此。
-  ** **日期口径**：Keep a Changelog 只要求"显示发布日期"并推荐 ISO 8601；**未**规定"日期取 tag 创建日还是版本号内嵌日期"——本集合取**发布日期**（可核对的发布事实），属判据化取值。**日期取值优先级（本集合判据化取值）**：取**发布动作自身的日期**——**tag 创建日优先**，无 tag 时取制品库/发布记录里的发布时间，**都取不到时可用版本号内嵌日期，但须确证它就是该次发布的日期、并把该取值写进项目自身规范**（防把"下一次发布"的日期当成本次）；条目日期与版本组标题日期**同一取值**。
-* **取样方式（可复取）**：`curl -sL https://keepachangelog.com/en/1.1.0/`、`curl -sL https://www.conventionalcommits.org/en/v1.0.0/`；Conventional Changelog 侧取 `raw.githubusercontent.com/conventional-changelog/conventional-changelog/master/packages/conventional-changelog-conventionalcommits/src/constants.js` 与 `packages/template/src/templates.ts`（HTML 取自返回的源码，比对时先做空白归一化）。
+** **排序方向**：外部材料只说"最新版本在最上"（Keep a Changelog）、"标题排序"（Conventional Changelog 的 `sort_by` 默认）；**没有任何材料**把"按版本分组"与"时间倒序"写成两种可择一的排序——**"版本倒序即时间倒序"是本集合的判据化表述**（成立前提是版本号单调递增，那也是本集合的取值）。
+** **提交信息与变更日志是两条不同对象**：Conventional Commits 只约束**提交信息**，Keep a Changelog / Conventional Changelog 面向**变更日志的展示**——"上游没有类型、下游按类型分组人工归类"的失效是本集合据此补上提交信息条文的理由。
+** **两者都是业界约定、不是强制性标准**：`changelog` 中**不得**把它写成"依据某标准要求"；Conventional Commits **没有**规定要用表格——本集合的"表格形态"是**借用其分列与破坏性变更分组**的本集合取舍。
+** **版本方向**：Keep a Changelog 的 "The latest version comes first." 是**版本之间最新在最上**；它**未**规定"版本号必须单调递增"——**递增是本集合对"版本号即发布标识"的取值**。
+** **`Unreleased` 区段**：Keep a Changelog **推荐**在顶部维护 `Unreleased` 一节——**本集合不采用**，属**本集合更严取舍**、外部材料**未**要求如此。
+** **日期口径**：Keep a Changelog 只要求"显示发布日期"并推荐 ISO 8601；**未**规定"日期取 tag 创建日还是版本号内嵌日期"——本集合取**发布日期**，属判据化取值（**tag 创建日优先**）。
+* **取样方式（可复取）**：`curl -sL https://keepachangelog.com/en/1.1.0/`、`curl -sL https://www.conventionalcommits.org/en/v1.0.0/`；Conventional Changelog 侧取 `raw.githubusercontent.com/conventional-changelog/conventional-changelog/master/packages/conventional-changelog-conventionalcommits/src/constants.js` 与 `packages/template/src/templates.ts`（比对时先做空白归一化）。
 
 == PEP 8 / PEP 20 / PEP 257（Python 风格）
 
 * PEP 8：Style Guide for Python Code（标题逐字）。用途：`specs/stack/python.adoc` 的命名、缩进、可读性等风格依据。
 * PEP 20：The Zen of Python（标题逐字）。用途：`specs/stack/python.adoc` 的"简单、可读优先"取向。
-* PEP 257：Docstring Conventions（标题逐字）。用途：`specs/stack/python.adoc` 的 docstring（文档注释）机制。
+* PEP 257：Docstring Conventions（标题逐字）。用途：`specs/stack/python.adoc` 的 docstring（文档注释）机制，以及"文档头写在模块 docstring 里"的语言机制侧依据。
 
 == PEP 508 / 锁文件（依赖声明与可重现）
 
 * PEP 508（正式文本标识与标题）：Dependency specification for Python Software Packages。用途：`specs/general/dependency.adoc`"声明明确的版本/受控范围、锁文件与可重现"的依据之一。
-* 同类可援引的官方材料：`npm ci` 与 `package-lock.json` 的官方文档（npm Docs）、Maven 的 `<dependencyManagement>`（Maven 官方 POM 参考）、Poetry/pip 的锁文件机制——分别对应各生态的"锁定模式、可重现构建"。
-* **说明**：以上材料名取自各项目官方文档的文档名（静态可查），本文件**未**逐字摘录它们的正文。
+* 同类可援引的官方材料：`npm ci` 与 `package-lock.json` 的官方文档、Maven 的 `<dependencyManagement>`（Maven 官方 POM 参考）、Poetry/pip 的锁文件机制——分别对应各生态的"锁定模式、可重现构建"。**说明**：以上材料名取自各项目官方文档的文档名（静态可查），**未**逐字摘录其正文。
 
 == POSIX
 
@@ -168,54 +167,54 @@
 == 运行时获取与"没有解释器"的处置（Microsoft Learn / Python 官方文档 / POSIX）
 
 * 材料：Microsoft Learn 的命令参考（`.bat`/`.cmd` 的解析与执行边界，见下节）、Python 官方文档（Windows 安装器与 `py` 启动器）、POSIX（shebang 与执行位）。
-* 依据要点（**要点转述、非逐字摘录**）：①**`py` 启动器随 Windows 官方安装器分发**，是 Windows 上定位"解释器"最稳的入口（POSIX 侧则没有对应物，故两侧探测次序本就不同）；②各平台**取运行时的方式互不相同**（发行版包管理器 / 官方安装器 / 应用商店别名），**没有**跨平台的"装一个解释器"命令；③POSIX 的 `#!` 只说明解释器怎么被定位，**不提供**"解释器不存在时怎么办"。
-* **须注意的语义差异（同义性）**：上述材料只说明"运行时怎么取、解释器怎么定位"，**未**规定"入口应当按次序探测解释器""连一个都没有时应报错退出而非静默继续"，更**未**规定"入口不得代为安装运行时"——**这三条都是本集合的判据化取舍**（理由与取舍的完整陈述见 link:adoption.adoc[] 同主题条，规则本体见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」与 `INSTALL.adoc`「取规范时连 python 都没有」）；**不得**把它读成"某平台要求安装流程必须由脚本完成"。
-* 用途：`INSTALL.adoc`「取规范时连 python 都没有」（没有解释器时的处置次序）、`script/fetch-specs.sh` / `script/fetch-specs.bat`（按次序探测、都没有时报错退出非 0）、`specs/general/script.adoc`「跨环境脚本」的边界条（入口不得代为安装/下载运行时）。
+* 依据要点（**要点转述、非逐字摘录**）：① **`py` 启动器随 Windows 官方安装器分发**，是 Windows 上定位"解释器"最稳的入口（POSIX 侧则没有对应物，故两侧探测次序本就不同）；② 各平台**取运行时的方式互不相同**（发行版包管理器 / 官方安装器 / 应用商店别名），**没有**跨平台的"装一个解释器"命令；③ POSIX 的 `#!` 只说明解释器怎么被定位，**不提供**"解释器不存在时怎么办"。
+* **须注意的语义差异（同义性）**：上述材料只说明"运行时怎么取、解释器怎么定位"，**未**规定"入口应当按次序探测解释器""连一个都没有时应报错退出而非静默继续"，更**未**规定"入口不得代为安装运行时"——**这三条都是本集合的判据化取舍**（规则本体见 `specs/general/script.adoc`「跨环境脚本」与 `INSTALL.adoc`「取规范时连 python 都没有」）；**不得**把它读成"某平台要求安装流程必须由脚本完成"。
+* 用途：`INSTALL.adoc`「取规范时连 python 都没有」、`script/fetch-specs.sh` / `script/fetch-specs.bat`（按次序探测、都没有时报错退出非 0）、`specs/general/script.adoc`「跨环境脚本」的边界条。
 
 == Microsoft Learn（Windows 命令参考）
 
 * 材料：Microsoft Learn 上 Windows 命令（`cmd.exe`）的官方参考。
 * 依据要点：命令解释器**按字节读取行尾、不做行尾归一化**（LF-only 批处理会直接执行失败：`goto`/标签匹配、`if`/`for` 复合语句、行尾注释与续行都可能失效）；批处理按**系统 ANSI 代码页**解析（简体中文 Windows 为 GBK/CP936）——**带 BOM 的 UTF-8** 会把 BOM 并入首行指令，**含非 ASCII 字符的 UTF-8** 会被按该代码页解析成乱码，故这两类会出现解析/显示异常，而**纯 ASCII 内容与代码页无关**。
-* 用途：`specs/general/encoding.adoc`「Windows 批处理必须 CRLF（L1）」、`specs/stack/powershell.adoc`「启动脚本（同名 .bat）」（纯 ASCII、不写 BOM、行尾 CRLF）。
-* **批处理（`.bat`/`.cmd`）自身的规则同样取材于此节**：延迟展开（`%var%` 在解析期展开、块语句里须 `setlocal enabledelayedexpansion` 后用 `!var!`）、路径须加引号（含空格即报错）、`%~1` 去引号后判空、未定义变量被替换成空串、`^` 续行不留尾随空格、`exit /b` 与 `%errorlevel%` 的退出码传播——这些**都是 `cmd.exe` 的官方文档条目**，故 `.bat` 有独立栈文件可承载（`specs/stack/batch.adoc`，唯一的批处理专属规则落点）。
+* 用途：`specs/general/encoding.adoc`「Windows 批处理必须 CRLF（L1）」、`specs/stack/powershell.adoc`「启动脚本」、`specs/stack/batch.adoc`「编码与行尾」。
+* **批处理（`.bat`/`.cmd`）自身的规则同样取材于此节**：延迟展开（`%var%` 在解析期展开、块语句里须 `setlocal enabledelayedexpansion` 后用 `!var!`）、路径须加引号（含空格即报错）、`%~1` 去引号后判空、未定义变量被替换成空串、`^` 续行不留尾随空格、`exit /b` 与 `%errorlevel%` 的退出码传播——这些**都是 `cmd.exe` 的官方文档条目**，故 `.bat` 有独立栈文件可承载。
 * **须注意的语义差异（同义性）**：上述条目只说明 `cmd.exe` **怎么解析与执行**，**未**规定「`.bat` 里不得混写 PowerShell 语法」「未定义变量必须当错误」「每个 `.bat` 只做一件事」；这些是本集合的判据化取舍（写在 `specs/stack/batch.adoc`，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注）。
 
 == EditorConfig 规范（编辑器配置）
 
 * 材料：EditorConfig 规范（EditorConfig Specification，站点 `spec.editorconfig.org`；**官方文本已取回**，编写时为 0.17.2 版）。
-* 依据要点（键名与取值清单取自规范正文）：`.editorconfig` 以"按文件路径匹配的 INI 段"声明编辑器行为，键含 `charset`、`end_of_line`、`insert_final_newline`、`indent_style`/`indent_size` 等；`charset` 的取值只有 `latin1`/`utf-8`/`utf-8-bom`/`utf-16be`/`utf-16le`，`end_of_line` 取 `lf`/`cr`/`crlf`；取值为 `unset` 时**移除该键值对的效果**（即使外层段已设置过，要点转述）。
+* 依据要点（键名与取值清单取自规范正文）：`.editorconfig` 以"按文件路径匹配的 INI 段"声明编辑器行为，键含 `charset`、`end_of_line`、`insert_final_newline`、`indent_style`/`indent_size` 等；`charset` 的取值只有 `latin1`/`utf-8`/`utf-8-bom`/`utf-16be`/`utf-16le`，`end_of_line` 取 `lf`/`cr`/`crlf`；取值为 `unset` 时**移除该键值对的效果**（要点转述）。
 * 用途：`specs/general/encoding.adoc`「跨平台检出」——仓库根须有 `.editorconfig`（缺失即补齐）、其行尾取值须与 `.gitattributes` 一致、`charset` 默认取 `utf-8`（`.ps1` 需要 BOM 时取 `utf-8-bom`；按格式规范须存为非 UTF-8 的文件用 `unset` 移除外层声明）。
-* **须注意的语义差异（同义性）**：该规范只定义"键与取值怎么写、如何生效"，**未**规定项目必须提供 `.editorconfig`、也未规定行尾与编码该怎么取值；"仓库根须有该文件、取值须与 `.gitattributes` 一致"是本集合自己的要求（`specs/general/source.adoc`「外部引用」）。
+* **须注意的语义差异（同义性）**：该规范只定义"键与取值怎么写、如何生效"，**未**规定项目必须提供 `.editorconfig`、也未规定行尾与编码该怎么取值；"仓库根须有该文件、取值须与 `.gitattributes` 一致"是本集合自己的要求。
 
 == git 官方文档
 
-* 材料：git 官方文档（`git-mv`、`git-diff --find-renames`/`-M`、`gitattributes`、`core.autocrlf`/`core.eol`、`git ls-files --eol`）。
-* 依据要点：**rename 检测按内容相似度、默认阈值 50%**（`-M<n>` 可调）；`.gitattributes` 的 `text`/`eol` 属性与 `core.autocrlf` 的优先级；行尾归一化（`core.autocrlf`/`core.eol`）与"整文件全红"的行尾噪声。
-* 用途：`specs/general/git.adoc`「文件移动与重命名」（P1 的判定标准与自检命令）、`specs/general/encoding.adoc`「跨平台检出」（`.gitattributes` 为权威落盘口）。
+* 材料：git 官方文档（`git-mv`、`git-diff --find-renames`/`-M`、`gitattributes`、`core.autocrlf`/`core.eol`、`git ls-files --eol`、`git-log --follow`）。
+* 依据要点：**rename 检测按内容相似度、默认阈值 50%**（`-M<n>` 可调）；`.gitattributes` 的 `text`/`eol` 属性与 `core.autocrlf` 的优先级；行尾归一化与"整文件全红"的行尾噪声；`git log --follow` 可跨重命名取回完整历史。
+* 用途：`specs/general/git.adoc`「文件移动与重命名」（P1 的判定标准与自检命令）「重命名与内容修改须分两个提交」（提交顺序的依据）、`specs/general/encoding.adoc`「跨平台检出」（`.gitattributes` 为权威落盘口）。
 
 == DORA（交付性能研究）与 GitHub Docs（合并请求的变更控制）
 
 * 材料：DORA（DevOps Research and Assessment）的年度《Accelerate State of DevOps Report》与 Google Cloud 的公开研究文章；GitHub Docs 的 *About protected branches*、*Managing a branch protection rule*（**官方网页已取回，仅题名可逐字核对**）。
 * 依据要点：变更**小批量、短生命周期分支、频繁小步合入主干**；**变更审批要求提交者以外的人批准、且不得自审自并**（`Require approvals` / `Do not allow bypassing the above settings` / `Require review from Code Owners`）——**"改动由人工批准后再进主干"是平台与业界的通行做法**，把合并动作留给人工不是本项目自创的规矩。
-* 用途：`specs/platform/cnb.adoc`「分支与合并请求统一」（trunk-based development 与 DORA 的交付性能研究）、「合并请求的合并主体（NPC 禁合并）」（**人工通过合并请求施加的审批是唯一入口**——自动化执行者自行合并即等于跳过审批；非自审自并的同类依据另见 IEEE 1028 与 `specs/general/review.adoc`）。
-* **须注意的语义差异（同义性，自派禁令）**：上列材料（DORA / GitHub Docs 的"合入须经独立评审、提交者不得自行绕过"）与 IEEE 1028（评审与被评审相互独立）给的都是"**谁来做核验/审批**"的方向，**未**规定"执行者不得再发一条评论唤起自己"；本集合据此推出的是一条**自己更严的判据化取舍**——**执行者不得在本次执行中自行发评论点名唤起自己**（也不得转由他人代发），规则本体见 `specs/platform/cnb.adoc`「评论唤起新实例（平台侧的派发入口）」，推导与实证见 link:adoption.adoc[] 同节；**不得**把该条读成"某标准规定 AI 不能自己派活"。
+* 用途：`specs/platform/cnb.adoc`「分支与合并请求统一」、「合并请求的合并主体（NPC 禁合并）」（**人工通过合并请求施加的审批是唯一入口**——自动化执行者自行合并即等于跳过审批）。
+* **须注意的语义差异（同义性，自派禁令）**：上列材料与 IEEE 1028 给的都是"**谁来做核验/审批**"的方向，**未**规定"执行者不得再发一条评论唤起自己"；本集合据此推出的是一条**自己更严的判据化取舍**（规则本体见 `specs/platform/cnb.adoc`「评论唤起新实例」）；**不得**把该条读成"某标准规定 AI 不能自己派活"。
 
-== 同 Agent 复核的适用面（CNB 平台侧）
+== 同 Agent 复核的适用面（平台侧）
 
-* 材料：IEEE 1028（软件评审：评审者与被评审者相互独立）；ISO 10007 / ISO 9001（配置管理与质量的变更控制：变更须受控、可追溯）；ISO 9241-110（交互原则：可控、可预期、不阻断）——**均为方向与下限的要点转述，版本与取样标记见本文件其他同主题条目**。
+* 材料：IEEE 1028（软件评审：评审者与被评审者相互独立）；ISO 10007 / ISO 9001（配置管理与质量的变更控制：变更须受控、可追溯）；ISO 9241-110（交互原则：可控、可预期、不阻断）——**均为方向与下限的要点转述**。
 * 依据要点：上述标准要求的是"**有独立、可核对的评审发生**"与"**变更可追溯**"，**未**规定"复核者须与执行者来自同一产品/同一来源"。
-* **须注意的语义差异（同义性，同 Agent 复核的适用面）**：本集合"**强制同 Agent**"是**自己更严的取舍**（防"缺复核时随手抓一个不可核对的外部执行者"），其**成立前提是环境里确实有同 Agent 的执行者可用**——该前提**由平台给出**（CNB 上的评论唤起形态使之成立）。故**不得**把它读成平台无关的通用前提、更**不得**把它读成"某标准规定必须同一产品复核"；**平台层未写明该前提**时，**不得**因"没有同 Agent 子执行者"而拒做或中断交付。规则本体见 `specs/platform/cnb.adoc`「评论唤起新实例（平台侧的派发入口）」，推导与实证见 link:adoption.adoc[] 同节。
+* **须注意的语义差异（同义性，同 Agent 复核的适用面）**：本集合"**强制同 Agent**"是**自己更严的取舍**（防"缺复核时随手抓一个不可核对的外部执行者"），其**成立前提是环境里确实有同 Agent 的执行者可用**——该前提**由平台给出**。故不得把它读成平台无关的通用前提、更不得读成"某标准规定必须同一产品复核"；**平台层未写明该前提**时，**不得**因"没有同 Agent 子执行者"而拒做或中断交付。规则本体见 `specs/platform/cnb.adoc`「评论唤起新实例」。
 
 == 上下文工程（Anthropic 工程博客 / Agent Skills 开放规范）
 
 * 材料：Anthropic 工程博客《Effective context engineering for AI agents》（公开文章，**官方网页已取回、仅题名与要点可逐字核对**）；Agent Skills 开放规范（**业界约定，非标准**，其 progressive disclosure 一节）。
-* 依据要点：**上下文是有限资源**——token 越多，信息召回与长程推理越差（业界称 *context rot*），故只加载必要的高信号内容（progressive disclosure）；**每多一轮请求，整段上下文被重发一次**，故"轮次"既是成本也是注意力稀释的来源。
-* 用途：`specs/general/context.adoc`「读取范围」（最小必要、委派重型读取）、「执行吞吐」（调用合并、构建输出一次取到、不零信息空转）；`specs-project-maintainer/priority.adoc` P4 的业界依据。
-* **须注意的语义差异（同义性，执行吞吐）**：上述材料给的是**方向**（少读、按需披露、上下文越长越差），**未**规定"互相无依赖的调用必须一次批量发出""构建与校验的输出须一次取到"这类**执行侧判据**，也**未**给出"轮次成本"的量级；本集合按现场实测（一次任务 180 次请求 / 175 万输入 token / 1659 s 中模型生成仅 580 s）把"少绕"判据化的取舍与量级见 link:throughput.adoc[]；**不得**把本条读成"某标准规定了轮次上限"。
+* 依据要点：**上下文是有限资源**——token 越多，信息召回与长程推理越差（业界称 *context rot*），故只加载必要的高信号内容；**每多一轮请求，整段上下文被重发一次**，故"轮次"既是成本也是注意力稀释的来源。
+* 用途：`specs/general/context.adoc`「读取范围」「执行吞吐」；`specs-project-maintainer/priority.adoc` P4 的业界依据。
+* **须注意的语义差异（同义性，执行吞吐）**：上述材料给的是**方向**（少读、按需披露、上下文越长越差），**未**规定"互相无依赖的调用必须一次批量发出""构建与校验的输出须一次取到"这类**执行侧判据**，也**未**给出"轮次成本"的量级；本集合按现场实测把"少绕"判据化的取舍与量级见 `library/throughput.adoc`。
 
 == The Twelve-Factor App
 
-* 材料：The Twelve-Factor App（十二要素应用方法论，公开文本十二要素之一至之三、之二等）。
+* 材料：The Twelve-Factor App（十二要素应用方法论）。
 * 要素名称逐字取（官方文本）：**Build, release, run**、**Config**、**Dependencies**。本集合引用其"构建/发布/运行分离、配置外置、依赖显式声明"的要点。
 * 用途：`specs/general/ci-cd.adoc` 总依据、`specs/general/security.adoc`「不硬编码密钥」、`specs/general/dependency.adoc`。
 
@@ -237,147 +236,138 @@
 
 == 配置类只做数据持有（POJO）——Spring Boot / Google Java Style / Spring 注解
 
-* 材料：**Spring Boot 官方文档**「Externalized Configuration」（`@ConfigurationProperties` 的定位：把外部配置**绑定**到类型安全的对象上）、**Spring Framework 官方文档**「Java-based Container Configuration」（`@Configuration`/`@Bean` 的定位：**声明** Bean 的定义与装配方式，由容器负责实例化与调用）；**Google Java Style Guide 3.4.2（Class member ordering）**对 POJO 的说明——"A POJO **only** has behavior that **acts on its own fields**"，即数据持有者的行为仅限对自身字段的读写，不含计算与对外访问；《阿里巴巴 Java 开发手册》对 POJO 类（DO/DTO/VO 等）的约定——"POJO **类的属性**不要设定任何**属性默认值**"、"POJO 类**必须写 toString** 方法"等**只针对属性与访问器**的条款。
-* 依据要点（**说明：此条为"官方文档定位与风格指南表述"的要点转述、非逐字摘录**，如日后需逐字比对，以 Spring Boot / Spring Framework 参考文档的 Externalized Configuration、Java-based Container Configuration 两节与 Google Java Style Guide 3.4.2 的原文为对照面）：配置类在**框架设计上本就被定义为配置项的数据持有者**——绑定由容器完成，逻辑**不在**它的职责内；这与"纯数据类不写逻辑"是同一条约定的两个用例。
-* **须注意的语义差异（同义性）**：上述材料给出的是**职责定位与风格建议**，**未**规定"配置类中任何逻辑一律禁止"；本集合据此推出的是**本项目自身的硬性约定**——**任何情况都不允许，无例外**（`specs/general/coding.adoc`「类设计」"配置类不写逻辑"，`L1`）；**不得**把本节读成"Spring 文档禁止在配置类里写逻辑"。
-* 实证反例（**本项目真实记载**）：配置类里做取值兜底/条件判断/派生值拼装时，配置项的**实际行为分散在配置类中**（看不见、测不到），与配置类应承担的"声明配置项"职责混淆；本项目为此在用户明确要求下把该条写成**无例外**并配机械防线（`check_config_class_guard`）。
+* 材料：**Spring Boot 官方文档**「Externalized Configuration」（`@ConfigurationProperties` 的定位：把外部配置**绑定**到类型安全的对象上）、**Spring Framework 官方文档**「Java-based Container Configuration」（`@Configuration`/`@Bean` 的定位：**声明** Bean 的定义与装配方式）；**Google Java Style Guide 3.4.2（Class member ordering）**对 POJO 的说明——"A POJO **only** has behavior that **acts on its own fields**"；《阿里巴巴 Java 开发手册》对 POJO 类的约定（只针对属性与访问器）。
+* 依据要点（**要点转述、非逐字摘录**）：配置类在**框架设计上本就被定义为配置项的数据持有者**——绑定由容器完成，逻辑**不在**它的职责内；这与"纯数据类不写逻辑"是同一条约定的两个用例。
+* **须注意的语义差异（同义性）**：上述材料给出的是**职责定位与风格建议**，**未**规定"配置类中任何逻辑一律禁止"；本集合据此推出的是**本项目自身的硬性约定**——**任何情况都不允许，无例外**（`specs/general/coding.adoc`「类设计」）；**不得**把本节读成"Spring 文档禁止在配置类里写逻辑"。
+* 实证反例（**本项目真实记载**）：配置类里做取值兜底/条件判断/派生值拼装时，配置项的**实际行为分散在配置类中**（看不见、测不到），与配置类应承担的"声明配置项"职责混淆。
 
 == 跨语言执行脚本（SQL / Lua 写资源文件，不写字符串拼接）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」，技术栈落点 `specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」）**：
-** **OWASP**「SQL Injection Prevention Cheat Sheet」与「Query Parameterization Cheat Sheet」（表名逐字；**官方页面已取回、要点转述**）：SQL 注入的**主防线是参数化查询（prepared statements）**——语句**先被固定为语句**、参数经**绑定**传入，从而**不把输入当作 SQL 文本解析**；反例形态正是"用字符串拼接/格式化把值拼进语句文本"。本集合据此把 SQL 写成**独立文件**（语句本体不在宿主语言字符串里）、由预编译语句绑定参数——字符串拼接在被禁止之列，正是因为它使"值"与"语句"混在一处、且无法被高亮与错误校验覆盖。
-** **MyBatis 官方文档**「Dynamic SQL」：映射文件（`*.xml`）用 `#{}` 生成**预编译参数**（`?`）、用 `${}` 做**字符串替换**；官方明确 `${}` 不防注入。这为"SQL 的合法承载形式是框架支持的 `.xml` 文件（而非 Java 字符串）"给出**框架侧依据**；本集合据此把 MyBatis 项目列为已知例外（SQL 写 `.xml`），并要求 `${}` 仅用于不由用户输入决定的场景 + 白名单校验。
-** **Redis 官方文档**「EVAL」（URL **https://redis.io/docs/latest/commands/eval/**，条目名为逐字；**官方页面已取回、要点转述**）与「Redis Lua API reference」（URL **https://redis.io/docs/latest/develop/programmability/lua-api/**）：`EVAL` 以**脚本文本**作为参数执行（`EVAL script numkeys key [key ...] [arg ...]` 形态），官方推荐用 `SCRIPT LOAD` + `EVALSHA` 加载与复用；客户端（如 Spring Data Redis）相应地按 `RedisScript` **从资源加载 `.lua` 文件**。本集合据此要求 Lua 写成 `.lua` 资源文件、按资源加载执行，不内联成宿主语言字符串。
-** **Hibernate 官方文档**（HQL/JPQL 章节，URL **https://hibernate.org/orm/documentation/**）：查询语句以**独立字符串/命名查询（`@NamedQuery` 等）**承载，官方同样把语句与参数分离。本集合**不**把"命名查询里的字符串"当合规落点（仍是宿主语言字符串、无高亮与错误校验），只把它作为"语句应与参数分离"的旁证。
-* 依据要点（**说明：以上为"官方文档定位"的要点转述，非逐字摘录**，如日后需逐字比对，以 OWASP 的两份 Cheat Sheet、MyBatis 官方文档的 Dynamic SQL 页、Redis 官方文档的 EVAL 与 Lua API 页原文为对照面）：①**注入与误用的根因是"把值/语句拼成一段文本"**，参数化与"语句独立于代码"是通行防线；②**各技术栈都支持把脚本作为资源/文件承载并加载执行**（MyBatis 的映射文件、Redis 客户端的脚本资源、JDBC 预编译语句），故"必须独立成文件"在这些栈上**有可落点**、不构成空中楼阁。
-* **加载时机（性能敏感路径不每次读）的依据要点**：上述材料给出的是**脚本执行与脚本复用**的机制面——Redis 官方文档「EVAL」明确 `EVAL` 以**脚本文本**为参数把脚本正文送到服务端执行，并推荐 `SCRIPT LOAD` + `EVALSHA` **按 sha 复用已加载脚本**（避免反复传送正文）；JDBC/MyBatis 侧则是"语句一次准备、多次绑定执行"（`PreparedStatement` 的复用语义）。**本集合据此推出的取值是"按性能敏感度定性"**：classpath 资源**打进产物后发布即不变**，故**性能敏感路径**（高频、争分夺秒，典型是 Redis 操作）**第一次使用时读取一次并缓存**、不在每次调用时重复读取（Redis 侧等价的复用手段是 `EVALSHA`/`SCRIPT LOAD`）；**不敏感路径**（启动装配、一次性任务、低频操作）每次读取无妨；**需求要求内容会变**的（如每次渲染前可编辑的 HTML 模板）**不适用缓存**、按是否需重读决定。**须如实标注**："资源读取次数""必须缓存"**均无标准明文要求**——官方材料给的是机制与推荐做法（`EVALSHA` 复用），"按性能敏感度定性 + 发布后不变即缓存"是**本集合自己的判据化取舍**（性能效率维度的取舍，依据 `ISO/IEC 25010` 的性能效率特性），**不得**把本节读成"某标准规定资源必须缓存"。
-* **须注意的语义差异（同义性）**：上述材料给的是**注入防护与参数化**的要求，**未**规定"脚本必须放在资源文件夹""扩展名必须是被调语言的扩展名"；**后缀为 `.sql` / `.lua` 本身也不是某标准的明文要求**（本集合未找到支持"扩展名必须如此"的标准原文，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**）。本集合据此推出的是**自己更严的判据化取舍**：跨语言脚本**独立成文件放资源文件夹、扩展名取被调语言自身的扩展名**（取用编辑器/工具链的高亮、补全与错误校验，理由与实证见 link:adoption.adoc[] 同主题条）；**不得**把本节读成"某标准规定 SQL 必须存成 `.sql` 文件"。同理，**不得**把本节读成"某标准规定资源必须缓存/必须只读一次"（缓存与否是本集合按性能敏感度定性的取舍，见上一段的加载时机要点）。
-* 实证反例（**本项目真实记载**，来自用户报告与项目对话记录）：待执行的另一语言的脚本以**字符串拼接/字符串模板**内联在宿主语言代码里——编辑时既**没有高亮**也**没有错误校验**（语法错、字段名错、参数个数不匹配都到运行期才暴露），"容易出错"是用户给出的直接动因；用户要求"**所有语言**当有跨语言执行脚本时优先把脚本放资源文件夹，扩展名取**目标语言的扩展名**或该技术支持的文件形式（如 MyBatis 的 XML 能处理 SQL），lua 通过读取文件使用、其他文件也一样"。用户**追加**的第二条要求（同一次对话）：**按不同场景考虑是否性能敏感**——"redis 操作是争分夺秒，不能每次都去读"；**进了 classpath 的资源发布成功后不会变，第一次使用时读取然后缓存即可**，**除非需求要求内容会变**（举例：需要转成 PDF 的 HTML 模板）。
+* **材料与用途（支持 `specs/general/coding.adoc`「跨语言执行脚本的落点」，技术栈落点 `specs/stack/java.adoc`「跨语言执行脚本」）**：
+** **OWASP**「SQL Injection Prevention Cheat Sheet」与「Query Parameterization Cheat Sheet」（表名逐字；**官方页面已取回、要点转述**）：SQL 注入的**主防线是参数化查询（prepared statements）**——语句**先被固定为语句**、参数经**绑定**传入，从而**不把输入当作 SQL 文本解析**；反例形态正是"用字符串拼接/格式化把值拼进语句文本"。本集合据此把 SQL 写成**独立文件**（语句本体不在宿主语言字符串里）、由预编译语句绑定参数。
+** **MyBatis 官方文档**「Dynamic SQL」：映射文件（`*.xml`）用 `#{}` 生成**预编译参数**（`?`）、用 `${}` 做**字符串替换**；官方明确 `${}` 不防注入。这为"SQL 的合法承载形式是框架支持的 `.xml` 文件"给出**框架侧依据**；本集合据此把 MyBatis 项目列为已知例外（SQL 写 `.xml`），并要求 `${}` 仅用于不由用户输入决定的场景 + 白名单校验。
+** **Redis 官方文档**「EVAL」（URL **https://redis.io/docs/latest/commands/eval/**，条目名为逐字；**官方页面已取回、要点转述**）与「Redis Lua API reference」：`EVAL` 以**脚本文本**作为参数执行（`EVAL script numkeys key [key ...] [arg ...]` 形态），官方推荐用 `SCRIPT LOAD` + `EVALSHA` 加载与复用；客户端相应地按 `RedisScript` **从资源加载 `.lua` 文件**。本集合据此要求 Lua 写成 `.lua` 资源文件、按资源加载执行，不内联成宿主语言字符串。
+** **Hibernate 官方文档**（HQL/JPQL 章节，URL **https://hibernate.org/orm/documentation/**）：查询语句以**独立字符串/命名查询（`@NamedQuery` 等）**承载，官方同样把语句与参数分离。本集合**不**把"命名查询里的字符串"当合规落点，只把它作为"语句应与参数分离"的旁证。
+* 依据要点（**要点转述，非逐字摘录**）：① **注入与误用的根因是"把值/语句拼成一段文本"**，参数化与"语句独立于代码"是通行防线；② **各技术栈都支持把脚本作为资源/文件承载并加载执行**，故"必须独立成文件"在这些栈上**有可落点**。
+* **加载时机（性能敏感路径不每次读）的依据要点**：Redis 官方文档「EVAL」明确 `EVAL` 以**脚本文本**为参数把脚本正文送到服务端执行，并推荐 `SCRIPT LOAD` + `EVALSHA` **按 sha 复用已加载脚本**；JDBC/MyBatis 侧则是"语句一次准备、多次绑定执行"（`PreparedStatement` 的复用语义）。**本集合据此推出的取值是"按性能敏感度定性"**。**须如实标注**："资源读取次数""必须缓存"**均无标准明文要求**——官方材料给的是机制与推荐做法，"按性能敏感度定性 + 发布后不变即缓存"是**本集合自己的判据化取舍**（依据 ISO/IEC 25010 的性能效率特性）。
+* **须注意的语义差异（同义性）**：上述材料给的是**注入防护与参数化**的要求，**未**规定"脚本必须放在资源文件夹""扩展名必须是被调语言的扩展名"；**后缀为 `.sql` / `.lua` 本身也不是某标准的明文要求**（本集合未找到支持"扩展名必须如此"的标准原文，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**）。
+* 实证反例（**本项目真实记载**）：待执行的另一语言的脚本以**字符串拼接/字符串模板**内联在宿主语言代码里——编辑时既**没有高亮**也**没有错误校验**，"容易出错"是用户给出的直接动因。
 
 == 跨环境脚本（一份逻辑 + 薄入口；实现语言取舍）
 
-* **材料与用途（支持 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）**：
-** **POSIX**（IEEE Std 1003.1 / The Open Group Base Specifications；要点见本文件「POSIX」一节）：文本行以 `\n` 分隔、shebang 行解析、进程退出状态——**这些语义只对 POSIX 系统成立**，`cmd.exe` 与 PowerShell **不遵守**（Microsoft Learn 的 Windows 命令参考对批处理的行尾与代码页解析另有规定，见本文件「Microsoft Learn（Windows 命令参考）」）。这为"**同一段 shell 逻辑无法在两侧行为一致地复用**"给出**规范侧依据**：`bash -euo pipefail`、管道退出码、`\r` 处理等在 Windows 原生环境里没有对应物。
-** **Microsoft Learn（Windows 命令参考）**：`.bat`/`.cmd` 按字节读行尾、按系统 ANSI 代码页解析——故批处理**只能 CRLF 落盘、指令用纯 ASCII**（详见 `specs/stack/batch.adoc`「编码与行尾」，`.ps1` 一侧见 `specs/stack/powershell.adoc`）。这为"入口文件必须按各自平台规范分别落盘"给出**官方文档依据**。
-** **PEP 8 / PEP 20 / PEP 257** 与 **Node.js / Deno / Bun 官方文档**（跨平台运行时，标准库含命令行参数、文件系统、JSON、HTTP；均可直接运行单文件脚本）：为"**Python 3 与 Node.js 并列为首选逻辑层语言**"给出**运行时能力侧依据**（装了运行时即得，不引入项目脚手架）。
+* **材料与用途（支持 `specs/general/script.adoc`「跨环境脚本」）**：
+** **POSIX**（IEEE Std 1003.1 / The Open Group Base Specifications）：文本行以 `\n` 分隔、shebang 行解析、进程退出状态——**这些语义只对 POSIX 系统成立**，`cmd.exe` 与 PowerShell **不遵守**。这为"**同一段 shell 逻辑无法在两侧行为一致地复用**"给出**规范侧依据**。
+** **Microsoft Learn（Windows 命令参考）**：`.bat`/`.cmd` 按字节读行尾、按系统 ANSI 代码页解析——故批处理**只能 CRLF 落盘、指令用纯 ASCII**。这为"入口文件必须按各自平台规范分别落盘"给出**官方文档依据**。
+** **PEP 8 / PEP 20 / PEP 257** 与 **Node.js / Deno / Bun 官方文档**（跨平台运行时，标准库含命令行参数、文件系统、JSON、HTTP；均可直接运行单文件脚本）：为"**Python 3 与 Node.js 并列为首选逻辑层语言**"给出**运行时能力侧依据**。
 ** **Go / Rust 官方文档**（`go build` / `cargo build` 可产出**无运行时依赖的单文件可执行产物**、支持交叉编译）：为"需要单文件分发时取编译型语言"给出**工具链侧依据**。
-* 依据要点（**说明：此条为"标准条款与官方文档定位"的要点转述、非逐字摘录**，如日后需逐字比对，以 POSIX（IEEE Std 1003.1）、Microsoft Learn 的 Windows 命令参考、PEP 8/PEP 20、Node.js 与 Deno 官方文档、Go 与 Rust 官方文档的原文为对照面）：①**两个平台的命令行语义不同**（行尾解析、代码页、退出码传播、可用命令集），故"逻辑写在入口里"必然要写两遍或写错；②**把平台差异收敛到入口、把逻辑写成不依赖平台的语言**是让差异只出现一次的通行做法；③**薄壳职责只有三件**（找解释器、原样透传参数、原样返回退出码），这是"入口层不承载逻辑"的可判定表述。
-* **须注意的语义差异（同义性）**：上述材料给的是**平台语义差异与运行时能力**，**未**规定"同一功能必须只写一份逻辑代码""入口必须是薄壳""逻辑层必须用 Python/Node.js"；**"跨平台逻辑用哪种语言"没有任何标准规定**（本集合未找到支持"必须用某语言"的标准原文，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**）。本集合据此推出的是**自己的判据化取舍**：逻辑**只写一份**、入口只做薄壳（三件事）、实现语言按"环境好搭建 / 不易出错 / 好维护 / 兼容性 / 效率"的**默认优先级**取（Python 3 与 Node.js 并列首选，编译型语言留给单文件分发场景），**不拿裸 shell 当逻辑层**；**不得**把本节读成"某标准规定必须如此分层"。形态与层级落点（`specs/general/script.adoc`、技术栈侧 `specs/stack/bash.adoc`/`python.adoc`/`powershell.adoc`）都是本集合的取舍。
-* **入口语言与落点、"不加前后命令"同样没有标准明文**：POSIX（IEEE Std 1003.1）规定 `#!` 行的解析与文件可执行位、Microsoft Learn 的 Windows 命令参考规定 `.bat` 的解析方式——这些只说明**各平台"怎么执行一个脚本文件"**，**没有**规定"入口文件必须与逻辑代码同名同目录""入口语言必须是某一种""调用方不得在脚本名前后加解释器与选项"。本集合据此推出的是**自己的判据化取舍**（L1）：入口与逻辑代码**同处一目录、主名相同**、**入口语言按平台默认具备者选**（Windows `.bat`/`.cmd`、Linux/macOS `.sh`）、**调用方只给脚本名即可执行**（不得要求加 `bash`/`python3`/`powershell -File` 一类前后命令，脚本自身功能参数属"必要参数"例外）；**按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注未确证**。
-* 实证反例（**本项目真实记载**，来自用户报告与项目对话记录）：用户提出"一个脚本的功能会需要在多个环境执行，最典型的就是 Windows 和 Linux，这种情况下**不要写两遍**，而是**再加一个跨平台的实际逻辑代码写逻辑**，`bat`、`sh` 文件作为入口调用逻辑代码"；并进一步要求给出**语言与规范的推荐**——判据是"适合写脚本、环境好搭建、代码不容易出错、效率还可以、好维护、兼容性不错"（用户以 Python 为举例，并明确"仅举例，有更好的可以换"）。这正是本条要防的失效形态：**同一逻辑在两份平台脚本里各写一遍**（改一处漏一处、两套行为慢慢漂移）。
+* 依据要点（**要点转述，非逐字摘录**）：① **两个平台的命令行语义不同**（行尾解析、代码页、退出码传播、可用命令集），故"逻辑写在入口里"必然要写两遍或写错；② **把平台差异收敛到入口、把逻辑写成不依赖平台的语言**是让差异只出现一次的通行做法；③ **薄壳职责只有三件**，这是"入口层不承载逻辑"的可判定表述。
+* **须注意的语义差异（同义性）**：上述材料给的是**平台语义差异与运行时能力**，**未**规定"同一功能必须只写一份逻辑代码""入口必须是薄壳""逻辑层必须用 Python/Node.js"；**"跨平台逻辑用哪种语言"没有任何标准规定**（如实标注**未确证**）。**入口语言与落点、"不加前后命令"同样没有标准明文**：POSIX 规定 `#!` 行的解析与文件可执行位、Microsoft Learn 规定 `.bat` 的解析方式——这些只说明**各平台"怎么执行一个脚本文件"**，**没有**规定"入口文件必须与逻辑代码同名同目录""调用方不得在脚本名前后加解释器与选项"。本集合据此推出的是**自己的判据化取舍**（L1）。
+* 实证反例（**本项目真实记载**）：用户提出"一个脚本的功能会需要在多个环境执行……**不要写两遍**，而是**再加一个跨平台的实际逻辑代码写逻辑**，`bat`、`sh` 文件作为入口调用逻辑代码"；并进一步要求给出**语言与规范的推荐**——判据是"适合写脚本、环境好搭建、代码不容易出错、效率还可以、好维护、兼容性不错"。
 
 == 脚本文档的承载位置（就近落盘，不逐脚本另建）
 
-* **材料与用途（支持 `specs/general/script.adoc`「脚本文档的承载位置与协作粒度（默认写进脚本自身）」）**：
-** **ISO/IEC/IEEE 25010（产品质量模型）**：把**可维护性**（含模块性、可重用性、可分析性、可修改性、可测试性）列为与功能适用性同级的产品质量特性（**要点转述**，版本与取样状态见本文件「ISO/IEC/IEEE 25010（系统与软件质量模型）」）。"文档与代码就近存放、不逐文件另建"是工程上对**可分析性/可修改性**的常见解读——文档离代码越远越易出现"改了一半、文档与代码冲突"。
-** **ISO/IEC/IEEE 29148（需求工程）**：要求描述**单一、无歧义、可验证、可追溯**（**要点转述**，见本文件同节）。这为"同一份说明只写一处（不把脚本头部的说明搬到独立文档再各写一遍）"给出**可验证性侧依据**。
-* 依据要点（**说明：此条为"标准条款定位"的要点转述、非逐字摘录**）：①**可维护性**要求读者能在**改动处附近**回答"这份脚本做什么、怎么用、边界在哪"；②**单一/可追溯**要求同一事实只有一处来源——脚本的定位、用法与边界写进脚本自身时，"改代码"与"改文档"是同一次改动。
-* **须注意的语义差异（同义性）**：上述材料给的是**可维护性与可验证性的方向与下限**，**未**规定「脚本默认单打独斗、各脚本相互独立」「脚本的文档不得另建独立文档」「承载方式按多行文档注释 → 多行普通注释 → 普通注释取值」「只有内容超容量才移交独立文档」「大规模团队式协作才按普通项目的文档组织处理」；**"脚本的文档必须写在脚本里"没有任何标准明文**（本集合未找到支持该表述的标准条款，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**）。本集合据此推出的是**自己的判据化取舍**（同样取向的登记见 link:adoption.adoc[]）；**不得**把本节读成"某标准规定脚本不得另建文档"。
-* 实证反例（**本项目真实记载**，来自用户口径）：用户明确「**脚本比较特殊，大部分情况下都是单打独斗**，除非设计大规模团队式的协作时（有的时候拆成多个脚本，**各脚本之间也是独立的**，只是在一个任务的不同阶段会用到而已），**否则文档直接以多行文档注释（优先级-高）/多行普通注释（优先级-中）/普通注释（优先级-低）的方式写在脚本里**」——本条要防的失效是：把普通项目那套"独立文档 + 逐模块组织"外推到脚本上（为单个脚本另建文档、或把相互独立的脚本当成一个模块来组织）。
+* **材料与用途（支持 `specs/general/script.adoc`「脚本文档的承载位置与协作粒度」）**：
+** **ISO/IEC/IEEE 25010**：把**可维护性**（含模块性、可重用性、可分析性、可修改性、可测试性）列为与功能适用性同级的产品质量特性（**要点转述**）。"文档与代码就近存放、不逐文件另建"是工程上对**可分析性/可修改性**的常见解读。
+** **ISO/IEC/IEEE 29148**：要求描述**单一、无歧义、可验证、可追溯**（**要点转述**）。这为"同一份说明只写一处"给出**可验证性侧依据**。
+* 依据要点（**要点转述**）：① **可维护性**要求读者能在**改动处附近**回答"这份脚本做什么、怎么用、边界在哪"；② **单一/可追溯**要求同一事实只有一处来源。
+* **须注意的语义差异（同义性）**：上述材料给的是**可维护性与可验证性的方向与下限**，**未**规定「脚本默认单打独斗、各脚本相互独立」「脚本的文档不得另建独立文档」「承载方式按优先级取值」「只有内容超容量才移交独立文档」「大规模团队式协作才按普通项目的文档组织处理」；**"脚本的文档必须写在脚本里"没有任何标准明文**（如实标注**未确证**）。
+* 实证反例（**本项目真实记载**）：用户明确「**脚本比较特殊，大部分情况下都是单打独斗**，除非设计大规模团队式的协作时……**否则文档直接以多行文档注释（优先级-高）/多行普通注释（优先级-中）/普通注释（优先级-低）的方式写在脚本里**」——本条要防的失效是：把普通项目那套"独立文档 + 逐模块组织"外推到脚本上。
 
 == 脚本头部注释（文档头）与决策记载
 
 * **材料与用途（支持 `specs/general/script.adoc`「脚本头部注释（文档头）」）**：
-** **PEP 257（Docstring Conventions）**：规定模块 docstring 的**形态与用途**——"A docstring is a string literal that occurs as the first statement in a module, function, class, or method definition"、模块 docstring 应给出"what the module does"一类的**用途说明**（**要点转述、非逐字摘录**，原文以 PEP 257 为准）。这为"**文档头写在模块 docstring 里**、Python 脚本用文档注释而非另起块注释"给出**语言机制侧依据**——docstring 是该语言的文档注释机制，按 link:../specs/general/coding.adoc[]"有文档注释机制须用文档注释"执行。
-** **ISO/IEC/IEEE 25010（产品质量模型）**：把**可维护性**（含模块性、可重用性、可分析性、可修改性、可测试性）列为与功能适用性同级的产品质量特性（**要点转述**）。脚本的定位、用法、参数与边界若没有与代码同处一处的落点，"改得对不对、能不能安全改"就无从判断——这是"细节会随维护丢失"的**质量特性侧依据**。
-** **ISO/IEC/IEEE 29148（需求工程）**：要求需求与描述**单一、无歧义、可验证、可追溯**（**要点转述**）。这为"**同一份契约只写一处**（入口注释不复述逻辑层契约）""**取值写常量名而不抄字面数值**（否则注释与代码成为两个真源、都可被读成事实）"给出**可验证性侧依据**。
-** **MADR / AWS Prescriptive Guidance（决策记载）**：决策记载应写明**当时的取舍与理由**（"Each ADR should be about one AD"、把 ADR 集中存放并可达；**要点转述与逐字摘录见本文件「决策记载（ADR / MADR / AWS Prescriptive Guidance）」一节**）。这为"**头部注释里的设计决策写成'决策 + 理由 + 边界'而非叙述**"给出**实践侧依据**（该实践属**业界权威实践、非标准**）。
-* 依据要点（**说明：此条为"标准条款与官方文档定位"的要点转述、非逐字摘录**，如日后需逐字比对，以 PEP 257、ISO/IEC/IEEE 25010、ISO/IEC/IEEE 29148、MADR 与 AWS Prescriptive Guidance 的原文为对照面）：①**文档注释是该语言的文档机制**（不是"另一种注释"），有机制即须用；②**可维护性**要求读者不读实现即可回答"这份脚本做什么、怎么用、边界在哪"；③**单一、无歧义、可验证**要求同一事实只出现一处、以常量为唯一取值来源；④**决策记载**的价值在于事后能判断"当初的取舍今天还成不成立"。
-* **须注意的语义差异（同义性）**：上述材料给的是**文档注释机制、可维护性、可验证性与决策记载的方向与下限**，**未**规定"写脚本必须先把文档头写出来""注释里不得写死字面取值""设计决策必须留在文件级而不进方法体""超过块注释容量必须移交独立文档""入口注释不得复述逻辑层契约""头部注释不设行数上限"；**"文档先行也适用于脚本"没有任何标准原文规定**（本集合未找到支持该表述的标准条款，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**）。本集合据此推出的是**自己的判据化取舍**（均为 L1；同样取向的登记见 link:adoption.adoc[]）：文档头**先行**、决策写成**决策 + 理由 + 边界**、取值写**抽象描述或常量名**、决策留**头部/文件级**、超容量**移交独立文档并一行回指**、入口注释**不复述**逻辑层契约、篇幅**不设上限**；**不得**把本节读成"某标准规定脚本必须文档先行"。
-* 实证反例（**本项目真实记载**，来自用户提问与项目对话记录）：用户先问"写脚本时，会不会先写文档？或者写完脚本，会不会把设计思路写到注释"，再明确"**需要呢，脚本很多细节可能随着维护丢失，文档先行也适用于脚本**"——即本条要防的失效是**实现先行、文档滞后**（或只把设计思路留在对话里）：脚本改了几轮之后，当初为什么这么取边界、放弃了哪种做法已无处可查，下一次维护只能靠猜。
+** **PEP 257（Docstring Conventions）**：规定模块 docstring 的**形态与用途**——"A docstring is a string literal that occurs as the first statement in a module, function, class, or method definition"、模块 docstring 应给出"what the module does"一类的**用途说明**（**要点转述、非逐字摘录**）。这为"**文档头写在模块 docstring 里**"给出**语言机制侧依据**。
+** **ISO/IEC/IEEE 25010**：把**可维护性**列为产品质量特性（**要点转述**）。脚本的定位、用法、参数与边界若没有与代码同处一处的落点，"改得对不对、能不能安全改"就无从判断。
+** **ISO/IEC/IEEE 29148**：要求需求与描述**单一、无歧义、可验证、可追溯**（**要点转述**）。这为"**同一份契约只写一处**""**取值写常量名而不抄字面数值**"给出**可验证性侧依据**。
+** **MADR / AWS Prescriptive Guidance（决策记载）**：决策记载应写明**当时的取舍与理由**（见本文件「决策记载」一节）。这为"**头部注释里的设计决策写成'决策 + 理由 + 边界'而非叙述**"给出**实践侧依据**（该实践属**业界权威实践、非标准**）。
+* **须注意的语义差异（同义性）**：上述材料给的是**文档注释机制、可维护性、可验证性与决策记载的方向与下限**，**未**规定"写脚本必须先把文档头写出来""注释里不得写死字面取值""设计决策必须留在文件级而不进方法体""超过块注释容量必须移交独立文档""入口注释不得复述逻辑层契约""头部注释不设行数上限"；**"文档先行也适用于脚本"没有任何标准原文规定**（如实标注**未确证**）。
+* 实证反例（**本项目真实记载**）：用户先问"写脚本时，会不会先写文档？或者写完脚本，会不会把设计思路写到注释"，再明确"**需要呢，脚本很多细节可能随着维护丢失，文档先行也适用于脚本**"——即本条要防的失效是**实现先行、文档滞后**。
 
 == 评论保真（任务单留证不得删除/改写）
 
-* **材料与用途（支持 `specs/platform/cnb.adoc`「评论不得删除」与 `specs/core/execution.adoc`「破坏性操作」）**：
-** **IEEE 1028**（软件评审）：评审与被评审相互独立，评审记录须**原样保留**、可复核（要点见本文件「IEEE 1028（软件评审）」）。
-** **ISO 10007 / ISO 9001**（配置管理与质量管理）：变更与工作须受控、**可追溯**，成文信息须**原样留存**（本文件「变更审批与"合并主体"」一节）。
-** **ISO 9241-110**（交互原则）：交互应**可控、可预期、不阻断**——删除/改写留证使事后无法核对，属"不可预期"的一类。
-* 依据要点（**要点转述、非逐字摘录**）：留证的价值在于**事后可核对**；一旦被删除或被改写成"当时的说法"，核对的对象就不存在了——这与"记录是否整洁"无关。
-* **须注意的语义差异（同义性）**：上述材料给的是**方向与下限**（评审独立、变更可追溯、交互可控），**未**规定"平台任务单下的评论一律不得删除"，**也未**规定"编辑既有评论等同于删除"；平台产品侧反而普遍**提供**删除/编辑入口。故"不得删除（含 NPC 生成的）"与"编辑同效"都是**本集合自己的判据化取舍**，按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注**未确证**。规则本体与判定标准见 `specs/platform/cnb.adoc`「评论不得删除」。
-* 实证反例（**本项目真实记载**）：用户明确要求「任何情况下，不得删除 issue、pr 的评论（包括 npc 生成的）」；此前本集合只有"过程性叙述不得作为独立评论发出"的交付纪律，**没有任何条文禁止**把发错的评论删掉——该形态就在本仓库的会话里出现过（执行者发了一条过程性叙述后，删掉是最近的"补救"动作）。同义性差异与取舍理由见 link:adoption.adoc[] 同主题条。
+* **材料与用途（支持 `specs/platform/cnb.adoc`「评论不得删除」与 `specs/core/execution.adoc`「破坏性操作」）**：**IEEE 1028**（评审与被评审相互独立，评审记录须**原样保留**、可复核）；**ISO 10007 / ISO 9001**（变更与工作须受控、**可追溯**，成文信息须**原样留存**）；**ISO 9241-110**（交互应**可控、可预期、不阻断**——删除/改写留证使事后无法核对）。
+* 依据要点（**要点转述**）：留证的价值在于**事后可核对**；一旦被删除或被改写成"当时的说法"，核对的对象就不存在了——这与"记录是否整洁"无关。
+* **须注意的语义差异（同义性）**：上述材料给的是**方向与下限**，**未**规定"平台任务单下的评论一律不得删除"，**也未**规定"编辑既有评论等同于删除"；平台产品侧反而普遍**提供**删除/编辑入口。故"不得删除（含 NPC 生成的）"与"编辑同效"都是**本集合自己的判据化取舍**（如实标注**未确证**）。规则本体与判定标准见 `specs/platform/cnb.adoc`「评论不得删除」。
 
 == 抽象与接入成本（易用性 / 约定优于配置 / 显式装配）
 
-* 材料：**ISO/IEC 25010**（本文件上节；易用性 usability 与可维护性 maintainability 属**产品质量特性**，与功能适用性 functional suitability **并列**）；**ISO 9241-110**（本文件上节；人机交互原则，通用名称含**可控性、符合预期**）；**The Twelve-Factor App**（本文件上节；逐字要素名 **Config**、**Dependencies**）；**Spring Boot 官方文档**「Externalized Configuration」与「Auto-configuration」（`@ConfigurationProperties` 把外部配置**绑定**到类型安全对象、自动配置在**缺少接入方定义时**生效，即**默认即用、配置只用于覆盖**）；**Convention over Configuration**（惯例优于配置，通用业界表述）；**SOLID 的依赖倒置原则（DIP）**与**好莱坞法则（Don't call us, we'll call you）**（使用方面向抽象、由容器反向注入）。
-* 依据要点（**说明：此条为"官方文档定位与业界方法论"的要点转述、非逐字摘录**，如日后需逐字比对，以 Spring Boot 参考文档的 Externalized Configuration、Auto-configuration 两节与 The Twelve-Factor App 的 Config/Dependencies 两节原文为对照面）：**可替换点由装配侧一处声明、由容器反向注入**是通行做法；框架侧做法是**给默认实现**（缺接入方定义时才生效）与**约定优于配置**（不写也能跑，写则覆盖）。故"接入方要为每个使用点各提供一遍同一实现/配置"属抽象漏做（同一事实多个来源），而非接入方的问题。
-* **须注意的语义差异（同义性）**：上述材料给的是**质量特性归类、原则与方法论**，**未**规定"某类型在接入方只能出现一次"或"必须提供默认实现"；本集合据此推出的是**本项目自身的取舍与更严要求**——`specs/general/coding.adoc`「抽象与接入成本」的 L1 两条（**唯一装配点**、**可替换点须有可用默认或显式必填声明**），其中"唯一"与"必须"是本集合的判据化取值（对照 ISO/IEC/IEEE 29148 的"需求单一、无歧义、可验证"与单一真源要求，见本文件 ISO/IEC/IEEE 29148 节）；**不得**把本节读成"ISO/IEC 25010 要求零配置接入"。
-* 实证反例（**本项目真实记载**，来源按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注为"未逐字取回官方原文、来自用户报告与项目对话记录"）：用户报告的功能设计失效形态——"**要求都实现了、功能都实现了，却很难用**"：某抽象定义了 `ISession` 接口，但每个 service 使用点都要业务项目**各自提供一遍 `ISession` 实现类型**（N 个使用点 = N 次重复接入；新增使用点还要再传一遍），导致能力虽在、接入成本随使用点线性增长。该形态即本条 L1「唯一装配点」要防的对象（判定特征与之一一对应）。
+* 材料：**ISO/IEC 25010**（易用性 usability 与可维护性 maintainability 属**产品质量特性**，与功能适用性 **并列**）；**ISO 9241-110**（人机交互原则，通用名称含**可控性、符合预期**）；**The Twelve-Factor App**（逐字要素名 **Config**、**Dependencies**）；**Spring Boot 官方文档**「Externalized Configuration」与「Auto-configuration」（`@ConfigurationProperties` 把外部配置**绑定**到类型安全对象、自动配置在**缺少接入方定义时**生效，即**默认即用、配置只用于覆盖**）；**Convention over Configuration**（惯例优于配置，通用业界表述）；**SOLID 的依赖倒置原则（DIP）**与**好莱坞法则**。
+* 依据要点（**要点转述**）：**可替换点由装配侧一处声明、由容器反向注入**是通行做法；框架侧做法是**给默认实现**与**约定优于配置**。故"接入方要为每个使用点各提供一遍同一实现/配置"属抽象漏做。
+* **须注意的语义差异（同义性）**：上述材料给的是**质量特性归类、原则与方法论**，**未**规定"某类型在接入方只能出现一次"或"必须提供默认实现"；本集合据此推出的是**本项目自身的取舍与更严要求**（`specs/general/coding.adoc`「抽象与接入成本」的两条 L1），其中"唯一"与"必须"是本集合的判据化取值；**不得**把本节读成"ISO/IEC 25010 要求零配置接入"。
+* 实证反例（**本项目真实记载**）：用户报告的功能设计失效形态——"**要求都实现了、功能都实现了，却很难用**"：某抽象定义了 `ISession` 接口，但每个 service 使用点都要业务项目**各自提供一遍 `ISession` 实现类型**（N 个使用点 = N 次重复接入），导致能力虽在、接入成本随使用点线性增长。
 
 == 阿里巴巴 Java 开发手册
 
 * 材料：《阿里巴巴 Java 开发手册》（公开出版的手册文本）。
-* 用途：`specs/stack/java.adoc` 首段"遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准"——即**引用其作为下限、本集合可以更严**（`specs/general/source.adoc`「引用不替代规则本身」）。
+* 用途：`specs/stack/java.adoc` 首段"遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准"——即**引用其作为下限、本集合可以更严**。
 
 == Feign 接口命名带所属域前缀（Spring Cloud 与《阿里巴巴 Java 开发手册》）
 
-* 材料：**阿里巴巴 Java 开发手册**【命名】章的「方法名/接口名命名规则」（要点转述：接口名与方法名用能望文生义的词、避免歧义与同义混用）；**Spring Cloud OpenFeign 官方文档**对声明式 HTTP 客户端接口的定位（接口定义就是调用契约，接口名直接出现在注入点）；以及**微服务同域多服务的命名实践**（同一领域（如用户中心域）有多个服务各自对外提供类同能力时，同名接口会碰名）。
-* 依据要点（**说明：此条为“官方文档定位与风格指南表述”的要点转述、非逐字摘录**，并且本仓库**未逐字取回《阿里巴巴 Java 开发手册》、Spring Cloud OpenFeign 正式文档与典型微服务仓库的原文**，故本条不引用任何加引号的字句，只给出归纳后的要点；如日后需逐字比对，以上三方的原文为对照面）：Feign 接口名是**调用方与检索者最先看到的标识**（需注入、需按名搜索），故命名要能承载“**这个接口属于哪个域/项目**”这一信息；同域多服务各自对外提供类同能力时，无前缀的同名 Feign 接口会碰名（只能靠包名区分）。适用面**只取 Feign 接口这一类**（用户明确限定“目前只需要考虑 feign，不需要考虑其他对外接口”），其余对外接口的命名不在此列。
-* **须注意的语义差异（同义性）**：上述材料给的是**命名的下限与理由**（望文生义、避歧义），**未**规定“方法名/接口名必须加所属域前缀”，也**未**规定前缀取词方式；“**前缀 = 域/项目名取词首字母组合**（`user-center` → `Uc`、`open-user-center` → `Ouc`）与“**先例优先**”是本集合据此给出的**自身取舍**（`specs/general/coding.adoc`「命名与代码质量」的「Feign 接口命名带所属域/项目前缀」，`L1`；**另有本集合自身的适用范围限定**：只约束 Feign 接口，不扩及其余对外接口）；**不得**把本节读成“阿里巴巴手册规定了该命名法”。
-* 取舍与边界：前缀的目的是“**读名知归属**”，不是把业务信息堆进类名——故业务名仍只写业务本身（`UserApi`），**不拼服务全名**（`UserCenterUserApi` 属判定标准里的反例）；也不为“商标化”而为每个接口另取一套前缀字母。
-* 实证反例（**本项目真实记录**，来源按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注为“来用户报告与项目对话记录、未逐字取回原文”）：用户报告的实际失效形态——同一领域下多个服务各自定义的远程调用接口**命名无统一前缀**（同一业务名在不同域下重名；新增接口时“取个不撞名的”全凭当下发挥），用户因此要求“写 Feign 接口时加一个前缀，优先考虑已有的固定前缀，没有先例则取项目名单词的首字词再组合”。
+* 材料：**阿里巴巴 Java 开发手册**【命名】章的「方法名/接口名命名规则」（要点转述：接口名与方法名用能望文生义的词、避免歧义与同义混用）；**Spring Cloud OpenFeign 官方文档**对声明式 HTTP 客户端接口的定位（接口定义就是调用契约，接口名直接出现在注入点）；以及**微服务同域多服务的命名实践**。
+* 依据要点（**要点转述，本仓库未逐字取回原文**）：Feign 接口名是**调用方与检索者最先看到的标识**，故命名要能承载"**这个接口属于哪个域/项目**"这一信息；同域多服务各自对外提供类同能力时，无前缀的同名 Feign 接口会碰名。适用面**只取 Feign 接口这一类**（用户明确限定"目前只需要考虑 feign，不需要考虑其他对外接口"）。
+* **须注意的语义差异（同义性）**：上述材料给的是**命名的下限与理由**（望文生义、避歧义），**未**规定"方法名/接口名必须加所属域前缀"，也**未**规定前缀取词方式；"前缀 = 域/项目名取词首字母组合"与"先例优先"是本集合据此给出的**自身取舍**。
+* 实证反例（**本项目真实记录**）：用户报告的实际失效形态——同一领域下多个服务各自定义的远程调用接口**命名无统一前缀**，用户因此要求"写 Feign 接口时加一个前缀，优先考虑已有的固定前缀，没有先例则取项目名单词的首字词再组合"。
 
-== 持久化访问走类型安全查询构造 API 与统一入口（MyBatis-Plus / 通用 ORM）
+== 持久化访问走类型安全查询构造 API 与统一入口
 
-* 材料：**MyBatis-Plus 官方文档**对 `IService` 与 `Wrappers` 的说明（`IService` 继承 `IService` 接口提供 `lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()` 等成员方法；`Wrappers` 提供 `lambdaQuery()`/`lambdaUpdate()` 等静态构造方法；另有非 Lambda 的 `QueryWrapper`/`UpdateWrapper`，其列名以**字符串**书写）；**Spring Data 官方文档**对声明式查询方法（`findByXxx`）的定位；**MyBatis 官方文档**「Dynamic SQL」（`#{}` 预编译参数与 `${}` 字符串替换的差别）；**ISO/IEC 25010**（可维护性——无编译期校验的字符串承载的标识符难维护）。
-* 依据要点（**说明：此条为官方文档定位与标准特性的要点转述、非逐字摘录**，本仓库**未逐字取回** MyBatis-Plus 与 Spring Data 的正式文档原文，故本条不引用任何加引号的字句；如日后需逐字比对，以上页面原文为对照面）：①**框架同时提供了"字符串形态"与"类型安全形态"两套查询构造**——官方把 lambda 形态作为推荐的类型安全写法，非 Lambda 形态则以字符串书写列名/表名；②**字符串书写的列名无编译期校验**：重命名重构（IDE 只重写符号引用，不重写字符串字面量）后不报错、到运行期才失败，属可维护性缺陷（ISO/IEC 25010 的可维护性特性）；③**统一入口**（`IService` 的成员方法）是框架自带的、可直接调用的能力，不需自建。
-* **须注意的语义差异（同义性）**：上述材料给的是**两套写法都存在、lambda 形态受推荐**，**未**规定"禁止一切查询构造器的 `new`"、"必须只用 `IService` 成员方法"；本集合据此推出的是**自己更严的判据化取舍**——通用层 `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」的三条 L1（**统一入口**、**优先用类型安全/声明式查询构造 API**、**替代优先**），**通用层只写抽象形态与判定标准、不写框架类名**，框架专名与禁止清单的**唯一落点**为技术栈层 `specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」（**强制走 `IService` 的 `lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`，除非无法替代，否则禁止 `new QueryWrapper` 及其子类**）；**不得**把本条读成"MyBatis-Plus 官方要求禁止 `new` 构造器"。
-* **取值范围与例外**：本条**不**禁止跨语言语句的承载（mapper `*.xml`，见本文件「跨语言执行脚本（SQL / Lua 写资源文件，不写字符串拼接）」），**不**禁止类型安全 API 表达不了的语义（退回 mapper `*.xml` 或 Mapper 接口上封装的默认方法）；存量为**随动迁移**（改到即迁、不发动全库改造）。
-* 实证反例（**本项目真实记载**，来源按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注为"来自用户报告与项目对话记录、未逐字取回官方原文"）：用户报告的失效形态——Service 实现类已经 `extends ServiceImpl<XxxMapper, Xxx>`，业务代码里却仍 `new QueryWrapper<>()` / `new LambdaQueryWrapper<>()` 拼条件，**同一项目并存两套写法**（"走哪条路径"全凭当下发挥）；非 Lambda 形态还用字符串写列名（`eq("user_name", ...)`），改名即静默失效。用户据此提出的要求原文口径为："**强制要求使用 IService 的成员方法 lambdaQuery lambdaUpdate ktQuery ktUpdate，除非无法替代，否则禁止使用 new QueryWrapper 及其子类的方式**"。
+* 材料：**MyBatis-Plus 官方文档**对 `IService` 与 `Wrappers` 的说明；**Spring Data 官方文档**对声明式查询方法（`findByXxx`）的定位；**MyBatis 官方文档**「Dynamic SQL」；**ISO/IEC 25010**（可维护性）。
+* 依据要点（**要点转述，本仓库未逐字取回 MyBatis-Plus 与 Spring Data 的正式文档原文**）：① **框架同时提供了"字符串形态"与"类型安全形态"两套查询构造**；② **字符串书写的列名无编译期校验**：重命名重构后不报错、到运行期才失败，属可维护性缺陷；③ **统一入口**是框架自带的、可直接调用的能力。
+* **须注意的语义差异（同义性）**：上述材料给的是**两套写法都存在、lambda 形态受推荐**，**未**规定"禁止一切查询构造器的 `new`"、"必须只用 `IService` 成员方法"；本集合据此推出的是**自己更严的判据化取舍**——通用层只写抽象形态与判定标准、不写框架类名，框架专名与禁止清单的唯一落点为技术栈层。
+* 实证反例（**本项目真实记载**）：用户报告的失效形态——Service 实现类已经 `extends ServiceImpl`，业务代码里却仍 `new QueryWrapper<>()` / `new LambdaQueryWrapper<>()` 拼条件，**同一项目并存两套写法**。
 
-== 多层嵌套对象转换用声明式映射（MapStruct / ISO/IEC 25010 可维护性）
+== 多层嵌套对象转换用声明式映射（MapStruct）
 
-* **材料与用途（支持通用层 `specs/general/coding.adoc`「对象转换（多层嵌套对象的转换）」与技术栈层 `specs/stack/java.adoc`「对象转换（MapStruct）」（**L2 建议**））**：**MapStruct 官方文档**（生成式映射框架：在**编译期**为映射接口生成实现，字段/类型对不上时报编译错误；支持嵌套映射方法自动调用、集合映射方法、"映射不能表达时用自定义方法"）；**ISO/IEC 25010**（可维护性——重复代码与无编译期校验的字段搬运）；**ISO/IEC/IEEE 29148**（判定须可验证）。
-* 依据要点（**说明：此条为官方文档定位与标准特性的要点转述、非逐字摘录**，本仓库**未逐字取回** MapStruct 官方文档原文，故本条不引用任何加引号的字句；如日后需逐字比对，以 MapStruct 官方文档与 ISO/IEC 25010 的原文为对照面。**唯一逐字项**：`@Mapping` 的用法面（`source`/`target`/`constant`/`expression` 等）属该库公开 API，须以其当前官方文档核对面为准）：①**手写逐字段搬运没有编译期保障**——模型新增字段后既不报错也不提示，只在运行期表现为"某个字段一直是空"，属可维护性缺陷（ISO/IEC 25010 的可维护性特性）；②**声明式映射的失效是编译期的**——映射接口要求每个目标字段都能被推断或显式映射，对不上即编译失败；③**嵌套与集合是一等公民**——对象含对象、集合含对象时用映射方法自动调用表达，不需手写 `foreach` 逐个转换。
-* **须注意的语义差异（同义性）**：上述材料给的是**该库能做什么、以及为什么生成式映射比手写更可靠**，**未**规定"多层嵌套对象转换必须用某库"、"禁止手写转换代码"，也**未**规定"哪种技术栈必须用哪个库"；本集合据此给出的是**自己的取向（建议、非强制）**——通用层 `specs/general/coding.adoc`「对象转换（多层嵌套对象的转换）」的 L2（**优先声明式映射**、判据目标式、等价路径同样合规），**框架专名与写法落在技术栈层**，Java 侧为 `specs/stack/java.adoc`「对象转换（MapStruct）」（**多层嵌套对象转换优先使用 MapStruct、建议不手写转换代码**）；**不得**把本节读成"MapStruct 官方要求禁止手写转换"，也**不得**读成外部标准规定。
-* **取值范围与例外**：本条**不**适用映射声明表达不了的语义（需查库/远程取值、条件分支取值、多来源合成一个字段）；**不**管**无嵌套（单层）**的转换（与字段数量无关）；**不**强制**无法运行注解处理器**的构建环境与**非 JVM 技术栈且无对应库**的场景。**本条不设强制面**——深拷贝/结构复制工具、序列化（如 JSON）中转、手工构建器等**等价路径同样合规**，判定按"同一转换只有一处来源、结构变化不静默漏字段"的目标式判据。存量为**随动迁移**（改到即迁、不发动全库改造）。**同义性差异的边界**：把"JVM 下优先用 MapStruct"读成外部标准规定即为误读——该库的优先性是本集合的取向，且是**建议而非硬约束**。
-* 实证反例（**本项目真实记载**，来源按 `specs/general/source.adoc`「无法确证时的正确做法」如实标注为"来自用户报告与项目对话记录、未逐字取回官方原文"）：用户报告的失效形态——**多层嵌套对象**（对象含对象、集合含对象）之间的转换由执行者**手写逐字段搬运代码**（一层层 `new` + 逐个 `set`）；用户据此提出的要求原文口径为："**多层嵌套对象转换时，优先使用 mapstruct（jvm下），不允许手动写转换代码——不是强制，但是建议**"。
+* **材料与用途（支持 `specs/general/coding.adoc`「对象转换」与 `specs/stack/java.adoc`「对象转换（MapStruct）」（**L2 建议**））**：**MapStruct 官方文档**（生成式映射框架：在**编译期**为映射接口生成实现，字段/类型对不上时报编译错误；支持嵌套映射方法自动调用、集合映射方法）；**ISO/IEC 25010**（可维护性）；**ISO/IEC/IEEE 29148**（判定须可验证）。
+* 依据要点（**要点转述，未逐字取回**）：① **手写逐字段搬运没有编译期保障**——模型新增字段后既不报错也不提示，只在运行期表现为"某个字段一直是空"；② **声明式映射的失效是编译期的**；③ **嵌套与集合是一等公民**。
+* **须注意的语义差异（同义性）**：上述材料给的是**该库能做什么、以及为什么生成式映射比手写更可靠**，**未**规定"多层嵌套对象转换必须用某库"、"禁止手写转换代码"，也**未**规定"哪种技术栈必须用哪个库"；本集合据此给出的是**自己的取向（建议、非强制）**。**本条不设强制面**——等价路径同样合规。
+* 实证反例（**本项目真实记载**）：用户报告的失效形态——多层嵌套对象之间的转换由执行者**手写逐字段搬运代码**；用户口径为"**多层嵌套对象转换时，优先使用 mapstruct（jvm下），不允许手动写转换代码——不是强制，但是建议**"。
 
 == HTTP 接口路径的命名风格（RFC 3986 / Google API 设计指南）
 
-* **材料与用途（支持 `specs/stack/spring.adoc`「分层与职责」的「HTTP 接口路径优先用中划线（kebab-case）」（L1））**：
-** **RFC 3986**（Uniform Resource Identifier (URI): Generic Syntax）：URI 的**通用语法成分**与**字符分类**——路径（path）由 `pchar` 组成，`-`、`_`、`~` 等属 **unreserved** 字符；`scheme` 与 `host` **大小写不敏感**，而**路径部分大小写敏感**（`A` 与 `a` 是不同的路径）。
-** **Google API 设计指南**（Google API Improvement Proposals / API Design Guide，官方页面公开）：REST 资源名与路径用**小写连字符（kebab-case）分隔的词**（如 `users/{userId}/user-events` 一类形态），不用下划线或驼峰。
-* 依据要点（**说明：此条为「标准特性与官方风格指南」的要点转述、非逐字摘录**，如日后需逐字比对，以 RFC 3986 第 2-3 章（Characters / Syntax Components）与 Google API 设计指南的资源名一节的原文为对照面）：**路径片段的大小写与 `_`/`-` 之差都不构成语义差**（`-` 与 `_` 同属 unreserved，见 RFC 3986 第 2.3 节），只构成拼写与可读性风险；故本条约束的是**一致性与可读性**，不是协议兼容性。
-* **版本关系（L1，引用现行版本）**：RFC 3986 **未被废止**，但已由 **RFC 8820**（*URI Design and Ownership*，**BCP 190**，2020-06，**Updates 3986**）更新——该文件的要点是"URI 的子结构由 scheme 决定，发布独立标准去强制 URI 子结构的特定形态通常是问题做法"。**用途是纠偏读者印象**：不得把 RFC 3986 读成"支持规定 URI/路径必须长什么样"——**"HTTP 路径优先用中划线"是本集合自己的风格取舍**（见下条同义性说明），不是 RFC 3986 的要求。（依据原文见本文件同节取样方式：`curl -s https://www.rfc-editor.org/rfc/rfc8820.txt`，"This document provides guidance on the specification of URI substructure in standards."）
-* **须注意的语义差异（同义性）**：上述材料给的是**URI 语法事实与公开的风格约定**，**未**规定必须用中划线、也未禁止下划线；本集合据此推出的是**自己更严的判据化取舍**——路由路径的路径片段用小写 + `-`，并给出两处照旧（服务路由/网关前缀、已发布且外部依赖的对外路径）与可逐条核对的判定标准（出现 `_` / 路径片段用驼峰或大写 / 同一接口内两种风格混用）；**不得**把本节读成「某标准规定 HTTP 路径必须用中划线」。**落点只在技术栈层**（`specs/stack/spring.adoc`）：「HTTP 路径」只在 Web 框架语境下有定义，通用层不写具体协议/框架专名。
-* 实证反例（**本项目真实记载**，来源如实标注为「来自用户报告与项目对话记录、未逐字取回指南原文」）：用户观察到同一项目里内部调用接口的路径**下划线与驼峰混用**，要求「**feign 接口地址优先使用中划线**」——路径风格不统一时，调用方每加一个接口都要先去看既有写法，且拼错风格的概率随接口数量线性上涨。
+* **材料与用途（支持 `specs/stack/spring.adoc`「分层与职责」的「HTTP 接口路径优先用中划线」（L1））**：
+** **RFC 3986**（Uniform Resource Identifier (URI): Generic Syntax）：URI 的**通用语法成分**与**字符分类**——路径由 `pchar` 组成，`-`、`_`、`~` 等属 **unreserved** 字符；`scheme` 与 `host` **大小写不敏感**，而**路径部分大小写敏感**。
+** **Google API 设计指南**（官方页面公开）：REST 资源名与路径用**小写连字符（kebab-case）分隔的词**，不用下划线或驼峰。
+* 依据要点（**要点转述**）：**路径片段的大小写与 `_`/`-` 之差都不构成语义差**（`-` 与 `_` 同属 unreserved，见 RFC 3986 第 2.3 节），只构成拼写与可读性风险；故本条约束的是**一致性与可读性**，不是协议兼容性。
+* **版本关系（L1，引用现行版本）**：RFC 3986 **未被废止**，但已由 **RFC 8820**（*URI Design and Ownership*，**BCP 190**，2020-06，**Updates 3986**）更新——该文件的要点是"URI 的子结构由 scheme 决定，发布独立标准去强制 URI 子结构的特定形态通常是问题做法"。**用途是纠偏读者印象**：不得把 RFC 3986 读成"支持规定 URI/路径必须长什么样"——**"HTTP 路径优先用中划线"是本集合自己的风格取舍**（依据原文可取：`curl -s https://www.rfc-editor.org/rfc/rfc8820.txt`）。
+* **须注意的语义差异（同义性）**：上述材料给的是**URI 语法事实与公开的风格约定**，**未**规定必须用中划线、也未禁止下划线；本集合据此推出的是**自己更严的判据化取舍**。**落点只在技术栈层**（`specs/stack/spring.adoc`）：「HTTP 路径」只在 Web 框架语境下有定义，通用层不写具体协议/框架专名。
+* 实证反例（**本项目真实记载**）：用户观察到同一项目里内部调用接口的路径**下划线与驼峰混用**，要求「**feign 接口地址优先使用中划线**」。
 
 == HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「HTTP 接口语义」的四条）**：**RFC 9110**（*HTTP Semantics*，**STD 97**，2022-06）与 **RFC 9457**（*Problem Details for HTTP APIs*，Standards Track，2023-07，**Obsoletes RFC 7807**）——**两份官方文本均已取回**（`curl -s https://www.rfc-editor.org/rfc/rfc9110.txt`、`curl -s https://www.rfc-editor.org/rfc/rfc9457.txt`）。
+* **材料与用途（支持 `specs/general/coding.adoc`「HTTP 接口语义」的四条）**：**RFC 9110**（*HTTP Semantics*，**STD 97**，2022-06）与 **RFC 9457**（*Problem Details for HTTP APIs*，Standards Track，2023-07，**Obsoletes RFC 7807**）——**两份官方文本均已取回**。
 * **逐字（RFC 9110，9.2.1 Safe Methods）**："Request methods are considered "safe" if their defined semantics are essentially read-only; i.e., the client does not request, and does not expect, any state change on the origin server as a result of applying a safe method to a target resource."；"Of the request methods defined by this specification, the GET, HEAD, OPTIONS, and TRACE methods are defined to be safe."；同节的反例与要求："it is common for Web-based content editing software to use actions within query parameters, such as "page?do=delete". If the purpose of such a resource is to perform an unsafe action, then the resource owner **MUST** disable or disallow that action when it is accessed using a safe request method. Failure to do so will result in unfortunate side effects when automated processes perform a GET on every URI reference for the sake of link maintenance, pre-fetching, building a search index, etc."
 * **逐字（RFC 9110，9.2.2 Idempotent Methods）**："A request method is considered "idempotent" if the intended effect on the server of multiple identical requests with that method is the same as the effect for a single such request. Of the request methods defined by this specification, PUT, DELETE, and safe request methods are idempotent."；"A client **SHOULD NOT** automatically retry a request with a non-idempotent method unless it has some means to know that the request semantics are actually idempotent, regardless of the method, or some means to detect that the original request was never applied."
 * **逐字（RFC 9110，15 Status Codes）**："The status code of a response is a three-digit integer code that describes the result of the request and the semantics of the response, including whether the request was successful and what content is enclosed (if any)."；五类首位的语义（"1xx (Informational)"…"5xx (Server Error)"）。
-* **逐字（RFC 9457，Abstract 与 3.1 成员）**："This document defines a "problem detail" to carry machine-readable details of errors in HTTP response content to avoid the need to define new error response formats for HTTP APIs."；成员 `type`（"a JSON string containing a URI reference"）、`status`（"a JSON number indicating the HTTP status code"，且 "Generators **MUST** use the same status code in the actual HTTP response"）、`title`（"a JSON string containing a short, human-readable summary of the problem type"）、`detail`（"a JSON string containing a human-readable explanation specific to this occurrence of the problem"）、`instance`（"a JSON string containing a URI reference that identifies the specific occurrence of the problem"）；媒体类型 **`application/problem+json`**（原文：该 API 以 "application/problem+json" 类型响应，即使客户端未在 `Accept` 里列出该类型——HTTP 允许如此）。
+* **逐字（RFC 9457，Abstract 与 3.1 成员）**："This document defines a "problem detail" to carry machine-readable details of errors in HTTP response content to avoid the need to define new error response formats for HTTP APIs."；成员 `type`（"a JSON string containing a URI reference"）、`status`（"a JSON number indicating the HTTP status code"，且 "Generators **MUST** use the same status code in the actual HTTP response"）、`title`、`detail`、`instance`；媒体类型 **`application/problem+json`**。
 * **它支撑什么**：`specs/general/coding.adoc`「HTTP 接口语义」的四条——安全方法不得产生状态变更（L1）、幂等语义与重试对齐（L2）、状态码按语义使用（L2）、对外错误响应统一结构（L3，可选）。
 * **须注意的同义性差异（L1，逐条如实标注）**：
-  ** **标准给的是协议语义，不是"项目必须怎么写"**：RFC 9110 规定的是方法与状态码的**协议语义**（安全/幂等的定义、状态码类别），**未**规定项目不许把错误包成 `200`、**未**规定客户端必须用哪种方法——"不得用 `200` 包错误""非幂等请求不得配自动重试"是**本集合按语义推出的判据化取值**（本集合据此写出可核对的判定标准），不得读成标准原文。
-  ** **"安全方法不得产生状态变更"这一条**：标准在此处的要求是**资源所有者须在安全方法被访问时禁用该动作**（`MUST disable or disallow`）——与本条同义，但标准的表述是"禁用动作"、本条的表述是"不得用安全方法承载有副作用的动作"，属**同一要求的两种写法**。
-  ** **Problem Details 是可选项**：RFC 9457 只定义了一种错误响应**格式**，**未**要求 API 必须采用；本集合据此把它定为 **L3（可选）**，只在"对外 HTTP API 需要机器可读的错误结构"时采用。
-  ** **与 `specs/general/security.adoc`「敏感信息」的关系**：RFC 9457 的 `detail` 成员原文是 "ought to focus on helping the client correct the problem, rather than giving debugging information"——与安全条的"不得暴露堆栈/SQL/内部路径"**同向**，两条各自成立、互不替代。
-* **本项目实证（用户要求）**：本轮用户要求"找一找业界知名的公共规范/标准，对比本项目公共规范、取长补短"后确定补入本节——补的两个缺口是**提交信息无规则**（依据已收却未成条文）与**HTTP 方法/状态码语义未覆盖**（此前只覆盖了路径命名风格）。
+** **标准给的是协议语义，不是"项目必须怎么写"**：RFC 9110 规定的是方法与状态码的**协议语义**，**未**规定项目不许把错误包成 `200`、**未**规定客户端必须用哪种方法——"不得用 `200` 包错误""非幂等请求不得配自动重试"是**本集合按语义推出的判据化取值**。
+** **"安全方法不得产生状态变更"这一条**：标准在此处的要求是**资源所有者须在安全方法被访问时禁用该动作**（`MUST disable or disallow`）——与本条同义，属**同一要求的两种写法**。
+** **Problem Details 是可选项**：RFC 9457 只定义了一种错误响应**格式**，**未**要求 API 必须采用；本集合据此把它定为 **L3（可选）**。
+** **与 `specs/general/security.adoc`「敏感信息」的关系**：RFC 9457 的 `detail` 成员原文是 "ought to focus on helping the client correct the problem, rather than giving debugging information"——与安全条的"不得暴露堆栈/SQL/内部路径"**同向**，两条各自成立、互不替代。
+* **本项目实证（用户要求）**：用户在要求"找一找业界知名的公共规范/标准，对比本项目公共规范、取长补短"后确定补入本节——补的两个缺口是**提交信息无规则**与**HTTP 方法/状态码语义未覆盖**。
 
-== 请求/响应类的复用与跨模块移动（ISO/IEC 25010 可维护性）
+== 请求/响应类的复用与跨模块移动
 
-* **材料与用途（支持 `specs/general/coding.adoc`「代码复用」的「跨服务/对外调用的请求响应类优先移动复用，不新建」（L1））**：**ISO/IEC 25010**（系统与软件质量模型）的**可维护性**（同一信息只有一个来源、改一处不必追多处）；**ISO/IEC/IEEE 29148**（需求/接口契约须单一、无歧义、可验证——同一数据契约出现两个定义即违反「单一」）；**The Twelve-Factor App** 的 **Dependencies**（依赖**显式声明**、不复用实现细节的副本）。
-* 依据要点（**说明：此条为标准特性的要点转述、非逐字摘录**）：**同一份数据契约的多个副本必然各自漂移**（字段增删只改一处 → 序列化与校验规则不一致，且没有编译期错误提示）；**「移动而非复制」是使「单一来源」成立的动作**——复制会立刻产生两个可独立演化的定义。
-* **须注意的语义差异（同义性）**：上述材料给的是**可维护性与单一来源的原则**，**未**规定请求/响应类必须移动、不得新建，也**未**规定任何例外清单；本集合据此推出的是**自己更严的判据化取舍**——给已有接口加新的内部调用接口时**优先移动并沿用**请求/响应类，只留两种例外（数据库实体类除用户声明外不移动、类里引用了第三方类型的类），并明确**本项目自身的模块依赖不算三方依赖**（仍可一起移动）；**不得**把本节读成「某标准规定了例外清单」。
-* 实证反例（**本项目真实记载**，来源如实标注为「来自用户报告与项目对话记录」）：用户报告的失效形态——给已有接口加 Feign 内部接口时**另建了一套请求/响应类**，同一契约出现两个定义；用户据此明确要求：「**当给一个现有的接口添加 feign 内部接口时，优先移动请求和响应类，而不是新增**，除非该类是**数据库实体类**（除声明外不用）或者**有三方依赖**（**本项目依赖不算，可以一起移动**）」。
+* **材料与用途（支持 `specs/general/coding.adoc`「代码复用」的「跨服务/对外调用的请求响应类优先移动复用」（L1））**：**ISO/IEC 25010** 的**可维护性**（同一信息只有一个来源、改一处不必追多处）；**ISO/IEC/IEEE 29148**（同一数据契约出现两个定义即违反「单一」）；**The Twelve-Factor App** 的 **Dependencies**。
+* 依据要点（**要点转述**）：**同一份数据契约的多个副本必然各自漂移**；**「移动而非复制」是使「单一来源」成立的动作**。
+* **须注意的语义差异（同义性）**：上述材料给的是**可维护性与单一来源的原则**，**未**规定请求/响应类必须移动、不得新建，也**未**规定任何例外清单；本集合据此推出的是**自己更严的判据化取舍**。
+* 实证反例（**本项目真实记载**）：用户报告的失效形态——给已有接口加 Feign 内部接口时**另建了一套请求/响应类**，同一数据契约出现两个定义。
 
 == 变更审批与"合并主体"（DORA / GitHub Docs）
 
-* 材料：**DORA**（DevOps Research and Assessment，Accelerate State of DevOps 报告系列）关于交付性能的研究结论——**变更审批（change approval）/代码评审**的**质量**与交付性能相关，而**把审批做成形式化的把关**并不提升性能；以及 **GitHub Docs** 关于**受保护分支（protected branches）与 required pull request reviews** 的官方说明：合入受保护分支的变更**须经独立于改动提出者的评审通过**，且**提交者不得自行绕过**所配置的评审要求。
-* 依据要点（**说明：此条为"业界权威实践的公开陈述"，引文为要点转述、非逐字摘录**，如日后需逐字比对，以 DORA 报告原文与 GitHub Docs 的 protected branches / required reviews 页面为对照面）：**让改动方自己去合入、或让同一自动化执行者既改又合**，等于取消独立评审这一环；**"谁提的改动谁负责任地提出、合入由独立的一方（人）确认"**是通行做法。
-* **须注意的语义差异（同义性）**：DORA 的结论指向"**审批要有实质、不要形式化**"，本**未**声称"某一类执行者绝对不得合并"；本集合据此推出的是一条**本项目自身的组织约定**——**CNB 平台上的 NPC/CI 执行者一律不得合并**（`specs/platform/cnb.adoc`「合并请求的合并主体（NPC 禁合并）」），其**根因**是：CI 环境是一次性、无合规责任主体的自动执行者，**授权给"同一个自动执行者"不构成独立评审**；**不得**把本节读成"标准规定 AI 不得合并"。
-* 实证反例（**本项目真实记载**）：本项目曾发生"由 **AI（CNB NPC/CI 环境中的执行者）实际执行了合并**"的实例——起因是发起人在对话中直接授权；该实例正是本条要防的失效形态：**授权被当成豁免、自动化执行者替人承担了不可逆且合规相关的动作**（本条也因此把"因用户要求/授权故本次合并"单列为判定标准②）。
+* 材料：**DORA**（Accelerate State of DevOps 报告系列）关于交付性能的研究结论——**变更审批/代码评审**的**质量**与交付性能相关，而**把审批做成形式化的把关**并不提升性能；以及 **GitHub Docs** 关于**受保护分支与 required pull request reviews** 的官方说明：合入受保护分支的变更**须经独立于改动提出者的评审通过**，且**提交者不得自行绕过**所配置的评审要求。
+* 依据要点（**要点转述**）：**让同一自动化执行者既改又合**，等于取消独立评审这一环；**"谁提的改动谁负责任地提出、合入由独立的一方（人）确认"**是通行做法。
+* **须注意的语义差异（同义性）**：DORA 的结论指向"**审批要有实质、不要形式化**"，**未**声称"某一类执行者绝对不得合并"；本集合据此推出的是一条**本项目自身的组织约定**——CNB 平台上的 NPC/CI 执行者一律不得合并；**不得**把本节读成"标准规定 AI 不得合并"。
+* 实证反例（**本项目真实记载**）：本项目曾发生"由 **AI（CNB NPC/CI 环境中的执行者）实际执行了合并**"的实例——起因是发起人在对话中直接授权；该实例正是本条要防的失效形态：**授权被当成豁免**。
 
 == 决策记载（ADR / MADR / AWS Prescriptive Guidance）
 
-**用途**：支撑 link:usage.adoc[]「一、什么时候该把依据写进图书馆（触发特征）」——**"规则/决策背后的依据要有落点"是业界通行做法，不是本站自创**；也支撑 link:adoption.adoc[] 的准入判定依据。**引文为逐字摘录或如实标注的要点转述**（本文件「使用与核对」的口径）。
+**用途**：支撑 `library/usage.adoc`「一、什么时候该把依据写进图书馆（触发特征）」——**"规则/决策背后的依据要有落点"是业界通行做法，不是本站自创**。
 
 === MADR 模板（官方文本已取回，逐字）
 
-Markdown Architectural Decision Records（adr/madr v4.0.0）**最小模板**的章节序列**逐字**如下（官方仓库 `template/adr-template-minimal.md` 已取回）：
+Markdown Architectural Decision Records（adr/madr v4.0.0）**最小模板**的章节序列**逐字**如下：
 
 [listing]
 ----
@@ -389,66 +379,66 @@ Markdown Architectural Decision Records（adr/madr v4.0.0）**最小模板**的�
 ### Consequences
 ----
 
-要点（据上列**逐字章节名**可判）：一份决策记载 = **问题/背景** + **考虑过的选项** + **选了什么及理由** + **后果**；"为什么选它、放弃了什么"是模板的必备结构，不是可选修饰。
+要点：一份决策记载 = **问题/背景** + **考虑过的选项** + **选了什么及理由** + **后果**；"为什么选它、放弃了什么"是模板的必备结构，不是可选修饰。
 
 === "好的记载"的判据（业界资料汇总，官方文本已取回、逐字）
 
-joelparkerhenderson/architecture-decision-record（业界广泛引用的 ADR 资料汇总）「Suggestions for writing good ADRs」逐字三条：
+joelparkerhenderson/architecture-decision-record「Suggestions for writing good ADRs」逐字三条：
 
 * "Specific: Each ADR should be about one AD, not multiple ADs."
 * "Immutable: Don't alter existing information in an ADR. Instead, amend the ADR by adding new information, or supersede the ADR by creating a new ADR."
 * "Rationale: Explain the reasons for doing the particular AD. This can include the context (see below), pros and cons of various potential choices, feature comparisons, cost/benefit discussions, and more."
 
-同页「Decision sharing (optional)」另有一句**逐字**："Many ADs recur across projects."，其后接（要点转述）"因而，过往决策的经验无论好坏，都是**在采用明确的知识管理策略时**才成为有价值的可复用资产"。
+同页「Decision sharing (optional)」另有一句**逐字**："Many ADs recur across projects."
 
-**它支撑什么**：①"一份记载只讲一个决策、必须写明理由与取舍"→ link:usage.adoc[]「一、什么时候该把依据写进图书馆（触发特征）」把"有取舍或争议的决策"列为入馆触发特征，且要求收**比较与理由**而非只写结论；②"决策一旦定下不改写、变更用新增/取代"→ 本集合的对应做法是**变更由 git 历史承载**（`specs/`）与**统一变更日志只追加**（link:../specs/general/changelog.adoc[]）；③"过往决策**在明确的知识管理策略下**才成为可复用资产"→ 本集合的"明确策略"即 link:usage.adoc[] 的写入判据与反查算法（**光有零散记录不构成依据库**）。
+**它支撑什么**：① "一份记载只讲一个决策、必须写明理由与取舍"→ `library/usage.adoc`「一、什么时候该把依据写进图书馆」把"有取舍或争议的决策"列为入馆触发特征；② "决策一旦定下不改写、变更用新增/取代"→ 本集合的对应做法是**变更由 git 历史承载**与**统一变更日志只追加**；③ "过往决策**在明确的知识管理策略下**才成为可复用资产"→ 本集合的"明确策略"即 `library/usage.adoc` 的写入判据与反查算法。
 
 === 存储与可检索（AWS Prescriptive Guidance，官方网页已取回、要点转述）
 
-AWS Prescriptive Guidance *Best practices for using architectural decision records*（官方文档页已取回；**要点转述、非逐字摘录**）两条与本题直接相关：**"Preserve ADR history"**（保留历史：变更时把旧记载标为 `Superseded` 并**保留在决策日志里**，新记载注明改动）与 **"Store ADRs in a central location"**（集中存放：每个项目成员都能访问该集合，并在项目文档主页上引用它）。
+AWS Prescriptive Guidance *Best practices for using architectural decision records* 两条与本题直接相关：**"Preserve ADR history"**（变更时把旧记载标为 `Superseded` 并**保留在决策日志里**）与 **"Store ADRs in a central location"**（每个项目成员都能访问该集合，并在项目文档主页上引用它）。
 
-**它支撑什么**：①"中央位置 + 从文档主页可达"→ 图书馆的**入口登记表**（link:README.adoc[]「主题登记」）与**在项目规范入口登记**（`AGENTS.adoc`「依据图书馆」，双向一致由机械防线钉住）——依据库的价值在于**找得到**，不在"存了文件"；②"保留历史、变更可追溯"→ 本集合"依据不作静默改写、换版关系暴露"（本文件「关于标准版本年份」）。
+**它支撑什么**：① "中央位置 + 从文档主页可达"→ 图书馆的**入口登记表**与在项目规范入口登记（双向一致由机械防线钉住）——依据库的价值在于**找得到**，不在"存了文件"；② "保留历史、变更可追溯"→ 本集合"依据不作静默改写、换版关系暴露"。
 
-**须注意的语义差异（同义性）**：ADR 面向**架构决策**；本集合把它**类推**到"规范条目与其依据"这一同类场合（link:README.adoc[]「放什么、不放什么」），**属借用其做法**，**未**声称这些材料规定了"规范集合必须配依据库"。
+**须注意的语义差异（同义性）**：ADR 面向**架构决策**；本集合把它**类推**到"规范条目与其依据"这一同类场合，**属借用其做法**，**未**声称这些材料规定了"规范集合必须配依据库"。
 
 == ISO 30401（知识管理体系——要求）
 
 * 标准名与版本：ISO 30401:2018 *Knowledge management systems — Requirements*（现行版本另有 **Amendment 1:2022** 与 **Amendment 2:2024**）。
-* **取样状态：未逐字取回**（编写时 `iso.org` 对应页面返回反爬校验页，故**不引用其字句**；题名与修正案编号取自公开可查的多处记录）。如需逐字比对，请以标准第 1 章 Scope 与第 4 章为对照面（本文件「使用与核对」）。
-* 用途（**借用其定位、非引用其条文**）：该标准把**知识管理**确立为可被要求、可被审核的**管理体系**对象——本集合据此论证"**依据/知识要有明确的管理策略与可查的落点**，而非零散记录"（link:usage.adoc[]「为什么需要本协议」的"缺触发判据 → AI 不主动写"）。
+* **取样状态：未逐字取回**（编写时 `iso.org` 对应页面返回反爬校验页，故**不引用其字句**；题名与修正案编号取自公开可查的多处记录）。如需逐字比对，请以标准第 1 章 Scope 与第 4 章为对照面。
+* 用途（**借用其定位、非引用其条文**）：该标准把**知识管理**确立为可被要求、可被审核的**管理体系**对象——本集合据此论证"**依据/知识要有明确的管理策略与可查的落点**，而非零散记录"。
 * **须注意的语义差异（同义性）**：本集合**未**声称要按 ISO 30401 建管理体系、也不做符合性评估；仅借用"知识管理是需要明确策略的体系"这一方向。
 
 == 依据的定位与取值（git / RFC 9110）
 
 === 为什么这里收的是"机制"而不是"某产品的接口"
 
-依据图书馆可以很大（link:README.adoc[]「为什么还要有"定位协议"（馆可以无限大）」），故"引用方怎么在不全量下载的前提下定位到具体文件"本身需要依据——但它依据的是**通用的、稳定的机制**（Git 的内容寻址、HTTP 的分段取值），**不是本站站点某一页的接口**（页面会改版、接口不是标准）。故本节收机制原文与**实测取样状态**，**不收产品接口**（`specs/general/source.adoc`「不臆造行为」：描述某平台行为须有官方文档或实际验证）。
+依据图书馆可以很大，故"引用方怎么在不全量下载的前提下定位到具体文件"本身需要依据——但它依据的是**通用的、稳定的机制**（Git 的内容寻址、HTTP 的分段取值），**不是本站站点某一页的接口**（页面会改版、接口不是标准）。故本节收机制原文与**实测取样状态**，**不收产品接口**（`specs/general/source.adoc`「不臆造行为」）。
 
 === git（内容寻址与按 blob 取回；官方文本已取回）
 
-* **官方材料**：git 的官方文档（`git-rev-parse`、`git-cat-file`、`git-grep`、`git-clone`；**官方文本已取回**）与 git 源码仓库自身的实践。
+* **官方材料**：git 的官方文档（`git-rev-parse`、`git-cat-file`、`git-grep`、`git-clone`；**官方文本已取回**）。
 * **逐字（`git-cat-file` 官方文档，Description 首句）**："In its first form, the command provides the content or the type of an object in the repository."
 * **逐字（`git-rev-parse` 官方文档，Specifying Revisions 一节）**："`<rev>:<path>`, e.g. `HEAD:README`, `master:./README`"；同处逐字："A suffix `:` followed by a path names the **blob or tree** at the given path in the tree-ish object named by the part before the colon."（即 `<commit>:<path>` 命名的是**该路径处的内容对象**，不是路径本身）。
-* **它支撑什么**：link:README.adoc[]「依据的定位协议（入口 + 索引 + 单点取值）」把"可靠性"落在**内容可校验**上（**内容主键是终态**，路径与 commit 都只是到达它的写法）、把 commit 降为**可选加固**——依据是"Git 按内容寻址、`<commit>:<path>` 给的是内容对象"。
-* **本项目实证（可复取，见下「取样方式」）**：`git rev-parse <commit>:<path>` 在同一内容处于不同路径时给出**同一个 blob sha**；文件改名/搬迁后**旧 blob 仍可 `git cat-file` 取回原文**。
+* **它支撑什么**：`library/README.adoc`「依据的定位协议」把"可靠性"落在**内容可校验**上（**内容主键是终态**，路径与 commit 都只是到达它的写法）、把 commit 降为**可选加固**。
+* **本项目实证（可复取）**：`git rev-parse <commit>:<path>` 在同一内容处于不同路径时给出**同一个 blob sha**；文件改名/搬迁后**旧 blob 仍可 `git cat-file` 取回原文**。
 
 === HTTP 分段取值（RFC 9110；官方文本已取回）
 
-* **标准名**：RFC 9110，*HTTP Semantics*（STD 97，Standards Track，2022-06；**官方文本已取回**）。**版本关系（L1，引用现行版本）**：RFC 9110 **Obsoletes** RFC 2818、7230、7231、**7232**、**7233**、7235、7538、7615、7694 与 7230 的一部分，故**分段取值不再引用 RFC 7233**（它在 2022 年已被取代）——本文件此前引用的 RFC 7233 为引用过时版本的偏差，已按 `specs/general/source.adoc`「引用现行版本（L2）」改正。
-* **逐字（14.2 节 Range 首句）**："The "Range" header field on a GET request modifies the method semantics to request transfer of only one or more subranges of the selected representation data (Section 8.1), rather than the entire selected representation."（原文的 `Range` 带双引号，此处按逐字保留）；**逐字（14.2 节）**："A server MAY ignore the "Range" header field. However, origin servers and intermediate caches ought to support byte ranges when possible…"；**逐字（15.3.7 节首句）**："The 206 (Partial Content) status code indicates that the server is successfully fulfilling a range request for the target resource by transferring one or more parts of the selected representation."
-* **它支撑什么**：link:README.adoc[] 的「分段取值（馆特别大时怎么只取一段）」一段与 link:usage.adoc[]「四、引用方怎么准确定位依据（不全量下载）」把"只取一段"写成**标准动作**（`Range` → `206`），依据即此（**当前不可用**，状态见下）。
-* **须注意的同义性（L1）**：RFC 9110 规定的是**协议侧的规则**，且明写服务端 `MAY ignore` 该请求头、**未**规定任何托管服务必须支持 Range。故本站**如实标注**：本仓库站点**未实测**到 Range 生效（见下「本项目实证」），文中**不得**把"支持 Range"当成既定事实或对引用方的要求。
+* **标准名**：RFC 9110，*HTTP Semantics*（STD 97，Standards Track，2022-06；**官方文本已取回**）。**版本关系（L1，引用现行版本）**：RFC 9110 **Obsoletes** RFC 2818、7230、7231、**7232**、**7233**、7235、7538、7615、7694 与 7230 的一部分，故**分段取值不再引用 RFC 7233**（它在 2022 年已被取代）。
+* **逐字（14.2 节 Range 首句）**："The "Range" header field on a GET request modifies the method semantics to request transfer of only one or more subranges of the selected representation data (Section 8.1), rather than the entire selected representation."；**逐字（14.2 节）**："A server MAY ignore the "Range" header field. However, origin servers and intermediate caches ought to support byte ranges when possible…"；**逐字（15.3.7 节首句）**："The 206 (Partial Content) status code indicates that the server is successfully fulfilling a range request for the target resource by transferring one or more parts of the selected representation."
+* **它支撑什么**：`library/README.adoc` 的「分段取值」一段与 `library/usage.adoc`「四、引用方怎么准确定位依据」把"只取一段"写成**标准动作**（`Range` → `206`），依据即此（**当前不可用**，状态见下）。
+* **须注意的同义性（L1）**：RFC 9110 规定的是**协议侧的规则**，且明写服务端 `MAY ignore` 该请求头、**未**规定任何托管服务必须支持 Range。故本站**如实标注**：本仓库站点**未实测**到 Range 生效，文中**不得**把"支持 Range"当成既定事实或对引用方的要求。
 
 === 取样方式（可复取，供日后复核）
 
-* **git（官方文本）**：`git help rev-parse` / `git help cat-file` / `git help clone`（本机 git 2.39.5），或 git 官方文档站点对应页（本次取回的命令：`curl -sL https://git-scm.com/docs/git-cat-file/2.38.0`；注意网页源码里引文所在行会**折行**，逐字比对时先归一化空白）。
-* **RFC 9110（官方文本）**：`curl -s https://www.rfc-editor.org/rfc/rfc9110.txt`（本次已取回，引文逐字比对；`Range` 与 `206` 分别在 14.2 与 15.3.7 节）。
-* **本项目实证（git 行为，2026-09-14 实测、可复现）**：①在一个临时仓库里两次提交同一文件的不同内容，`git rev-parse HEAD:f.txt` 前后给出**不同 blob sha**；②旧 blob sha 在后续提交之后仍能 `git cat-file -p <旧 sha>` 取回**旧内容**（改名/覆盖不影响取回）；③对本站远程仓库 `git clone --filter=blob:none --no-checkout` 的克隆体积极小，`git ls-tree HEAD library/` 列出各主题文件的 **blob sha**，`git cat-file -p <blob>` 可按需取回**单个文件**内容（即"只取一份"的可行路径）。
-* **本项目实证（Range，2026-09-14 实测）**：对本站站点（`https://agent.c332030.com/library/README.adoc`）与平台原始文件视图（`https://cnb.cool/<仓库>/-/git/raw/main/library/README.adoc`）**两处**发 `Range: bytes=0-99`，**均**返回 `200` 与**整份**内容（未见 `206`；两份内容字节一致，`md5` 相同）——故 link:README.adoc[] 与 link:usage.adoc[] 均**如实写明"当前未实测到 Range 生效"**，取值以整份文件为准。
-* **本项目实证（取用侧的取值路径，2026-09-14 实测）**：①**站点直链**（`https://agent.c332030.com/library/README.adoc`、`.../library/usage.adoc`）→ `200`、`text/plain`、**纯文本**（`md5` 与**站点发布分支（`main`）的同名文件逐字节一致**，即取到的是**未经处理器装配的仓库字节**——站点对非 HTML 文件直出原文、发布的是 `main` 当前内容，页面内装配只发生在 `index.html` 正文区），即**取用侧只需 https，不需要 git**；②**平台原始文件视图按分支名**（`https://cnb.cool/<仓库>/-/git/raw/main/library/README.adoc`）→ `200`、`text/plain`（`main`、`HEAD`、`refs/heads/main` 均可用；**短 commit sha、40 位 commit sha 亦可用**，不存在的 ref → `404`）；③**git 客户端**：`git ls-remote <仓库> refs/heads/main` → 返回 `372c143...` `refs/heads/main`（**这条只有具备 git 的一方走得到**，构成"取用侧与作者侧条件不同"的实证）；④**"页面里找入口"不成立**：站点首页（`index.html`）不暴露 commit、也不书写分支名，`index.html` 自身**按 `./<仓库根相对路径>` 直接 fetch**，仓库页面（平台）里嵌的 commit sha **属渲染产物**（改版即变，且站内不承载）——故入口**不得**靠解析页面结构取得，**只能**是常驻层里的**固定地址**。
+* **git（官方文本）**：`git help rev-parse` / `git help cat-file` / `git help clone`，或 git 官方文档站点对应页（注意网页源码里引文所在行会**折行**，逐字比对时先归一化空白）。
+* **RFC 9110（官方文本）**：`curl -s https://www.rfc-editor.org/rfc/rfc9110.txt`（引文逐字比对；`Range` 与 `206` 分别在 14.2 与 15.3.7 节）。
+* **本项目实证（git 行为，实测、可复现）**：① 在一个临时仓库里两次提交同一文件的不同内容，`git rev-parse HEAD:f.txt` 前后给出**不同 blob sha**；② 旧 blob sha 在后续提交之后仍能 `git cat-file -p <旧 sha>` 取回**旧内容**；③ 对本站远程仓库 `git clone --filter=blob:none --no-checkout` 的克隆体积极小，`git ls-tree HEAD library/` 列出各主题文件的 **blob sha**，`git cat-file -p <blob>` 可按需取回**单个文件**内容。
+* **本项目实证（Range，实测）**：对本站站点与平台原始文件视图**两处**发 `Range: bytes=0-99`，**均**返回 `200` 与**整份**内容（未见 `206`；两份内容字节一致，`md5` 相同）——故 `library/README.adoc` 与 `library/usage.adoc` 均**如实写明"当前未实测到 Range 生效"**，取值以整份文件为准。
+* **本项目实证（取用侧的取值路径，实测）**：① **站点直链** → `200`、`text/plain`、**纯文本**（`md5` 与**站点发布分支的同名文件逐字节一致**，即取到的是**未经处理器装配的仓库字节**——站点对非 HTML 文件直出原文），即**取用侧只需 https，不需要 git**；② **平台原始文件视图按分支名** → `200`、`text/plain`（分支名、`HEAD`、短/长 commit sha 均可用，不存在的 ref → `404`）；③ **git 客户端**：`git ls-remote <仓库> refs/heads/main` 可取到当前 commit（**这条只有具备 git 的一方走得到**，构成"取用侧与作者侧条件不同"的实证）；④ **"页面里找入口"不成立**：站点首页不暴露 commit、也不书写分支名，仓库页面里嵌的 commit sha **属渲染产物**（改版即变）——故入口**不得**靠解析页面结构取得，**只能**是常驻层里的**固定地址**。
 
 == 关于标准版本年份（引用的取舍）
 
-* **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本（L2）」约束。
+* **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等，分段取值与 HTTP 语义的现行依据）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA（Accelerate 报告系列）/ GitHub Docs（受保护分支与 required reviews）；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总（decision-record）/ AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。

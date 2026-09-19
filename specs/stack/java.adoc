@@ -1,107 +1,105 @@
 = Java 规范（技术栈层）
 
-以下规范适用于 **Java 项目**。加载触发特征：项目存在 `.java` 源文件、`pom.xml`/`build.gradle`、lombok 配置等。Java 项目写代码必须加载本文件及 link:../stack/java-syntax.adoc[]、link:../stack/java-testing.adoc[]（见 AGENTS_COMMON.adoc 加载调度规则）。
+适用于 **Java 项目**。加载触发特征：项目存在 `.java` 源文件、`pom.xml`/`build.gradle`、lombok 配置等。Java 项目写代码必须加载本文件及 `specs/stack/java-syntax.adoc`、`specs/stack/java-testing.adoc`。跨语言通用编码规则见 `specs/general/coding.adoc`；本文件只收录 Java 专属规则。
 
-跨语言通用编码规则见 link:../general/coding.adoc[]（含命名通用规则）；本文件只收录 Java 专属规则。
-
-遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准。命名与代码风格另参考 Google Java Style Guide 与 Oracle Java 命名约定。
+遵守《阿里巴巴 Java 开发手册》；与本规范冲突时以本规范定义为准。命名与代码风格另参考 Google Java Style Guide 与 Oracle Java 命名约定。
 
 == 命名
 
-* 类重名：除非类全名（全限定类名）冲突不可避免，否则不使用类重名；发现类重名的需调整优化
-* Feign 接口命名带所属域前缀（L1，Java 落点，本条唯一适用面）：**Feign 声明式 HTTP 客户端接口**按「**前缀 + 接口业务名 + `Api`**」命名，前缀取**该接口所属域/项目**的固定前缀（先例优先；无先例按项目名取词首字母组合）——`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`（`UserApi` 是接口业务名）。**只约束 Feign 接口**：REST Controller、RPC 服务契约等其他对外接口不适用本条、不据此改名。判定标准、反例与存量口径见 link:../general/coding.adoc[]「命名与代码质量」的「Feign 接口命名带所属域/项目前缀」（本文件不复制条文）
-* 工具类命名**优先用复数 `Utils` 结尾**：**仅限工具类**（承载通用静态工具方法、提供项目自有功能的类，如字符串/集合处理 `CStrUtils`），类名优先以 `Utils` 结尾（参考 Apache Commons/Spring `StringUtils`/`ObjectUtils`），单数 `Util` 仅在既有一致约定等情况下采用，不混用。**非工具类不受此约束**——即使静态使用或加 `@UtilityClass`，下列不算工具类，命名由自身语义决定（跟随所替代/扩展的对象），不得套用 `Utils`/`Util` 结尾：
-  ** 常量类（只放常量）；
-  ** **低版本 JDK 替代/补齐类**：复刻 JDK 静态能力为低版本补齐（如 JDK8 无 `List.of`，提供 `CList.of(...)`）；
-  ** **JDK 现有类的扩展类**：JDK 现有静态类亦为静态使用，其扩展/对应类非工具类（如对应/扩展 `Collectors` 的 `CCollectors`）
+* **类重名**：除非类全名（全限定类名）冲突不可避免，否则不使用类重名；发现类重名的需调整优化。
+* **Feign 接口命名带所属域前缀（L1，本文件是 Java 落点）**：**Feign 声明式 HTTP 客户端接口**按「**前缀 + 接口业务名 + `Api`**」命名，前缀取**该接口所属域/项目**的固定前缀（先例优先；无先例按项目名取词首字母组合）——`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`。**只约束 Feign 接口**：REST Controller、RPC 服务契约等其他对外接口不适用本条、不据此改名。判定标准、反例与存量口径见 `specs/general/coding.adoc`「命名与代码质量」的「Feign 接口命名带所属域/项目前缀」。
+* **工具类命名优先用复数 `Utils` 结尾**：**仅限工具类**（承载通用静态工具方法、提供项目自有功能的类），类名优先以 `Utils` 结尾（参考 Apache Commons/Spring `StringUtils`/`ObjectUtils`），单数 `Util` 仅在既有一致约定等情况下采用，不混用。**非工具类不受此约束**——即使静态使用或加 `@UtilityClass`，下列不算工具类，命名由自身语义决定（跟随所替代/扩展的对象）：
+** 常量类（只放常量）；
+** **低版本 JDK 替代/补齐类**：复刻 JDK 静态能力为低版本补齐（如 JDK8 无 `List.of`，提供 `CList.of(...)`）；
+** **JDK 现有类的扩展类**：JDK 现有静态类亦为静态使用，其扩展/对应类非工具类（如对应/扩展 `Collectors` 的 `CCollectors`）。
 
 == 编码
 
-* 强制优先使用 lombok：能用 lombok 代替的绝不手写——getter/setter、构造器、builder、toString/equals/hashCode 等一律用 lombok 生成，禁止移除 lombok 的使用
-* 局部变量强制使用 lombok val、var（硬性要求）：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃 val/var；val/var 仅适用于局部变量，字段不得使用；唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断等）等确需显式类型提示的场景可写显式类型，此类例外须克制使用
-* lombok.config 实时读取：lombok.config 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行，不得在规范或代码注释中固化其具体配置内容
-* 对象创建统一用 builder、构造器统一用 lombok：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 @SuperBuilder 而非 @Builder，支持继承场景）；无参、必参、全参构造方法一律用 lombok 注解生成，禁止手写任何构造器；实体类用 @Data、@NoArgsConstructor、@AllArgsConstructor；@AllArgsConstructor 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器
+* **强制优先使用 lombok（L1）**：能用 lombok 代替的绝不手写——getter/setter、构造器、builder、toString/equals/hashCode 等一律用 lombok 生成，禁止移除 lombok 的使用。
+* **局部变量强制使用 lombok `val`/`var`（L1）**：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃；`val`/`var` 仅适用于局部变量，字段不得使用。唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断）等确需显式类型提示的场景可写显式类型，此类例外须克制使用。
+* **`lombok.config` 实时读取**：`lombok.config` 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行。
+* **对象创建统一用 builder**：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 `@SuperBuilder` 而非 `@Builder`，支持继承场景）；实体类用 `@Data`、`@NoArgsConstructor`、`@AllArgsConstructor`；`@AllArgsConstructor` 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器。
 * **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：构造方法一律由 lombok 注解生成，**不得手写**任何构造方法体或参数列表——
 ** **无参构造**：用 `@NoArgsConstructor`（需要时配 `@NoArgsConstructor(access = AccessLevel.PRIVATE)` 一类访问级别）；
-** **必参构造**（只含必填/不变字段）：用 `@RequiredArgsConstructor`（字段以 `private final` 修饰，或在 `lombok.config` 里另行声明必填判据，按项目当前 `lombok.config` 执行）；
+** **必参构造**（只含必填/不变字段）：用 `@RequiredArgsConstructor`（字段以 `private final` 修饰，或在 `lombok.config` 里另行声明必填判据）；
 ** **全参构造**：用 `@AllArgsConstructor`；
-** **同时需要多个**（如既有无参又要全参）：**同时标多个构造注解**，各自生成一个，不为「合并成一个手写构造方法」而放弃注解（lombok 允许多个构造注解共存于同一类，见 `lombok.config` 的实时读取条）。
-** **判定标准（任一命中即违规）**：①类中出现手写的构造方法（写了参数列表或方法体），而该构造可由 `@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 之一表达；②同一类里手写与 lombok 生成的构造方法并存（同一构造的来源出现两处）；③以「lombok 表达不了」为由手写而未在代码注释写明原因（如需要做入参校验、规范化、防御性拷贝等构造期逻辑时，才可手写；此类例外须在注释写明何注解表达不了）。
-** 例外（L2，须写清理由）**：构造期需要**注解表达不了的动作**（参数校验、字段规范化、防御性拷贝、调用父类/其他对象的初始化）时，可手写该构造方法（或改在 `@Builder` 的自定义 builder 方法里承接），须在代码注释写明「哪个注解表达不了、为何」。**存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
-** 依据（标准名/编号）：ISO/IEC 25010（可维护性：同一构造写两遍、样板代码遮蔽真实差异）；ISO/IEC/IEEE 29148（判定须可验证）；Project Lombok 官方文档（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor` 的职责与共存方式）。**「构造一律由 lombok 生成、不手写」是本集合的取向**（见 依据见图书馆「规范准入与自身取舍的依据」主题（**该库不在公共引用面内**，此处只留依据名与判据））。
-* 纯数据结构类识别特征（补充通用编码规范）：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑（通用规则见 link:../general/coding.adoc[]「类设计」）
-* 配置类识别特征（`@ConfigurationProperties` 等，补充通用编码规范）：除通用编码规范中"以 Config/Properties/Options/Settings 等命名"的识别外，**标注 `@ConfigurationProperties` 的类一律属配置类**（无论类名如何）——只放配置项字段与 lombok 访问器注解，**不得含任何逻辑**（无例外），校验注解与绑定注解属声明、不属逻辑（通用规则与判定标准见 link:../general/coding.adoc[]「类设计」）
-* 定义方法时参数换行：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行
-* JSON 处理全局统一使用 Jackson，禁止引入其他 JSON 库（如 Gson、fastjson）
-* 既有工具类/先例优先（补充通用编码规范「代码复用」）：Java 项目写代码前先查项目自有工具类（如 ctool4j 的 `CList`/`CStrUtils`/`CIdUtils`）与已引入工具库（如 hutool 的 `IdUtil`/`CollUtil`/`StrUtil`）是否已覆盖该操作，并跟随项目内同类调用的先例；**已有等价能力时禁止手写 JDK 原生写法**（典型反例：已有 `IdUtil.fastUUID()`/`CIdUtils.UUID()` 仍写 `java.util.UUID.randomUUID().toString()`；已有 `CollUtil.isNotEmpty` 仍写 `null != coll and !coll.isEmpty`）。选择优先级与现成 API 清单见 link:../stack/java-syntax.adoc[]「工具类使用优先级」（通用规则见 link:../general/coding.adoc[]「代码复用」）
-* 反射操作优先使用 MethodHandle：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时，可补充后再使用
-* 日志打印（禁 println、统一 slf4j 见通用编码规范）：静态文本（无参）不属占位符参数化约束范围，合规；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（如 `log.error("msg: {}", arg, e)`）
+** **同时需要多个**（如既有无参又要全参）：**同时标多个构造注解**，各自生成一个，不为"合并成一个手写构造方法"而放弃注解。
+** **判定标准（任一命中即违规）**：① 类中出现手写的构造方法（写了参数列表或方法体），而该构造可由上述三个注解之一表达；② 同一类里手写与 lombok 生成的构造方法并存（同一构造的来源出现两处）；③ 以"lombok 表达不了"为由手写而未在代码注释写明原因。
+** **例外（L2，须写清理由）**：构造期需要**注解表达不了的动作**（参数校验、字段规范化、防御性拷贝、调用父类/其他对象的初始化）时，可手写该构造方法（或改在 `@Builder` 的自定义 builder 方法里承接），须在代码注释写明「哪个注解表达不了、为何」。**存量**按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移、不发动全库改造。
+** 依据（标准名/编号）：ISO/IEC 25010（可维护性：同一构造写两遍、样板代码遮蔽真实差异）、ISO/IEC/IEEE 29148（判定须可验证）、Project Lombok 官方文档。**"构造一律由 lombok 生成、不手写"是本集合的取向**。
+* **纯数据结构类识别特征（补充通用编码规范）**：除通用编码规范中"以 bean/model/pojo/dto/vo/entity 等命名"的识别外，**仅使用 `@Data`/`@Getter`/`@Setter` 等 lombok 访问器注解的类同属纯数据结构类**，方法中不得出现非字段读写的计算/转换/组装逻辑。
+* **配置类识别特征**：除"以 Config/Properties/Options/Settings 等命名"的识别外，**标注 `@ConfigurationProperties` 的类一律属配置类**（无论类名如何）——只放配置项字段与 lombok 访问器注解，**不得含任何逻辑**（无例外），校验注解与绑定注解属声明、不属逻辑（规则与判定标准见 `specs/general/coding.adoc`「类设计」）。
+* **定义方法时参数换行**：多参数且整行宽度（含缩进）临近或超过 80 字符时，参数需换行——左括号 `(` 紧跟方法名后换行，每个参数单独一行，右括号 `)` 单独一行收尾；参数较少或整行宽度未达阈值时保持单行。
+* **JSON 处理全局统一使用 Jackson**，禁止引入其他 JSON 库（Gson、fastjson）。
+* **既有工具类/先例优先（补充通用编码规范「代码复用」）**：Java 项目写代码前先查项目自有工具类（如 ctool4j 的 `CList`/`CStrUtils`/`CIdUtils`）与已引入工具库（如 hutool 的 `IdUtil`/`CollUtil`/`StrUtil`）是否已覆盖该操作，并跟随项目内同类调用的先例；**已有等价能力时禁止手写 JDK 原生写法**（典型反例：已有 `IdUtil.fastUUID()`/`CIdUtils.UUID()` 仍写 `java.util.UUID.randomUUID().toString()`；已有 `CollUtil.isNotEmpty` 仍写 `null != coll and !coll.isEmpty`）。选择优先级与现成 API 清单见 `specs/stack/java-syntax.adoc`「工具类使用优先级」。
+* **反射操作优先使用 MethodHandle**：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时可补充后再使用。
+* **日志打印**：禁止 `println`、统一 slf4j；静态文本（无参）不属占位符参数化约束范围；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（`log.error("msg: {}", arg, e)`）。
 
 == 对象转换（MapStruct）
 
-对象转换按通用编码规范 link:../general/coding.adoc[]「对象转换（多层嵌套对象的转换）」执行——**声明式映射是优先路径、本集合的建议取向**：JVM 下**优先用 MapStruct**（编译期生成映射实现），**建议不手写转换代码**；**无嵌套（单层）的转换不在该条范围内**，本条也不设强制面（详见下「例外与边界」）。**框架专名与写法（本文件是本条的 Java 落点）**如下：
+对象转换按 `specs/general/coding.adoc`「对象转换（多层嵌套对象的转换）」执行——**声明式映射是优先路径、本集合的建议取向**：JVM 下**优先用 MapStruct**（编译期生成映射实现），**建议不手写转换代码**；**无嵌套（单层）的转换不在该条范围内**，本条也不设强制面。
 
-* **多层嵌套对象转换优先用 MapStruct（L2，建议）**：不同层/不同模型（Entity ↔ DTO ↔ VO、Feign 内部调用接口的请求/响应类等）之间**一层层**的对象转换，**优先**用 **MapStruct 的 `@Mapper` 映射接口**声明完成（编译期生成实现、字段名不一致在编译期报错）；**建议不手写转换代码**——逐字段 `set`/`get` 搬运、嵌套结构逐层 `new` 组装、手写递归/循环展开对象树。措辞是"优先/建议"：**不做强制性限制**——项目要用深拷贝/结构复制工具、序列化（如 JSON）中转等等价路径同样合规，只要满足通用层「对象转换（多层嵌套对象的转换）」的**达标判据**（同一转换只有一处来源、结构变化时不静默漏字段）。
-* **嵌套结构由映射声明表达（写法建议，非强制）**：选了 MapStruct 时，对象内含对象、集合内含对象用**映射方法自动调用**（子类型各声明一个映射方法，父映射直接引用）或 `@Mapping` 表达字段对应；集合/列表映射直接声明为 `List<XxxVo> toVoList(List<Xxx>)`。**不要求**逐元素手写 `for`/`stream().map(...)`——但手写循环**不构成违规**，按通用层的达标判据判定即可。
-* **不并存两套写法（与「代码复用」的先例优先同源）**：项目已有转换工具（MapStruct 生成的 `XxxConverter` 实例，或既有手写 Converter 类）时**跟随先例并在其基础上扩展**，不新增第二套转换写法；注入方式按 link:../stack/spring.adoc[]「注入」（构造器注入）。
-* **MapStruct 用法（推荐写法，非强制）**：映射接口用 `@Mapper(componentModel = "spring")`（与 Spring 项目一致，按既有先例取值）；**转换方法接收单个源对象、返回一个目标对象**（集合类型由 MapStruct 生成循环，优于 `@Mapping` 或手写 `@AfterMapping` + `@Context`）；`@Mapping` 仅用于字段名/来源不一致、常量、默认值、表达式等库自动推断不了的场合，能自动推断的不写多余注解；映射接口**独立成文件放转换/映射所在包**（跟随项目既有约定，如 `converter`/`mapper`/`mapstruct`），**不写进纯数据结构类**（`@Data` 类里不写转换方法，通用规则见 link:../general/coding.adoc[]「类设计」）。
-* **例外与边界（L2）**：①**库表达不了的语义**（需查库/远程取值、条件分支决定取值、多来源合成一个字段）在映射接口内以自定义方法（`default` 方法或 `@Mapping(expression=...)`）承接，也可按**主动声明**（代码注释 / PR 描述 / Issue 要求）手写；②**无嵌套（单层）的转换不在本条范围内**，本来怎么写都行；③**构建环境无法运行注解处理器**（构建链未接入 annotation processor）时自然不适用——本条**不设强制面**，手写转换**不构成违规**，只是**建议**：除主动声明外**优先**声明式映射，确需手写时在**代码注释备注原因**（写明为何 MapStruct 等映射表达不了）。
-* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
+* **多层嵌套对象转换优先用 MapStruct（L2，建议）**：不同层/不同模型（Entity ↔ DTO ↔ VO、Feign 内部调用接口的请求/响应类）之间**一层层**的对象转换，优先用 **MapStruct 的 `@Mapper` 映射接口**声明完成（编译期生成实现、字段名不一致在编译期报错）；建议不手写转换代码——逐字段 `set`/`get` 搬运、嵌套结构逐层 `new` 组装、手写递归/循环展开对象树。措辞是"优先/建议"：**不做强制性限制**（深拷贝/结构复制工具、序列化中转等等价路径同样合规），只要满足通用层的**达标判据**（同一转换只有一处来源、结构变化时不静默漏字段）。
+* **嵌套结构由映射声明表达（写法建议，非强制）**：选了 MapStruct 时，对象内含对象、集合内含对象用**映射方法自动调用**（子类型各声明一个映射方法，父映射直接引用）或 `@Mapping` 表达字段对应；集合/列表映射直接声明为 `List<XxxVo> toVoList(List<Xxx>)`。不要求逐元素手写 `for`/`stream().map(...)`——但手写循环**不构成违规**。
+* **不并存两套写法（与「代码复用」的先例优先同源）**：项目已有转换工具（MapStruct 生成的 `XxxConverter` 实例，或既有手写 Converter 类）时**跟随先例并在其基础上扩展**，不新增第二套转换写法；注入方式按 `specs/stack/spring.adoc`「注入」。
+* **MapStruct 用法（推荐写法，非强制）**：映射接口用 `@Mapper(componentModel = "spring")`（与 Spring 项目一致，按既有先例取值）；**转换方法接收单个源对象、返回一个目标对象**（集合类型由 MapStruct 生成循环）；`@Mapping` 仅用于字段名/来源不一致、常量、默认值、表达式等库自动推断不了的场合；映射接口**独立成文件放转换/映射所在包**（跟随项目既有约定，如 `converter`/`mapper`/`mapstruct`），**不写进纯数据结构类**。
+* **例外与边界（L2）**：① 库表达不了的语义（需查库/远程取值、条件分支决定取值、多来源合成一个字段）在映射接口内以自定义方法（`default` 方法或 `@Mapping(expression=...)`）承接，也可按**主动声明**（代码注释 / PR 描述 / Issue 要求）手写；② 无嵌套（单层）的转换不在本条范围内；③ 构建环境无法运行注解处理器时自然不适用——**本条不设强制面**，手写转换**不构成违规**，只是建议：除主动声明外优先声明式映射，确需手写时在**代码注释备注原因**。
+* **存量**按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
 
 == 持久化访问（MyBatis-Plus / JPA 等）
 
-持久化访问按通用编码规范 link:../general/coding.adoc[]「持久化访问（数据库/缓存等）」执行——**统一入口** + **优先用类型安全/声明式查询构造 API** + **替代优先**三条 L1 的**抽象形态**在通用层（该层不写具体框架类名）；**框架专名与禁止清单（本文件是唯一落点）**如下：
+持久化访问按 `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」执行——**统一入口** + **优先用类型安全/声明式查询构造 API** + **替代优先**三条 L1 的抽象形态在通用层（该层不写具体框架类名）；**框架专名与禁止清单以本文件为唯一落点**。
 
 * **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `IService` 的成员方法——`lambdaQuery()`、`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`（Kotlin 用 `kt*`），**不手工 `new` 任何 Wrapper**。**禁止** `new QueryWrapper<>()`、`new UpdateWrapper<>()`、**及其子类**（含 `new LambdaQueryWrapper<>()`、`new LambdaQueryChainWrapper<>()`、`new UpdateChainWrapper<>()`、匿名子类与自定义 Wrapper 子类）；`new LambdaQueryWrapper<>()` 虽同样类型安全，仍属本条禁止面——**强制走 `IService` 成员方法这一统一入口**，保证同一项目只有一种写法。识别特征：Service 实现类有 `extends ServiceImpl<XxxMapper, Xxx>` 却没走 `lambdaQuery()`/`lambdaUpdate()` 的调用点、调用点出现 Wrapper 的 `new`。
-* **`IService` 之外用 `Wrappers` 静态方法或映射文件（L1）**：需要 `Mapper` 专有方法或分页等 `IService` 不覆盖的能力时，用 **`Wrappers` 的 lambda 静态方法**（`Wrappers.lambdaQuery()`/`Wrappers.lambdaUpdate()`）或**在 Mapper 接口上用注解/映射文件**声明该查询，**不得**为此 `new` 构造器；同一操作在项目内已有先例时跟随先例（见 link:../general/coding.adoc[]「代码复用」）。
+* **`IService` 之外用 `Wrappers` 静态方法或映射文件（L1）**：需要 `Mapper` 专有方法或分页等 `IService` 不覆盖的能力时，用 **`Wrappers` 的 lambda 静态方法**（`Wrappers.lambdaQuery()`/`Wrappers.lambdaUpdate()`）或**在 Mapper 接口上用注解/映射文件**声明该查询，**不得**为此 `new` 构造器；同一操作在项目内已有先例时跟随先例。
 * **JPA / Spring Data（对照落点）**：走 `Repository`/`EntityManager` 等既有入口，优先声明式查询方法（`findByXxx`）与类型化 Criteria，不用字符串拼列名。
-* **例外（L2，须写清理由）**：`IService` 与 `Wrappers` 的 lambda 形态**均表达不了的语义**（如 ORM 未封装的自定义 SQL 片段与其他表条件化 JOIN）允许退回 mapper `*.xml`（见 link:../general/coding.adoc[]「跨语言执行脚本的落点」）；确需 Wrapper 子类承载领域条件时，**在 Mapper 接口上以默认方法封装一次**、业务侧只调用该方法（**不得在业务代码里 `new`**），并在代码注释写明"为何替代形态表达不了"。**存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移（改到即迁），不发动全库改造。
-* **判定标准（任一命中即违规）**：①出现 `new QueryWrapper`/`new UpdateWrapper`/`new LambdaQueryWrapper`/`new LambdaQueryChainWrapper` 一类构造器 `new`（含匿名子类、自定义子类），而同一条件可由 `lambdaQuery()`/`lambdaUpdate()` 表达；②列名/字段名以**字符串**写进查询构造（`eq("user_name", ...)`），而可用方法引用（`User::getUserName`）表达；③绕过 `IService` 另起一套访问写法（同一项目内并存 `IService` 成员方法与自建 Wrapper 两条路径）。
-* 依据（标准名/编号）：ISO/IEC 25010（可维护性：字符串列名无编译期校验、重命名即静默失效）；ISO/IEC/IEEE 29148（判定须可验证）；（MyBatis-Plus 官方文档给出 `IService` 的 lambda 方法与 `Wrappers` 静态方法，本条取其为唯一入口，属**本集合自己的取舍**）。
+* **例外（L2，须写清理由）**：`IService` 与 `Wrappers` 的 lambda 形态**均表达不了的语义**（ORM 未封装的自定义 SQL 片段与其他表条件化 JOIN）允许退回 mapper `*.xml`；确需 Wrapper 子类承载领域条件时，**在 Mapper 接口上以默认方法封装一次**、业务侧只调用该方法（**不得在业务代码里 `new`**），并在代码注释写明"为何替代形态表达不了"。**存量**按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移。
+* **判定标准（任一命中即违规）**：① 出现 `new QueryWrapper`/`new UpdateWrapper`/`new LambdaQueryWrapper`/`new LambdaQueryChainWrapper` 一类构造器 `new`（含匿名子类、自定义子类），而同一条件可由 `lambdaQuery()`/`lambdaUpdate()` 表达；② 列名/字段名以**字符串**写进查询构造（`eq("user_name", ...)`），而可用方法引用（`User::getUserName`）表达；③ 绕过 `IService` 另起一套访问写法（同一项目内并存两条路径）。
+* 依据（标准名/编号）：ISO/IEC 25010（可维护性：字符串列名无编译期校验、重命名即静默失效）、ISO/IEC/IEEE 29148（判定须可验证）；MyBatis-Plus 官方文档给出 `IService` 的 lambda 方法与 `Wrappers` 静态方法，本条取其为唯一入口，属**本集合自己的取舍**。
 
 == 跨语言执行脚本（SQL / Lua 等）
 
-Java 里要执行**其他语言**的脚本时，须按通用编码规范「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」执行——**独立成文件放资源文件夹、扩展名取被调语言的扩展名、按资源读取后执行**，不得用字符串拼接、字符串模板或字符串常量内联在 Java 代码里。
+Java 里要执行**其他语言**的脚本时，须按 `specs/general/coding.adoc`「跨语言执行脚本的落点」执行——**独立成文件放资源文件夹、扩展名取被调语言的扩展名、按资源读取后执行**，不得用字符串拼接、字符串模板或字符串常量内联在 Java 代码里。
 
-* **SQL（L1）**：执行 SQL 时**按资源加载 `.sql` 文件**（`src/main/resources/` 下，如 `src/main/resources/sql/order-query.sql`），用 `PreparedStatement` 参数化执行——SQL 本体不写在 Java 字符串里。**MyBatis 项目是已知例外**：SQL 写在 mapper 的 `*.xml` 映射文件里（MyBatis 支持的文件形式），**不再另建 `.sql`**；MyBatis 给出的 **`${}` 是字符串拼接**（直接替换进 SQL 文本），仅可用于不由用户输入决定的场景（如动态排序字段）、且须对取值做**白名单校验**，其余一律用 `#{}`（预编译参数）。
-* **Redis / Lua（L1）**：Lua 脚本**写成 `.lua` 文件**放 `src/main/resources/lua/` 下，用 `DefaultRedisScript`（或项目的等价封装）**按资源加载**后执行，**禁止**把 Lua 内联成 Java 字符串、也禁止在 Java 里拼 Lua 片段（依据：Redis 官方文档的 "EVAL" 与 "Redis Lua API reference"）。
-* **加载时机（L1，与通用编码规范「跨语言执行脚本的落点」的「加载时机」同条，此处给 Java 落点）**：classpath 资源打进产物后**发布即成常量**，**不得在每次调用时都读**——
-** 性能敏感路径（如 Redis 操作）：按"读一次、反复用"定性**——`.lua` 用 `DefaultRedisScript` 时**按静态常量声明**（`private static final DefaultRedisScript<...> SCRIPT = new DefaultRedisScript<>(...)`，在静态初始化块或静态构造方法里 `setLocation`/`setScriptSource` + 载入一次），**禁止在方法内 `new DefaultRedisScript` 后逐次读资源**；`.sql` 若属热点查询，同样把"读一次"与"执行多次"分开（读入后缓存 `String` 或缓存预编译 `PreparedStatement`/`DataSource` 侧对象，按框架能力与并发安全取舍）。Redis `EVAL` 反复把脚本正文送到服务端亦属重复开销，等价的复用手段是 `EVALSHA`/`SCRIPT LOAD`（是否适用按项目的客户端封装与部署形态定）
-** **不敏感路径**（启动装配、一次性任务、低频操作）：每次读取无妨
-** **需求要求内容会变**：如每次渲染前可编辑、需要热更新的 HTML 模板（转 PDF 等场景）——**不缓存**，按"是否需重读"决定（按变更重读或使用带失效策略的缓存），**不得**为省一次读取而让需求要求的可变内容被冻结在首次读到的版本上
-** **判定标准（任一命中即违规）**：①热点路径的调用体内出现 `getResourceAsStream`/`ClassPathResource` 读取（如 `new DefaultRedisScript` 在方法内、`ScriptUtils` 每次调用执行脚本读取）；②Redis 热点操作每次都把脚本正文重发服务端且不做 `EVALSHA` 复用；③反向误用——把需求要求可变的模板/脚本按静态常量一次性读死
+* **SQL（L1）**：执行 SQL 时**按资源加载 `.sql` 文件**（`src/main/resources/` 下，如 `src/main/resources/sql/order-query.sql`），用 `PreparedStatement` 参数化执行——SQL 本体不写在 Java 字符串里。**MyBatis 项目是已知例外**：SQL 写在 mapper 的 `*.xml` 映射文件里（MyBatis 支持的文件形式），不再另建 `.sql`；MyBatis 给出的 **`${}` 是字符串拼接**（直接替换进 SQL 文本），仅可用于不由用户输入决定的场景（如动态排序字段）、且须对取值做**白名单校验**，其余一律用 `#{}`（预编译参数）。
+* **Redis / Lua（L1）**：Lua 脚本**写成 `.lua` 文件**放 `src/main/resources/lua/` 下，用 `DefaultRedisScript`（或项目的等价封装）**按资源加载**后执行，禁止把 Lua 内联成 Java 字符串、也禁止在 Java 里拼 Lua 片段（依据：Redis 官方文档的 "EVAL" 与 "Redis Lua API reference"）。
+* **加载时机（L1，本文件给 Java 落点）**：classpath 资源打进产物后**发布即成常量**，**不得在每次调用时都读**——
+** **性能敏感路径**（如 Redis 操作）：按"读一次、反复用"定性——`.lua` 用 `DefaultRedisScript` 时**按静态常量声明**（`private static final DefaultRedisScript<...> SCRIPT = new DefaultRedisScript<>(...)`，在静态初始化块里 `setLocation`/`setScriptSource` + 载入一次），**禁止在方法内 `new DefaultRedisScript` 后逐次读资源**；`.sql` 若属热点查询，同样把"读一次"与"执行多次"分开（读入后缓存 `String` 或缓存预编译 `PreparedStatement`，按框架能力与并发安全取舍）。Redis `EVAL` 反复把脚本正文送到服务端亦属重复开销，等价的复用手段是 `EVALSHA`/`SCRIPT LOAD`。
+** **不敏感路径**（启动装配、一次性任务、低频操作）：每次读取无妨。
+** **需求要求内容会变**：如每次渲染前可编辑、需要热更新的 HTML 模板（转 PDF 等场景）——**不缓存**，按"是否需重读"决定，不得为省一次读取而让需求要求的可变内容被冻结在首次读到的版本上。
+** **判定标准（任一命中即违规）**：① 热点路径的调用体内出现 `getResourceAsStream`/`ClassPathResource` 读取（如 `new DefaultRedisScript` 在方法内、`ScriptUtils` 每次调用执行脚本读取）；② Redis 热点操作每次都把脚本正文重发服务端且不做 `EVALSHA` 复用；③ 反向误用——把需求要求可变的模板/脚本按静态常量一次性读死。
 * **`@Sql` / `ScriptUtils`（L2）**：测试里的 `@Sql`、`ScriptUtils.executeSqlScript(...)` 等同样指向 `.sql` 资源，不内联 SQL。
-* 依据（标准名/编号）：OWASP SQL Injection Prevention Cheat Sheet、OWASP Query Parameterization Cheat Sheet、Redis 官方文档（EVAL / Redis Lua API reference）、MyBatis 官方文档（Dynamic SQL 的 `${}` 与 `#{}`）、ISO/IEC 25010 性能效率（资源重复读取的取舍）。
+* 依据（标准名/编号）：OWASP SQL Injection Prevention Cheat Sheet、OWASP Query Parameterization Cheat Sheet、Redis 官方文档、MyBatis 官方文档（Dynamic SQL 的 `${}` 与 `#{}`）、ISO/IEC 25010 性能效率。
 
 == 健壮性
 
-* 公共方法对边界输入显式处理：null 入参、无匹配结果必须返回空集合/默认值或快速失败（requireNonNull/断言），不得让调用方遇到隐式 NPE
-* 禁止修改调用方传入的可变入参（数组、集合、对象内容）；确需就地处理时，API 契约必须显式声明
-* 消费输入流必须保证后续可用：读取后重新缓冲再返回，异常路径不得返回已消费且未重缓冲的对象
-* 资源生命周期归属一致：static 线程池等全局资源不得由实例 @PreDestroy 关闭，防止多上下文互相影响
-* 字节数组转字符串必须显式指定字符集；HTTP 文本内容优先从 Content-Type 解析 charset，未声明才使用默认值
-* 链式字符串替换使用占位符或一次性正则，避免替换产物被后续规则二次改写；缓存键命名不得与输入空间可能出现的值冲突
-* 按标准协议（如 HTTP 报文）拼接日志或输出时，结构须符合协议规范（首行即协议行，不得以空行开头、不得插入非协议内容）
-* 需要内存回收（弱引用/软引用语义）的缓存统一使用 Caffeine 的 weakKeys/weakValues/softValues，禁止手写 WeakHashMap/软引用自实现
+* **公共方法对边界输入显式处理**：null 入参、无匹配结果必须返回空集合/默认值或快速失败（`requireNonNull`/断言），不得让调用方遇到隐式 NPE。
+* **禁止修改调用方传入的可变入参**（数组、集合、对象内容）；确需就地处理时，API 契约必须显式声明。
+* **消费输入流必须保证后续可用**：读取后重新缓冲再返回，异常路径不得返回已消费且未重缓冲的对象。
+* **资源生命周期归属一致**：static 线程池等全局资源不得由实例 `@PreDestroy` 关闭，防止多上下文互相影响。
+* **字节数组转字符串必须显式指定字符集**；HTTP 文本内容优先从 Content-Type 解析 charset，未声明才使用默认值。
+* **链式字符串替换使用占位符或一次性正则**，避免替换产物被后续规则二次改写；缓存键命名不得与输入空间可能出现的值冲突。
+* **按标准协议拼接日志或输出时结构须符合协议规范**（如 HTTP 报文首行即协议行，不得以空行开头、不得插入非协议内容）。
+* **需要内存回收（弱引用/软引用语义）的缓存统一使用 Caffeine 的 `weakKeys`/`weakValues`/`softValues`**，禁止手写 `WeakHashMap`/软引用自实现。
 
 == javadoc
 
 注释需满足发布私服 / Maven 中央仓库的 javadoc 检查（doclint）要求：
 
-* 多行注释永远写多行：`/**` 单独一行、注释内容逐行书写、`*/` 单独一行，禁止单行写法 `/** xxx */`；javadoc 使用完整多行块，包含 `@param`、`@return`、`@throws`、`@since`
-* **所有 public/protected 方法与字段必须有 javadoc**（**明文要求，非仅靠 doclint 推导**）：每个公共成员一条 javadoc——**方法**含职责说明与 `@param`（与参数一一对应、名称一致；泛型用 `@param <T> 描述`）/`@return`（非 void 必须）/`@throws`（受检异常必须）；**字段**说明含义、默认值及配置方式（无参无返回值，不标注 `@param`/`@return`/`@throws`）；**不得因"编译能过、doclint 不报"而省略**——缺少 javadoc 即视为未完成
-* 从独立文档迁移时**逐方法落位**：原文档"方法列表/功能说明"里的每个方法条目都要落到对应方法的 javadoc（不得只补类级描述，映射清单见 link:../general/doc-design.adoc[]「存量文档收敛」）；**文档并入 javadoc 后移除对应 `@see`**——某类/方法的内容已完整并入、独立文档随之删除后，`@see` 指向的文档已不存在，须同步移除该 `@see`（`@see` 仅指向仍需保留的功能/模块级设计文档，即"有对应设计文档则保留、文档没了则去掉"）
-* 版本号用 `@version` 维护：类级 javadoc 用 `@version` 标注源文件版本，随行为/接口/默认值/已知缺陷等变更递增（初始 `1.0`）；**变更摘要统一写入项目根的统一 changelog（时间倒序）**，不在源码或设计文档中另行维护变更日志（机制见 link:../general/doc-design.adoc[]「版本与变更记录」）
-* 类型指代写短类名 + import、不写全限定类名（L2，Java 落点）：javadoc 里提到某个类时**先写短类名**（`CUnauthorizedException`），需要解析的场合在**代码示例**里写一条 `import com.c332030.ctool4j.core.exception.CUnauthorizedException;`；**不得**写全限定类名（`com.c332030.ctool4j.core.exception.CUnauthorizedException`）当标识。**"如果有必要"仅三态**：①**同名类冲突**（两个短名相同的类，限定到能区分的粒度）；②**无代码示例可承载 `import`**（纯 `text` 描述、通篇无代码块）；③**该类型不在本仓库的 classpath 内**（外部依赖或他仓类型、不在本仓库依赖树里，读者无法据短名解析、也给不出可解析的 `import`，此时写类全名或改用可点击链接）。**另有三处不属禁止对象、照常写全**：①`{@link ...}` / `@see` 引用的**文件路径**（路径不是类型名）；②`@see` 里按类全名做的**成员引用**（javadoc 标签要求合法引用，须全限定）；③字符串与配置里必须全限定的场合（`@ConditionalOnClass` 的类名、`main-class`、反射按名加载、`import` 语句本身）属逻辑实现、不受本条约束。**判定标准**：文档内容里出现"包名 + 类名"形态的指代且不属上述情形 / 同一处短名与全限定名并存 / 以"更准确"为由通篇写全限定。通用条、判据与不做一次性存量替换的口径见 link:../general/doc.adoc[]「注释与文档」的「文档中提及类型优先写类名 + import，不写类全名」（不复制正文）
-* 特殊字符必须转义：`< > &` 使用 `&lt; &gt; &amp;`，或使用 `{@code ...}` 包裹；HTML 标签必须闭合：`<p>` 换行、`<ul><li>` 列表正确嵌套闭合
-* 构建器 setter 方法注释须标注 `@param`、`@return this`
-* 代码与设计文档双向引用：类/方法的 javadoc 用 `@see "..."` 指向对应的设计文档（**文档承载该功能/模块的总结与规划，不要求逐类同名的设计文档**；类级描述本身写在类 javadoc：一句话定位 + 能力目录）、如有对应测试设计文档一并 `@see`（独立成篇的测试设计文档取测试类名，如 `FooTests` → `FooTests.adoc`）；**路径基准统一为"相对模块根"的路径**（即从该源文件所属模块的根目录起算，不受源文件所在包层级影响）——落点按文档规范（多模块项目为 `<模块>/doc/...`，业务系统单模块为 `doc/<设计阶段>/<模块>/...`，见下），**无论引用方源文件位于哪层包，路径都从模块根写起**（如模块根下 `doc/3-design/core/xxx.adoc`，则 `@see "doc/3-design/core/xxx.adoc"`）；**不写 `../` 形式的"相对当前文件"路径**（写 `../` 会随包层级变化而失效）。这是对通用文档规范「引用路径」（文档中的 link 引用用相对当前文件所在目录的相对路径）的**显式例外**：javadoc `@see` 由 IDE/javadoc 解析，模块根相对使路径不受文件所在包层级影响、模块内一致且利于 IDE 跳转，同一仓库不得混用"相对当前文件"的 `../` 形式；**路径以实际存在的文档为准**：有对应设计文档则 `@see`，**没有则不写 `@see`**（不得写指向不存在文件的路径），**也不得以"补 `@see`"为由强制新建文档**——javadoc 本身就是文档，是否另设功能/模块级设计文档按 link:../general/doc-design.adoc[]「信息归属」的内容范围决定（内容已并入代码文档注释的按上条移除 `@see`）。本条的"不强制新建文档"只针对**独立文档的存在性**，**不得据此减少 javadoc 自身的内容要求**（见上「所有 public/protected 方法与字段必须有 javadoc」）；落点：业务系统单模块写 `doc/<设计阶段>/<模块>/`、多模块项目写各模块 `doc/`（见 link:../general/doc-design.adoc[]、link:../general/doc-lifecycle.adoc[]、link:../general/doc-module.adoc[]）；注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹，裸 `@see doc/...adoc`（不带引号）会被 javadoc 当作类/成员引用解析并报错（failOnError 会中断构建），不可使用
-* 源类与各类测试类在 javadoc 中互相引用：源类 javadoc `@see` 其各类测试类（`Tests` / `BootTests` / `PerfTests` / `IT`，如有）；各类测试类 javadoc `@see` 源类与同被测类的其他测试类（性能测试类须指向源类与功能测试类，见 link:java-testing.adoc[]「测试类命名」）——使"源类 ↔ 测试/性能测试"的关系由代码互引表达、可被 IDE 与工具遍历，不依赖文档目录索引（通用规则见 link:../general/doc-design.adoc[]「类间关系与双向引用」）
-* 测试类 javadoc 与主类对称：测试类类级 javadoc 同样"一句话定位 + 用例目录（覆盖场景清单）+ 该测试的整体设计思路与覆盖取舍"，方法级 javadoc 写该用例细节——**测试意图、该用例的设计思路与依据、边界与断言取舍、测试数据选择理由**（用例编号与文档对应见 link:../general/testing.adoc[]「测试文档」）；这些内容**须完整进代码、不得因放入注释而省略**（原写在测试文档的类/方法级用例设计思路等也一并迁入，见 link:../general/testing.adoc[]「测试文档」）
-* javadoc 等文档性缺陷直接修复遵循通用文档规范（link:../general/doc.adoc[]「文件格式与编码」）
-* 非文档注释（`//` 行注释、`/* */` 块注释）仅限方法体内使用，用于说明局部逻辑实现；类、字段、方法签名等结构说明一律用 javadoc（`/** */`），不得用普通注释（通用注释定位规则见 link:../general/coding.adoc[]「注释」）
+* **多行注释永远写多行**：`/**` 单独一行、注释内容逐行书写、`*/` 单独一行，禁止单行写法 `/** xxx */`；javadoc 使用完整多行块，包含 `@param`、`@return`、`@throws`、`@since`。
+* **所有 public/protected 方法与字段必须有 javadoc（L1）**：每个公共成员一条 javadoc——**方法**含职责说明与 `@param`（与参数一一对应、名称一致；泛型用 `@param <T> 描述`）/`@return`（非 void 必须）/`@throws`（受检异常必须）；**字段**说明含义、默认值及配置方式（无参无返回值，不标注 `@param`/`@return`/`@throws`）；**不得因"编译能过、doclint 不报"而省略**——缺少 javadoc 即视为未完成。
+* **从独立文档迁移时逐方法落位**：原文档"方法列表/功能说明"里的每个方法条目都要落到对应方法的 javadoc（不得只补类级描述，映射清单见 `specs/general/doc-design.adoc`「存量文档收敛」）；**文档并入 javadoc 后移除对应 `@see`**（`@see` 仅指向仍需保留的功能/模块级设计文档）。
+* **版本号用 `@version` 维护**：类级 javadoc 用 `@version` 标注源文件版本，随行为/接口/默认值/已知缺陷等变更递增（初始 `1.0`）；**变更摘要统一写入项目根的统一 changelog**，不在源码或设计文档中另行维护变更日志。
+* **类型指代写短类名 + import、不写全限定类名（L2，Java 落点）**：javadoc 里提到某个类时先写短类名（`CUnauthorizedException`），需要解析的场合在**代码示例**里写一条 `import com.c332030.ctool4j.core.exception.CUnauthorizedException;`；不得写全限定类名当标识。**"如果有必要"仅三态**：① 同名类冲突（限定到能区分的粒度）；② 无代码示例可承载 `import`；③ 该类型不在本仓库的 classpath 内。**另有三处不属禁止对象、照常写全**：① `{@link ...}` / `@see` 引用的**文件路径**（路径不是类型名）；② `@see` 里按类全名做的**成员引用**（javadoc 标签要求合法引用）；③ 字符串与配置里必须全限定的场合（`@ConditionalOnClass` 的类名、`main-class`、反射按名加载、`import` 语句本身）。**判定标准**：文档内容里出现"包名 + 类名"形态的指代且不属上述情形 / 同一处短名与全限定名并存 / 以"更准确"为由通篇写全限定。通用条与不做一次性存量替换的口径见 `specs/general/doc.adoc`「文档中提及类型优先写类名 + import」。
+* **特殊字符必须转义**：`< > &` 使用 `&lt; &gt; &amp;`，或使用 `{@code ...}` 包裹；HTML 标签必须闭合（`<p>` 换行、`<ul><li>` 列表正确嵌套闭合）。
+* **构建器 setter 方法注释须标注 `@param`、`@return this`**。
+* **代码与设计文档双向引用**：类/方法的 javadoc 用 `@see "..."` 指向对应的设计文档；**路径基准统一为"相对模块根"**（从该源文件所属模块的根目录起算，不受源文件所在包层级影响）；**不写 `../` 形式的"相对当前文件"路径**。这是对通用文档规范「引用路径」的**显式例外**：javadoc `@see` 由 IDE/javadoc 解析，模块根相对使路径不受文件所在包层级影响。**路径以实际存在的文档为准**：有对应设计文档则 `@see`，**没有则不写 `@see`**，也不得以"补 `@see`"为由强制新建文档。注意 javadoc 的 `@see` 标签要求合法引用，故文档路径须用英文双引号包裹（裸 `@see doc/...adoc` 会被当作类/成员引用解析并报错，`failOnError` 会中断构建）。
+* **源类与各类测试类在 javadoc 中互相引用**：源类 javadoc `@see` 其各类测试类（`Tests` / `BootTests` / `PerfTests` / `IT`，如有）；各类测试类 javadoc `@see` 源类与同被测类的其他测试类（性能测试类须指向源类与功能测试类，见 `specs/stack/java-testing.adoc`「测试类命名」）。
+* **测试类 javadoc 与主类对称**：测试类类级 javadoc 同样"一句话定位 + 用例目录 + 该测试的整体设计思路与覆盖取舍"，方法级 javadoc 写该用例细节——**测试意图、该用例的设计思路与依据、边界与断言取舍、测试数据选择理由**；这些内容须完整进代码、不得因放入注释而省略。
+* **非文档注释（`//`、`/* */`）仅限方法体内使用**，用于说明局部逻辑实现；类、字段、方法签名等结构说明一律用 javadoc（`/** */`）。
+* **javadoc 等文档性缺陷直接修复**，遵循通用文档规范。
 
 == 依赖与仓库（Clojars）
 
-* **Clojure/Clojars 构件按次序实测取源（L2）**：Clojars 生态的第三方构件（如 `aaron-santos/clj-tiny-astar`）**可能已由中央仓镜像一并代理**——本环境实测：腾讯云 `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/` 是一个**聚合仓库**（group repository），该构件的 `.jar`（10006 字节）与 `.pom`（3619 字节）**可直接取到**（200）；故**先按上条次序对该镜像实测**，**取不到时才另加 Clojars 源**，境内可用的 Clojars 镜像为清华 TUNA `https://mirrors.tuna.tsinghua.edu.cn/clojars/`（实测可取到同一构件）。**镜像是否有该构件要先实测、不得凭镜像名假定**：`org.clojure/clojure` 一类坐标**本就不在 Clojars**（它来自中央仓），在 Clojars 官方与其镜像上**都取不到**（实测均 404）——这是「坐标归属搞错」、**不是镜像失效**，不得据此判定 Clojars 源不可用。选源次序与降级条件见 link:../general/dependency.adoc[]「包源（包仓库/镜像站）的选用」，Maven 侧的源与 `mirrorOf` 写法见 link:maven.adoc[]「仓库与镜像」。
-* **JDK 与构建工具的二进制同样按次序取源（L2）**：JDK 发行包（Adoptium/Temurin 等）、Gradle/Maven 的发行包在国内环境**优先用就近的境内镜像**（实测：腾讯云 `gradle/`、华为云 `gradle/` 与 `nodejs/`、清华 TUNA `nodejs-release/` 取得到发行包；**TUNA 的 `gradle/` 与 `AdoptOpenJDK/` 实测 404**，别按旧资料写进配置），**不要**每次都从各项目官方源站直连下载；**版本仍以项目声明为准**（见 link:../general/ci-cd.adoc[]「运行环境须与项目声明一致」），源只影响"从哪取"，不影响"取哪个版本"。**Gradle Wrapper 的 `distributionUrl` 属项目内已配置的落点**——存在即沿用，不覆盖。
+* **Clojure/Clojars（`clojars`）构件按次序实测取源（L2）**：Clojars 生态的第三方构件**可能已由中央仓镜像一并代理**——先按 `specs/stack/maven.adoc`「仓库与镜像」的次序对该镜像实测，**取不到时才另加 Clojars 源**，境内可用的 Clojars 镜像见图书馆实测记录（依据名：包源与镜像源）。**镜像是否有该构件要先实测、不得凭镜像名假定**：`org.clojure/clojure` 一类坐标**本就不在 Clojars**（它来自中央仓），在 Clojars 官方与其镜像上都取不到——这是「坐标归属搞错」、不是镜像失效。
+* **JDK 与构建工具的二进制同样按次序取源（L2）**：JDK 发行包（Adoptium/Temurin 等）、Gradle/Maven 的发行包在国内环境**优先用就近的境内镜像**，不要每次都从各项目官方源站直连下载；**版本仍以项目声明为准**（见 `specs/general/ci-cd.adoc`「运行环境须与项目声明一致」），源只影响"从哪取"，不影响"取哪个版本"。**Gradle Wrapper 的 `distributionUrl` 属项目内已配置的落点**——存在即沿用，不覆盖。

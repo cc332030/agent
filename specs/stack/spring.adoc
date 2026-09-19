@@ -1,42 +1,42 @@
 = Spring 规范（技术栈层）
 
-以下规范适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。（依据：Spring Framework 官方文档的依赖注入与声明式事务两节。）通用编码规则见 link:../general/coding.adoc[]；本文件只收录 Spring 专属规则。
+适用于 **Spring/Spring Boot 项目**。加载触发特征：项目存在 Spring 依赖、`@SpringBootApplication` 等 Spring 注解。依据：Spring Framework 官方文档的依赖注入与声明式事务两节。通用编码规则见 `specs/general/coding.adoc`；本文件只收录 Spring 专属规则。
 
 == 注入
 
-* 依赖注入默认使用构造器注入；无注入字段时添加 `@AllArgsConstructor` 属正常写法，不作问题提醒
-* 禁止字段注入（`@Autowired` 直接标注字段）、setter 注入：构造器注入保证依赖不为 null、便于测试与不可变，除非确有必要（循环依赖等）并说明原因
-* 注入的 Bean 优先用接口/抽象类型声明：面向接口注入便于替换实现与测试，除非确无多实现
+* **依赖注入默认使用构造器注入**；无注入字段时添加 `@AllArgsConstructor` 属正常写法，不作问题提醒。
+* **禁止字段注入（`@Autowired` 直接标注字段）、setter 注入**：构造器注入保证依赖不为 null、便于测试与不可变，除非确有必要（循环依赖等）并说明原因。
+* **注入的 Bean 优先用接口/抽象类型声明**：面向接口注入便于替换实现与测试，除非确无多实现。
 
 == Bean 定义
 
-* Bean 的获取：业务代码中不得直接 `ApplicationContext.getBean(...)`（绕开依赖注入、隐藏依赖关系），一律用构造器注入声明依赖
-* `@Bean` 方法仅在配置类中使用，业务类不定义 `@Bean`；`@Bean` 方法所在配置类须标注 `@Configuration`
-* 条件化装配用 `@ConditionalOnXxx` 系列注解，不手写 `if` 判断后返回 null；对外提供的可替换点用 `@ConditionalOnMissingBean` 给默认实现、接入方一处覆盖即全局生效（接入成本见 link:../general/coding.adoc[]「抽象与接入成本」）
+* **Bean 的获取**：业务代码中不得直接 `ApplicationContext.getBean(...)`（绕开依赖注入、隐藏依赖关系），一律用构造器注入声明依赖。
+* **`@Bean` 方法仅在配置类中使用**，业务类不定义 `@Bean`；`@Bean` 方法所在配置类须标注 `@Configuration`。
+* **条件化装配用 `@ConditionalOnXxx` 系列注解**，不手写 `if` 判断后返回 null；对外提供的可替换点用 `@ConditionalOnMissingBean` 给默认实现、接入方一处覆盖即全局生效（接入成本见 `specs/general/coding.adoc`「抽象与接入成本」）。
 
 == 配置
 
-* 配置项统一用 `@ConfigurationProperties` 绑定（类型安全），不在业务代码中散落 `@Value`；`@Value` 仅限少量简单配置
-* 配置类不写逻辑（**任何情况都不允许**）：`@ConfigurationProperties` 类与 `@Configuration` 类只承载"配置项声明 + 按配置装配对象"，逻辑一律下沉到工具类或 Service——取值兜底、条件判断、格式转换、派生值与数据加工**一律不在配置类中做**，只放字段与访问器（判定标准：条件分支/循环为零、不做计算与对外访问、取值用工具方法或语言内置写法；被容器调用的 `@Bean` 装配方法另见 link:../general/coding.adoc[]「类设计」）
-* `@ConfigurationProperties` 类须提供校验（`@Validated` + JSR-303 注解），启动即校验配置合法性，避免运行期才发现配置错误
-* `@ConfigurationProperties` 类的校验注解只做**声明式**校验：校验逻辑写在自定义 `ConstraintValidator` 或工具类中，不得在配置类里写校验/判空逻辑
-* 配置项须有默认值或显式必填声明；必填项缺失时启动失败（fail-fast），不静默使用空值（通用要求见 link:../general/coding.adoc[]「抽象与接入成本」之「可替换点须有可用默认」）
-* 与框架既有做法的边界（防静默推翻）：本条**严于** Spring 的常规用法——官方允许在配置类里放派生 getter、在 `@Bean` 方法内做条件装配（`@ConditionalOnXxx` 除外，见「Bean 定义」）；本规范要求这类加工下沉到工具类/Service，已有项目按 link:../core/execution.adoc[]「规范变更的存量处理」**随动迁移**（改到的文件顺带调整，不发动全库改造）
+* **配置项统一用 `@ConfigurationProperties` 绑定**（类型安全），不在业务代码中散落 `@Value`；`@Value` 仅限少量简单配置。
+* **配置类不写逻辑（任何情况都不允许，L1）**：`@ConfigurationProperties` 类与 `@Configuration` 类只承载"配置项声明 + 按配置装配对象"，逻辑一律下沉到工具类或 Service——取值兜底、条件判断、格式转换、派生值与数据加工**一律不在配置类中做**，只放字段与访问器（判定标准见 `specs/general/coding.adoc`「类设计」）。
+* **`@ConfigurationProperties` 类须提供校验**（`@Validated` + JSR-303 注解），启动即校验配置合法性，避免运行期才发现配置错误。
+* **校验注解只做声明式校验**：校验逻辑写在自定义 `ConstraintValidator` 或工具类中，不得在配置类里写校验/判空逻辑。
+* **配置项须有默认值或显式必填声明**；必填项缺失时启动失败（fail-fast），不静默使用空值。
+* **与框架既有做法的边界（防静默推翻）**：本条**严于** Spring 的常规用法——官方允许在配置类里放派生 getter、在 `@Bean` 方法内做条件装配（`@ConditionalOnXxx` 除外）；本规范要求这类加工下沉到工具类/Service，已有项目按 `specs/core/execution.adoc`「规范变更的**存量处理**」**随动迁移**（改到的文件顺带调整，不发动全库改造）。
 
 == 事务
 
-* 事务用 `@Transactional` 声明式管理，不在业务代码中手动 `begin/commit/rollback`
-* `@Transactional` 须显式指定 `rollbackFor`（默认只回滚 `RuntimeException`，受检异常不回滚，易埋坑）
-* 事务方法须为 public 且由 Spring 代理调用：同类内部方法直接调用（`this.xxx()`）不走代理、事务失效，需注意规避
-* 事务范围尽量小：不在事务内做远程调用、耗时 IO 等操作，避免长事务占用连接
+* **事务用 `@Transactional` 声明式管理**，不在业务代码中手动 `begin/commit/rollback`。
+* **`@Transactional` 须显式指定 `rollbackFor`**（默认只回滚 `RuntimeException`，受检异常不回滚，易埋坑）。
+* **事务方法须为 public 且由 Spring 代理调用**：同类内部方法直接调用（`this.xxx()`）不走代理、事务失效。
+* **事务范围尽量小**：不在事务内做远程调用、耗时 IO 等操作，避免长事务占用连接。
 
 == 跨语言执行脚本（资源文件夹）
 
-* **执行其他语言的脚本按资源加载，不内联字符串（L1）**：`@Sql`、`ScriptUtils`、Redis `DefaultRedisScript`、JDBC 语句等，一律**从资源文件夹加载 `.sql`/`.lua` 等文件**后执行，不用字符串拼接或字符串模板在 Java 里组装脚本；落点与判定标准见 link:../stack/java.adoc[]「跨语言执行脚本（SQL / Lua 等）」与通用规则 link:../general/coding.adoc[]「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」（本文件不复制条文）。
-* **加载时机按性能敏感度定性（L1）**：读进来的脚本**发布后不变**，性能敏感路径（Redis 操作、热点查询等）须"读一次、反复用"——静态常量声明 `DefaultRedisScript`、静态初始化块里 `setScriptSource` 载入一次，不每次调用读；**需求要求内容会变**的模板（如转 PDF 的 HTML 模板）**不适用缓存**、按重读决定。判据与 Java 落点见 link:../stack/java.adoc[]「跨语言执行脚本（SQL / Lua 等）」的「加载时机」（本文件不复制条文）。
+* **执行其他语言的脚本按资源加载，不内联字符串（L1）**：`@Sql`、`ScriptUtils`、Redis `DefaultRedisScript`、JDBC 语句等，一律**从资源文件夹加载 `.sql`/`.lua` 等文件**后执行，不用字符串拼接或字符串模板在 Java 里组装脚本；落点与判定标准见 `specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」与 `specs/general/coding.adoc`「跨语言执行脚本的落点」。
+* **加载时机按性能敏感度定性（L1）**：读进来的脚本**发布后不变**，性能敏感路径（Redis 操作、热点查询）须"读一次、反复用"——静态常量声明 `DefaultRedisScript`、静态初始化块里载入一次；**需求要求内容会变**的模板不适用缓存、按重读决定。判据与 Java 落点见 `specs/stack/java.adoc`「跨语言执行脚本」的「加载时机」。
 
 == 分层与职责
 
-* 分层职责清晰：Controller 只做参数校验与协议转换、Service 承载业务逻辑、Repository/Mapper 只做数据访问，不跨层调用、不在 Controller 写业务逻辑
-* **HTTP 接口路径优先用中划线（kebab-case）（L1）**：路由路径（Feign 等内部调用接口与控制器的 `@RequestMapping`/`@GetMapping` 一类路径）的**路径片段**须用小写 + 中划线（`-`），**不得**用下划线（`_`）或驼峰/大写：写 `` `/user-center/get-user` ``，不写 `` `/user_center/getUser` ``。**理由与依据**：路径片段是大小写敏感的 URI 成分，`-` 与 `_` 都是 RFC 3986 的 unreserved 字符——两者之差**不构成语义差、只构成拼写风险**（依据：RFC 3986 的 URI 语法；Google API 设计指南的 REST 资源名路径以小写连字符分隔）。**两处照旧**（沿用既有，不按本条改名）：①**服务路由前缀/网关前缀**——它由服务名或注册中心决定、与本条无关；②**已发布、外部依赖的对外路径**——改动即破坏既有调用方，属契约变更、须单独评估。**判定标准（任一命中即违规）**：①新增或改动的路径里出现 `_`；②路径片段用驼峰/大写字母分段；③同一接口内两种风格混用。存量路径按「规范变更的存量处理」随动迁移（改到该接口时一并规范），不发动全库改名。**与命名规则的分工**：本条只管**路径字符串**；接口**类名**、DTO 类型等 Java 标识符的命名按 link:java.adoc[]「命名」与 link:../general/coding.adoc[]「命名与代码质量」执行，两者互不混用。
-* Controller 统一用 `@RestController`，返回体统一封装；异常统一由全局异常处理器（`@RestControllerAdvice`）处理，不在业务代码中逐处 try-catch 后手工拼错误响应
+* **分层职责清晰**：Controller 只做参数校验与协议转换、Service 承载业务逻辑、Repository/Mapper 只做数据访问，不跨层调用、不在 Controller 写业务逻辑。
+* **HTTP 接口路径优先用中划线（kebab-case）（L1）**：路由路径（Feign 等内部调用接口与控制器的 `@RequestMapping`/`@GetMapping` 一类路径）的**路径片段**须用小写 + 中划线（`-`），**不得**用下划线（`_`）或驼峰/大写：写 `/user-center/get-user`，不写 `/user_center/getUser`。**理由与依据**：路径片段是大小写敏感的 URI 成分，`-` 与 `_` 都是 RFC 3986 的 unreserved 字符——两者之差**不构成语义差、只构成拼写风险**（依据：RFC 3986 的 URI 语法；Google API 设计指南的 REST 资源名路径以小写连字符分隔）。**两处照旧**（沿用既有，不按本条改名）：① **服务路由前缀/网关前缀**——它由服务名或注册中心决定、与本条无关；② **已发布、外部依赖的对外路径**——改动即破坏既有调用方，属契约变更。**判定标准（任一命中即违规）**：① 新增或改动的路径里出现 `_`；② 路径片段用驼峰/大写字母分段；③ 同一接口内两种风格混用。存量路径按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移，不发动全库改名。**与命名规则的分工**：本条只管**路径字符串**；接口类名、DTO 类型等 Java 标识符的命名按 `specs/stack/java.adoc`「命名」与 `specs/general/coding.adoc`「命名与代码质量」执行。**本条只在技术栈层**（"HTTP 路径"只在 Web 框架语境下有定义，通用层不写协议/框架专名）。
+* **Controller 统一用 `@RestController`**，返回体统一封装；异常统一由全局异常处理器（`@RestControllerAdvice`）处理，不在业务代码中逐处 try-catch 后手工拼错误响应。
