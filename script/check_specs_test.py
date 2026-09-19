@@ -4405,6 +4405,28 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         cm.check_rename_split_guard()
         self.assertIn("分量大小不是理由", self.error_texts())
 
+    def test_batch_rename_clause_removed_reports(self):
+        # 反例：删掉"不按文件个数分摊" -> 多文件同时改名会被读成"每个文件各开一个改名提交"
+        # （"改动只涉及本文件"被当成拆分依据，批量改名提交就此消失）
+        self._write_valid()
+        self._drop("**不按文件个数分摊**")
+        cm.check_rename_split_guard()
+        self.assertIn("文件个数", self.error_texts())
+
+    def test_batch_delivery_clause_removed_reports(self):
+        # 反例：删掉"分批交付时序列不重排" -> 分批整理时以"压缩提交"为由把已交付的两个提交压掉或重排
+        self._write_valid()
+        self._drop("**同一 PR 内改动分批交付时，这条序列不重排**")
+        cm.check_rename_split_guard()
+        self.assertIn("分批交付", self.error_texts())
+
+    def test_chain_check_command_removed_reports(self):
+        # 反例：删掉断链核对命令 -> "那一批改名"被拆分/省略成「新增 + 删除」时无抓手可核
+        self._write_valid()
+        self._drop("`git log --diff-filter=R -M --name-status`")
+        cm.check_rename_split_guard()
+        self.assertIn("diff-filter=R", self.error_texts())
+
     def test_resident_reference_removed_reports(self):
         # 反例：必加载层重申行被删 -> 常驻上下文里读不到 P7（下次会话不会加载 git 规范）
         self._write_valid()
