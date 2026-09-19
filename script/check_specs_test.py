@@ -2639,6 +2639,9 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
                    "* 以真实结果为准。\n\n"
                    "=== 判准维度：严格执行 / 尽力而为\n\n严格执行与尽力而为两档，都须留证。\n\n"
                    "=== 验证的适用边界\n\n先判改动性质；代码类改动 / 规范类改动；"
+                   "不改内容的操作（C 类：只改提交/历史或文件路径，内容逐字节不变，"
+                   "不重跑全量编译与测试）；"
+                   "\"内容没变\"不是\"少核对\"的借口；"
                    "判据问句\"会不会被未知项目加载\"；先判改动性质；不得互串；取**更严的一侧**；"
                    "每次验证都换一个干净上下文。\n\n"
                    "=== 验证的效力等级\n\n"
@@ -3033,6 +3036,8 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("specs/general/verify.adoc",
                    "= 测试规范\n\n== 验证与运行契约\n\n=== 验证的适用边界\n\n"
                    "先判改动性质：代码类改动按机械判据判过不过、规范类改动做三视角；"
+                   "不改内容的操作（C 类）内容逐字节不变、不重跑全量编译与测试，"
+                   "\"内容没变\"不是\"少核对\"的借口；"
                    "判据是「会不会被未知项目加载」；不得互串；取**更严的一侧**；"
                    "每次验证都换一个干净上下文；结论按**效力等级**标——确定项可判对错、"
                    "概念项只到未发现，不得当作阻断交付的条件。\n")
@@ -3092,6 +3097,19 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc", self._own_text())
         cm.check_lifecycle_guard()
         self.assertIn("干净上下文", self.error_texts())
+
+    def test_missing_content_unchanged_boundary_reports(self):
+        # 反例：删掉"不改内容的操作（C 类）不重跑全量校验"（压缩提交/纯改名又会被要求跑全量构建）
+        self._write_valid()
+        self.write("specs/general/verify.adoc",
+                   "= 测试规范\n\n== 验证与运行契约\n\n=== 验证的适用边界\n\n"
+                   "先判改动性质：代码类改动按机械判据判过不过、规范类改动做三视角；"
+                   "判据是「会不会被未知项目加载」；不得互串；取**更严的一侧**；"
+                   "每次验证都换一个干净上下文；结论按**效力等级**标——确定项可判对错、"
+                   "概念项只到未发现，不得当作阻断交付的条件。\n")
+        self.write("AGENTS.adoc", self._own_text())
+        cm.check_lifecycle_guard()
+        self.assertIn("不改内容的操作", self.error_texts())
 
     def test_missing_split_section_reports(self):
         # 反例：拆分判据节被删（拆分成为新的失控源）
