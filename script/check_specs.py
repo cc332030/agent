@@ -114,12 +114,29 @@
      `AGENTS.adoc` 登记；两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）须都在
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
-     并把"自足"要求误加到只对维护方成立的文件上。
+     并把"自足"要求误加到只对维护方成立的文件上。清单里的 `script/fetch-specs.py`
+     条目须写明**解释器兜底**（运行它不再以"机器上有 python3"为前提），与第 30g 项同源。
  30e. 规范抓取（安装取文件）防线：随规范分发的 `script/fetch-specs.py` 与其同名平台入口
      （`.sh`/`.bat`）须存在且形态正确（清单**从入口自身解析**而非手工清单、增量语义、
      「不是站点首页」的判据——站点对未命中路径回落 200 + HTML、落点边界校验、退出码语义、
      薄壳三件事、`.bat` 纯 ASCII + CRLF），且 INSTALL/AGENTS_COMMON/README 三处登记同步——
      防安装时又退回「手拼逐条下载命令」（清单漏项 + 转义出错 + 逐条往返）。
+ 30g. 解释器兜底防线（`fetch-specs` 安装路径）：`script/fetch-specs.sh` 与
+     `script/fetch-specs.bat` 须**按次序探测解释器、找不到就报错退出**（缺一即
+     "没有 python 的机器上装不上规范"），且 INSTALL.adoc 须写明这一兜底——防"默认有
+     python3"被当成前提：CentOS/RHEL 8 及更早只给 `python2`、部分 Windows 只有
+     Microsoft Store 的 `python` 别名、精简镜像与 CI 镜像可能整个没有，而两个入口原先
+     都只调 python3，于是**装规范这一步先失败**，后面所有规范都无从加载（本仓库实证）。
+     由 `check_interpreter_fallback_guard` 钉住。
+ 30h. 共享缓存防线（`fetch-specs` 落点）：`script/fetch-specs.py` 须**默认落到平台用户级
+     缓存目录**（POSIX `XDG_CACHE_HOME`/`~/.cache`、Windows `%LOCALAPPDATA%\\Cache` 一类），
+     使本机所有项目共用一份、同一文件不因项目数重复下载；须保留 `--local`（项目内副本、
+     临时产物语义）与 `--cache-dir`/`AGENT_SPECS_CACHE`（显式落点，且不得借它写到缓存目录
+     之外）；缓存内容须按来源地址分槽、脚本不得删除缓存里的既有文件；来源是本机
+     （`localhost`/回环）时不缓存。INSTALL.adoc/AGENTS_COMMON.adoc/README.adoc 须同步写明
+     这一落点——防"每个项目各下载一遍同几份文件"的重复流量与等待（用户实测诉求）。
+     由 `check_shared_cache_guard` 钉住。
+
  30d. 性能测试防线：`specs/general/testing.adoc` 的「性能测试」须仍在，且**测量与记录**的要点
      齐备——对比测试（含当前实现作基准）、排除初始化干扰、测量口径可核对、离散度与样本量
      （至少 3 次采样 / 报离散度 / 差异小于离散度视为无显著差异）、公平比较、计时区间与消费结果、
@@ -1950,6 +1967,22 @@ def check_spec_fetch_guard():
             missing = [k for k in keys if k not in text]
             if missing:
                 err(f"规范抓取防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    # 解释器兜底（本仓库实证：入口原先只调 python3，"没有 python 的机器上装不上规范"）
+    for rel, keys, desc in (
+        ("script/fetch-specs.sh", ("command -v python3", "command -v python", "exec "),
+         "须**按次序探测解释器**（先 python3、再 python）、用探测到的那个 exec 逻辑代码，"
+         "两者都没有时报错并退出非 0——不得把 python3 直接写死成前提"),
+        ("script/fetch-specs.bat", ("where py", "where python3", "where python", "exit /b 127"),
+         "须**按次序探测解释器**（py -3 / python3 / python）、用探测到的那个调用逻辑代码，"
+         "都没有时报错并 `exit /b` 非 0——不得把 python3 直接写死成前提"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"解释器兜底防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
     # 落盘形态：`.bat` 纯 ASCII + CRLF、`.sh` LF（入口按各自平台规范落盘）
     bat = os.path.join(REPO_ROOT, "script", "fetch-specs.bat")
     if os.path.isfile(bat):
@@ -1981,6 +2014,165 @@ def check_spec_fetch_guard():
         missing = [k for k in keys if k not in text]
         if missing:
             err(f"规范抓取防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_interpreter_fallback_guard():
+    """『解释器兜底防线』：安装取文件的抓手不得以"机器上有 python3"为前提。
+
+    背景（用户报告的真实失效）：`INSTALL.adoc` 与 `AGENTS_COMMON.adoc` 让执行者在项目
+    根目录直接跑入口脚本取规范，而两个入口原先都直接调 `python3`——**python 不是所有
+    环境都有的**：CentOS/RHEL 8 及更早只给 `python2`（`python3` 要另装）、部分 Windows
+    只装了 Microsoft Store 的 `python` 别名、精简镜像与部分 CI 镜像可能整个没有
+    （`python3: command not found` / `'python3' 不是内部或外部命令`）。此时**安装这一步
+    先失败**，而它正是后面所有规范的入口——失败的是"取规范"，用户看到的却只是"装不上"。
+
+    故钉住两条：①两个入口都**按次序探测**解释器（`.sh`：PATH 里的 `python3` → `python`；
+    `.bat`：`py -3` → `python3` → `python`），用探测到的那个调用逻辑代码，都没有时
+    **报错并退出非 0**（不得静默继续、也不得把 `python3` 写死成前提）；②安装文档须写明
+    这一兜底，引用方读文档时就知道不必先自己装 python。
+
+    **边界（用户在 PR 上追问「没有 python 也要下载啊」时定的）**：入口报错退出**不等于**
+    "取不到就算了"——同一追问下确定了另一条：**入口不得代为安装/下载运行时**。理由是
+    `specs/general/script.adoc`「跨环境脚本」既有的两条：入口只做薄壳（**不得**为"让逻辑
+    跑起来"改变系统状态）、入口不设前置步骤（该职责要么由**人**按本平台既有的软件分发方式
+    完成、要么在**人已交互登录、能看见命令与报错**的会话里由 agent 完成，判据是 ISO 9241-110
+    的可控与可预期）。故安装文档须给出**完整的处置次序**（先按平台既有分发方式装一个 →
+    或让 AI 在能看见报错的会话里做 → 或退到远程入口地址直接读），而不是只写"报错退出"；
+    同一追问也否掉了 `curl … | python3 -` 那条远程执行形态（**它同样要 python**，只是把
+    "取不到"换成了"执行不了"）。
+
+    只核入口形态与文档措辞（探测次序的**行为**由 `script/check_specs_test.py` 的用例与
+    人工复核承担——本仓库 CI 是 Linux、没有 Windows 运行时可在构建里执行 `.bat`）。
+    """
+    phase("解释器兜底防线检查")
+    checks = (
+        # (相对路径, [(描述, 应出现的键), ...], 顺序约束)
+        ("script/fetch-specs.sh",
+         (("按次序探测解释器（先 python3、再 python），不把 python3 写死成前提",
+           ("command -v python3", "command -v python")),
+          ("用探测到的解释器调用逻辑代码", ("exec ", "fetch-specs.py", "$@")),
+          ("两者都没有时报错并退出非 0", ("127", "未找到解释器"))),
+         ((("command -v python3 >/dev/null",), ("command -v python >/dev/null",)),
+          "python3 须排在 python 之前")),
+        ("script/fetch-specs.bat",
+         (("按次序探测解释器（py -3 / python3 / python），不把 python3 写死成前提",
+           ("where py", "where python3", "where python")),
+          ("用探测到的解释器调用逻辑代码", ("%~dp0", "%*")),
+          ("都没有时报错并退出非 0", ("exit /b 127",))),
+         ((("where py >nul",), ("where python3 >nul",), ("where python >nul",)),
+          "探测次序须为 py → python3 → python")),
+    )
+    for rel, groups, order in checks:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺失 {rel}——安装取文件的 {rel.rsplit('.', 1)[-1]} 入口不在，"
+                "该平台上的解释器兜底随之失效", rel)
+            continue
+        text = open(path, encoding="utf-8").read()
+        for desc, keys in groups:
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"解释器兜底防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+        # 顺序判别的键须**互不包含**：`command -v python` 会命中 `command -v python3` 里的子串、
+        # `where python` 同理，用子串判次序会被重叠命中骗过（本仓库实证：写反次序仍判正确）。
+        # 故取"带判空后缀"的判别串——它们只可能出现在各自的探测分支里。
+        seq = order[0]
+        positions = [text.find(k[0]) for k in seq]
+        if all(p >= 0 for p in positions) and positions != sorted(positions):
+            err(f"解释器兜底防线被破坏：{rel} 的探测次序不对——{order[1]}"
+                "（后写的那个会被前面的分支永久遮住，等于没有兜底）", rel)
+
+    # 安装文档须写明兜底：引用方才知道"没有 python3 也不必先自己装"
+    install = os.path.join(REPO_ROOT, "INSTALL.adoc")
+    if os.path.isfile(install):
+        text = open(install, encoding="utf-8").read()
+        for keys, desc in (
+                (("兜底", "python"), "安装文档须写明取文件脚本的解释器兜底"),
+                (("python2",), "须点出只有 python2 的环境（CentOS/RHEL 8 及更早）"),
+                (("没装", "没有"), "须写明**连 python 都没有**时的做法（报错退出而非静默）"),
+                # 用户在 PR 上追问「没有 python 也要下载啊」：安装文档须给出「一个都没有」时的
+                # 完整处置次序——先按平台既有分发方式装一个（这一步是**人**的、不是入口的）、
+                # 或让 AI 在能看见报错的会话里做、或退到远程入口；并写明**入口不得代为安装**
+                # （否则"入口不承载逻辑/不改变系统状态"被绕过，门变成施工队）。
+                (("装一个 python 3",),
+                 "须写明**没有解释器时的处置次序**（先按本平台既有的软件分发方式装一个 python 3）"
+                 "——只写'报错退出'等于没回答'那接下来怎么办'（用户在 PR 上追问的正是这一步）"),
+                (("不得**代为安装", "可预期"),
+                 "须写明**入口不得代为安装/下载运行时**（脚本的一步 vs 人的一步）并给出理由"
+                 "（改系统状态、要管理员权限、失败方式因环境而异、对调用方不可预期）——"
+                 "缺则'让逻辑跑起来'会被读成'入口自己想办法搞一个解释器'"),
+                (("远程入口地址", "同样要 python"),
+                 "须写明**不装解释器的替代路径**（直接读远程入口地址），并点出 `curl … | python3 -` "
+                 "那条远程执行形态**同样要 python**——缺则引用方会把它当'绕过解释器'的办法")):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"解释器兜底防线被破坏：INSTALL.adoc 缺失 {missing}——{desc}"
+                    "（缺则引用方仍以为必须先有 python3）", "INSTALL.adoc")
+    phase_done()
+
+
+def check_shared_cache_guard():
+    """『共享缓存防线』：取规范默认落**共享缓存**，不在每个项目里各留一份。
+
+    背景（用户实测诉求）：安装说明让引用方在**项目根目录**跑取文件抓手，落点取项目内
+    目录时，同一台机器上 N 个项目就是 N 份同样的副本——同一批文件反复下载、反复等待，
+    项目一多就是纯重复流量；且各项目的副本各自过期、各自清理。
+
+    故钉住：①默认落点取**平台用户级缓存目录**（POSIX `XDG_CACHE_HOME`/`~/.cache`、
+    Windows `%LOCALAPPDATA%\\Cache`），本机所有项目共用一份；②保留回退与覆盖手段——
+    `--local` 取项目内副本（临时产物语义，随项目清理）、`--cache-dir`/`AGENT_SPECS_CACHE`
+    显式指定，且显式指定**只接受缓存目录之下的路径**（不得借它写到任意位置）；③缓存
+    内容按来源地址分槽（不同来源的副本互不覆盖）、脚本**不删除**缓存里的既有文件、
+    来源是本机时不缓存（本地服务端内容可能每次都在变）；④三处文档（安装文档、公共入口、
+    README）须同步写明这一落点——否则读者按旧文档还在项目里逐份下载。
+
+    只核"机制在不在"（源码关键点 + 文档措辞）；**实际落点行为**由
+    `script/check_specs_test.py` 的用例与人工复核承担（行为要跨平台取环境变量，
+    不适合放进只读文本的机械校验）。
+    """
+    phase("共享缓存防线检查")
+    rel = "script/fetch-specs.py"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺失 {rel}——取文件的抓手不在，共享缓存与解释器兜底都无从谈起", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        for desc, keys in (
+                ("默认落点须取平台用户级缓存目录（本机所有项目共用一份）",
+                 ("XDG_CACHE_HOME", "LOCALAPPDATA", "shared_cache_dir")),
+                ("须保留项目内副本这条路径（`--local`，临时产物语义）",
+                 ("--local", "check_out_dir")),
+                ("须能显式指定缓存落点（参数与环境变量）",
+                 ("--cache-dir", "AGENT_SPECS_CACHE")),
+                ("缓存须按来源地址分槽（不同来源的副本互不覆盖）",
+                 ("cache_slot_dir", "urlsplit")),
+                ("本机来源不缓存（服务端内容可能每次都在变）",
+                 ("is_local_base", "127.")),
+        ):
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"共享缓存防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    for rel, keys, desc in (
+        ("INSTALL.adoc",
+         ("用户级缓存目录", "所有项目共用", "--local"),
+         "安装文档须写明落点默认是共享缓存、以及 `--local` 这条项目内副本路径"
+         "（缺则引用方仍按『每个项目各下载一份』执行）"),
+        ("AGENTS_COMMON.adoc",
+         ("用户级缓存目录", "所有项目共用"),
+         "公共入口的「加载方式」须写明副本默认落共享缓存（引用方按入口加载时才知道不必"
+         "逐项目各存一份）"),
+        ("README.adoc",
+         ("共享缓存",),
+         "README 的引用方式须写明该落点（读者从入口才知道取文件不必逐项目下载）"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"共享缓存防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
     phase_done()
 
 
@@ -2019,15 +2211,22 @@ def check_link_refs():
     phase_done()
 
 
-def _collect_section_names(path: str):
-    """收集一个 .adoc 文件的所有节标题文本（去掉 `=` 前缀）。
+def _ref_titles(path: str):
+    """收集一个 .adoc 文件里**可被 `link:x.adoc[]「…」` 指向的标题文本**。
 
-    AsciiDoc 节标题形如 `== 设计文档`、`=== 信息归属（同一信息只写一处）`。
-    返回节标题正文集合，并收录别名以便引用方按习惯省略括号说明：
-      * 完整标题；
-      * 去掉括号后缀的简化名（`信息归属（同一信息只写一处）` → `信息归属`）；
-      * 括号内的文字（`分类与懒加载（加载调度器）` → `加载调度器`）。
+    两类写法都收（引用方按其中任一种指过来都算指向真实存在的东西）：
+      * **节标题**：`== 设计文档`、`=== 信息归属（同一信息只写一处）`（带 `=` 前缀）；
+      * **条目名**：`* **入口语言选择（L1）**：……` —— 规范文件里大量判据是**列表条目**
+        而非节，引用方更常指「某文件「某条目」」（本仓库既有大量这类引用）。
+
+    每类都收录别名，便于按习惯省略级别/括号说明：完整文本、去掉括号后缀的简化名
+    （`信息归属（同一信息只写一处）` → `信息归属`）、括号内的文字
+    （`分类与懒加载（加载调度器）` → `加载调度器`）。
     `----` 代码块内的行不采集（如 INSTALL.adoc 模板首行 `= Agent 规范入口` 并非节）。
+
+    **历史缺陷（本轮实测）**：原实现只采集 `=` 起头的节标题，`link:a.adoc[]「某条目」`
+    一律判为悬空——于是「指向条目」这种正确写法**无法通过校验、只能改成节名**。
+    该缺陷会反向诱导规范改坏（把 `「入口语言选择」` 改成 `「文件头与解释器」` 只为过检）。
     """
     names = set()
     in_block = False
@@ -2038,18 +2237,30 @@ def _collect_section_names(path: str):
                 continue
             if in_block:
                 continue
-            m = re.match(r"^(=+)\s+(.+?)\s*$", line)
-            if not m:
-                continue
-            title = m.group(2)
-            names.add(title)
-            simple = re.sub(r"[（(].*$", "", title).strip()
-            if simple:
-                names.add(simple)
-            for inner in re.findall(r"[（(]([^（）()]+)[）)]", title):
-                if inner.strip():
-                    names.add(inner.strip())
+            m = re.match(r"^(=+)\s+(.+?)\s*$", line)          # 节标题
+            if m:
+                titles = [m.group(2)]
+            else:
+                m = re.match(r"\s*\*\s+\*\*(.+?)\*\*", line)   # 列表条目：`* **名称**`
+                titles = [m.group(1)] if m else []
+            for title in titles:
+                title = title.strip()
+                if not title:
+                    continue
+                names.add(title)
+                # 条目名常带级别后缀（`（L1）`、`（L2，……）`），引用时通常省略，故收录简化名
+                simple = re.sub(r"[（(].*$", "", title).strip()
+                if simple:
+                    names.add(simple)
+                for inner in re.findall(r"[（(]([^（）()]+)[）)]", title):
+                    if inner.strip():
+                        names.add(inner.strip())
     return names
+
+
+def _collect_section_names(path: str):
+    """`_ref_titles` 的兼容别名（既有调用点与用例沿用旧名）。"""
+    return _ref_titles(path)
 
 
 def check_section_refs():
@@ -6302,6 +6513,12 @@ def check_cross_platform_script_guard():
         `python3 foo.py` / `powershell -File foo.ps1`；脚本功能参数属"必要参数"例外）、
         **入口不得为跑逻辑自加命令或塞参数**——缺这几条，用户"不希望脚本执行前后加命令和参数"
         的要求就落不了地（入口要么跑不起来、要么把平台差异推回给调用方）；
+      * **门口不装东西**（用户追加要求「没有 python 也要能取到规范」时定的边界）：入口**不得**
+        为"让逻辑跑起来"而安装/下载/解压运行时、包或依赖，也**不得**把"代为获取运行时"当成入口
+        的职责——否则入口从"门"变成"装门的施工队"：改系统状态、要管理员权限、失败方式千差万别，
+        且"装什么、从哪装、改了什么"对调用方不可预测（依据 ISO 9241-110 的可控与可预期）。
+        该职责要么由人按本平台既有软件分发方式完成、要么在**人已交互登录、能看见命令与报错**
+        的正常会话里由 agent 完成；
       * **入口与公开说明同步**：加载调度器的脚本加载项须含本条的**识别特征**（多个 OS 上跑、
         `.bat`/`.cmd` 与 `.sh` 成对），`README.adoc` 的目录说明须让读者知道这条存在。
     """
@@ -6372,6 +6589,17 @@ def check_cross_platform_script_guard():
         (("不得为“跑逻辑”自加命令", "一一对应"),
          "须写明入口**不得为跑逻辑自加命令、也不得给逻辑代码塞参数**（调用前的 `cd`/`mkdir`/"
          "安装/下载/校验，或转交时多加了固定参数）——缺则'只转交'被绕过，入口又开始做别的事"),
+        (("薄壳之外不得多做", "与逻辑层调用等价", "不等价"),
+         "须写明**薄壳之外不得多做、但可以做「把逻辑层当命令直接跑」的薄壳**（判定标准：入口里"
+         "出现与「把调用方给的参数交给逻辑代码」**不等价**的动作即违规；「先探测解释器、一个都"
+         "没有就报错退出非 0」仍属薄壳）——缺则「入口不承载逻辑」被读成「入口只许有一条形态」，"
+         "把「另留一个只跑逻辑的入口脚本」这种正当形态也一起禁掉"),
+        (("安装/下载/解压任何运行时", "不属", "代为获取运行时"),
+         "须写明**入口不得为「让逻辑跑起来」而安装/下载/解压运行时、包或依赖**（`apt`/`apk`/"
+         "`yum`/`pip`/`winget`、`curl | sh` 一类都不属薄壳），且**代为获取运行时不是入口的职责**"
+         "——要么由人按本平台既有软件分发方式完成、要么在**人已交互登录、能看见命令与报错的正常"
+         "会话**里由 agent 完成，不得在入口或非交互执行里静默发生——缺则「让逻辑跑起来」被读成"
+         "「入口自己想办法搞一个运行时」（把环境差异与不可控的系统改动带进入口）"),
         (("不拿裸 shell 当逻辑层",),
          "须写明**不拿裸 shell 当逻辑层**（bash 在 Windows 上不可得或来自 Git Bash/WSL、"
          "cmd 在 Linux 上不可用）——缺则逻辑又被写进 shell，平台差异回到逻辑层"),
@@ -9014,6 +9242,8 @@ def main(argv=None) -> int:
     check_historical_notes()
     check_install_codeblock()
     check_spec_fetch_guard()
+    check_interpreter_fallback_guard()
+    check_shared_cache_guard()
     check_filler_docs()
     check_principle_guard()
     check_priority_guard()

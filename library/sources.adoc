@@ -165,6 +165,13 @@
 * **Failsafe 默认 includes 逐字摘**（官方文档已取回）："`**/IT*.java`"、"`**/*IT.java`"、"`**/*ITCase.java`"。
 * 用途：`specs/stack/java-testing.adoc`「测试类命名」「测试分类与执行边界」——`Tests` 被 surefire 的 `**/*Tests.java` 收进常规 `test` 阶段，而 `IT` **天然被 surefire 排除、由 failsafe 承接**。这两组 includes 是该文件"四类后缀 + 独立执行"契约的**决定性依据**（后缀取错即被误跑或误跳过）。
 
+== 运行时获取与"没有解释器"的处置（Microsoft Learn / Python 官方文档 / POSIX）
+
+* 材料：Microsoft Learn 的命令参考（`.bat`/`.cmd` 的解析与执行边界，见下节）、Python 官方文档（Windows 安装器与 `py` 启动器）、POSIX（shebang 与执行位）。
+* 依据要点（**要点转述、非逐字摘录**）：①**`py` 启动器随 Windows 官方安装器分发**，是 Windows 上定位"解释器"最稳的入口（POSIX 侧则没有对应物，故两侧探测次序本就不同）；②各平台**取运行时的方式互不相同**（发行版包管理器 / 官方安装器 / 应用商店别名），**没有**跨平台的"装一个解释器"命令；③POSIX 的 `#!` 只说明解释器怎么被定位，**不提供**"解释器不存在时怎么办"。
+* **须注意的语义差异（同义性）**：上述材料只说明"运行时怎么取、解释器怎么定位"，**未**规定"入口应当按次序探测解释器""连一个都没有时应报错退出而非静默继续"，更**未**规定"入口不得代为安装运行时"——**这三条都是本集合的判据化取舍**（理由与取舍的完整陈述见 link:adoption.adoc[] 同主题条，规则本体见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」与 `INSTALL.adoc`「取规范时连 python 都没有」）；**不得**把它读成"某平台要求安装流程必须由脚本完成"。
+* 用途：`INSTALL.adoc`「取规范时连 python 都没有」（没有解释器时的处置次序）、`script/fetch-specs.sh` / `script/fetch-specs.bat`（按次序探测、都没有时报错退出非 0）、`specs/general/script.adoc`「跨环境脚本」的边界条（入口不得代为安装/下载运行时）。
+
 == Microsoft Learn（Windows 命令参考）
 
 * 材料：Microsoft Learn 上 Windows 命令（`cmd.exe`）的官方参考。

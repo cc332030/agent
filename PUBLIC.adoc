@@ -17,7 +17,7 @@
 | 通用规范入口 | `specs/`（整目录） | 规范正文：必加载层 / 通用层 / 技术栈层 / 项目类型层 / 平台层（分层见 `AGENTS_COMMON.adoc`「分类与懒加载」）
 | 通用规范入口 | `prompts/_common.txt` | 公共任务提示词的**公共片段**：会被提示词用 `include::_common.txt[tag=…]` 引用，AI 以纯文本读取、片段未展开时**按提示词正文的指引单独取用**（故它同样会被引用方取到）
 | 通用规范入口 | `script/clean_tmp.py` | 随规范分发的通用清理工具（可远程加载执行，见 `specs/core/execution.adoc`「临时产物」）
-| 通用规范入口 | `script/fetch-specs.py`（+ 同名入口 `fetch-specs.sh` / `fetch-specs.bat`） | 随规范分发的抓取工具：按入口的加载调度器登记自动解析清单、一次取全（安装取文件与离线读取用；见 `specs/core/execution.adoc`「临时产物」与 `AGENTS_COMMON.adoc`「访问与解析」）
+| 通用规范入口 | `script/fetch-specs.py`（+ 同名入口 `fetch-specs.sh` / `fetch-specs.bat`） | 随规范分发的抓取工具：按入口的加载调度器登记自动解析清单、一次取全，两个平台入口均**按次序探测解释器**（不假定机器上有 python3、都没有时报错退出）（安装取文件与离线读取用；见 `specs/core/execution.adoc`「临时产物」与 `AGENTS_COMMON.adoc`「访问与解析」）
 |===
 
 == 组织与其边界
