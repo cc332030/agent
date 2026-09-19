@@ -18,4 +18,6 @@ else
   exit 127
 fi
 
+# 解释器是原生可执行文件（非脚本），exec 按 POSIX 语义把 PID 交给它；
+# 位置参数为空时兼容 shell 继续往下走，故不在末尾依赖 exec 的返回。
 exec "$runtime" "$script_dir/fetch-specs.py" "$@"
