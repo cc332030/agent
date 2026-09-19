@@ -3666,22 +3666,26 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
 
 
 class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
-    """钉住『变更日志登记时机防线』（用户明确提出：changelog 仅在明确要求时追加）。
+    """钉住『变更日志声明优先防线』（用户明确提出：除非主动声明否则不新增、不修改）。
 
-    失效形态（本项目实证）：执行者把"我改动了东西"与"该记一条 changelog"画等号，
-    每轮改动都自行追加条目——而本仓库的 changelog 不是自动追加区。
+    两类失效形态（本项目实证，分别对应两次收紧）：
+      * ①执行者把"我改动了东西"与"该记一条 changelog"画等号，每轮改动都自行追加条目；
+      * ②用户只说"调整一下项目规范"、并未提到 changelog，执行者把"改文档"扩大成
+        "改 changelog"，顺手新增了条目——旧条文只写正向（何时可以写），没写这条越界形态。
     """
 
     def _write_valid(self):
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机：**changelog 条目仅在用户明确要求时追加**——"
-                   "用户未明确要求时**一律不写、不改**本文件（含为本次改动顺手补一条）。"
+                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
+                   "——「主动声明」指用户**本次明确要求**新增、修改、整理或压缩 changelog；"
+                   "**其余一切情形按\"未声明\"处理**：未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"，"
+                   "均**不得**新增条目（含\"顺手补一条\"）。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
         self.write("script/check_effective.py",
                    "ROWS = [\n"
-                   "    (\"本仓库 changelog 条目仅在用户明确要求时追加\",\n"
+                   "    (\"本仓库 changelog 除非主动声明，否则不新增、不修改\",\n"
                    "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
-                   "     \"check_changelog_timing_guard 钉住登记时机条\"),\n"
+                   "     \"check_changelog_timing_guard 钉住默认动作条\"),\n"
                    "]\n")
 
     def _patch_root(self):
@@ -3701,14 +3705,36 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         self.assertIn("登记时机", self.error_texts())
 
     def test_default_action_wording_removed_reports(self):
-        # 反例：只留"仅在明确要求时追加"、删掉"未明确要求时一律不写、不改"
-        # （默认动作缺位＝执行者仍可自称"我以为这属于明确要求"）
+        # 反例：只留"除非主动声明"，删掉默认动作"一律不新增、不修改"
         self._write_valid()
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机：**changelog 条目仅在用户明确要求时追加**。"
+                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：用户**本次明确要求**新增、修改、整理或压缩 changelog 时按口径写。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("一律不写、不改", self.error_texts())
+        self.assertIn("一律不新增、不修改", self.error_texts())
+
+    def test_declaration_criteria_removed_reports(self):
+        # 反例：默认动作在、但"主动声明"没有判据（"这应该也算声明"重新可用）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
+                   "——**其余一切情形按\"未声明\"处理**：未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"，"
+                   "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("本次明确要求", self.error_texts())
+
+    def test_undeclared_forms_removed_reports(self):
+        # 反例：默认动作与声明判据都在，但没点名"未声明"的越界形态
+        # （用户只说改文档，执行者仍可把"改文档"读成"改 changelog"）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
+                   "——「主动声明」指用户**本次明确要求**新增、修改、整理或压缩 changelog；"
+                   "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("只要求更新文档或 README", self.error_texts())
 
     def test_missing_agents_file_reports(self):
         # 反例：项目规范入口被删（条目无处承载）
@@ -4289,6 +4315,14 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
     def _write_valid(self) -> None:
         self.write("specs/general/git.adoc", "= git 规范\n\n" + self.GIT_SECTION)
         self.write(
+            "specs/platform/cnb.adoc",
+            "= CNB 平台\n\n== 压缩提交（提交历史的整理）\n"
+            "* **压缩提交＝提交历史整理（L1）**：用户要求时按本条执行。\n"
+            "* **压缩对象不含\"改名提交 + 内容修改提交\"（L1，与「重命名与内容修改须分两个提交」的接口）**："
+            "拆出的那两个提交**不是**本节的临时中间提交（别名：改名提交 + 内容修改提交），"
+            "未点名本条时那两个提交**原样保留**；用户**明确声明**（须点名重命名与内容修改）时按 git 规范"
+            "「例外」执行。\n")
+        self.write(
             "specs/core/execution.adoc",
             "= 执行原则\n\n== 文件操作强制检查\n"
             "* **重命名与内容修改须分两个提交（L1 最高关注项 P7）**：第一个提交**只做重命名、"
@@ -4426,6 +4460,69 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         self._drop("`git log --diff-filter=R -M --name-status`")
         cm.check_rename_split_guard()
         self.assertIn("diff-filter=R", self.error_texts())
+
+    def test_compression_request_boundary_removed_reports(self):
+        # 反例：删掉"压缩提交的请求不覆盖本条" -> "用户说要合并成一个提交"就成了本条失效的依据
+        # （这正是用户点名不能照做的形态：合并/压缩的请求不解除重命名与内容修改要分两个提交）
+        self._write_valid()
+        self._drop("* **「压缩提交」的请求不覆盖本条（L1，与「例外」并列的唯一另一条边界）**")
+        cm.check_rename_split_guard()
+        self.assertIn("压缩提交", self.error_texts())
+
+    def test_exemption_needs_named_declaration(self):
+        # 反例：例外允许"只说合并/压缩"就算声明 -> 本条的例外被放宽成"共用一个词即可"
+        self._write_valid()
+        self._drop("**点名重命名与内容修改**")
+        cm.check_rename_split_guard()
+        self.assertIn("点名", self.error_texts())
+
+    def test_compression_post_check_removed_reports(self):
+        # 反例：删掉"压缩后核对" -> 压缩要求把本条的记录一并压掉时无抓手可核
+        self._write_valid()
+        self._drop("④**压缩后核对")
+        cm.check_rename_split_guard()
+        self.assertIn("压缩后核对", self.error_texts())
+
+    def test_platform_interface_removed_reports(self):
+        # 反例：平台层「压缩提交」没写与 P7 的接口 -> 平台侧可自行把"要压缩"读成"压回一个"
+        self._write_valid()
+        self.write("specs/platform/cnb.adoc", "= CNB 平台\n\n== 压缩提交（提交历史的整理）\n* 另议。\n")
+        cm.check_rename_split_guard()
+        self.assertIn("cnb.adoc", self.error_texts())
+
+    def test_compression_boundary_body_gutted_reports(self):
+        # 反例：边界条只留轴标题、正文被抽空（要求被搬进相邻条目）——
+        # 整节关键词核对会被相邻条款的字样兜住，故须按条目**自身**的正文核（实测旧法静默通过）
+        self._write_valid()
+        text = ("= git 规范\n\n" + self.GIT_SECTION)
+        b = cm._bullet_text(text, "「压缩提交」的请求不覆盖本条")
+        self.write("specs/general/git.adoc",
+                   text.replace(b, b.split("**：")[0] + "**：另议。\n"))
+        cm.check_rename_split_guard()
+        self.assertIn("原样保留", self.error_texts())
+
+    def test_compression_boundary_criteria_removed_reports(self):
+        # 反例：边界条抽掉自身的「判定标准」——它退化成一句口号，复核者无从判定某次是否越界
+        self._write_valid()
+        text = ("= git 规范\n\n" + self.GIT_SECTION)
+        b = cm._bullet_text(text, "「压缩提交」的请求不覆盖本条")
+        head, _, tail = b.partition("**判定标准（逐条可核对，任一命中即不合规）**")
+        self.write("specs/general/git.adoc",
+                   text.replace(b, head + "**为什么算两件事（依据）**" + tail.split("**为什么算两件事（依据）**", 1)[-1]))
+        cm.check_rename_split_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_platform_interface_decoy_reports(self):
+        # 反例：平台层接口被换成"只保留通用词"的诱饵条目（两个提交/别名/原样保留/例外/声明/点名
+        # 都出现，但接口要求本身没了）——整节关键词核对会被兜住，故须按接口条自身核（实测旧法静默通过）
+        self._write_valid()
+        cnb = open(os.path.join(cm.REPO_ROOT, "specs", "platform", "cnb.adoc"), encoding="utf-8").read()
+        line = [l for l in cnb.split("\n") if "别名" in l][0]
+        self.write("specs/platform/cnb.adoc",
+                   cnb.replace(line, "* 另议：两个提交、别名的说法不是重点，原样保留与否、"
+                                     "例外与声明、点名都见别处。"))
+        cm.check_rename_split_guard()
+        self.assertIn("压缩对象不含", self.error_texts())
 
     def test_resident_reference_removed_reports(self):
         # 反例：必加载层重申行被删 -> 常驻上下文里读不到 P7（下次会话不会加载 git 规范）
