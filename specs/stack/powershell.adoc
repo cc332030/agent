@@ -5,21 +5,18 @@
 == 启动脚本（同名 .bat）
 
 * **`.ps1` 脚本须配一个同名 `.bat` 启动脚本**（如 `foo.ps1` 配 `foo.bat`）：`.ps1` 无法直接双击运行，且受 PowerShell 执行策略（Execution Policy）限制、命令行运行（需显式 `powershell -File ...`）也很麻烦，故须提供一个 `.bat` 文件作为启动入口，便于直接双击或命令行运行。
-* `.bat` 启动脚本内容约定：调用 `powershell`（或 `pwsh`）执行同名 `.ps1`，并把命令行参数透传过去。参考：
-  ```
-  @echo off
-  powershell -ExecutionPolicy Bypass -File "%~dp0foo.ps1" %*
-  ```
-  ** 用 `-ExecutionPolicy Bypass` 避免执行策略拦截 `.ps1`；
-  ** 用 `"%~dp0foo.ps1"` 定位 `.bat` 所在目录下的同名 `.ps1`（`%~dp0` 为当前 `.bat` 所在目录，含结尾 `\`），保证从任意目录/双击启动都能定位到脚本；
-  ** 用 `%*` 把 `.bat` 收到的所有命令行参数透传给 `.ps1`；
-  ** `.bat` 与 `.ps1` 保持**同名**，便于识别对应关系。
-* `.bat` 与 `.ps1` 同步维护：`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，二者成对存在、保持一致，避免启动入口失效。
-* **启动脚本须在 `cmd.exe` 下可解析、不依赖本地编码（L1）**：`.bat` 会被 `cmd.exe` 按**系统 ANSI 代码页**（简体中文 Windows 为 GBK/CP936）解析，且**按字节读行尾**——**带 BOM 的 UTF-8、或 LF 行尾都会让启动脚本解析失败**（如 `@echo off` 变成命令本身、`@echo` 被当作命令名、块语句直接报错；依据：Microsoft Learn 的 Windows 命令参考）。故：`.bat` **指令一律用纯 ASCII 写**（路径与参数用 `%~dp0`/`%*` 变量表达、不硬编码中文；需要中文提示/输出时由同名 `.ps1` 承载，其编码见下「编码与行尾」）、**不写 BOM**、**行尾 CRLF**（判据见 link:../general/encoding.adoc[]「换行符」）；**不指定某一种本地编码**——纯 ASCII 内容在任何代码页下字节一致、与代码页无关。故 `.bat` 与 `.ps1` **同名但格式要求不同**（`.bat` 纯 ASCII + CRLF，`.ps1` UTF-8 + CRLF），二者分别按本条与「编码与行尾」的要求保存。纯 ASCII 是 UTF-8 的子集，故本条与通用层「一律 UTF-8」一致；**存量已按本地编码（如 GBK）保存的 `.bat`** 按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移——改到该文件时转为纯 ASCII、中文移入同名 `.ps1`，不为此发动全库一次性转换。
+* `.bat` 启动脚本的落点与写法属**批处理栈**：编码（纯 ASCII、不写 BOM）、行尾（CRLF）、块语句/引用/续行的坑，以及"启动脚本为何是 Windows 侧入口"的完整条文见 link:batch.adoc[]（**批处理专属规则的唯一落点**，本文件不复制）。本处只重申与本栈绑定的一条要求——**`.ps1` 的启动由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略**；`.bat` 与 `.ps1` **同名**、成对存在、同步维护（`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，避免启动入口失效）。
+* **启动脚本须在 `cmd.exe` 下可解析、不依赖本地编码（L1）**：`.bat` 会被 `cmd.exe` 按**系统 ANSI 代码页**（简体中文 Windows 为 GBK/CP936）解析，且**按字节读行尾**——**带 BOM 的 UTF-8、或 LF 行尾都会让启动脚本解析失败**（如 `@echo off` 变成命令本身、`@echo` 被当作命令名、块语句直接报错；依据：Microsoft Learn 的 Windows 命令参考）。故 **`.bat` 与 `.ps1` 同名但格式要求不同**（`.bat` 纯 ASCII + CRLF，`.ps1` UTF-8 + CRLF），二者分别按 link:batch.adoc[]「编码与行尾」与本文件「编码与行尾」的要求保存（通用层「一律 UTF-8」的基准不变，`.bat` 只是取纯 ASCII 这一子集）。
+
+== 作为跨环境入口（Windows 与 Linux 并存时）
+
+* **`.ps1` 与同名 `.bat` 只做薄壳（L1）**：脚本要在多个操作系统上跑时，逻辑**只写一份**放跨平台逻辑代码、`.bat` 只负责启动（见 link:../general/script.adoc[]「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）——**不得**在 `.ps1` 里另写一遍 Linux 侧逻辑，也不得把参数解析、路径拼装放进入口；参数用 `%*` 原样透传、退出码须原样返回给调用方（`.bat` 侧的写法与理由见 link:batch.adoc[]「作为跨环境入口（Windows 与 Linux 并存时）」）。
+* **入口的位置与命名（L1）**：Windows 入口与逻辑代码**同处一目录、主名相同**（逻辑 `foo.py` → 入口 `foo.bat`，需要 PowerShell 能力时再加 `foo.ps1` + 同名 `.bat`），**不另建 `windows/`、`bin/` 目录**；调用方**只输 `foo.bat`（或双击）就能跑**——**不得**要求调用方加 `powershell -File`/`-ExecutionPolicy Bypass` 一类前后命令（该参数固定写在 `.bat` 内部，见 link:batch.adoc[]「作为跨环境入口（Windows 与 Linux 并存时）」）。
+* **入口语言选择（L1）**：Windows 入口**取 `.bat`/`.cmd`**（`cmd.exe` 是系统自带；需要 PowerShell 时按「启动脚本（同名 .bat）」用 `.ps1` + 同名 `.bat`），**不得**用需要另装的运行时当入口（如用 `.py`/`python foo.py`、或用 `.sh` 当 Windows 入口）——入口要求用户先装运行时或先改执行策略，等于把平台差异与安装步骤推给调用方；Windows 侧入口的完整条文（含 `.cmd` 与 `.bat` 的等价、退出码、不混写 PowerShell 语法）见 link:batch.adoc[]。
 
 == 编码与行尾
 
-* **编码（L1）**：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM，避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
-* **行尾（L1）**：`.ps1` **落盘 CRLF**（与同名 `.bat` 一致）——PowerShell 虽能解析 LF，但带 BOM 的脚本改用 BOM 字符集、CRLF 是 Windows 工具链与编辑器的一致预期；**不得**为"统一成 LF"把 `.ps1`/`.bat` 改成 LF（`.bat` 改成 LF 会直接失效，见上「启动脚本」）。行尾由 `.gitattributes` 的 `*.ps1 text eol=crlf` 与 `*.bat text eol=crlf` 声明（见 link:../general/encoding.adoc[]「跨平台检出」），不靠人工逐个文件手动调整。
+* **编码（L1）**：`.ps1` 一律 UTF-8 编码（通用要求见 link:../general/script.adoc[]「文件格式与编码」）；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM（**BOM 是唯一允许出现在首行之前的东西**——此前不得有空行或注释，否则 `#Requires`/首行注释一类首行声明失效（`.bat` 侧的 `@echo off` 同此）），避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
+* **行尾（L1）**：`.ps1` **落盘 CRLF**（与同名 `.bat` 一致）——PowerShell 虽能解析 LF，但带 BOM 的脚本改用 BOM 字符集、CRLF 是 Windows 工具链与编辑器的一致预期；**不得**为"统一成 LF"把 `.ps1`/`.bat` 改成 LF（`.bat` 改成 LF 会直接失效，见 link:batch.adoc[]「编码与行尾」）。行尾由 `.gitattributes` 的 `*.ps1 text eol=crlf` 与 `*.bat text eol=crlf` 声明（见 link:../general/encoding.adoc[]「跨平台检出」），不靠人工逐个文件手动调整。
 * 编码与行尾核对：`file <脚本>`——`.bat` 应显示 `ASCII` 文本（显示 `UTF-8`/`UTF-8(BOM)` 即说明它含非 ASCII 或 BOM、属待改存量）、`.ps1` 应显示 `UTF-8(BOM)`；二者均须 `with CRLF line terminators`；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
-* 执行策略：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略。
+* 执行策略：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略（`.bat` 侧的完整写法见 link:batch.adoc[]）。

@@ -86,6 +86,12 @@ MECHANISMS = [
     ("规范何时该拆分（默认不拆、三条硬条件、拆后逐项自洽核对）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py", "check_lifecycle_guard 钉住「一条规范何时该拆分」与「拆分后的自洽核对」两节及三条硬条件、默认不拆、单独过准入九问；『某次拆分是否由实害驱动』属语义判断，交人/子 agent 复核"),
     ("执行环境能力先自评、无机制走降级路径且不空自评", "specs/general/self-check.adoc", "script/check_specs.py", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）；'自评是否属实'属运行时行为，靠遵守 + 人 review"),
     ("常驻层体积与调度器条目数不得无上限膨胀", "AGENTS_COMMON.adoc", "script/check_specs.py", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限；'体量与层级的语义是否合理'仍交人/子 agent 复核"),
+    ("单个规范文件的软阈值（超线只提醒、不强制拆分）",
+     "specs-project-maintainer/spec-lifecycle.adoc「单个规范文件的软阈值」",
+     "script/check_specs.py",
+     "check_file_size_hint 钉住『超线须有提示』且『**不得**进 errors/退出码』两件事（提醒与硬上限的分界）、"
+     "范围边界（常驻层与图书馆不吃本阈值）；"
+     "『某个超线的文件到底该归位、该拆、还是确实不拆』属体量/层级的语义判断，交人/子 agent 复核"),
     ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
     ("对外能力的可替换点须有唯一装配点、须有可用默认（接入成本是设计指标）", "specs/general/coding.adoc", "script/check_specs.py", "check_abstraction_adoption_guard 钉住「抽象与接入成本」节的两条 L1（唯一装配点、可替换点须有可用默认或显式必填声明）与其判定特征、四条要点齐全、L1/L2 级别标注、依据行在、Spring「配置」侧引用承接；『某个抽象是否真的做到了唯一装配点』属引用方项目代码（本仓库不可见），交人/子 agent 复核"),
     ("既有实现与先例优先（先查项目已有能力与先例，禁止手写原生写法绕过）", "specs/general/coding.adoc", "script/check_specs.py", "check_reuse_precedent_guard 钉住通用层两条 L1 条文与典型反例（UUID 手写、集合判空手写）、Java 栈 java-syntax.adoc 优先级顺序（项目自有/已引入库须排在 JDK 之前）、java.adoc 的识别特征与 README 同步；『某次编码是否真的先查了先例』属引用方项目行为（本仓库不可见），交人/子 agent 复核"),
@@ -199,6 +205,15 @@ MECHANISMS = [
     ("运行环境须与项目声明一致（jdk1.8、python2 等；换别的版本也能跑通也不得换，声明不可得时标未确证）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_runtime_env_guard 钉住条文与 L1、判据两句、声明落点（不另立第二真源）、降级路径（未声明先确认 / 不可得标未确证不得记为通过）、依据行，以及必加载层、验证、基线三处引用与调度器识别特征、维护方与图书馆落点；『某次到底用了哪个版本』属运行时事实（引用方环境与提交记录），机械无法判定，交人/子 agent 复核"),
+    ("评论不得删除：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）",
+     "specs/platform/cnb.adoc + specs/core/execution.adoc + specs/general/collab.adoc", "script/check_specs.py",
+     "check_comment_preservation_guard 钉住三处落点（平台层「评论不得删除（L1）」：禁令本体含 NPC 生成的评论、不可逆与留证落点的理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界；通用层「派发入口」的平台无关同口径条；必加载层「破坏性操作」写明本条**不是**『先确认即可执行』的一类）与调度器识别特征、README 目录说明同步；**重点拦『把禁令删掉』与『降级成先确认即可删』两种降级**；『某次是否真的删了评论』属运行时行为（平台评论列表），机械无法判定，交人/子 agent 复核"),
+    ("跨环境脚本：一份跨平台逻辑 + 各平台薄壳入口（逻辑不得写两遍、入口不得承载逻辑、参数与退出码原样传递、不拿裸 shell 当逻辑层）",
+     "specs/general/script.adoc", "script/check_specs.py",
+     "check_cross_platform_script_guard 钉住通用层「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」的要点（逻辑只写一份放跨平台逻辑脚本；入口层不得承载逻辑并给可判定判据；参数与退出码原样转交/原样返回；不得在另一平台重写逻辑；入口按各自平台规范落盘；实现语言取舍的默认优先级与『不拿裸 shell 当逻辑层』；不假设逻辑脚本所处目录；**入口与逻辑脚本同处一目录、主名相同**；**入口语言按平台默认具备者选**（Windows `.bat`/`.cmd`、Linux/macOS `.sh`）；**调用方不加前后命令**（只给脚本名即可跑，必要参数除外）；入口不设前置步骤、不得为跑逻辑自加命令或给逻辑脚本塞参数）与技术栈三个脚本栈文件的引用承接与各栈落点/命名/入口语言要点、调度器识别特征、README 同步、图书馆同义性差异；『某项目的脚本是否真的这么分层』属引用方项目代码（本仓库不可见），交人/子 agent 复核"),
+    ("Windows 批处理（`.bat`/`.cmd`）的专属规则有独立栈文件：行尾 CRLF、纯 ASCII 不写 BOM、块语句延迟展开、`exit /b %errorlevel%` 原样返回退出码、不混写 PowerShell 语法",
+     "specs/stack/batch.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
+     "check_cross_platform_script_guard 钉住批处理栈文件存在、承载 BATCH_STACK_KEYS 全部要点（编码/行尾、薄壳与 `exit /b %errorlevel%`、延迟展开、引号与 `%~1`、`@echo off`、未定义变量、不混写 PowerShell 语法）、指向通用层「跨环境脚本」节，以及 powershell.adoc 反向指向它（引用不复制）与调度器技术栈层登记；『某个项目的 .bat 是否真的这么写』属引用方项目代码（本仓库不可见），交人/子 agent 复核"),
     ("交付形态与报告落点：不得只冒一句过程性叙述、不得只交付不汇报", "prompts/_common.txt + PROMPTS.adoc", "script/check_specs.py", "check_delivery_guard 钉住 `delivery` 片段的报告落点（过程性叙述不得作为独立评论发出）+ **输出通道只有两条**（最终汇报 / 必须停下确认，且『除这两条之外的任何中间话一律不发』——只写例外形态不写默认动作时，执行者会自造第三条通道、判据回到执行者手里）与交付形态两态（有改动却未提交未推送 / 无改动却未说明）、两个提示词内的『交付即汇报』步骤（同含两条通道）、以及 PROMPTS.adoc 与 README.adoc 的登记同步；**本轮实测失效**：一轮 NPC 任务唯一对外的输出就是一句过程性叙述、既无汇报也无任何提交，旧版片段只写『有改动必须提交推送』、恰漏『无改动也是完成态』与『过程性叙述不得外发』；『某次是否真的只发了一句、是否真的漏了提交』属运行时行为（评论内容与推送记录），交人/子 agent 复核"),
 ]
 

@@ -169,6 +169,102 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
         self.assertIn("分类与懒加载", self.error_texts())
 
 
+class TestCheckFileSizeHint(CheckSpecsTestCase):
+    """钉住「单个规范文件的软阈值」（提醒该优化了，但不强制拆）。
+
+    两件事同时钉住，缺一即失效：
+      ① **提醒确实会出现**——非必加载的单个规范文件超线时须打印提示（否则"提醒"
+         只在文本里成立，等于没有触发点：本仓库此前的抓手只覆盖必加载层的"合计量"）；
+      ② **提醒不得变成硬上限**——超线**不得**进 `errors`、**不得**影响退出码
+         （用 err() 就成了硬上限，会逼出"为压体积删规则"或"为达标拆出空壳"，与
+          P2/P3 的完整性底线冲突）。
+    另钉范围边界：常驻层由硬上限负责、图书馆不吃本软阈值（误伤只会制造噪音）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_hint = cm.SOFT_FILE_SIZE_HINT
+
+    def tearDown(self) -> None:
+        cm.SOFT_FILE_SIZE_HINT = self._orig_hint
+        super().tearDown()
+
+    def _run_capture(self):
+        import contextlib
+        import io as _io
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cm.check_file_size_hint()
+        return buf.getvalue()
+
+    def test_under_threshold_no_hint(self):
+        # 正例：未超线不打提示、无错误
+        cm.SOFT_FILE_SIZE_HINT = 10000
+        self.write("specs/general/doc.adoc", "= 文档\n" + "x" * 100)
+        cm.check_file_size_hint()
+        self.assertEqual(cm.errors, [])
+
+    def test_over_threshold_hints_but_not_error(self):
+        # 反例（关键）：单个规范文件超线 → 须有提示，但**不得**报错
+        cm.SOFT_FILE_SIZE_HINT = 100
+        self.write("specs/general/doc.adoc", "= 文档\n" + "x" * 500)
+        out = self._run_capture()
+        self.assertIn("specs/general/doc.adoc", out)
+        self.assertIn("软阈值", out)
+        self.assertIn("提醒、不阻断", out)
+        self.assertEqual(cm.errors, [], "软阈值不得进 errors（否则成了硬上限）")
+
+    def test_resident_layer_excluded(self):
+        # 范围边界：常驻层由硬上限负责，本软阈值不重复提醒（防两条防线口径混淆）
+        cm.SOFT_FILE_SIZE_HINT = 100
+        self.write("AGENTS_COMMON.adoc", "= 入口\n" + "x" * 500)
+        self.write("specs/core/execution.adoc", "= 执行原则\n" + "x" * 500)
+        out = self._run_capture()
+        self.assertNotIn("AGENTS_COMMON.adoc", out)
+        self.assertNotIn("specs/core/execution.adoc", out)
+
+    def test_library_and_prompts_excluded(self):
+        # 范围边界：图书馆无体量上限、说明/提示词文档不是"按需加载即整份读完"的对象
+        cm.SOFT_FILE_SIZE_HINT = 100
+        self.write("library/sources.adoc", "= 依据\n" + "x" * 500)
+        self.write("prompts/_common.txt", "x" * 500)
+        self.write("README.adoc", "= 说明\n" + "x" * 500)
+        out = self._run_capture()
+        self.assertNotIn("library/sources.adoc", out)
+        self.assertNotIn("README.adoc", out)
+        self.assertEqual(cm.errors, [])
+
+    def test_maintainer_layer_in_scope(self):
+        # 维护方自查层同样是规范文件，须纳入（它的体量提醒此前完全没有抓手）
+        cm.SOFT_FILE_SIZE_HINT = 100
+        self.write("specs-project-maintainer/priority.adoc", "= 优先级\n" + "x" * 500)
+        out = self._run_capture()
+        self.assertIn("specs-project-maintainer/priority.adoc", out)
+        self.assertEqual(cm.errors, [])
+
+    def test_threshold_matches_spec_text(self):
+        # 反例（防漂移）：机械侧取值须与规范正文的"约 30 KB"一致——
+        # 两处各改一处即"提醒线"与实际判定不符（要么永不触发、要么处处触发）
+        spec = open(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "specs-project-maintainer", "spec-lifecycle.adoc"), encoding="utf-8").read()
+        self.assertIn("单个规范文件的软阈值", spec)
+        self.assertIn("30 KB", spec)
+        self.assertIn("只提醒、不报错、不阻断提交、不强制拆分", spec)
+        self.assertIn("常驻层（入口 + `specs/core/`）不在本阈值内", spec)
+        self.assertEqual(cm.SOFT_FILE_SIZE_HINT, 30000)
+
+    def test_spec_scope_matches_implementation(self):
+        # 反例（防自相矛盾）：正文若把"任一规范文件"（含常驻层）写成在阈值内，
+        # 会与实现（常驻层排除、由硬上限负责）冲突——读者按正文去处理常驻层，
+        # 得到的提示与硬上限的报错对不上（"该处理哪条"分不清）
+        impl = open(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "check_specs.py"),
+            encoding="utf-8").read()
+        self.assertIn("常驻层由硬上限（check_budget_guard）负责", impl)
+        self.assertIn("if rel in resident:", impl)
+
+
 class TestCheckDispatcherLayers(CheckSpecsTestCase):
     """钉住加载调度器的分层结构（层头 + 每层条目数）。
 
@@ -3259,7 +3355,7 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         cm.ENCODING_FILE = os.path.join(self.root, "specs", "general", "encoding.adoc")
         cm.LINE_ENDING_STACK_FILES = tuple(
             os.path.join(self.root, "specs", "stack", f)
-            for f in ("bash.adoc", "python.adoc", "powershell.adoc"))
+            for f in ("bash.adoc", "python.adoc", "batch.adoc", "powershell.adoc"))
 
     def tearDown(self) -> None:
         cm.ENCODING_FILE = self._orig_enc
@@ -3274,7 +3370,11 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
                    "由 `.gitattributes`（行尾）与 `.editorconfig` 固定，"
                    "`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
-            self.write(f"specs/stack/{f}", "行尾：按本栈要求（LF 或 CRLF）\n")
+            self.write(f"specs/stack/{f}",
+                       "行尾：按本栈要求（LF 或 CRLF）；BOM 是唯一允许出现在首行之前的东西\n")
+        self.write("specs/stack/batch.adoc",
+                   "行尾：CRLF，纯 ASCII，**天然不带 BOM**（二者是一件事的两面）；"
+                   "**首行** `@echo off`\n")
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
 
     def test_valid_line_ending_rules_pass(self):
@@ -3294,7 +3394,10 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
                    "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.ps1` 用 CRLF；"
                    "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
-            self.write(f"specs/stack/{f}", "行尾：LF\n")
+            self.write(f"specs/stack/{f}",
+                       "行尾：LF；BOM 是唯一允许出现在首行之前的东西\n")
+        self.write("specs/stack/batch.adoc",
+                   "行尾：CRLF，纯 ASCII，**天然不带 BOM**；**首行** `@echo off`\n")
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
         cm.check_line_ending_guard()
         self.assertIn(".bat", self.error_texts())
@@ -3304,7 +3407,10 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         self.write("specs/general/encoding.adoc",
                    "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
-            self.write(f"specs/stack/{f}", "行尾：LF\n")
+            self.write(f"specs/stack/{f}",
+                       "行尾：LF；BOM 是唯一允许出现在首行之前的东西\n")
+        self.write("specs/stack/batch.adoc",
+                   "行尾：CRLF，纯 ASCII，**天然不带 BOM**；**首行** `@echo off`\n")
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
         cm.check_line_ending_guard()
         self.assertIn(".gitattributes", self.error_texts())
@@ -3316,7 +3422,10 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
                    "`.bat`/`.cmd` 必须 CRLF；"
                    "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
-            self.write(f"specs/stack/{f}", "行尾：LF\n")
+            self.write(f"specs/stack/{f}",
+                       "行尾：LF；BOM 是唯一允许出现在首行之前的东西\n")
+        self.write("specs/stack/batch.adoc",
+                   "行尾：CRLF，纯 ASCII，**天然不带 BOM**；**首行** `@echo off`\n")
         self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
         cm.check_line_ending_guard()
         self.assertIn(".editorconfig", self.error_texts())
@@ -9128,6 +9237,456 @@ class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
         self._write_all(entry="= 项目规范\n* 别的\n")
         cm.check_after_change_review_guard()
         self.assertIn("AGENTS.adoc", self.error_texts())
+
+class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
+    """钉住『跨环境脚本防线』：一份跨平台逻辑 + 各平台薄壳入口不得被删或降级。
+
+    该条对应用户报告的真实失效与要求：同一功能要在 Windows 与 Linux 上都跑时，常见做法是
+    **把逻辑写两遍**（`.bat` 一份、`.sh` 一份），两套行为慢慢漂移；用户的方案是**逻辑只写一份
+    放跨平台逻辑代码**、`.bat`/`.sh` 只作为**入口**调用它，并要求给出**实现语言的推荐**。
+    最易被冲掉的两处：①"入口里不得写逻辑"退化成"入口也可以稍微处理一下参数"；
+    ②"只写一份"被"顺手再写个 sh 版本"绕过。故反例逐项覆盖这两处与语言取舍、工作目录约定。
+    """
+
+    SCRIPT = (
+        "= 脚本规范\n"
+        "\n"
+        "== 跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）\n"
+        "\n"
+        "同一功能要在多个操作系统上跑时，**不得把逻辑写两遍**——"
+        "逻辑只写一份放**跨平台逻辑层**（一份跨平台逻辑代码）。\n"
+        "* **入口层（薄壳）**：职责只有三件——定位逻辑代码、转交全部命令行参数、"
+        "把它的退出码作为自己的退出码返回。\n"
+        "* **入口层不得承载逻辑（L1）**：入口文件里**不得**出现判定分支、参数解析；"
+        "**判定标准**：整份入口可逐行解释为上述三件事。\n"
+        "* **入口层不为逻辑层添第二套选项语义（L1）**：只做转交，不解释参数含义、"
+        "不设默认值、不吞参数；**例外**：`cmd.exe` 无法承载某些字符时**可以**按平台语法**转义**，"
+        "但不得改变参数的值。\n"
+        "* **入口层须让退出码可判定（L1）**：`cmd.exe` 用 `exit /b %errorlevel%`、"
+        "`sh` 用 `exec`、PowerShell 用 `exit $LASTEXITCODE`。\n"
+        "* **不得**在 `.sh` 里再写一遍逻辑（L1）：入口**只允许**一份薄壳，"
+        "每个入口只是调用器、不是该平台版本。\n"
+        "* **入口文件按平台规范落盘（L1）**：`.bat`/`.cmd` 与 `.ps1` 用 CRLF、`.sh` 用 LF，"
+        "`.bat` 用纯 ASCII。\n"
+        "* **逻辑代码不得假设自身所处目录（L1）**：入口以绝对路径调用、不 `cd`。\n"
+        "* **入口层须与逻辑代码同处一目录、同名不同扩展名（L1）**：入口与逻辑代码放同一目录，"
+        "主名必须相同，不另建 `bin/`/`script/`/`windows/`。\n"
+        "* **入口脚本须能直接执行，调用方不加前后命令（L1）**：只给脚本名即可跑；"
+        "**例外（必要参数除外）**：脚本自身功能参数不算前后命令。\n"
+        "* **入口语言按平台默认具备者选（L1）**：Windows 取 `.bat`/`.cmd`、"
+        "Linux/macOS 取 `.sh`；不得为一侧入口引入要另装的运行时。\n"
+        "* **入口脚本不得为“跑逻辑”自加命令、也不得给逻辑代码塞参数（L1）**："
+        "转交须与调用方给的一一对应。\n"
+        "* **入口脚本不得要求调用方先做前置动作（L1）**：不设前置步骤，"
+        "不得写“请先……”这类对调用方的要求。\n"
+        "\n"
+        "**入口语言取舍（L1）**：Windows 取 `.bat`/`.cmd`、Linux/macOS 取 `.sh`。\n"
+        "**实现语言取舍（L2）**：优先 **Python 3** 或 **Node.js**；单文件分发用 **Go**/**Rust**。\n"
+        "* **默认不拿裸 shell 当逻辑层（L2）**：shell 作为入口恰当、作为逻辑层不恰当。\n"
+        "\n"
+        "== 与编码规范的关系\n"
+        "* x。\n"
+    )
+
+    # 批处理栈夹具：满足 BATCH_STACK_KEYS 的全部要点（`.bat`/`.cmd` 的专属规则）
+    BATCH = (
+        "= Windows 批处理脚本规范（技术栈层）\n"
+        "\n"
+        "== 编码与行尾\n"
+        "* **行尾 CRLF**：`.bat`/`.cmd` 一律 CRLF，**纯 ASCII**、**不写 BOM**。\n"
+        "\n"
+        "== 语法与健壮性\n"
+        "* 首行 `@echo off`。\n"
+        "* 块语句里用延迟展开（`setlocal enabledelayedexpansion` + `!var!`）。\n"
+        "* 路径一律加引号；可选参数用 `%~1` 去引号后判空。\n"
+        "* 未定义变量一律当错误。\n"
+        "\n"
+        f"== 作为跨环境入口（Windows 与 Linux 并存时）\n"
+        f"* 见「{cm.CROSS_PLATFORM_SCRIPT_SECTION}」；只做**薄壳**，`exit /b %errorlevel%` 返回**退出码**。\n"
+        "* 同处一目录、主名相同；**入口语言选择**取 `.bat`/`.cmd`。\n"
+        "* 不把 **PowerShell** 语法（`$` 变量、cmdlet、`-eq`）写进 `.bat`。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_script = cm.SCRIPT_SPEC_FILE
+        self._orig_common = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.SCRIPT_SPEC_FILE = os.path.join(self.root, "specs", "general", "script.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+        self._orig_stack = cm.CROSS_PLATFORM_STACK_FILES
+        cm.CROSS_PLATFORM_STACK_FILES = tuple(
+            os.path.join(self.root, "specs", "stack", n)
+            for n in ("bash.adoc", "python.adoc", "batch.adoc", "powershell.adoc"))
+        self._orig_batch = cm.BATCH_STACK_FILE
+        cm.BATCH_STACK_FILE = os.path.join(self.root, "specs", "stack", "batch.adoc")
+
+    def tearDown(self) -> None:
+        (cm.SCRIPT_SPEC_FILE, cm.GENERIC_FILE, cm.README_FILE) = (
+            self._orig_script, self._orig_common, self._orig_readme)
+        cm.CROSS_PLATFORM_STACK_FILES = self._orig_stack
+        cm.BATCH_STACK_FILE = self._orig_batch
+        super().tearDown()
+
+    def _write_valid(self, script: str = None) -> None:
+        sec = cm.CROSS_PLATFORM_SCRIPT_SECTION
+        self.write("specs/general/script.adoc", script if script is not None else self.SCRIPT)
+        for n in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{n}",
+                       f"= 栈\n\n== 入口\n* 见「{sec}」。\n"
+                       "* 同处一目录、主名相同；入口语言选择见上；"
+                       "#!/usr/bin/env bash；执行策略 Bypass；"
+                       "Python 只作逻辑层、不作入口（前置命令）；见 batch.adoc。\n")
+        self.write("specs/stack/batch.adoc", self.BATCH)
+        self.write("AGENTS_COMMON.adoc",
+                   "脚本：**跨环境脚本**（`.bat`/`.cmd` 与 `.sh` 成对）；"
+                   "批处理栈 `specs/stack/batch.adoc`\n")
+        self.write("README.adoc", "目录：脚本（含**跨环境脚本**、各平台入口只做**薄壳**）。\n")
+        self.write("library/adoption.adoc",
+                   f"* **{sec}（L1）是本站取舍**：同义性差异见下。\n")
+
+    def test_valid_cross_platform_guard_passes(self):
+        self._write_valid()
+        cm.check_cross_platform_script_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 又退回"两个平台各写一份脚本"
+        self._write_valid("= 脚本规范\n\n== 与编码规范的关系\n* x。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("跨环境脚本（入口", self.error_texts())
+
+    def test_thin_shell_clause_removed_reports(self):
+        # 反例：入口不承载逻辑的条文被抽掉 → 入口又可以"顺便处理一下参数"
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口层不得承载逻辑（L1）**：入口文件里**不得**出现判定分支、参数解析；"
+            "**判定标准**：整份入口可逐行解释为上述三件事。\n", "* 入口随便写。\n"))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("入口层不得承载逻辑", self.error_texts())
+
+    def test_no_second_logic_clause_removed_reports(self):
+        # 反例：'不得在另一平台重写逻辑'被抽掉 → 顺手再写个 sh 版本
+        self._write_valid(self.SCRIPT.replace(
+            "* **不得**在 `.sh` 里再写一遍逻辑（L1）：入口**只允许**一份薄壳，"
+            "每个入口只是调用器、不是该平台版本。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("再写一遍", self.error_texts())
+
+    def test_passthrough_clause_removed_reports(self):
+        # 反例：'不为逻辑层添第二套选项语义'被抽掉 → 入口自定默认值、吞参数，两平台行为不同
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口层不为逻辑层添第二套选项语义（L1）**：只做转交，不解释参数含义、"
+            "不设默认值、不吞参数；**例外**：`cmd.exe` 无法承载某些字符时**可以**按平台语法**转义**，"
+            "但不得改变参数的值。\n", "* 入口可以自己定默认值。\n"))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("第二套选项语义", self.error_texts())
+
+    def test_escape_exception_removed_reports(self):
+        # 反例：转义例外被删 → "不得自行解析参数"被读成"连必要的转义都禁止"（cmd.exe 做不到）
+        self._write_valid(self.SCRIPT.replace(
+            "；**例外**：`cmd.exe` 无法承载某些字符时**可以**按平台语法**转义**，"
+            "但不得改变参数的值", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("转义", self.error_texts())
+
+    def test_exit_code_clause_removed_reports(self):
+        # 反例：退出码判据被删 → 入口"总是成功"，调用方（CI）看不到真实成败
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口层须让退出码可判定（L1）**：`cmd.exe` 用 `exit /b %errorlevel%`、"
+            "`sh` 用 `exec`、PowerShell 用 `exit $LASTEXITCODE`。\n", "* 退出码不管。\n"))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("退出码可判定", self.error_texts())
+
+    def test_language_clause_removed_reports(self):
+        # 反例：实现语言取舍被删 → 执行者只能凭"哪个顺手"选语言
+        self._write_valid(self.SCRIPT.replace(
+            "**实现语言取舍（L2）**：优先 **Python 3** 或 **Node.js**；"
+            "单文件分发用 **Go**/**Rust**。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("实现语言", self.error_texts())
+
+    def test_bare_shell_clause_removed_reports(self):
+        # 反例：'不拿裸 shell 当逻辑层'被删 → 逻辑又被写进 shell、平台差异回到逻辑层
+        self._write_valid(self.SCRIPT.replace(
+            "* **默认不拿裸 shell 当逻辑层（L2）**：shell 作为入口恰当、作为逻辑层不恰当。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("裸 shell", self.error_texts())
+
+    def test_workdir_clause_removed_reports(self):
+        # 反例：目录约定被删 → 入口一 cd，相对路径在本地与 CI 下行为不同
+        self._write_valid(self.SCRIPT.replace(
+            "* **逻辑代码不得假设自身所处目录（L1）**：入口以绝对路径调用、不 `cd`。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("不得假设自身所处目录", self.error_texts())
+
+    def test_stack_pointer_missing_reports(self):
+        # 反例：栈文件未指向本条的入口约定 → 该栈执行者读不到"薄壳、不写逻辑"
+        self._write_valid()
+        self.write("specs/stack/bash.adoc", "= 栈\n\n== 其他\n* x。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/bash.adoc", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例：调度器识别特征被删 → 该条永远不会被触发加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "脚本：行尾按类型取值。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_entry_removed_reports(self):
+        # 反例：README 目录说明未同步 → 读者按 README 学习时不知道有这条规则
+        self._write_valid()
+        self.write("README.adoc", "目录：脚本。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_library_synonymy_removed_reports(self):
+        # 反例：图书馆未记同义性差异 → 本站取舍会被读成外部标准原文
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 取舍\n* 其它。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_same_dir_same_name_clause_removed_reports(self):
+        # 反例：'同处一目录、主名相同'被删 → 入口另放 windows/ 目录，改逻辑连带改入口
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口层须与逻辑代码同处一目录、同名不同扩展名（L1）**：入口与逻辑代码放同一目录，"
+            "主名必须相同，不另建 `bin/`/`script/`/`windows/`。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("同处一目录", self.error_texts())
+
+    def test_no_extra_command_clause_removed_reports(self):
+        # 反例：'不加前后命令'被删 → 又要求用户敲 `bash foo.sh` / `python3 foo.py`
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口脚本须能直接执行，调用方不加前后命令（L1）**：只给脚本名即可跑；"
+            "**例外（必要参数除外）**：脚本自身功能参数不算前后命令。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("不加前后命令", self.error_texts())
+
+    def test_entry_language_clause_removed_reports(self):
+        # 反例：入口语言取舍被删（条文与结论文本都去掉）→ 入口语言选择无落点
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口语言按平台默认具备者选（L1）**：Windows 取 `.bat`/`.cmd`、"
+            "Linux/macOS 取 `.sh`；不得为一侧入口引入要另装的运行时。\n", "")
+            .replace("**入口语言取舍（L1）**：Windows 取 `.bat`/`.cmd`、"
+                     "Linux/macOS 取 `.sh`。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("入口语言取舍", self.error_texts())
+
+    def test_entry_language_section_removed_reports(self):
+        # 反例：入口语言取舍整段被删（含结论行）→ 入口语言选择无落点
+        self._write_valid(self.SCRIPT.replace(
+            "**入口语言取舍（L1）**：Windows 取 `.bat`/`.cmd`、Linux/macOS 取 `.sh`。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("入口语言取舍", self.error_texts())
+
+    def test_no_precondition_clause_removed_reports(self):
+        # 反例：'不设前置步骤'被删 → 入口又开始要求调用方先 cd / 设变量 / 装依赖
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口脚本不得要求调用方先做前置动作（L1）**：不设前置步骤，"
+            "不得写“请先……”这类对调用方的要求。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("前置动作", self.error_texts())
+
+    def test_no_self_added_command_clause_removed_reports(self):
+        # 反例：'不得自加命令/塞参数'被删 → 入口里先 cd、装依赖，或给逻辑代码预置参数
+        self._write_valid(self.SCRIPT.replace(
+            "* **入口脚本不得为“跑逻辑”自加命令、也不得给逻辑代码塞参数（L1）**："
+            "转交须与调用方给的一一对应。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("自加命令", self.error_texts())
+
+    def test_stack_same_dir_missing_reports(self):
+        # 反例：栈文件未写本栈入口的落点与命名 → 通用层的'同处一目录、主名相同'在该栈无落点
+        self._write_valid()
+        self.write("specs/stack/bash.adoc",
+                   f"= 栈\n\n== 入口\n* 见「{cm.CROSS_PLATFORM_SCRIPT_SECTION}」。\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/bash.adoc", self.error_texts())
+
+
+    def test_batch_stack_missing_reports(self):
+        # 反例：`.bat`/`.cmd` 的专属栈文件缺失 → 用户指出的缺口（"没有看到 bat 脚本的规范文件"）
+        # 复现：写批处理脚本时没有触发特征、也没有编码/行尾/块语句/退出码的落点
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "stack", "batch.adoc"))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_batch_stack_encoding_clause_removed_reports(self):
+        # 反例：批处理栈的编码/行尾（CRLF + 纯 ASCII + 不写 BOM）被删
+        # → `.bat` 又按通用 LF/UTF-8 落盘，在 Windows 上直接执行失败
+        self._write_valid()
+        self.write("specs/stack/batch.adoc",
+                   self.BATCH.replace("* **行尾 CRLF**：`.bat`/`.cmd` 一律 CRLF，"
+                                      "**纯 ASCII**、**不写 BOM**。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_batch_stack_delayed_expansion_removed_reports(self):
+        # 反例：延迟展开的判据被删 → 块语句里 `%var%` 在解析期展开、取不到值
+        self._write_valid()
+        self.write("specs/stack/batch.adoc",
+                   self.BATCH.replace("* 块语句里用延迟展开"
+                                      "（`setlocal enabledelayedexpansion` + `!var!`）。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_batch_stack_exit_code_removed_reports(self):
+        # 反例：`exit /b %errorlevel%` 的判据被删 → 退出码是最后一条命令的、调用方看不到真实成败
+        self._write_valid()
+        self.write("specs/stack/batch.adoc",
+                   self.BATCH.replace("`exit /b %errorlevel%` 返回**退出码**",
+                                      "调用方自己看输出"))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_batch_stack_powershell_syntax_mix_removed_reports(self):
+        # 反例：'不得把 PowerShell 语法写进 .bat' 被删 → 混写出来的 `.bat` 一条都跑不通
+        self._write_valid()
+        self.write("specs/stack/batch.adoc",
+                   self.BATCH.replace("* 不把 **PowerShell** 语法（`$` 变量、cmdlet、`-eq`）"
+                                      "写进 `.bat`。\n", ""))
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+    def test_powershell_missing_batch_pointer_reports(self):
+        # 反例：powershell.adoc 不再指向批处理栈 → `.ps1` 的同名 `.bat` 其规则无处可查
+        self._write_valid()
+        self.write("specs/stack/powershell.adoc",
+                   f"= 栈\n\n== 入口\n* 见「{cm.CROSS_PLATFORM_SCRIPT_SECTION}」。\n"
+                   "* 同处一目录、主名相同；入口语言选择见上；执行策略 Bypass；\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/powershell.adoc", self.error_texts())
+
+    def test_dispatcher_batch_stack_entry_removed_reports(self):
+        # 反例：调度器未登记批处理栈 → "写一个批处理脚本"没有触发特征、规则实际失效
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "脚本：**跨环境脚本**（`.bat`/`.cmd` 与 `.sh` 成对）\n")
+        cm.check_cross_platform_script_guard()
+        self.assertIn("specs/stack/batch.adoc", self.error_texts())
+
+
+
+class TestCheckCommentPreservationGuard(CheckSpecsTestCase):
+    """钉住『评论不得删除防线』：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）。
+
+    用户明确要求：「任何情况下，不得删除 issue、pr 的评论（包括 npc 生成的）」。该条在本仓库
+    正是一处失效面：既有"过程性叙述不得作为独立评论发出"的交付纪律容易被读成"发错的那条删掉
+    就行"，而评论串是**派发的对象钉定与留证落点**、删除**不可逆**、**编辑同效**。
+    """
+
+    PKG = "specs/platform/cnb.adoc"
+    COLLAB = "specs/general/collab.adoc"
+    EXEC = "specs/core/execution.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_readme = cm.README_FILE
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+
+    def tearDown(self) -> None:
+        cm.README_FILE = self._orig_readme
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write(self.PKG,
+                   "= CNB\n\n== 评论不得删除（L1）\n"
+                   "* **任何情况下都不得删除 Issue / PR 的评论**（含 **NPC** 生成的）："
+                   "**不可逆**，评论是**留证落点**；**编辑**原话与删除**同效**；"
+                   "正当处置是**再发一条更正**。**判定标准**：①**调用**了**删除评论的接口**；"
+                   "②编辑既有评论；③转交他人代删；④自我豁免。\n"
+                   "* 边界：清理 **临时产物** 照旧；与合并无关。\n")
+        self.write(self.COLLAB,
+                   "= 协作\n\n== 派发入口（往哪派、派什么）\n"
+                   "* **评论不得删除（L1，平台无关）**：任务单下的评论**不得删除**——评论是**留证落点**、"
+                   "**不可逆**；**编辑**与删除**同效**；**再发一条更正**；"
+                   "边界见 **临时产物**；判据见 `specs/platform/cnb.adoc`「评论不得删除」。\n")
+        self.write(self.EXEC,
+                   "= 执行\n\n== 破坏性操作（不可逆，先确认再动手）\n"
+                   "* **不得删除平台任务单（Issue / PR）下的评论（L1）**：**没有**『先确认』就能删的路径，"
+                   "**一律不删**；**编辑**与删除**同效**；**再发一条更正**；"
+                   "本地 **临时产物** 清理照旧。\n")
+        self.write("AGENTS_COMMON.adoc", "平台：**评论不得删除**\n")
+        self.write("README.adoc", "目录：平台（含**评论不得删除**）。\n")
+
+    def test_valid_comment_preservation_guard_passes(self):
+        self._write_valid()
+        cm.check_comment_preservation_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_platform_clause_removed_reports(self):
+        # 反例：平台层禁令被删 → 删除评论又成了"清理一下"的随手动作
+        self._write_valid()
+        self.write(self.PKG, "= CNB\n\n== 其它\n* x。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("评论不得删除", self.error_texts())
+
+    def test_edit_equivalence_removed_reports(self):
+        # 反例：抽掉"编辑同效" → 删不掉就改掉，留证照样没了
+        self._write_valid()
+        self.write(self.PKG,
+                   "= CNB\n\n== 评论不得删除（L1）\n"
+                   "* **不得删除 Issue / PR 的评论**（含 **NPC** 生成的）：**不可逆**、**留证落点**；"
+                   "**再发一条更正**。**判定标准**：①**调用**了**删除评论的接口**。\n"
+                   "* 边界：**临时产物** 照旧；与合并无关。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("同效", self.error_texts())
+
+    def test_broken_layer_reports(self):
+        # 反例：必加载层的"没有先确认就能删的路径"被删 → 被读成"确认过就能删"
+        self._write_valid()
+        self.write(self.EXEC,
+                   "= 执行\n\n== 破坏性操作（不可逆，先确认再动手）\n"
+                   "* **不得删除平台任务单（Issue / PR）下的评论（L1）**："
+                   "**编辑**与删除**同效**；**再发一条更正**；**临时产物** 照旧。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("specs/core/execution.adoc", self.error_texts())
+
+    def test_generic_clause_removed_reports(self):
+        # 反例：通用层同口径条被删 → 非 CNB 环境读不到这条禁令
+        self._write_valid()
+        self.write(self.COLLAB, "= 协作\n\n== 派发入口（往哪派、派什么）\n* x。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("specs/general/collab.adoc", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例：调度器识别特征被删 → 该禁令永远不会被触发加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "平台：分支与合并请求统一。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_entry_removed_reports(self):
+        # 反例：README 目录说明未同步 → 读者找不到这条禁令
+        self._write_valid()
+        self.write("README.adoc", "目录：平台。\n")
+        cm.check_comment_preservation_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_batch_first_line_guard_reports(self):
+        # 反例：批处理栈的"天然不带 BOM / 首行"口径被删 → 空行或 BOM 把 `@echo off` 挤下首行
+        self.write("specs/general/encoding.adoc",
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF；"
+                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+        for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
+            self.write(f"specs/stack/{f}"
+                      , "行尾：按本栈要求；BOM 是唯一允许出现在首行之前的东西\n")
+        self.write("specs/stack/batch.adoc", "行尾：CRLF\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs/general/encoding.adoc`")
+        orig = cm.LINE_ENDING_STACK_FILES
+        cm.LINE_ENDING_STACK_FILES = tuple(
+            os.path.join(self.root, "specs", "stack", f)
+            for f in ("bash.adoc", "python.adoc", "batch.adoc", "powershell.adoc"))
+        try:
+            cm.check_line_ending_guard()
+        finally:
+            cm.LINE_ENDING_STACK_FILES = orig
+        self.assertIn("batch.adoc", self.error_texts())
+        self.assertIn("天然不带 BOM", self.error_texts())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
