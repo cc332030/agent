@@ -9690,3 +9690,117 @@ class TestCheckCommentPreservationGuard(CheckSpecsTestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestCheckSpecFetchGuard(CheckSpecsTestCase):
+    """钉住『规范抓取（安装取文件）防线』：随规范分发的取文件脚本不得被删或退化。
+
+    对应用户报告的真实失效：安装时"下载规范"没有抓手，执行者临场手拼逐条下载命令——
+    硬编码长串文件名、内联进命令行还会被 shell 转义反复绊倒（用户实测日志 `ok=… bad=…`、
+    转义一错就重来）；更根本的是**清单会腐化**（手工清单没人维护、新增规范就漏一份，
+    用户那次漏了 `specs/` 的多数文件）。故反例逐项覆盖：脚本被删、退回手工清单、
+    落点越界、入口不成对/缺退出码、`.bat` 非 CRLF、三处登记不同步。
+    """
+
+    SCRIPT_PY = (
+        '#!/usr/bin/env python3\n'
+        '"""fetch 脚本：清单从 AGENTS_COMMON.adoc 解析。\n'
+        '退出码：0 成功 / 1 有文件没取到 / 2 参数或前置条件错误。\n'
+        '"""\n'
+        'SPECS_REF_RE = "specs/"\n'
+        'def check_out_dir(p):\n'
+        '    """落点必须位于当前工作目录之下"""\n'
+        'def fetch(t):\n'
+        '    """不是站点首页判据: <!doctype html / <html"""\n'
+        'def main():\n'
+        '    """默认跳过已存在；需要最新内容加 --force；落点相对当前工作目录；os.replace 原子落盘"""\n'
+    )
+    SCRIPT_SH = (
+        '#!/usr/bin/env bash\n'
+        'set -u\n'
+        'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n'
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_root = cm.REPO_ROOT
+        cm.REPO_ROOT = self.root
+        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
+        os.makedirs(os.path.join(self.root, "specs"), exist_ok=True)
+
+    def tearDown(self) -> None:
+        cm.REPO_ROOT = self._orig_root
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write("script/fetch-specs.py", self.SCRIPT_PY)
+        self.write("script/fetch-specs.sh", self.SCRIPT_SH)
+        with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
+            fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n'
+                     b'exit /b %errorlevel%\r\n')
+        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs。\n")
+        self.write("README.adoc", "工具 fetch-specs。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_spec_fetch_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_script_reports(self):
+        # 反例：抓手被删 → 执行者又临场手拼逐条下载命令
+        self._write_valid()
+        os.remove(os.path.join(self.root, "script", "fetch-specs.py"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("fetch-specs.py", self.error_texts())
+
+    def test_missing_bat_entry_reports(self):
+        # 反例：Windows 入口缺失 → 该平台没有可执行入口（退化成手工拼命令）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "script", "fetch-specs.bat"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("fetch-specs.bat", self.error_texts())
+
+    def test_manual_list_regression_reports(self):
+        # 反例：退回手工清单（不再从入口解析）→ 新增规范就漏一份
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   '#!/usr/bin/env python3\n'
+                   '"""读 AGENTS_COMMON.adoc。"""\n'
+                   '"""退出码：0 / 1 / 2。"""\n'
+                   '"""落点必须位于当前工作目录之下、相对当前工作目录。"""\n'
+                   '"""默认跳过；--force。"""\n'
+                   'def f(t):\n'
+                   '    """<!doctype html"""\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("SPECS_REF_RE", self.error_texts())
+
+    def test_bat_lf_line_ending_reports(self):
+        # 反例：`.bat` 被写成 LF → 在 cmd.exe 下直接执行失败
+        self._write_valid()
+        with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
+            fh.write(b'@echo off\npython3 "%~dp0fetch-specs.py" %*\nexit /b %errorlevel%\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("CRLF", self.error_texts())
+
+    def test_bat_exit_code_missing_reports(self):
+        # 反例：入口不返回退出码 → "失败也成功"，调用方无法判定
+        self._write_valid()
+        with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
+            fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("errorlevel", self.error_texts())
+
+    def test_non_atomic_write_reports(self):
+        # 反例：退回"直接 wb 覆盖"→ 传输中断会把原有好副本截断成半份
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("；os.replace 原子落盘", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("os.replace", self.error_texts())
+
+    def test_docs_not_synced_reports(self):
+        # 反例：INSTALL 未登记抓手 → 安装时读者又不知道有它
+        self._write_valid()
+        self.write("INSTALL.adoc", "把规范下载到 tmp。\n")
+        cm.check_spec_fetch_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())

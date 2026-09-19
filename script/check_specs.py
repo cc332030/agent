@@ -115,6 +115,11 @@
      清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
      安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
      并把"自足"要求误加到只对维护方成立的文件上。
+ 30e. 规范抓取（安装取文件）防线：随规范分发的 `script/fetch-specs.py` 与其同名平台入口
+     （`.sh`/`.bat`）须存在且形态正确（清单**从入口自身解析**而非手工清单、增量语义、
+     「不是站点首页」的判据——站点对未命中路径回落 200 + HTML、落点边界校验、退出码语义、
+     薄壳三件事、`.bat` 纯 ASCII + CRLF），且 INSTALL/AGENTS_COMMON/README 三处登记同步——
+     防安装时又退回「手拼逐条下载命令」（清单漏项 + 转义出错 + 逐条往返）。
  30d. 性能测试防线：`specs/general/testing.adoc` 的「性能测试」须仍在，且**测量与记录**的要点
      齐备——对比测试（含当前实现作基准）、排除初始化干扰、测量口径可核对、离散度与样本量
      （至少 3 次采样 / 报离散度 / 差异小于离散度视为无显著差异）、公平比较、计时区间与消费结果、
@@ -1836,6 +1841,126 @@ def check_install_codeblock():
             err(f"INSTALL.adoc 模板代码块中『{prev}』与『{nxt}』之间缺少空行"
                 "（空行被吞会导致样式变化，须逐字保留）",
                 os.path.relpath(INSTALL_FILE, REPO_ROOT))
+    phase_done()
+
+
+def check_spec_fetch_guard():
+    """『规范抓取防线』：随规范分发的取文件脚本不得被删、入口不得拆散或退化。
+
+    背景（用户报告的失效）：安装时"下载规范"这一步原先没有抓手——`INSTALL.adoc` 只写
+    「下载到临时目录」，执行者于是临场手拼逐条下载命令：硬编码一长串文件名、逐个 URL 取、
+    内联进命令行还会被 shell 转义反复绊倒（用户实测日志：ok=… bad=…、转义一错就重来）。
+    更根本的是**清单会腐化**：手工清单没人维护，新增一份规范就漏一份（用户那次就漏了
+    `specs/` 的多数文件）；而站点**没有**目录归档端点（`/archive/main.tar.gz` 一类实测
+    回落成首页 HTML），无法靠"下一次压缩包"绕开清单问题。
+
+    故本条把"怎么取"落成一个**随规范分发**的抓手（`script/fetch-specs.py`，配同名平台入口），
+    并钉住三处最易退化的要点：
+      * **清单从入口自身解析**：不得退回"手工清单 / 硬编码文件名数组"（漏项与腐化的根因），
+        也不得写成"必须依赖 git / 归档端点"（实测站点无归档端点、引用方多半只有 https）；
+      * **入口成对且薄**：`.sh` 与 `.bat` 与逻辑代码同目录同主名、调用方只给脚本名；`.bat`
+        必须 `exit /b %errorlevel%`（否则退出码丢失，"失败也成功"）；
+      * **判据不得只看状态码**：站点对未命中路径回落首页 HTML 并返回 `200`，只判状态码会把
+        HTML 当成"取到的规范"存进落点（本条实现期实测）；须有"不是站点首页"这一类判据。
+
+    只核文本与文件形态（脚本自身行为另由其头部用法与人工/子 agent 复核承担）。
+    """
+    phase("规范抓取（安装取文件）防线检查")
+    targets = {
+        "script/fetch-specs.py": ("fetch-specs.py", "跨平台逻辑代码"),
+        "script/fetch-specs.sh": ("Linux/macOS 入口",),
+        "script/fetch-specs.bat": ("Windows 入口",),
+    }
+    for rel, desc in targets.items():
+        if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+            err(f"缺失 {rel}——安装取文件的抓手（{'/'.join(desc)}）被删除后，"
+                "执行者又会临场手拼逐条下载命令（清单漏项 + 转义出错 + 逐条往返）", rel)
+    py = os.path.join(REPO_ROOT, "script", "fetch-specs.py")
+    if not os.path.isfile(py):
+        phase_done()
+        return
+    body = open(py, encoding="utf-8").read()
+
+    def _keys(k):
+        return (k,) if isinstance(k, str) else tuple(k)
+
+    for keys, desc in (
+        (("AGENTS_COMMON.adoc", "SPECS_REF_RE", "specs/"),
+         "须**从入口自身解析清单**（读 AGENTS_COMMON.adoc 的调度器登记、按 `specs/...` 提取）——"
+         "退回手工清单/硬编码文件名即回到'新增规范就漏一份'的失效"),
+        (("跳过", "force"),
+         "须写明**增量**语义（已有且非空的文件默认跳过、需要最新内容时显式刷新）——"
+         "否则每次会话重取全部文件，白付带宽与往返（判据见 specs/general/context.adoc「执行吞吐」）"),
+        (("doctype", "html"),
+         "须有**不是站点首页**的判据（站点对未命中路径回落成首页 HTML 且返回 200，"
+         "只判状态码会把 HTML 当成'取到的规范'写进落点）——本条实现期实测，故写成判据"),
+        ("落点必须位于当前工作目录之下",
+         "须校验**落点位于当前工作目录之下**（脚本会被放在目标项目任意位置、也可能被传 "
+         "`--out ../x`），拒绝越界写入"),
+        (("os.replace",),
+         "须**先取到内存、再原子落盘**（临时文件 + `os.replace`）——直接覆盖既有副本时，"
+         "传到一半失败会把原本完好的副本截断成半份（比'没更新'更坏：副本在、内容是坏的）"),
+        (("退出码", "1", "2"),
+         "头部注释须写明**退出码语义**（0 成功 / 1 有文件没取到 / 2 参数或前置条件错误）——"
+         "只有『取不到』可被调用方判定，副本才不会被当成已就绪"),
+        (("相对", "当前工作目录"),
+         "须写明落点**相对调用方的工作目录**（不假设脚本自身所在目录）、"
+         "且脚本只写落点、不删除既有文件"),
+    ):
+        missing = [k for k in _keys(keys) if k not in body]
+        if missing:
+            err(f"规范抓取防线被破坏：script/fetch-specs.py 缺失要点 {missing}——{desc}",
+                "script/fetch-specs.py")
+    # 入口形态：薄壳 + 同主名 + 退出码（两平台各自的可核对写法）
+    entry_checks = (
+        ("script/fetch-specs.sh",
+         (("exec", "fetch-specs.py"), ("$@",)),
+         "须用 `exec` 跑同目录的逻辑代码并原样转交 `$@`（入口只做定位、参数透传、退出码转交三件事）"),
+        ("script/fetch-specs.bat",
+         (("%~dp0",), ("%*",), ("exit /b %errorlevel%",)),
+         "须定位同目录逻辑代码、`%*` 原样透传参数，并以 `exit /b %errorlevel%` 原样返回退出码"
+         "（缺则退出码是最后一条命令的，「失败也成功」）"),
+    )
+    for rel, keys_groups, desc in entry_checks:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8").read()
+        for keys in keys_groups:
+            missing = [k for k in keys if k not in text]
+            if missing:
+                err(f"规范抓取防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    # 落盘形态：`.bat` 纯 ASCII + CRLF、`.sh` LF（入口按各自平台规范落盘）
+    bat = os.path.join(REPO_ROOT, "script", "fetch-specs.bat")
+    if os.path.isfile(bat):
+        raw = open(bat, "rb").read()
+        if any(b > 127 for b in raw):
+            err("script/fetch-specs.bat 含非 ASCII 字节——批处理须纯 ASCII"
+                "（cmd.exe 按系统代码页解析，非 ASCII 会乱码）", "script/fetch-specs.bat")
+        if b"\r\n" not in raw:
+            err("script/fetch-specs.bat 不是 CRLF 行尾——LF-only 的批处理在 cmd.exe 下直接"
+                "执行失败", "script/fetch-specs.bat")
+    sh = os.path.join(REPO_ROOT, "script", "fetch-specs.sh")
+    if os.path.isfile(sh):
+        raw = open(sh, "rb").read()
+        if b"\r\n" in raw:
+            err("script/fetch-specs.sh 含 CRLF 行尾——.sh 一律 LF", "script/fetch-specs.sh")
+    # 公开说明同步：安装文档与公共入口须让执行者知道这个抓手
+    for rel, keys, desc in (
+        ("INSTALL.adoc", ("fetch-specs", "tmp/agent-specs"),
+         "安装文档须写明取文件抓手与默认落点——否则安装时又回到手拼下载命令"),
+        ("AGENTS_COMMON.adoc", ("fetch-specs",),
+         "公共入口的「加载方式」须写明随规范分发的取文件抓手——引用方按入口加载时才知道有它"),
+        ("README.adoc", ("fetch-specs",),
+         "README 的目录结构与引用方式须登记该抓手（读者从入口才知道取文件不必手工拼清单）"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in text]
+        if missing:
+            err(f"规范抓取防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
     phase_done()
 
 
@@ -8582,6 +8707,7 @@ def main(argv=None) -> int:
     check_forbidden_patterns()
     check_historical_notes()
     check_install_codeblock()
+    check_spec_fetch_guard()
     check_filler_docs()
     check_principle_guard()
     check_priority_guard()
