@@ -1170,6 +1170,180 @@ class TestCheckIndexPageGuard(CheckSpecsTestCase):
         self.assertIn("doc-module.adoc", self.error_texts())
 
 
+class TestCheckDataDictionaryGuard(CheckSpecsTestCase):
+    """钉住『数据字典防线』（按作用域归档、只引名称、新增与调整即生效）。
+
+    本条的失效形态不是「没写规则」，而是**写了规则却仍然膨胀、仍然各写一遍**——故反例须
+    覆盖**判据本体被抽走**（不是只覆盖"整节被删"）：
+      ① 分档表被压成一句并列词（"每档只一处"与"拿什么判属于哪档"都无从核对）；
+      ② **「当前文档」档的落点句被抽掉**（用户点名的那句：定义写在该文档开头）；
+      ③ **「每次新增与调整内容时都须判定」被删**（本条只在"新建字典"那一次生效）；
+      ④ 图书馆档被删（依据被当名称收进规则正文、规则被复制进图书馆）；
+      ⑤ 调度器未登记（规则在、但永远不会被加载）；
+      ⑥ 文档侧互引断开（读文档规范/编码规范的人永远看不到这节）。
+    另钉「定义与使用说明分列」被合并（把 SKOS 的两个属性并成一个）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_files = (cm.TERMINOLOGY_FILE, cm.DOC_FILE, cm.ENCODING_FILE)
+        cm.TERMINOLOGY_FILE = os.path.join(self.root, "specs", "general", "terminology.adoc")
+        cm.DOC_FILE = os.path.join(self.root, "specs", "general", "doc.adoc")
+        cm.ENCODING_FILE = os.path.join(self.root, "specs", "general", "encoding.adoc")
+
+    def tearDown(self) -> None:
+        cm.TERMINOLOGY_FILE, cm.DOC_FILE, cm.ENCODING_FILE = self._orig_files
+        super().tearDown()
+
+    TERM = (
+        "= 数据字典规范\n\n== 数据字典\n\n"
+        "* **只引名称、不引定义（L1）**：只写名称，**不得**复述定义。\n"
+        "* **作用域决定落点、每档只一处（L1）**：写进**唯一落点**，**每档只一处**；"
+        "**本文件的字典写在本文开头**。判据即表末一列，**抽取**掉专有名词后核对。\n\n"
+        "| 作用域 | 唯一落点 | 判据 |\n"
+        "| 全局 | `specs/**` | 抽取后仍成立 |\n"
+        "| 项目全局 | 根 `AGENTS.adoc` | 只在本项目成立 |\n"
+        "| 模块/功能 | 模块设计文档 | 跨类共用 |\n"
+        "| 类/接口 | 代码文档注释 | 单类内部 |\n"
+        "| 当前文档 | 该文档开头 | 只有读这份文档的人需要 |\n"
+        "| 图书馆 | 入口主题登记表 | 依据 |\n"
+        "| 提示词 | 产物所在文件 | 随产物走 |\n\n"
+        "* **一行一个名称（L1）**：**每个名称独占一段**、不得挤在同一行；"
+        "增删或引用其中一个名称**不必碰到**同一段里的其他名称。\n"
+        "* **条目形态照标准（L2）**：照 ISO 1087，**定义**与**使用说明**分列"
+        "（SKOS 的 `skos:definition` 与 `skos:scopeNote`）。\n"
+        "* **反膨胀（L1）**：**判定标准**（任一命中即违规）：上游落点收录了下游名称。\n"
+        "* **新增与调整内容时都须判定（L1）**：**每次**新增或调整内容时都须走一遍；"
+        "调整掉的名称须**同步**其定义。\n"
+        "* **图书馆等「不在默认引用面内」的落点按其自身规则走（L2）**：图书馆不在默认引用面内。\n"
+    )
+
+    def _write_valid(self):
+        self.write("specs/general/terminology.adoc", self.TERM)
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n== 文档组织与导航\n\n"
+                   "* **名称的定义按作用域归档、引用只写名称**：见 "
+                   "`specs/general/terminology.adoc`「数据字典」；本条与「信息归属」同向。\n")
+        self.write("specs/general/encoding.adoc",
+                   "= 编码规范\n\n* **术语统一（L2）**：同名同义；"
+                   "定义写在哪见 `specs/general/terminology.adoc`「数据字典」。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n== 分类与懒加载（加载调度器）\n\n=== 通用层（涉及对应活动时加载）\n\n"
+                   "* **新增/调整任何内容时判定名称的落点** → `specs/general/terminology.adoc`\n\n"
+                   "== 技术栈扩展约定\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_data_dictionary_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        # 反例：整节承载文件被删
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "terminology.adoc"))
+        cm.check_data_dictionary_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例：整节被删（判据全失）
+        self._write_valid()
+        self.write("specs/general/terminology.adoc", "= 数据字典规范\n\n== 别的节\n")
+        cm.check_data_dictionary_guard()
+        self.assertIn("数据字典", self.error_texts())
+
+    def test_scope_table_flattened_reports(self):
+        # 反例①：分档表被压成一句并列词 → "每档只一处"与"拿什么判属于哪档"都无从核对
+        self._write_valid()
+        bad = self.TERM.replace("| 作用域 | 唯一落点 | 判据 |\n", "")
+        bad = bad.replace("| 全局 | `specs/**` | 抽取后仍成立 |\n", "")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("唯一落点", self.error_texts())
+
+    def test_current_document_clause_removed_reports(self):
+        # 反例②：用户点名的那句（当前文档的定义写在该文档开头）被抽掉
+        self._write_valid()
+        bad = self.TERM.replace("**本文件的字典写在本文开头**", "**另开一处存放**")
+        bad = bad.replace("| 当前文档 | 该文档开头 | 只有读这份文档的人需要 |\n", "")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("当前文档", self.error_texts())
+
+    def test_scope_dropped_reports(self):
+        # 反例②b：作用域少了一档（图书馆档被删）→ 依据会被当名称收进规则正文
+        self._write_valid()
+        bad = self.TERM.replace("| 图书馆 | 入口主题登记表 | 依据 |\n", "")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("作用域分档表缺失", self.error_texts())
+        self.assertIn("图书馆", self.error_texts())
+
+    def test_scope_row_dropped_but_name_mentioned_elsewhere_reports(self):
+        # 反例②c（本轮实测的**假绿**）：档位行从表里被抽掉，但档位名仍以别的形态出现在正文里
+        # ——旧判定用裸子串 `f"| {scope}"`，此时仍命中、防线全绿（"表被抽掉"正是本条要拦的
+        # 失效形态）。判定须按**表格行**取值。
+        self._write_valid()
+        bad = self.TERM.replace("| 全局 | `specs/**` | 抽取后仍成立 |\n", "")
+        bad += "\n正文补一句：落点分档见 `| 全局 | / | 项目全局 |` 的说明。\n"
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("作用域分档表缺失", self.error_texts())
+        self.assertIn("全局", self.error_texts())
+
+    def test_new_and_adjusted_timing_removed_reports(self):
+        # 反例③："每次新增、调整内容时都须判定"被删 → 本条只在"新建字典"那一次生效
+        self._write_valid()
+        bad = self.TERM.replace("* **新增与调整内容时都须判定（L1）**：**每次**新增或调整内容时都须走一遍；"
+                                "调整掉的名称须**同步**其定义。\n", "")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("调整内容时都须判定", self.error_texts())
+
+    def test_definition_and_scope_note_merged_reports(self):
+        # 反例④：把"定义"与"使用说明"并成一个属性（SKOS 的两个属性被合并）
+        self._write_valid()
+        bad = self.TERM.replace(
+            "* **条目形态照标准（L2）**：照 ISO 1087，**定义**与**使用说明**分列"
+            "（SKOS 的 `skos:definition` 与 `skos:scopeNote`）。\n",
+            "* **条目形态照标准（L2）**：照 ISO 1087 写。\n")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("使用说明", self.error_texts())
+
+    def test_one_name_per_line_removed_reports(self):
+        # 反例④b：用户点名的那句（一行一个名称）被抽掉 → 名称又挤回一段
+        self._write_valid()
+        bad = self.TERM.replace(
+            "* **一行一个名称（L1）**：**每个名称独占一段**、不得挤在同一行；"
+            "增删或引用其中一个名称**不必碰到**同一段里的其他名称。\n", "")
+        self.write("specs/general/terminology.adoc", bad)
+        cm.check_data_dictionary_guard()
+        self.assertIn("一行一个名称", self.error_texts())
+
+    def test_dispatcher_not_registered_reports(self):
+        # 反例⑤：调度器未登记 → 规则在、但永远不会被加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n== 分类与懒加载（加载调度器）\n\n=== 通用层（涉及对应活动时加载）\n\n"
+                   "* **写代码** → `specs/general/coding.adoc`\n\n== 技术栈扩展约定\n")
+        cm.check_data_dictionary_guard()
+        self.assertIn("terminology.adoc", self.error_texts())
+
+    def test_doc_cross_ref_removed_reports(self):
+        # 反例⑥：文档侧互引断开 → 读文档规范的人永远看不到这节
+        self._write_valid()
+        self.write("specs/general/doc.adoc", "= 文档规范\n\n== 文档组织与导航\n\n* 每级目录须有索引页。\n")
+        cm.check_data_dictionary_guard()
+        self.assertIn("doc.adoc", self.error_texts())
+
+    def test_encoding_cross_ref_removed_reports(self):
+        # 反例⑦：编码侧「术语统一」未互引 → 该条会被读成"定义也写这里"
+        self._write_valid()
+        self.write("specs/general/encoding.adoc", "= 编码规范\n\n* **术语统一（L2）**：同名同义。\n")
+        cm.check_data_dictionary_guard()
+        self.assertIn("encoding.adoc", self.error_texts())
+
+
 # integration：完整合法样例全通过
 # --------------------------------------------------------------------------- #
 class TestIntegration(CheckSpecsTestCase):
@@ -2543,6 +2717,36 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
         self._write_valid()
         cm.check_delivery_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_fragment_never_included_reports(self):
+        # 反例（本轮实测）：片段**写好了但没有任何提示词 include** —— 题面末句复述其大意、
+        # include 一次都没有。此类"死内容"在装配层即失效：维护者以为已经写了，
+        # 每次执行都拿不到该条正文（`no-self-dispatch` 片段就这样空转过）。
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   self.DELIVERY +
+                   "// tag::no-self-dispatch[]\n9. 不得自行发评论唤起自己。\n"
+                   "// end::no-self-dispatch[]\n")
+        cm.check_delivery_guard()
+        self.assertIn("no-self-dispatch", self.error_texts())
+        self.assertIn("没有任何提示词", self.error_texts())
+
+    def test_fragment_wired_by_one_prompt_passes(self):
+        # 边界：只被**其中一份**提示词 include 即算接线（片段不必人人取用）
+        self._write_valid()
+        self.write("prompts/_common.txt",
+                   self.DELIVERY +
+                   "// tag::no-self-dispatch[]\n9. 不得自行发评论唤起自己。\n"
+                   "// end::no-self-dispatch[]\n")
+        self.write("prompts/review.adoc",
+                   "= 检查修复\n\n[listing]\n----\n"
+                   "10. 交付即汇报（**有改动**须提交推送并建 PR，**不得**只交付不汇报、"
+                   "**不得**只冒一句、**没有交付**；**输出通道只有两条**、"
+                   "**任何中间话一律不发**）\n"
+                   "include::_common.txt[tag=delivery]\n"
+                   "include::_common.txt[tag=no-self-dispatch]\n----\n")
+        cm.check_delivery_guard()
+        self.assertNotIn("no-self-dispatch", self.error_texts())
 
     def test_missing_fragment_reports(self):
         # 反例：公共片段被删 → 两处提示词同时失去这条边界
@@ -9664,7 +9868,7 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
         "\n"
         f"== 作为跨环境入口（Windows 与 Linux 并存时）\n"
         f"* 见「{cm.CROSS_PLATFORM_SCRIPT_SECTION}」；只做**薄壳**，`exit /b %errorlevel%` 返回**退出码**。\n"
-        "* 同处一目录、主名相同；**入口语言选择**取 `.bat`/`.cmd`。\n"
+        "* **入口语言选择（入口的语言取值）**取 `.bat`/`.cmd`。\n"
         "* 不把 **PowerShell** 语法（`$` 变量、cmdlet、`-eq`）写进 `.bat`。\n"
     )
 
@@ -9696,7 +9900,7 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
         for n in ("bash.adoc", "python.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{n}",
                        f"= 栈\n\n== 入口\n* 见「{sec}」。\n"
-                       "* 同处一目录、主名相同；入口语言选择见上；"
+                       "* **入口的语言取值**：入口语言选择见上；"
                        "#!/usr/bin/env bash；执行策略 Bypass；"
                        "Python 只作逻辑层、不作入口（前置命令）；见 batch.adoc。\n")
         self.write("specs/stack/batch.adoc", self.BATCH)
@@ -10003,10 +10207,13 @@ class TestCheckScriptHeaderGuard(CheckSpecsTestCase):
                    "* 文档头写在模块 **docstring** 里、**不另起块注释**："
                    "docstring 是该语言的**文档注释机制**。\n"
                    "* docstring 里写**抽象描述或常量名**、**不抄实现取值**。\n")
+        # 各栈按数据字典条只**指向**通用层落点（判据唯一落点＝通用层本节），
+        # 并保留本栈取值（批处理用 `rem`/`::` 行注释）
         for n in ("bash.adoc", "batch.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{n}",
                        "= 栈\n\n== 入口\n"
-                       "* **入口的注释只写入口自己（L1）**：**不得复述**逻辑层的参数与默认值。\n")
+                       f"* **入口的头部注释只写入口自己**：判据见「{cm.SCRIPT_HEADER_SECTION}」"
+                       "下的「入口的注释边界（L1）」；本栈用 `rem`/`::` 行注释。\n")
         self.write("AGENTS_COMMON.adoc",
                    "脚本：**文档头先行**（取值写**常量名**）；识别特征：新写或改脚本。\n")
         self.write("README.adoc", "目录：脚本（含**文档头先行**与**跨环境脚本**）。\n")
