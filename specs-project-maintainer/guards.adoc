@@ -104,7 +104,8 @@
 | 89 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级 |
 | 90 | `check_java_serial_guard` | Java 序列化防线——已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、JDK 14+ 补 `@Serial`、不得为未实现者补字段或顺手加 `implements Serializable`、不得以抑制代替显式声明；另钉「优先 `val`、可变才 `var`」与「链式调用一律换行」两处判据本体 |
 | 91 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改 |
-| 92 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
+| 92 | `check_toolchain_present_guard` | 校验工具链齐备防线——校验手段依赖的工具须装齐、**缺工具不得静默跳过**（公共条文 + 本仓库落点 + CI **真的调用处理器**三处同口径；权威定义在公共条文、本仓库落点只登记「哪一道防线承载」） |
+| 93 | `check_asciidoctor_syntax` | 对维护范围内全部 .adoc 做一次语法编译验证（收集规则与 `collect_adoc_files` 同源、覆盖根由 `ADOC_ROOTS` 给定）；处理器探测不到即**报错**（不得跳过），`asciidoctor` 带 `--failure-level=WARN` |
 |===
 
 **由别的防线收尾调用、不直接进序列的两道**（可达性由 `check_wiring_guard` 的闭包口径裁定）：

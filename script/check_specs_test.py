@@ -683,13 +683,111 @@ class TestRefKindPredicates(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_toolchain_present_guard（校验工具链齐备）
+# --------------------------------------------------------------------------- #
+class TestToolchainPresentGuard(CheckSpecsTestCase):
+    """钉住『校验手段依赖的工具须装齐、缺工具不得静默跳过』的三处落点。
+
+    本条要防的失效形态：脚本里写着某段校验、环境里没有它依赖的工具、跑起来却报 OK
+    （本仓库实证：语法编译段长期走"跳过"分支而 `check_specs.py` 始终报绿）。
+    故三处落点缺一即报错：公共条文本体、本仓库落点、CI 的安装与装后校验。
+    """
+
+    _CI = ("= CI\n\n== 校验链完整（定义未执行防线）\n\n"
+           "* **校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（L1）**："
+           "**先探测**工具在不在、缺则**装齐**再跑，不得把缺工具走**自动跳过**；"
+           "装不上时如实标『未执行 + 原因』、**不得记作通过**；"
+           "**安装方式**（命令级）：`gem install asciidoctor`。\n")
+
+    # 本仓库落点按「登记处只留一层」的口径写：只点名**承载该检查的那道防线**与安装命令，
+    # 处理器次序与效力边界归公共条文（防同一处口径在两份文件里各留一份、各自漂移）
+    _OWN = ("= 自身\n* toolchain: 承载该检查的防线是 `check_asciidoctor_syntax`；"
+            "两个处理器都探测不到时 `check_asciidoctor_syntax` 会**直接报错**"
+            "（不再\"跳过\"）；安装：`gem install asciidoctor`。\n")
+
+    # CI 侧的形态：装上并**就地校验**（校验写在安装同一步骤里，失败即整步失败；
+    # 只"装"不校验、或校验只输出一行而不影响结论，都会静默退回"缺工具也绿"）
+    _WF = ("name: check\n"
+           "steps:\n"
+           "  - name: Install and verify asciidoctor\n"
+           "    run: |\n"
+           "      gem install asciidoctor --no-document\n"
+           "      command -v asciidoctor\n"
+           "      asciidoctor --version\n")
+
+    def _write_all(self, ci=None, own=None, wf=None):
+        self.write("specs/general/ci-cd.adoc", self._CI if ci is None else ci)
+        self.write("AGENTS.adoc", self._OWN if own is None else own)
+        self.write(".github/workflows/check-specs.yml", self._WF if wf is None else wf)
+
+    def test_all_three_landings_pass(self):
+        self._write_all()
+        cm.check_toolchain_present_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_public_clause_reports(self):
+        # 反例①：公共条文本体被删 → 要求只活在本仓库落点里、引用方学不到
+        self._write_all(ci="= CI\n\n== 校验链完整（定义未执行防线）\n\n* 别的内容\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("不得因缺工具而静默跳过", self.error_texts())
+
+    def test_missing_install_way_reports(self):
+        # 反例②：只说要装、不给安装方式 → 执行者装不上就只能跳过
+        self._write_all(ci=self._CI.replace("`gem install asciidoctor`", "某个工具"))
+        cm.check_toolchain_present_guard()
+        self.assertIn("安装方式", self.error_texts())
+
+    def test_missing_repo_landing_reports(self):
+        # 反例③：本仓库落点缺失（只说原则、不点名防线与命令）
+        self._write_all(own="= 自身\n* 无\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_missing_ci_verify_step_reports(self):
+        # 反例④：CI 只"装"不校验 → 装失败时仍会退回"缺工具也绿"
+        self._write_all(wf="name: check\nsteps:\n  - run: gem install asciidoctor\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("装后校验", self.error_texts())
+
+    def test_ci_install_step_without_processor_invocation_reports(self):
+        # 反例⑤：同一步骤里只 install、没有真的调用处理器（装成没装成都看不出来）
+        self._write_all(wf="name: check\nsteps:\n  - name: Install asciidoctor\n"
+                           "    run: |\n      gem install asciidoctor --no-document\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("装后校验", self.error_texts())
+
+    def test_ci_version_step_separated_from_install_reports(self):
+        # 反例⑥：校验被挪到**另一个步骤**（它失败时后面的步骤照跑，装失败仍会绿）
+        self._write_all(wf="name: check\nsteps:\n"
+                           "  - name: Install asciidoctor\n"
+                           "    run: gem install asciidoctor --no-document\n"
+                           "  - name: Verify\n    continue-on-error: true\n"
+                           "    run: asciidoctor --version\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("装后校验", self.error_texts())
+
+    def test_ci_step_name_not_double_counted_as_install(self):
+        # 反例⑦：只有名字里有 `gem install asciidoctor`、真步骤里没有安装动作
+        self._write_all(wf="name: check\nsteps:\n"
+                           "  - name: gem install asciidoctor --no-document\n"
+                           "    run: echo skip\n"
+                           "  - run: asciidoctor --version\n")
+        cm.check_toolchain_present_guard()
+        self.assertIn("没有**安装步骤**", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
 # check_asciidoctor_syntax（--failure-level=WARN）
 # --------------------------------------------------------------------------- #
 class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
-    """钉住语法编译的**效力边界**：asciidoctor 默认对 WARNING/ERROR 仍返回 0。
+    """钉住语法编译的**效力边界与"缺工具不得跳过"**。
 
-    故命令行必须显式带 `--failure-level=WARN`，否则 `include::` 目标缺失、`image::`
-    找不到这类"只告警不报错"的问题必然漏报（防线形同虚设）。
+    * `asciidoctor`（Ruby）默认对 WARNING/ERROR 仍返回 0，故命令行必须显式带
+      `--failure-level=WARN`，否则 `include::` 目标缺失这类"只告警不报错"的问题必然漏报。
+    * Python 版 `asciidoc` **没有**这个开关（实测传了会 `illegal command options`、
+      整批命令都会以非 0 失败），故对它必须**不发**该开关，并如实把效力降级告警。
+    * **两个处理器都探测不到时报错**（用户口径：没有环境就要安装环境，不得省略）——
+      旧实现此处走"跳过"分支，语法段在本环境长期没跑而脚本照旧报 OK。
     """
 
     def test_failure_level_constant_present(self):
@@ -697,15 +795,118 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
                                 "check_specs.py"), encoding="utf-8").read()
         self.assertIn("--failure-level=WARN", src)
 
-    def test_no_asciidoctor_skips_without_error(self):
-        # 本环境无 asciidoctor：跳过而非报错（保证幂等）
+    def test_no_processor_reports_error_instead_of_skipping(self):
+        # 两个处理器都探测不到：**报错**，不得静默跳过（防"声明的校验手段从未执行"）
         orig = cm.shutil.which
         cm.shutil.which = lambda name: None
         try:
             cm.check_asciidoctor_syntax()
         finally:
             cm.shutil.which = orig
+        self.assertTrue(cm.errors, "缺工具时必须报错（不得跳过）")
+        self.assertIn("探测不到任何 AsciiDoc 处理器", cm.errors[0])
+
+    def test_processor_detection_order_prefers_asciidoctor(self):
+        # 探测次序：先 Ruby 的 asciidoctor、再 Python 的 asciidoc
+        orig = cm.shutil.which
+        cm.shutil.which = lambda name: f"/usr/bin/{name}"
+        try:
+            proc, found = cm._detect_asciidoc_processor()
+        finally:
+            cm.shutil.which = orig
+        self.assertEqual((proc, found), ("asciidoctor", "/usr/bin/asciidoctor"))
+
+    def test_python_asciidoc_gets_no_failure_level_flag(self):
+        # Python 实现不认 --failure-level：发给它会让整批命令以 `illegal command options` 失败
+        calls = []
+        orig_which, orig_run = cm.shutil.which, cm.subprocess.run
+        cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
+
+        class _R:
+            returncode, stderr = 0, ""
+
+        def _run(cmd, **kw):
+            calls.append(cmd)
+            return _R()
+
+        cm.subprocess.run = _run
+        try:
+            self.write("specs/general/a.adoc", "= T\n")
+            cm.check_asciidoctor_syntax()
+        finally:
+            cm.shutil.which, cm.subprocess.run = orig_which, orig_run
         self.assertEqual(cm.errors, [])
+        self.assertTrue(calls)
+        self.assertFalse([c for c in calls if "--failure-level=WARN" in c],
+                         "不得对 Python 版 asciidoc 发 --failure-level")
+
+    def test_ruby_asciidoctor_gets_failure_level_flag(self):
+        calls = []
+        orig_which, orig_run = cm.shutil.which, cm.subprocess.run
+        cm.shutil.which = lambda name: "/usr/bin/asciidoctor" if name == "asciidoctor" else None
+
+        class _R:
+            returncode, stderr = 0, ""
+
+        def _run(cmd, **kw):
+            calls.append(cmd)
+            return _R()
+
+        cm.subprocess.run = _run
+        try:
+            self.write("specs/general/a.adoc", "= T\n")
+            cm.check_asciidoctor_syntax()
+        finally:
+            cm.shutil.which, cm.subprocess.run = orig_which, orig_run
+        self.assertEqual(cm.errors, [])
+        self.assertTrue([c for c in calls if "--failure-level=WARN" in c],
+                        "Ruby 版 asciidoctor 必须带上 --failure-level=WARN")
+        # 命令行形态只此一处可判：注入点须与命令拼装同源（旧实现把拼装写在循环体内，
+        # 检查只能靠"重复调一次真实函数"观察，等于把校验跑两遍——语法段有真实副作用，
+        # 不该为了观察行为而复跑；故抽出 `_adoc_compile_cmd` 供两条判据各自核对一次）
+        self.assertIn("--failure-level=WARN", cm._adoc_compile_cmd("asciidoctor", "/tmp/a.adoc"),
+                      "Ruby 版命令行须带 --failure-level=WARN")
+        self.assertNotIn("--failure-level=WARN", cm._adoc_compile_cmd("asciidoc", "/tmp/a.adoc"),
+                         "Python 版命令行不得带 --failure-level")
+
+    def test_syntax_check_covers_all_adoc_roots(self):
+        # 覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现）：
+        # 只编仓库根时，被 `ADOC_ROOTS` 点名的子树一份都不会被真的编译，而检查照旧显示"完成"
+        seen = []
+        orig_which, orig_run = cm.shutil.which, cm.subprocess.run
+        cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
+
+        class _R:
+            returncode, stderr = 0, ""
+
+        def _run(cmd, **kw):
+            seen.append(cmd[-1])
+            return _R()
+
+        cm.subprocess.run = _run
+        try:
+            self.write("specs/general/a.adoc", "= T\n")
+            self.write("docs/b.adoc", "= T\n")
+            cm.ADOC_ROOTS = ("", "docs")
+            cm.check_asciidoctor_syntax()
+        finally:
+            cm.shutil.which, cm.subprocess.run = orig_which, orig_run
+            cm.ADOC_ROOTS = ("",)
+        self.assertEqual(cm.errors, [])
+        names = sorted(os.path.relpath(p, self.root).replace("\\", "/") for p in seen)
+        self.assertEqual(names, ["docs/b.adoc", "specs/general/a.adoc"])
+
+    def test_syntax_check_reports_missing_adoc_root(self):
+        # 反例：`ADOC_ROOTS` 点名的根不存在——该子树一份都没编，须报错而不是静默"完成"
+        orig_which = cm.shutil.which
+        cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
+        try:
+            cm.ADOC_ROOTS = ("", "docs")
+            cm.check_asciidoctor_syntax()
+        finally:
+            cm.shutil.which = orig_which
+            cm.ADOC_ROOTS = ("",)
+        self.assertIn("ADOC_ROOTS", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #

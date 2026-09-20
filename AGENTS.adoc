@@ -69,6 +69,7 @@
 **工具与它钉住的防线逐条清单在** `specs-project-maintainer/guards.adoc`（唯一视图，本文件不复述——综述列在那里会各自漂移，上游落点也会被下游细节撑大）：
 
 * `script/check_specs.py` — 规范完整性机械校验（每次改完规范必跑）；其**防线清单与逐条用途**见 `specs-project-maintainer/guards.adoc`。
+** **校验工具链须装齐、缺工具即报错（本仓库落点，不得省略，L1）**：本仓库的校验手段依赖 AsciiDoc 处理器，**没有环境就要装环境**——通用要求见 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」，承载它的防线是 `check_specs.py` 的 `check_asciidoctor_syntax`：**两个处理器都探测不到时 `check_asciidoctor_syntax` 会**直接报错**（不再"跳过"——本仓库实证：旧实现走跳过分支，语法段在本环境长期没跑而脚本照旧报 OK）。安装命令：`gem install asciidoctor --no-document`。具体探测次序与效力边界见公共条文与 CI 配置，本处不复述。
 * `script/check_effective.py` — "定义未执行"深度核验工具（`--list` 打印台账、`--warn` 在有无抓手条款时非零退出），配套测试 `script/check_effective_test.py`。
 * `.github/workflows/check-specs.yml` — 本仓库 CI：在 push/PR 上运行上述校验及配套测试（**只做确定性校验**；语义审查交人 review，不在 CI 中调用外部 AI）。
 * 维护方自查层的登记（`specs-project-maintainer/`，五份）：`specs-project-maintainer/spec-lifecycle.adoc`（条目准入与定级、规范集合自身的重构与拆分）、`specs-project-maintainer/priority.adoc`（最高关注项的不可降级清单）、`specs-project-maintainer/verify.adoc`（维护方的验证义务）、`specs-project-maintainer/context.adoc`（公共内容被加载时的可控性）、`specs-project-maintainer/guards.adoc`（**防线清单**）。
