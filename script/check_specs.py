@@ -180,17 +180,28 @@
      另钉调度器（AGENTS_COMMON.adoc）与 Java 栈（java-testing.adoc）两处落点、以及图书馆依据主题
      （library/performance.adoc）与依据锚点。
  29. Java 序列化 / 局部变量推断 / 链式调用换行防线：`specs/stack/java.adoc`「序列化（`Serializable`）」须仍在，且判据本体齐备（已实现 `Serializable` 的类型须显式声明 `serialVersionUID`、缺省 `1L`、`lombok.config` 实时取值、`@Serial`、**不为未实现者补字段或顺手加 `implements Serializable`**、不得以抑制代替显式声明、判定标准与存量口径、依据行含「1L 属本集合取值」）；`specs/stack/java.adoc`「编码」的「局部变量优先 `val`、可变才 `var`」须齐备（`var` 是例外档、用 `var` 却没重新赋值的判定、例外、未引入 lombok 时按 `var` 兜底、字段不得使用、依据与「属本集合取值」定性）；`specs/general/coding.adoc`「表达式与调用写法」的「链式调用一律换行」须齐备（**长度不是判据**、同行两处及以上环节即违规、例外、只改形态不改语义的边界、依据与「严于通行风格」定性）；并钉调度器三处识别特征（含通用层的「所有语言」）与图书馆两处依据落点。
- 30. AsciiDoc 语法：有 asciidoctor 时对**本仓库维护范围内的全部 .adoc** 做一次编译验证
-     （`collect_adoc_files`：仓库根全部 .adoc + `specs/`/`specs-project-maintainer/`/
-     `library/` 递归），并带 `--failure-level=WARN` 使 WARNING（含 `include::` 目标缺失）
-     也返回非 0——否则语法"通过"而内容实际缺块。`CHANGELOG.adoc` 属只追加的历史记录，
-     纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
- 31. 变更日志登记时机：`AGENTS.adoc` 须写明 **changelog 条目仅在用户明确要求时追加**、用户未明确要求时**一律不写不改**（含顺手补一条），且 `script/check_effective.py` 登记该条——防执行者把『改了东西』与『该记一条』画等号、条目随每轮任务自发生长（用户明确提出的口径；本仓库 changelog 不是自动追加区）。
- 32. Maven 仓库与镜像防线：`specs/stack/maven.adoc`「仓库与镜像」节须仍在，且含指定中央仓库地址、
+ 30. 校验工具链齐备：`specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」须写明
+     **校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过**（含四要件：条文本体、L1
+     标注、判定标准、安装方式），`AGENTS.adoc` 须有本仓库落点（点名承载检查的那道防线
+     `check_asciidoctor_syntax`、缺工具即报错与安装命令），`.github/workflows/check-specs.yml`
+     须**真的调用处理器**（只"装"不校验时，装失败仍会退回"缺工具也绿"）——防"脚本里写着语法
+     验证、环境里没工具、跑起来却报 OK"这种最隐蔽的假绿（本仓库实证：语法段在本环境长期走
+     "跳过"分支、`check_specs.py` 始终报 OK）。
+ 31. AsciiDoc 语法：对**本仓库维护范围内的全部 .adoc** 做一次编译验证
+     （收集规则唯一实现在 `_collect_adoc_files`：仓库根全部 .adoc + `specs/`/
+     `specs-project-maintainer/`/`library/`/`prompts/` 递归；覆盖根见 `ADOC_ROOTS`，
+     默认仓库根）；处理器按次序探测 `asciidoctor`（Ruby，带 `--failure-level=WARN`，
+     WARNING 含 `include::` 目标缺失也返回非 0）与 `asciidoc`（Python 实现，**无该开关**、
+     缺 include 目标时仍返回 0——故这一半效力降级并**显式告警**）；**两个都探测不到即报错、
+     不得跳过**（用户口径：没有环境就要安装环境，不得省略；口径与安装方式见
+     `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」与 CI workflow）。
+     `CHANGELOG.adoc` 属只追加的历史记录，纳入语法编译但豁免引用/节名/链接格式/历史来源四类检查。
+ 32. 变更日志登记时机：`AGENTS.adoc` 须写明 **changelog 条目仅在用户明确要求时追加**、用户未明确要求时**一律不写不改**（含顺手补一条），且 `script/check_effective.py` 登记该条——防执行者把『改了东西』与『该记一条』画等号、条目随每轮任务自发生长（用户明确提出的口径；本仓库 changelog 不是自动追加区）。
+ 33. Maven 仓库与镜像防线：`specs/stack/maven.adoc`「仓库与镜像」节须仍在，且含指定中央仓库地址、
      两条触发前提（未配置过仓库/镜像、外网出口 IP 在中国大陆）、优先用该仓库、换源边界（仅当它不可用才可
      改用其他**在境内**的镜像站）与『已配置过即不做』——防地址被换、前提被删或只留一半、
      『不可用即换源』被读宽成『可自行另挑』（含换到境外源，等于白配）、既有配置被重配一遍。
- 33. 包源与镜像源防线：`specs/general/dependency.adoc`「包源（包仓库/镜像站）的选用」须仍在，且
+ 34. 包源与镜像源防线：`specs/general/dependency.adoc`「包源（包仓库/镜像站）的选用」须仍在，且
      含**选源次序（就近/平台内 → 所在地区主流公共源 → 邻近境外源 → 更远境外源）**、**逐级降级不得跳级**、
      **先实测可用再启用/一次配置到位**、**不覆盖引用方既有配置**、**推荐非强制**与**取值须可复核**；
      技术栈/平台侧须有落点（Maven 的源与 `mirrorOf`、Python 的 pip 源、Clojars 构件的取源次序、
@@ -201,7 +212,7 @@
      ——防"凭感觉挑一个源、直接跳到境外源、不实测就配、把引用方既有配置重配一遍"，也防把**实测不存在**
      的目录（如"高校镜像站的 npm 目录"）当推荐源写进配置（本次用户要求 + 本项目实测；本轮复核又实测出
      "聚合仓库已代理 Clojars"与"某镜像 `/npm/` 目录 404 但按包名可取"两类，故把这两条判据也钉住）。
- 34. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`）——
+ 35. 变更日志条目形态：`CHANGELOG.adoc` 的条目须保持**单行**（`版本号 | 日期 | 变更摘要`）——
      仅对**流水式**条目适用；条目行之后不得紧跟续行——防日志被当成追加区、同一条目被多行续写
      （工具习惯是 heredoc / 多次 append）而与下一条粘连、渲染成一整段。采用**按版本分组 +
      表格式**的项目其日志里没有任何带日期的行，本项因此自动不报错（两形态无冲突）。
@@ -213,25 +224,25 @@
      变更点/影响/标记四项）；图书馆 `library/sources.adoc` 须有该形态的依据与**"业界约定而非
      标准"的如实标注**。防"一个版本改了很多东西时不可检索"（用户报告）与**反向失效**
      （换成表格后把"影响"列省掉、或用类型列代替破坏性变更标注）。
- 35. 引文段落防线：**仓库维护范围内的 `.adoc` 不得有行首 `> ` 的引文行**——该形态会被
+ 36. 引文段落防线：**仓库维护范围内的 `.adoc` 不得有行首 `> ` 的引文行**——该形态会被
      AsciiDoc 解析成 **callout list**（旧式 `listdef-callout` 正则吃掉单 `>` 起头者、
      `index` 取空串后 `List.calc_style()` 里 `assert False`，**整份文件编译失败**；实测
      一次打死 6 个文件）。页面侧（`index.html` 用 Asciidoctor.js）把它渲染成引用块、
      看不出问题，而 `check_asciidoctor_syntax` 只在环境里真有 asciidoctor 时才跑——
      故这条**确定项**须有独立抓手。写引文用 `[quote]` + 正文行。
- 36. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
+ 37. 抽象与接入成本防线：`specs/general/coding.adoc`「抽象与接入成本」须仍在，且
      两条 L1（唯一装配点 / 可替换点须有可用默认或显式必填声明）、判定标准、四条要点与
      L1/L2 标注、依据行齐备，`specs/stack/spring.adoc`「配置」须引用该节（不复制条文）
      ——防"对外能力要求每个使用点各提供一遍实现/配置"重新变成默认做法（用户的真实失效报告：
      "功能都实现了，却很难用"）。
- 37. 索引页触发判据防线：`specs/general/doc.adoc`「索引页的触发判据」须仍在，且
+ 38. 索引页触发判据防线：`specs/general/doc.adoc`「索引页的触发判据」须仍在，且
      四条要点（触发判据=目录已承载实质文档 / 空目录与仅有索引页自己的不建 / 索引只做导航
      不得复制上一级内容 / 模块级导航由模块 README 承担）齐备，`specs/general/doc-module.adoc`
      的模块 doc 索引条目须同写「按需」口径——防把"每级目录须有索引页"读宽成"每个模块都建
      `doc/README.adoc`"（用户的真实失效：48 个模块被批量补上内容几乎逐字同构、不含本级自身
      信息的空壳索引）。
 
- 38. 改动范围边界防线：**两层同口径**——通用层 `specs/general/scope.adoc`「工作空间边界
+ 39. 改动范围边界防线：**两层同口径**——通用层 `specs/general/scope.adoc`「工作空间边界
      （不依赖任何平台）」+「平台上的仓库边界（代码托管平台）」两节须仍在（本地/服务器
      "文件都在"时禁的是**改入口工作空间以外的文件**；平台上可写范围被放大成"有权访问的
      全部仓库"，故按**只改当前项目/入口项目**表达），平台层 `specs/platform/cnb.adoc`
@@ -241,7 +252,7 @@
      "只读"优先）、拒绝的形态；公共片段 `prompts/_common.txt` 的 `scope-boundary` 同口径
      且**两个提示词代码块内都引入**——防"引用被误当成授权"（用户明确的收紧要求：未声明
      直接改别处应当拒绝）、防提示词复制到未知项目后这条边界整条丢失。
- 39. 交付形态与报告落点防线（**本轮实测失效的直接抓手**）：公共片段 `prompts/_common.txt`
+ 40. 交付形态与报告落点防线（**本轮实测失效的直接抓手**）：公共片段 `prompts/_common.txt`
      的 `delivery` 片段须仍在且齐备四处要点——①**报告落点**（过程性叙述不得作为**独立的
      一条评论**发出去、结论须**汇总成一次完整汇报**）；②**交付形态两态**（"有改动却没提交
      也没推送"与"没有改动却没说明"都属交付失败，自动化场景下**没有提交即等于没有交付**）；
@@ -255,7 +266,7 @@
      仍在"——"某次是否真的只冒了一句、是否真的漏了提交"属运行时行为（评论内容与推送记录），
      机械无法判定，交人/子 agent 复核。
 
- 40. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
+ 41. 跨语言执行脚本的落点与加载时机防线：`specs/general/coding.adoc`「跨语言执行脚本的落点
      （资源文件夹，不写字符串拼接/模板）」须仍在，且 L1（落点／扩展名取被调语言／
      按资源读取后执行／**加载时机按性能敏感度定性**：发布后不变的资源在性能敏感路径
      须首次读取后缓存、需求要求内容会变的模板不缓存）、可逐条核对的判定标准、典型反例
@@ -268,11 +279,11 @@
      （用户的真实失效报告：字符串拼接与模板没有高亮与错误校验、容易出错；以及
      **性能敏感路径每次读取本可只读一次的资源**）。
 
- 41. 提示词登记处索引形态防线：`PROMPTS.adoc` 的公共约定允许只做索引（不复述片段正文），
+ 42. 提示词登记处索引形态防线：`PROMPTS.adoc` 的公共约定允许只做索引（不复述片段正文），
      但**每条边界必须可达**——对 `_common.txt` 的每个关键片段，登记处须么写出该边界的要点、
      么写出该片段名并写明『正文在 `_common.txt`、此处只作索引』；整条被删或"形式上是索引但
      没说清正文在哪"都报错（后者会让读者以为读到的是全文）。由 `check_prompts_index_guard` 钉住。
- 42. 提示词取值路径与装配状态防线（**用户指出的既有偏差**）：提示词会被**未知项目**按不同
+ 43. 提示词取值路径与装配状态防线（**用户指出的既有偏差**）：提示词会被**未知项目**按不同
      路径取用，`include::` 的装配状态随路径而变，而**推断"这是渲染视图所以已展开"正是本仓库
      实测过的失效**（曾把站点**原始文件地址**当渲染视图、据此以为内容完整）。本防线钉住：
      公共片段 `prompts/_common.txt` 的「查看与复制方式」须按**取值路径**判断（装配过的：
@@ -281,7 +292,7 @@
      "内容有没有被处理器装配过"判定；`PROMPTS.adoc` 须有「取值路径与装配状态」节（三行判据表
      + "不是三种版本的提示词" + L1 实证话术条）；`AGENTS.adoc` 的提示词条须登记该口径与抓手名。
 
- 43. 评审备注落点防线：`specs/general/review.adoc`「问题记录」的『备注落点按事项的适用范围
+ 44. 评审备注落点防线：`specs/general/review.adoc`「问题记录」的『备注落点按事项的适用范围
     判定』须仍在且**两个方向都在**——判定标准（去具体类名/模块名后仍成立＝全局性；只有某
     一处能触发/违反＝范围性）、全局性问题**不得写进范围性落点**、**全局备注也不夹带范围性
     内容**（范围性内容留在范围内落点、只用链接指向）、范围性问题不上升为全局规范；并由
@@ -289,7 +300,7 @@
     两处指向该节——防"备注"退化成"记得记一笔"而没有落点（实测失效：把"全项目都要注意 X"
     写进某个类的 javadoc，只有读那个类的人看得见、换个入口即找不到）。
 
- 44. Feign 接口命名带所属域/项目前缀防线：`specs/general/coding.adoc`「命名与代码质量」的
+ 45. Feign 接口命名带所属域/项目前缀防线：`specs/general/coding.adoc`「命名与代码质量」的
      「Feign 接口命名带所属域/项目前缀」须仍在且为 L1，**且范围限定只此一类接口**
      （用户明确"目前只需要考虑 feign，不需要考虑其他对外接口"）——条文不得写回
      "对外提供或跨服务/跨项目调用的接口"这类宽口径；齐备「前缀 + 接口业务名 + `Api`」形态、
@@ -303,7 +314,7 @@
      同类 Feign 接口碰名、按名看不出归属）。
 
 
- 45. 数据访问边界防线（**用户在本轮要求里点名的三件事**）：
+ 46. 数据访问边界防线（**用户在本轮要求里点名的三件事**）：
      **判据须落回各自的节**：`specs/stack/java.adoc`、`specs/stack/spring.adoc`、
      `specs/general/coding.adoc` 里都另有一个**同名节**（三份的「持久化访问」节标题逐字相同），
      全文匹配会跨文件跨节、把"题名从本文档里删了、另一处还提了一句"读成齐备（实测：把
@@ -331,7 +342,7 @@
      防"工具类里拿着别人的 service `lambdaQuery()`、实体 Service 里跨多表编排、主键为 null
      仍去查库"重回默认做法（用户点名要求：成员方法只许在本子类内用，实体 Mapper 只由本实体的
      service 调用，调库前自动判空、集合返回空集合而不是 null）。
- 46. 持久化访问防线（**用户明确提出的硬性要求**，**按通用层/技术栈层分层设防**）：
+ 47. 持久化访问防线（**用户明确提出的硬性要求**，**按通用层/技术栈层分层设防**）：
      `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」须仍在，且三条 L1（**统一
      入口**：走该技术给定的统一入口、不自建构造器；**优先用类型安全/声明式查询构造 API**：
      方法引用/属性名引用、`findByXxx` 一类；**替代优先**：技术自带的类型安全/声明式形态强制
@@ -350,7 +361,7 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
- 47. 运行环境须与项目声明一致防线（**用户提出的硬性要求**）：`specs/general/ci-cd.adoc`
+ 48. 运行环境须与项目声明一致防线（**用户提出的硬性要求**）：`specs/general/ci-cd.adoc`
      的「运行环境须与项目声明一致」须仍在且齐备 L1 标注、判据两句（"即使换一个版本也能跑通流程，
      也不得换" + "所用版本与项目声明不一致即违规"）、**声明落点**（取项目已有声明、不得另立
      第二真源）、**降级路径**（未声明先确认 / 声明环境不可得时如实说明并标未确证、不得记为通过 /
@@ -362,7 +373,7 @@
      重回默认做法（用户提出的要求：开发与验证须严格使用项目声明的那一个运行环境，严禁用
      别的版本，即使能正常跑通流程）。
 
- 48. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
+ 49. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
      同一文件在一次改动里既重命名、又改内容时，`specs/general/git.adoc` 的
      「重命名与内容修改须分两个提交（默认固定动作）」须整节齐备（一句话规则、适用对象与判定标准、
      分量不是理由、提交顺序、无损拆分、两个提交都进本次交付、例外、引用方自检命令），
@@ -371,7 +382,7 @@
      的 P7 条目在且级别与依据齐备——防"用对了 `git mv`、却把重命名与内容修改塞进同一个提交"
      从 P1 与 P7 两条防线之间漏过去（用户原话："这是对丢失历史、重命名被识别为新增+删除的补充"）。
 
- 49. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
+ 50. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
      （动手前先摸清现状与最佳方案（含**调整内容一类需求须先找现成可参照的既有标准与更优设计**）/
      不得绕开既有体系另写一套（三个允许条件、不留两套并存）/
      大范围改动先确认（不得替用户判定既有流程已废弃）/ 改动前先定基线（扫描既有校验手段、完整可用
@@ -392,7 +403,7 @@
      公开面同步——防"不摸现状直接动手""绕开既有实现另写一套""重构后把老用例改掉让它通过"
      重回默认做法（本项目实测失效）。
 
- 50. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
+ 51. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
      「跨服务/对外调用的请求响应类优先移动复用」须仍在且为 L1，且**两种例外与一条边界齐备**——
      ①数据库实体类（除用户声明外不移动）；②类里引用了第三方类型；**本项目自身的依赖不算三方依赖**
      （该字句缺位等于给出一个随时可套用的豁免口）；并含「移动而非复制、同步更新原引用」的动作、
@@ -406,13 +417,13 @@
      `library/adoption.adoc` 的「本集合自己承认的更严取舍」须登记两条——防「另建一套更省事」与
      「下划线与驼峰混用」重回默认做法（用户提出的真实失效：同一数据契约出现两个定义、路径风格混用）。
 
- 51. 对象转换防线（**用户提出的建议层要求**）：多层嵌套对象之间的转换**优先**用**声明式映射**
+ 52. 对象转换防线（**用户提出的建议层要求**）：多层嵌套对象之间的转换**优先**用**声明式映射**
      完成、**建议不手写转换代码**，JVM 下优先 MapStruct——**不是强制、但是建议**（用户明确要求
      不做强制性限制：深拷贝/结构复制工具、序列化中转等等价路径同样合规；判据按目标判——同一转换
      只有一处来源、结构变化不静默漏字段；无嵌套单层不在范围内）。`specs/general/coding.adoc`
      「对象转换（多层嵌套对象的转换）」只留跨语言抽象、**不得出现框架专名**；框架专名与写法落在
      `specs/stack/java.adoc`「对象转换（MapStruct）」。
- 52. 构造方法不手写（优先 lombok）防线（**用户提出的规范调整**）：**无参、必参、全参构造
+ 53. 构造方法不手写（优先 lombok）防线（**用户提出的规范调整**）：**无参、必参、全参构造
      （所有参）一律优先用 lombok 而不是手写**——三种构造分别对应 `@NoArgsConstructor`、
      `@RequiredArgsConstructor`、`@AllArgsConstructor`，同时需要多个即**同时标多个注解**；
      判据是"类中出现手写的构造方法、而该构造可由注解表达"即违规。落点在
@@ -422,7 +433,7 @@
      缺则该条永不被触发加载。失效形态是"类上已标 `@Data`、仍另写无参/全参构造"：同一构造
      出现两个来源、字段增删时改一处而另一处静默过期。只钉"条文、三种注解、判据、例外与
      措辞是否仍在"——"某个具体类该不该手写构造"属语义判断，交人/子 agent 复核。
- 53. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
+ 54. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
      提到某个类型时**优先写类名 + `import`、不写类全名**（用户举例：
      `com.c332030.ctool4j.core.exception.CUnauthorizedException`）。通用层落点为
      `specs/general/doc.adoc`「注释与文档」下的同名条目（**L2**：先短类名、需要解析时在就近
@@ -434,7 +445,7 @@
      边界）；调度器（`AGENTS_COMMON.adoc` 的文档条目与 Java 技术栈条目）须带识别特征——
      缺则该条永不被触发加载。**为 L2 且判据是语义的（`java.util.UUID` 一类外部类型全限定
      属合规），故不扫存量文档**："某处到底该不该写全限定"交人/子 agent 复核。
- 54. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
+ 55. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
      （也不得转由他人/其他执行者代发）——`specs/platform/cnb.adoc`「评论唤起新实例
      （平台侧的派发入口）」须有该 L1 条（含判定标准四态：新增评论指向本次唤起名 /
      自我豁免 / 实际发出 / 转交他人代发）与正当形态（先停 + 一次"停下确认"，由人另发评论）；
@@ -445,7 +456,7 @@
      执行、重新按入口加载规范并付一次调用与等待）。判据是**这条评论发出去没有**，机械只
      钉"要求文本仍在"——"某次是否真的发了"属运行时行为（评论列表），交人/子 agent 复核。
 
- 55. 提交信息防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/git.adoc`
+ 56. 提交信息防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/git.adoc`
      「提交信息」须仍在且齐备——首行形态 `<type>[(scope)]: <subject>`（`type` 取与变更日志同源的
      **固定闭集**）、**可逐条核对的判定标准**（首行不以 `<type>:` / `<type>(scope):` 起头即不合规）、
      破坏性变更的两处标注（`!` 与 `BREAKING CHANGE:` 页脚）与反向禁令（**不得把某个类型默认为
@@ -455,7 +466,7 @@
      图书馆，却**只用它支撑变更日志的展示形态**——同一条链的"上游"（一次提交改了什么）空着，
      "下游"（按类型分组）只能靠人工归类。
 
- 60. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
+ 61. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
      强制生效""依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）：通用层
      `specs/general/review.adoc`「精炼性」须仍在且齐备**判据本体**——重复面是必查项（L1）
      且与"没查过"分得清、判定标准（任一命中即为重复描述）、收敛形态（一处完整定义 +
@@ -468,7 +479,7 @@
      不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
      钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
 
- 61. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+ 62. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
      模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
      在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
      实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
@@ -476,7 +487,7 @@
      `check_install_repeat_update_guard` 钉住（配"该条被删""只留『以用户为准』而无『不自动
      改回』""不一致时不说、用户不知道"三条反例）。
 
- 62. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
+ 63. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
      的「数据字典」一节须仍在且齐备八件——**只引名称不引定义**（名称是检索键、定义只有一处）、
      **作用域分档 + 每档只一处**（分档表须有「作用域 / 唯一落点 / 判据」三列，七档逐档在表里：
      全局 / 项目全局 / 模块功能 / 类接口 / **当前文档（定义写在该文档开头）** / 图书馆 / 提示词）、
@@ -494,7 +505,7 @@
      可选强调 + 档位名 + `[^|]*\|`）：档位名只出现在正文里不给过——用裸子串 `f"| 全局"`
      时，"档从表里被抽掉、正文另有一处提到档位名"会假绿（本轮实测）。
 
- 56. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
+ 57. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
      （文档头）」须仍在且九条齐备——**文档头先行**（动手第一步就写、不得只留待补占位、改动后
      同提交同步）、**脚本必须写文档头**、条目清单含**关键约定与设计决策**（不得省略）、
      **设计决策写成决策 + 理由 + 边界**（含判定标准）、**取值写抽象描述或常量名**
@@ -507,7 +518,7 @@
      须有对应依据主题段（如实标注要点转述与同义性差异）——防"写完顺手补一段文档"与
      "注释里抄实现取值（改代码不改注释即文档说谎）"重回默许形态（用户要求：脚本很多细节
      可能随着维护丢失，文档先行也适用于脚本）。
- 57. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
+ 58. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
      「HTTP 接口语义」须仍在且齐备三处——①条文与**级别**（安全方法不得产生状态变更 **L1**、
      幂等与状态码 **L2**、Problem Details **L3 可选**；级别不得被顺手改动，把可选格式升成 L1
      会高频误伤只做内网接口的项目）；②**适用范围**（无 HTTP 接口的项目不适用，准入面不引入
@@ -517,7 +528,7 @@
      方法与状态码语义未覆盖——`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用，把错误
      一律包成 `200` 会让重试、缓存、监控与网关策略全部失效。
 
- 58. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
+ 59. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
      `MECHANISMS` 每条目须在 `grip`（抓手路径）与 `note`（备注）之外，**显式声明钉住它的
      防线名**——本题由 `check_guard_manifest` 逐条核实：①声明的防线在 `script/check_specs.py`
      里**真实存在**；②**真的会被调用**（接线闭包内，不是"定义了但没人调"）；③无抓手条目
@@ -528,7 +539,7 @@
      本条把**逐条声明**变成必填：声明与实现不一致即报红——"读者以为有抓手、实际那一道
      早没了"正是台账要防的失效。
 
- 59. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
+ 60. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
      `specs-project-maintainer/priority.adoc` 的「强调的正确做法」下须有
      「机械防线的核对对象是**判据本体**，不是轴名（L1）」一节，且齐备**核对对象**
      （钉判定标准里能拿去核对的那句话，不是轴名/条目标题）、**防线空转**这一失效形态
@@ -1160,26 +1171,14 @@ def collect_adoc_files():
     产物，其自身的死链/悬空引用会随分发一起流出。故此处以"仓库根全部 .adoc + 各目录
     递归"一次收全，新增目录/新文件自动纳入，不再靠逐项登记（漏登记即漏检查）。
     """
-    result = []
     # 目录一律**由 REPO_ROOT 现场推导**（不直接引用可能被重定向的模块常量）：
     # 各检查/单测会把 REPO_ROOT 指向临时根，现场推导才能保证"只收本仓库内的文件"，
-    # 不会把真实仓库的目录（如真实 library/）漏收进来。
-    root_dir = os.path.abspath(REPO_ROOT)
-    for sub in ("specs", "specs-project-maintainer", "library", "prompts"):
-        d = os.path.join(root_dir, sub)
-        for dirpath, _, files in os.walk(d):
-            for f in files:
-                if f.endswith(".adoc"):
-                    result.append(os.path.join(dirpath, f))
-    # 仓库根：全部 .adoc（含 AGENTS.adoc / INSTALL.adoc / PUBLIC.adoc / README.adoc /
-    # PROMPTS.adoc / CHANGELOG.adoc / AGENTS_COMMON.adoc；library/、prompts/ 已由上面收，不重复）
-    if os.path.isdir(root_dir):
-        for f in sorted(os.listdir(root_dir)):
-            if f.endswith(".adoc"):
-                result.append(os.path.join(root_dir, f))
-    # 统一归一化为**仓库根相对 POSIX 路径**（如 `library/README.adoc`、`specs/…`）：
+    # 不会把真实仓库的目录（如真实 library/）漏收进来。收集规则见 `_collect_adoc_files`
+    # （唯一实现：语法编译段按 `ADOC_ROOTS` 复用同一套规则）。
+    #
+    # 返回的是**仓库根相对 POSIX 路径**（如 `library/README.adoc`、`specs/…`）：
     # 这是全仓库通用的规范写法，也让"某文件在不在检查集合里"可被直接核验。
-    return [os.path.relpath(f, root_dir).replace("\\", "/") for f in result]
+    return _collect_adoc_files(REPO_ROOT)
 
 
 def _rel_of(path: str) -> str:
@@ -2049,43 +2048,278 @@ def check_java_serial_guard():
     phase_done()
 
 
-def check_asciidoctor_syntax():
-    """若环境有 asciidoctor，做一次语法编译验证。
+# AsciiDoc 处理器的两个实现（按次序探测；**探测不到即报错，不跳过**）：
+#   ① `asciidoctor`（Ruby 实现）——支持 `--failure-level=WARN`，WARNING 也能返回非 0；
+#   ② `asciidoc`（Python 实现，PyPI 包名 `asciidoc`）——**无 `--failure-level`**（传了会
+#      `illegal command options`），缺 `include::` 目标时只 WARNING、仍返回 0，
+#      故这条效力边界须显式记下（本仓库实测），不得假装它能拦 WARNING。
+# 两个实现都探测不到时**报错**：语法验证是"确定项"（文件能否编译、include 目标在不在，
+# 二值可判），跳过它等于把已声明的校验手段变成摆设——用户口径：**不得省略**。
+# 空串是"未指定"：默认取仓库根（REPO_ROOT 现场推导，见 _detect_asciidoc_processor）。
+ASCIIDOC_PROCESSORS = ("asciidoctor", "asciidoc")
+ADOC_ROOTS = ("",)
 
-"""
+
+def _collect_adoc_files(root_dir):
+    """收集 `root_dir` 下的全部 `.adoc`（递归 + 仓库/目录根），返回**该根相对** POSIX 路径。
+
+    单一实现：`collect_adoc_files` 用仓库根调用、语法编译段用 `ADOC_ROOTS` 里的每个根
+    调用——两处若各写一份"哪些目录算维护范围"，改一处必漏另一处。
+    """
+    result = []
+    root_dir = os.path.abspath(root_dir)
+    for sub in ("specs", "specs-project-maintainer", "library", "prompts"):
+        for dirpath, _, files in os.walk(os.path.join(root_dir, sub)):
+            for f in files:
+                if f.endswith(".adoc"):
+                    result.append(os.path.join(dirpath, f))
+    if os.path.isdir(root_dir):
+        for f in sorted(os.listdir(root_dir)):
+            if f.endswith(".adoc"):
+                result.append(os.path.join(root_dir, f))
+    return [os.path.relpath(f, root_dir).replace("\\", "/") for f in result]
+
+
+
+
+def _detect_asciidoc_processor():
+    """探测本机的 AsciiDoc 处理器，返回 (命令名, 可执行路径) 或 (None, None)。
+
+    探测次序由 `ASCIIDOC_PROCESSORS` 给定（先 Ruby 的 `asciidoctor`、再 Python 的
+    `asciidoc`）——**两个都按"命令能否在 PATH 里找到"判**，不按包名/版本猜。
+    """
+    for cmd in ASCIIDOC_PROCESSORS:
+        found = shutil.which(cmd)
+        if found:
+            return cmd, found
+    return None, None
+
+
+def _adoc_compile_cmd(proc, path):
+    """拼一次语法编译的命令行；`--failure-level=WARN` 只发给认它的 `asciidoctor`。
+
+    Ruby 版 `asciidoctor` **默认对 WARNING/ERROR 仍返回 0**，故必须显式带
+    `--failure-level=WARN`，否则 `include::` 目标缺失、`image::` 找不到这类"只告警不报错"
+    的问题必然漏报、防线形同虚设。Python 版 `asciidoc`（PyPI）**没有**这个开关（实测传了
+    整批命令都会以 `illegal command options` 失败），故对它**不发**并如实把效力降级告警。
+    """
+    if proc == "asciidoctor":
+        return [proc, "--failure-level=WARN", "-o", "-", path]
+    return [proc, "-o", "-", path]
+
+
+# CI 步骤里"执行了哪条命令"的判据用语：`run:` 的内容（含 `|`/`>` 块）与
+# `uses:` 的 action 名。步骤名不计入——名字里写 `gem install asciidoctor` 而步骤实际
+# 跑的是 `echo skip` 时，按"整段文本包含关键字"判会假绿（名字比命令更容易写）。
+_WF_RUN_KEY = re.compile(r"^\s*(?:-\s+)?run:\s*(.*)$")
+_WF_USES_KEY = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)\s*$")
+# YAML 块标量的续行判定：`run: |` / `run: >` / `run: |-` 及其它 `|`/`>` 变体。
+# AsciiDoc 文档里会有大量 `|` 表格行，故**只在"步骤内的 run 键之后"调用本函数**。
+_WF_BLOCK_SCALAR = re.compile(r"^[|>][+-]?\d*\s*$")
+
+
+def _workflow_runs(text):
+    """从 workflow 文本里取**每步实际执行的命令**，返回 `[步骤名, 命令…]` 的列表。
+
+    形态判据（不是"整段文本里出现过某个词"）：
+      * 只取 `run:` 键的值（含 `|`/`>` 块标量的续行）与 `uses:` 的 action 名——
+        **步骤名 `name:` 不计**（名字比命令更容易写，按名字判会把"名字里写了安装命令、
+        实际什么都不装"判成装过了）；
+      * 块标量的续行由"缩进比 run 键更深"判定，遇到同缩进或更浅的行即结束；
+      * 步骤仍按 `- ` 起行切分，缩进深浅（列表项内联键 / `- name:` 后换行写键）都收。
+    """
+    steps, cur, key_indent = [], None, None
+    for raw in text.split("\n"):
+        if raw.lstrip().startswith("#"):
+            continue                      # 注释不参与（注释里写命令不算执行了它）
+        stripped = raw.strip()
+        m_key = _WF_RUN_KEY.match(raw)
+        m_uses = _WF_USES_KEY.match(raw)
+        if m_key or m_uses:
+            if cur is None and (m_key or m_uses):
+                cur = []
+            if cur is None:
+                continue
+            key_indent = len(raw) - len(raw.lstrip(" "))
+            value = (m_key.group(1) if m_key else m_uses.group(1)).strip()
+            if m_uses:
+                cur.append(value)
+                key_indent = None
+                continue
+            if _WF_BLOCK_SCALAR.match(value):
+                key_indent = key_indent + 1  # 块体只在"比键更深"的缩进里
+                continue
+            if value:
+                cur.append(value)
+            key_indent = None
+            continue
+        if key_indent is not None:
+            # 正在收集块标量：缩进比键更深的行是块体，否则块结束
+            if stripped and (len(raw) - len(raw.lstrip(" "))) >= key_indent:
+                cur.append(stripped)
+                continue
+            key_indent = None
+        if stripped.startswith("- ") or stripped == "-":
+            if cur:
+                steps.append(cur)
+            cur = []
+    if cur:
+        steps.append(cur)
+    return steps
+
+
+def check_toolchain_present_guard():
+    """『校验工具链齐备防线』：校验手段依赖的工具须装齐、**不得因缺工具而静默跳过**。
+
+    实证失效（本仓库）：`script/check_specs.py` 里写着 AsciiDoc 语法编译段，但本环境
+    长期没有 `asciidoctor`，该段于是走"跳过"分支、脚本始终报 OK——**声明的校验手段
+    从未执行，而输出看起来是绿的**。用户口径：**没有环境就要安装环境，不得省略**。
+
+    故本条钉住三处落点（缺一即"工具链要求"只活在某一份文件里）：
+      ① `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体与 L1 标注、
+         **判定标准**（可逐条核对：跑之前先探测工具、缺则装齐，装不上如实标"未执行 +
+         原因"、不得记作通过）、**安装方式**（含本仓库要用的处理器与命令）；
+      ② `AGENTS.adoc` 的本仓库落点：点名 `check_asciidoctor_syntax`、处理器探测次序、
+         **缺工具即报错**与安装命令；
+      ③ `.github/workflows/check-specs.yml` 的安装步骤与**装后校验**（`asciidoctor --version`）。
+    安装步骤被删或只"装"不校验时，CI 会退回"缺工具也绿"；文本一条不落时，下一位
+    执行者才知道该装什么。
+    """
+    phase("校验工具链齐备防线检查")
+    # ① 公共规范：条文本体 + L1 + 判定标准 + 安装方式 + 探测次序
+    rel_ci = "specs/general/ci-cd.adoc"
+    ci_path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(ci_path):
+        err(f"缺少 {rel_ci}——校验工具链齐备的要求失去公共落点", rel_ci)
+    else:
+        with open(ci_path, encoding="utf-8") as fh:
+            ci = fh.read()
+        for keys, desc in (
+                (("不得因缺工具而静默跳过", "L1"),
+                 "条文本体与级别：缺工具须装齐、不得静默跳过，且须标 L1"
+                 "（否则会被当成『尽力而为』放过）"),
+                (("先探测", "装齐", "自动跳过"),
+                 "判定标准须可逐条核对：跑之前先探测工具、缺则装齐；把"
+                 "『环境里没有就自动跳过』显式判为不符合本条"),
+                (("未执行", "不得记作通过"),
+                 "降级路径须写明：装不上时如实标『未执行 + 原因』，不得记作通过"),
+                (("安装方式", "install"),
+                 "须给出安装方式（命令级），否则执行者知道要装却不知道装什么")):
+            missing = [k for k in keys if k not in ci]
+            if missing:
+                err(f"校验工具链齐备防线被破坏：{rel_ci} 缺失 {missing}——{desc}"
+                    "（本仓库实证：语法验证段写着、环境里没工具、脚本却报 OK）", rel_ci)
+    # ② 本仓库落点：AGENTS.adoc 须点名脚本、探测次序与安装命令
+    rel_own = "AGENTS.adoc"
+    own_path = os.path.join(REPO_ROOT, *rel_own.split("/"))
+    if not os.path.isfile(own_path):
+        err(f"缺少 {rel_own}——校验工具链要求失去本仓库落点", rel_own)
+    else:
+        with open(own_path, encoding="utf-8") as fh:
+            own = fh.read()
+        for keys, desc in (
+                (("check_asciidoctor_syntax",),
+                 "须点名承载该检查的那道防线（否则读者只看得到一句原则）"),
+                (("`check_asciidoctor_syntax` 会**直接报错**", "不再\"跳过\""),
+                 "须写明缺工具时**报错而非跳过**（这条是本防线的失效模式："
+                 "写成『跳过』时脚本会长期报绿）"),
+                (("gem install asciidoctor",),
+                 "须给出安装命令（README/workflow 只是路径，命令要能照抄）")):
+            missing = [k for k in keys if k not in own]
+            if missing:
+                err(f"校验工具链齐备防线被破坏：{rel_own} 缺失 {missing}——{desc}", rel_own)
+    # ③ CI：安装步骤 + **装后校验**（只"装"不校验时，装失败仍会退回"缺工具也绿"）。
+    # 判据按**每步实际执行的命令**取值（见 `_workflow_runs`）：教程式注释、步骤名、
+    # 排在安装之前的版本输处、以及"装与校验分成两步"都会被拦下——这几种形态下
+    # 装失败都不会让 action 失败，等于 CI 上又有了第二条"跳过"路径。
+    rel_wf = ".github/workflows/check-specs.yml"
+    wf_path = os.path.join(REPO_ROOT, *rel_wf.split("/"))
+    if not os.path.isfile(wf_path):
+        err(f"缺少 {rel_wf}——校验工具链在 CI 侧的落点丢失", rel_wf)
+    else:
+        with open(wf_path, encoding="utf-8") as fh:
+            wf = fh.read()
+        steps = _workflow_runs(wf)
+        install_at = next((i for i, cmd in enumerate(steps)
+                           if any("install" in line and proc in line
+                                  for line in cmd for proc in ASCIIDOC_PROCESSORS)),
+                          None)
+        # 装后校验：真调用处理器（`--version` / `--help` 两类"证明它在"的调用），
+        # 且**必须与安装同一步**——分成两步时，第二步失败后后续步骤照跑，装失败仍会绿。
+        verify_at = None
+        if install_at is not None:
+            for line in steps[install_at]:
+                parts = line.split()
+                if parts and parts[0] in ASCIIDOC_PROCESSORS \
+                        and any(a in ("--version", "--help", "-v", "-h") for a in parts[1:]):
+                    verify_at = install_at
+                    break
+        if install_at is None:
+            err(f"校验工具链齐备防线被破坏：{rel_wf} 没有**安装步骤**"
+                f"（须有一条实际执行 `install` 且点名处理器的命令：{ASCIIDOC_PROCESSORS}）"
+                "——缺则语法段在 CI 上同样走不到；只写在注释或步骤名里不算执行了它",
+                rel_wf)
+        elif verify_at is None:
+            err(f"校验工具链齐备防线被破坏：{rel_wf} 的安装步骤里没有**装后校验**"
+                "（须在同一步骤内真的调用处理器，如 `asciidoctor --version`）——"
+                "只『装』不调用时装失败静默通过；调用若被拆到另一步，该步失败后"
+                "后续步骤照跑、CI 仍会绿（两种都等于留了第二条跳过路径）", rel_wf)
+    phase_done()
+
+
+def check_asciidoctor_syntax():
+    """AsciiDoc 语法编译验证：**环境缺工具即报错，不得跳过**。
+
+    效力：把"本仓库维护范围内的全部 `.adoc`"逐份编译一次，编译失败即报错——
+    这是**确定项**（文件能否编译、`include::` 目标在不在，二值可判），故不设
+    "环境没有就跳过"的旁路（用户口径：没有环境就要安装环境，不得省略）。
+
+    工具探测与效力边界：
+      * `asciidoctor`（Ruby）：带 `--failure-level=WARN`，WARNING（含 `include::`
+        目标缺失）也返回非 0；
+      * `asciidoc`（Python 实现）：**没有** `--failure-level`，缺 `include::` 目标时
+        只 WARNING、仍返回 0——故这一半效力降级，但"编译是否失败"仍被真正拦住；
+      * **两个都没有 → 报错**：安装方式见 `.github/workflows/check-specs.yml`
+        与 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」。
+    """
     phase("AsciiDoc 语法编译验证")
-    if shutil.which("asciidoctor") is None:
-        log("  提示: 未检测到 asciidoctor，跳过语法编译验证"
-            "（CI 中请先在运行本脚本前安装，见 workflow）。")
+    proc, proc_path = _detect_asciidoc_processor()
+    if proc is None:
+        err("本机探测不到任何 AsciiDoc 处理器（按次序试过 "
+            + "、".join(f"`{c}`" for c in ASCIIDOC_PROCESSORS) + "）——"
+            "语法编译验证是**确定项**、不得跳过：请先装齐工具再跑本脚本"
+            "（Ruby：`gem install asciidoctor`；只需 Python 时：`pip install asciidoc`；"
+            "CI 的安装步骤见 `.github/workflows/check-specs.yml`）",
+            "script/check_specs.py")
+        phase_done()
         return
-    # 固定口径：WARNING 及以上即视为失败（含 include 目标缺失、image 找不到）
-    failure_level = "--failure-level=WARN"
-    files = collect_adoc_files()
-    unsupported = False   # 一旦确认本机 asciidoctor 不认 --failure-level，后续一律降级
+    detail(f"  处理器: {proc}（{proc_path}）")
+    if proc != "asciidoctor":
+        log(f"  警告: 本机处理器是 `{proc}`（Python 实现），它不支持 `--failure-level`，"
+            "WARNING 级问题（含 `include::` 目标缺失）本次无法拦截；"
+            "要拦住这一半请改装有 `--failure-level` 的 `asciidoctor`（Ruby 实现，>= 1.5.7）")
+    # 覆盖**全部维护根**（`ADOC_ROOTS`，默认仓库根）：只编仓库根时，被点名的子树
+    # （独立的规范集合/产物目录）一份都不会被真的编译，而检查照样显示"完成"。
+    files = []
+    for root in ADOC_ROOTS:
+        root_dir = os.path.join(REPO_ROOT, *root.split("/")) if root else REPO_ROOT
+        if not os.path.isdir(root_dir):
+            err(f"ADOC_ROOTS 点名的根不存在：{root or '.'}——语法编译验证的覆盖范围"
+                "不能停在不存在的位置（等于该子树一份都没编）", "script/check_specs.py")
+            continue
+        files.extend([os.path.join(root, rel) if root else rel
+                      for rel in _collect_adoc_files(root_dir)])
     for i, rel in enumerate(files, 1):
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
-        base_cmd = ["asciidoctor", "-o", "-", "-a", "outfilesuffix=.html", path]
-        cmd = base_cmd if unsupported else [base_cmd[0], failure_level] + base_cmd[1:]
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = subprocess.run(_adoc_compile_cmd(proc, path),
+                               capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
-            err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
+            err(f"{proc} 超时 (30s)，文件可能过大或处理器卡死: {rel}")
             continue
-        # 老版本 asciidoctor 不认 --failure-level：显式降级（只告警一次），不静默通过
-        if not unsupported and r.returncode != 0 \
-                and "unrecognized option" in (r.stderr or ""):
-            unsupported = True
-            log("  警告: 本机 asciidoctor 不支持 --failure-level，"
-                "WARNING 级问题（含 include 目标缺失）本次无法拦截；"
-                "请升级 asciidoctor（>= 1.5.7）")
-            try:
-                r = subprocess.run(base_cmd, capture_output=True, text=True, timeout=30)
-            except subprocess.TimeoutExpired:
-                err(f"asciidoctor 超时 (30s)，文件可能过大或 asciidoctor 卡死: {rel}")
-                continue
         if r.returncode != 0:
-            err(f"asciidoctor 语法/告警: {r.stderr.strip()}", rel)
+            err(f"{proc} 语法/告警: {r.stderr.strip()}", rel)
     phase_done()
 
 
@@ -3186,11 +3420,21 @@ def check_install_repeat_update_guard():
 #     `check_maven_parallel_guard`，三笔在同一序列里一进一出，终值同为 `91`。
 #     删除原因与承接方见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，
 #     按次序留档）」；新增两条见同表第 90、91 行。
+#   * **本次合并记账（两侧一并保留）**：上游那笔「删除 `orm_boundary` + 新增两条」与
+#     本分支那笔「新增 `check_toolchain_present_guard`」在同一序列里各记一次，故终值为
+#     **93 = 91 + 1（本分支新增校验工具链齐备）+ 1（此前 rebase 已含的并行度防线）**——
+#     两笔都不得丢：`CHECKS` 里 `check_java_serial_guard`、`check_maven_parallel_guard`、
+#     `check_toolchain_present_guard`、`check_asciidoctor_syntax` 四道同时在序。
+#     用例数同源取实测（`check_specs_test.py` + `check_effective_test.py` 的 `test_*` 方法数）：
+#     本分支初版记 1021，复核（d3209b8）又补了 CI 侧的例外形态用例；上游与两侧合并后
+#     **实测 1041**（`Ran 1041 tests ... OK`），故终值取 1041——基线只允许"不低于实测"。
+#     另一笔（本分支复核 d3209b8）：`check_toolchain_present_guard` 的 CI 落点判据由
+#     "装后校验 `asciidoctor --version`"改为"**真的调用处理器**"，并补了对应的例外形态用例。
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
-GUARD_WIRING_BASELINE = 91
-GUARD_TEST_BASELINE = 1013
+GUARD_WIRING_BASELINE = 93
+GUARD_TEST_BASELINE = 1041
 
 
 def _read_ledger_no_grip_declared():
@@ -9929,6 +10173,7 @@ CHECKS = (
     check_info_density_guard,
     check_java_serial_guard,
     check_maven_parallel_guard,
+    check_toolchain_present_guard,
     check_asciidoctor_syntax,
 )
 

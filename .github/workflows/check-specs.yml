@@ -31,19 +31,30 @@ jobs:
   # 1) 确定性规范检查（引用完整性、链接格式、节名引用、栈登记一致、调度器登记、
   #    私有约定误导入、历史来源声明、INSTALL 模板、文档注水、要点防线，以及优先级/
   #    准入/自检/来源/换行符/Java 测试类命名/提示词/常驻层体积上限/从属者与能力自评
-  #    /规范验证/任务生命周期（节点 + 验证边界 + 拆分判据）/接纳面（含公共内容私有引用与"公共内容不得声明机械防线"）/图书馆（存在 + 入口登记 + 逐字引文 + 引用可解析）/公共内容覆盖面（入口清单与实际一致）/本仓库自身侧 git mv 自查/清单逐项与文档-脚本一致性（准入项数、七节点、`check_*` 名字、硬超时与三态留证）/跨语言执行脚本的落点（脚本放资源文件夹、扩展名取被调语言）各防线 + AsciiDoc 语法；
+  #    /规范验证/任务生命周期（节点 + 验证边界 + 拆分判据）/接纳面（含公共内容私有引用与"公共内容不得声明机械防线"）/图书馆（存在 + 入口登记 + 逐字引文 + 引用可解析）/公共内容覆盖面（入口清单与实际一致）/本仓库自身侧 git mv 自查/清单逐项与文档-脚本一致性（准入项数、七节点、`check_*` 名字、硬超时与三态留证）/跨语言执行脚本的落点（脚本放资源文件夹、扩展名取被调语言）/校验工具链齐备 各防线 + AsciiDoc 语法；
   #    完整检查项清单见 script/check_specs.py 文件头 docstring）
-  #    安装 asciidoctor 使语法验证真正执行（不再跳过）；发现问题即返回非 0，action 失败。
+  #    **AsciiDoc 处理器必须装齐：不装时 `check_specs.py` 的语法编译段直接报错、
+  #    action 失败（用户口径：没有环境就要安装环境，不得省略）。**装的是 Ruby 版
+  #    `asciidoctor`：只有它支持 `--failure-level=WARN`，即 WARNING（含 `include::`
+  #    目标缺失）也能让检查返回非 0；Python 版 `asciidoc`（PyPI）没有这个开关。
   lint-specs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      # 运行环境与项目声明一致：规范里点名的脚本一律按 python3 跑（见 specs/stack/python.adoc）
+      - uses: actions/setup-python@v5
         with:
-          ruby-version: '3.2'
-      - name: Install asciidoctor
-        run: gem install asciidoctor --no-document
-      - name: Run deterministic spec checks (incl. asciidoctor syntax)
+          python-version: '3.x'
+      # AsciiDoc 处理器（确定项校验的依赖）：本步骤内装上并**就地校验装成了没有**——
+      # 校验必须在同一步骤里判（`command -v` 不通过即整步失败），否则装失败会静默退回
+      # "缺工具也绿"；而 `check_specs.py` 缺处理器时会直接报错，故校验失败必须让 action
+      # 失败、不得继续往下跑（口径见 specs/general/ci-cd.adoc「校验链完整」）。
+      - name: Install and verify asciidoctor
+        run: |
+          gem install asciidoctor --no-document
+          command -v asciidoctor
+          asciidoctor --version
+      - name: Run deterministic spec checks (incl. AsciiDoc syntax)
         run: python3 script/check_specs.py
       - name: Run spec-check unit tests
         run: python3 -m unittest discover -s script -p '*_test.py' -v
