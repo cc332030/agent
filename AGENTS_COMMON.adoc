@@ -35,41 +35,42 @@
 
 === 通用层（涉及对应活动时加载）
 
-* **写任何新代码、改任何既有代码（含代码评审）** → `specs/general/coding.adoc`（含「抽象与接入成本」「代码复用」；「持久化访问（数据库/缓存等）」——含**统一入口**、**请求响应类优先移动复用**、**本项目自身的依赖不算三方依赖**；「对象转换」——含**多层嵌套对象**；「跨语言执行脚本的落点」——含 **`src/main/resources/`**；「HTTP 接口语义」；「代码质量（新产出即高质）」——含**代码评审**时逐条核对）
-* **写/改脚本（bash、Python、Node、PowerShell、Windows 批处理；识别特征：`.bat`/`.cmd` 与 `.sh` 成对、安排取舍（要不要多读一份资料 / 要不要再跑一遍）、要把逻辑在两个平台各写一份、要为脚本另建独立文档）** → `specs/general/script.adoc`（含「脚本文档随脚本落盘」——**脚本单打独斗**、承载按**多行块注释**取值；「脚本头部注释」——**文档头先行**、取值写**常量名**；「参数处理」「退出码」「安全」「跨环境脚本」——纯**逻辑只写一份**、入口只做薄壳）
-* **写注释/文档、判定内容写在哪一层（识别特征：文中出现包名 + 类名形态的指代）** → `specs/general/doc.adoc`（含「注释与文档」「必记录项」「文档质量」「文档组织与导航」「索引页的触发判据」「引用路径」「类型指代：优先写类名 + import、**不写类全名**」）
-* **新增/调整任何内容时判定名称的落点、或要引入/引用一个已定义的名称（识别特征：要为一个概念定名、要给名称下定义、出现"这个代号指什么"、要把名称的定义归档到某处）** → `specs/general/terminology.adoc`（含「数据字典」——**只引名称不引定义**、**作用域决定落点且每档只一处**（本文件的字典写在该文档开头）、条目形态照 ISO 1087、**新增与调整内容时都须判定**、图书馆等不在默认引用面内的落点）
-* **写/更新设计文档、测试设计文档、判定信息归属** → `specs/general/doc-design.adoc`（含「依赖关系文档（模块间依赖的唯一视图）」）
-* **业务系统全生命周期文档（`doc/` 下有阶段目录、项目走立项→上线完整流程）** → `specs/general/doc-lifecycle.adoc`
+**登记形态（本文件是唯一登记处）**：每条一行——**加载项 + 触发特征 + 一行指向该文件的引用**。**落点承担什么、有哪些条、依据是什么，一律写在该文件里**（本文件不写「含 …」这类小抄：它会让本处成为上游落点，与 `specs/general/terminology.adoc`「数据字典」的「反膨胀」相抵）。触发特征必须可判读（工作涉及该主题、或项目具备该技术特征），宁宽不漏。
+
+* **任何代码活动**（**写任何新代码、改任何既有代码**、代码评审、交付前的质量自检；要判「**代码质量（新产出即高质）**」十项下限；识别特征：写**持久化访问（数据库/缓存等）**——含要判定「走不走统一入口」；写**对象转换**——多层嵌套对象；要**新增一个内部调用接口**的请求/响应类（**请求响应类优先移动复用**，且**本项目自身的依赖不算三方依赖**））→ `specs/general/coding.adoc`
+* **脚本编写**（bash、Python、Node、PowerShell、Windows 批处理；识别特征：要写**跨语言执行脚本的落点**（SQL/Lua 等内联在宿主语言里）、`.bat`/`.cmd` 与 `.sh` 成对、安排取舍（要不要多读一份资料 / 要不要再跑一遍）、要把逻辑在两个平台各写一份（**跨环境脚本**）、要**为脚本另建独立文档**（**脚本单打独斗**、承载按**多行块注释**取值）、**文档头先行**且取值写**常量名**）→ `specs/general/script.adoc`
+* **注释与文档、判定内容写在哪一层、"这段文字有没有废话"**（识别特征：文中出现**包名 + 类名**形态的指代——须优先写类名 + import、**不写类全名**；要判文档是否注水或是否简明）→ `specs/general/doc.adoc`
+* **新增/调整任何内容时判定名称的落点，或要引入/引用一个已定义的名称**（识别特征：要为一个概念定名、要给名称下定义、出现"这个代号指什么"、要把名称的定义归档到某处）→ `specs/general/terminology.adoc`
+* **写/更新设计文档、测试设计文档，或判定信息归属**（识别特征：多模块结构，或要**增删依赖/新增模块/改包或模块结构**——触发「依赖关系文档（模块间依赖的唯一视图）」）→ `specs/general/doc-design.adoc`
+* **业务系统全生命周期文档**（`doc/` 下有阶段目录、项目走立项→上线完整流程）→ `specs/general/doc-lifecycle.adoc`
 * **多模块项目的模块文档组织** → `specs/general/doc-module.adoc`
-* **git 操作（文件移动/重命名、行尾与检出归一、暂存与提交、提交信息）** → `specs/general/git.adoc`
-* **写/更新变更日志（存在 `CHANGELOG.*`、要新增或改写条目）** → `specs/general/changelog.adoc`
-* **code review（含每次改完东西后对本轮改动的复核）** → `specs/general/review.adoc`
-* **多 agent 协作（拆分、派发、调用量控制、硬超时与降级；含「派发入口（评论唤起新实例：一次评论 = 一次派发；执行者不得自行发评论唤起自己）」）** → `specs/general/collab.adoc`
-* **文件编码与换行符（新增/编辑文件、跨 Linux 与 Windows 协作、写 `.bat`/`.cmd`/`.ps1`、配置 `.gitattributes`/`.editorconfig`）** → `specs/general/encoding.adoc`
-* **涉及安全边界的代码（外部输入、认证授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载）** → `specs/general/security.adoc`
-* **引入/调整/升级依赖，或取依赖/构件/运行时/系统包（依赖清单变化、取包失败、要新配包源或镜像站）** → `specs/general/dependency.adoc`
-* **跑测试、补测试、做性能测试或性能优化（识别特征：判定某处是否需要性能测试、出现性能敏感特征、要给出方案组合与成绩）** → `specs/general/testing.adoc`
-* **动手前（要改任何东西、要替换或废弃既有流程、要另写一套、需判定"改完有没有破坏既有行为"）** → `specs/general/planning.adoc`
-* **执行任何非平凡任务（需读完再动手的多步骤任务）** → `specs/general/self-check.adoc`
-* **改动范围判定（要增删改文件、在平台上动手、任务引用了当前工作空间以外的文件或项目）** → `specs/general/scope.adoc`
-* **读取范围、长会话治理、执行吞吐（多步命令/构建/轮询、预计需多次往返）、生成效率（同等质量下最少往返）（含安排取舍：要不要多读一份资料、要不要再跑一遍）、token 纪律（任务开始时即加载）** → `specs/general/context.adoc`
+* **git 操作**（文件移动/重命名、行尾与检出归一、暂存与提交、提交信息）→ `specs/general/git.adoc`
+* **写/更新变更日志**（存在 `CHANGELOG.*`、要新增或改写条目）→ `specs/general/changelog.adoc`
+* **code review，或每次改完东西后对本轮改动的复核** → `specs/general/review.adoc`
+* **多 agent 协作**（拆分、派发、调用量控制、硬超时与降级；含「**派发入口（评论唤起新实例：**一次评论 = 一次派发；执行者不得自行发评论唤起自己）」）→ `specs/general/collab.adoc`
+* **文件编码与换行符**（新增/编辑文件、跨 Linux 与 Windows 协作、写 `.bat`/`.cmd`/`.ps1`、配置 `.gitattributes`/`.editorconfig`）→ `specs/general/encoding.adoc`
+* **涉及安全边界的代码**（外部输入、认证授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载）→ `specs/general/security.adoc`
+* **引入/调整/升级依赖，或取依赖/构件/运行时/系统包**（依赖清单变化、取包失败、要新配包源或镜像站）→ `specs/general/dependency.adoc`
+* **跑测试、补测试、做性能测试或性能优化**（识别特征：要判定某处是否需要性能测试、出现性能敏感特征、要给出**方案组合**与成绩、要报离散度）→ `specs/general/testing.adoc`
+* **动手前**（要改任何东西、要替换或废弃既有流程、需判定"改完有没有破坏既有行为"）→ `specs/general/planning.adoc`
+* **执行任何非平凡任务**（需读完再动手的多步骤任务）→ `specs/general/self-check.adoc`
+* **改动范围判定**（要增删改文件、在平台上动手、任务引用了当前工作空间以外的文件或项目）→ `specs/general/scope.adoc`
+* **读取范围、长会话治理、执行吞吐、生成效率（同等质量下最少往返）与 token 纪律**（识别特征：多步命令/构建/轮询、预计需多次往返、**安排取舍**——要不要多读一份资料 / 要不要再跑一遍；同一批文件要改两次才满足同一条要求；**任务开始时即加载**）→ `specs/general/context.adoc`
 * **产出规范/文档/汇报/review 意见等涉及引用与事实的内容** → `specs/general/source.adoc`
 * **新建/调整入口文档（项目根 `AGENTS.adoc`/`AGENTS.md`），或遇到"另起新实例就接不上"的信息** → `specs/general/entry-doc.adoc`
-* **编译/运行/分步验证（须覆盖项目全部既定校验手段、外部资源须实测可用、对象须钉定 commit sha）** → `specs/general/verify.adoc`
-* **跑构建/测试/脚本前，或要判定"运行环境须与项目声明一致"（项目有声明运行环境的落点：`pom.xml` 的 `java.version`、`.nvmrc`、`.python-version` 等；识别特征：出现"换个版本也能跑通""用默认版本先试"）** → `specs/general/ci-cd.adoc`
-* **配置/编写 CI/CD 流水线（存在 `.github/workflows/`、`.gitlab-ci.yml`、`.cnb.yml` 等）** → `specs/general/ci-cd.adoc`
+* **编译/运行/分步验证**（须覆盖项目全部既定校验手段、外部资源须实测可用、对象须钉定 commit sha；另含「**代码质量（新产出即高质）**」十项下限）→ `specs/general/verify.adoc`
+* **跑构建/测试/脚本前、要配置 CI/CD 流水线，或要判定"运行环境须与项目声明一致"**（存在 `.github/workflows/`、`.gitlab-ci.yml`、`.cnb.yml`；项目有声明落点：`pom.xml` 的 `java.version`、`.nvmrc`、`.python-version`；识别特征：出现"换个版本也能跑通"）→ `specs/general/ci-cd.adoc`
 
 === 技术栈层（检测到即加载，不得遗漏）
 
-* **Java 项目**（存在 `.java`、`pom.xml`/`build.gradle`、lombok 配置）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/java-testing.adoc`。涉及：**类型指代**（写 javadoc 时用**全限定类名**还是类名 + `import`，含 `classpath` 判定）、**对象转换（MapStruct）**、**MyBatis-Plus 持久化访问**（识别特征：`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate` 与**禁止 `new QueryWrapper`**）、**Feign 接口命名**（**只此一类**接口适用）、**构造方法不手写**（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、**测试类命名与拆分**（`Tests`/`BootTests`/`PerfTests`/`IT` 四类后缀；一个被测类可按需求/分类拆多个测试类、同分类同属性须归一类、不得滥拆）、**跨语言脚本**（SQL/Lua 放 `src/main/resources/`）。
-* **Spring 项目（存在 Spring 依赖/注解）** → `specs/stack/spring.adoc`（注入、Bean 定义、配置、事务、分层与职责）。识别特征：写/改 `@RequestMapping`/`@GetMapping` 一类的路由路径时，按「**HTTP 接口路径优先用中划线（kebab-case）**」判（存量随动迁移）。
-* **Maven 构建**（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`（仓库与镜像、依赖、构建与验证）。
-* **Bash/Shell 脚本**（存在 `.sh`，或 shebang 为 bash/sh）→ `specs/stack/bash.adoc`（行尾 LF）。
-* **Python 脚本**（以 `python3`/`python` 为 shebang 的 `.py`）→ `specs/stack/python.adoc`（行尾 LF、docstring 文档头）。
-* **Windows 批处理**（存在 `.bat`/`.cmd`）→ `specs/stack/batch.adoc`（行尾 CRLF、纯 ASCII、专属坑位）。
-* **PowerShell 脚本**（存在 `.ps1`）→ `specs/stack/powershell.adoc`（行尾 CRLF、同名 `.bat` 启动脚本）。
-* **其他技术栈**按其栈文件加载（未登记的栈按通用层与本入口执行，不臆造其专属规则）。
+* **Java 项目**（存在 `.java`、`pom.xml`/`build.gradle`、lombok 配置）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/java-testing.adoc`。识别特征：**类型指代**（写 javadoc 时用**全限定类名**还是类名 + `import`，含 `classpath` 判定）、**对象转换（MapStruct）**（多层嵌套对象）、**MyBatis-Plus 持久化访问**（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate` 与**禁止 `new QueryWrapper`**）、**Feign 接口命名**（**只此一类**接口适用）、**构造方法不手写**（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、**测试类命名与拆分**（`Tests`/`BootTests`/`PerfTests`/`IT` 四类后缀；一个被测类可按需求/分类拆多个测试类、同分类同属性须归一类、不得滥拆）、**跨语言脚本**（SQL/Lua 放 `src/main/resources/`）
+* **Spring 项目**（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`（识别特征：写/改 `@RequestMapping`/`@GetMapping` 一类的**路由路径**时，按「**接口路径优先用中划线（kebab-case）**」判）
+* **Maven 构建**（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`
+* **Bash/Shell 脚本**（存在 `.sh`，或 shebang 为 bash/sh）→ `specs/stack/bash.adoc`
+* **Python 脚本**（以 `python3`/`python` 为 shebang 的 `.py`）→ `specs/stack/python.adoc`
+* **Windows 批处理**（存在 `.bat`/`.cmd`）→ `specs/stack/batch.adoc`
+* **PowerShell 脚本**（存在 `.ps1`）→ `specs/stack/powershell.adoc`
+* **其他技术栈**按其栈文件加载（未登记的栈按通用层与本入口执行，不臆造其专属规则）；新增栈文件时须在本层登记并写明检测特征（见下「技术栈扩展约定」）。
 
 === 项目类型层（项目在其自身规范中主动声明才加载）
 
@@ -77,7 +78,7 @@
 
 === 平台层（按使用平台加载）
 
-* **CNB 平台**（在其上进行任务开发与合并请求管理、与平台 NPC 协作、**在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行**）→ `specs/platform/cnb.adoc`。涉及：分支与合并请求统一、变更范围只限当前项目、冲突处理、NPC 禁合并、**评论唤起新实例**（**执行者不得自行发评论唤起自己**）、**评论不得删除**、**压缩提交（**提交历史整理**）**、对象钉定与可追溯、平台侧执行吞吐。
+* **CNB 平台**（在其上进行任务开发与合并请求管理、与平台 NPC 协作、**在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行**；识别特征：要建分支/建 PR、要判"改动能不能落到别的仓库"、要派发或复核、**评论不得删除**与**评论唤起新实例**（执行者不得自行发评论唤起自己）、要**压缩提交（**提交历史整理**）**）→ `specs/platform/cnb.adoc`（该文件承载本平台上的全部专属口径与判据，本入口不列其条目）
 
 === 维护方层（只对维护"被其他项目引用的共享内容集合"的项目生效）
 

@@ -37,7 +37,7 @@ exit /b %errorlevel%
   `%~dp0` 为当前 `.bat` 所在目录（含结尾 `\`），使**没写 shebang 的可执行位、从任意目录或双击启动**都能定位到逻辑代码；以逻辑代码的**绝对路径**调用、不 `cd`（保留调用方的工作目录）。
 * **入口的位置与命名**：本栈取值＝逻辑 `foo.py` → 入口 `foo.bat`（或逻辑 `foo.ps1` → 启动 `foo.bat`），**不另建 `windows/`、`bin/`、`script/` 目录**；判据属通用层（见 `specs/general/script.adoc`「入口层须与逻辑代码同处一目录、同名不同扩展名」）。本栈另有一条：调用方**只输 `foo.bat`、`foo.cmd`（或双击）就能跑**——不得要求调用方加 `cmd /c`、`powershell -File`、`-ExecutionPolicy Bypass` 一类前后命令。
 * **入口语言选择（入口的语言取值）**：Windows 入口**取 `.bat`/`.cmd`**（`cmd.exe` 是系统自带）——判据属通用层，见 `specs/general/script.adoc`「入口语言取舍」。本文件的反例面：`.py`/`python foo.py`、`.sh` 当 Windows 入口、或要求先改 PowerShell 执行策略。
-* **需要 PowerShell 能力时按本文件写法由 `.bat` 承接**：`.ps1` **不能**直接双击运行、且受执行策略限制，故**批处理是 Windows 侧的启动入口**；`@echo off` + `powershell -ExecutionPolicy Bypass -File "%~dp0foo.ps1" %*` + `exit /b %errorlevel%` 三条齐备，`.bat` 与 `.ps1` **同名**、成对存在、同步维护。
+* **需要 PowerShell 能力时按本文件写法由 `.bat` 承接**：**`.ps1` 无法直接双击运行、且受执行策略限制**，故**批处理是 Windows 侧的启动入口**——`@echo off` + `powershell -ExecutionPolicy Bypass -File "%~dp0foo.ps1" %*` + `exit /b %errorlevel%` **三条齐备**，`.bat` 与 `.ps1` **同名**、成对存在、**同步维护**（`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，避免启动入口失效）；**不要求用户手动修改系统执行策略**。
 * **不把 PowerShell 语法写进 `.bat`（L1）**：`$LASTEXITCODE`/`$env:VAR`/`Write-Host` 一类写法在 `cmd.exe` 里不存在，混写出来的 `.bat` **一条都跑不通**；需要这些能力就写 `.ps1`、由同名 `.bat` 启动。**判定标准**：`.bat`/`.cmd` 里出现 `$` 开头的变量、cmdlet 名（`Write-Host`/`Get-ChildItem`）、或 PowerShell 的 `-eq`/`-ne` 运算符——命中即违规。
 * **多行拼接用 `^`、续行后不留尾随空格（L1）**：`^` 之后若有**尾随空格/制表符**，转义的是那个空格而不是换行，命令会被截断成非预期的一段（这是"多行命令莫名丢失后半段"的最常见成因）。行尾注释用 `::` 或 `rem`；`goto :eof` 亦可作块内提前返回。
 * **转义例外（应当遵守）**：`cmd.exe` 无法原样承载某些字符（`%`、`^`、`&`、`|`、`<`、`>`、`!` 在延迟展开下），此时入口**可以**按平台语法转义，但**不得改变参数的值**。

@@ -2,7 +2,8 @@
 """
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
-检查项（每项对应一个 check_ 函数，逐条见各函数 docstring 的判定口径）：
+检查项（每项对应一个 `check_*` 函数；**执行次序与逐条用途的清单在**
+`specs-project-maintainer/guards.adoc`，此处只给条目名）：
   1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
      当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
   2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
@@ -14,8 +15,8 @@
   7. 历史来源声明：禁止指向旧文件/旧命名/旧位置的历史来源注记（会让引用悬空）。
   8. INSTALL 模板：INSTALL.adoc 的入口模板代码块须逐字保留（含换行空行），且入口文件名规则
      须兼容 `AGENTS.md`、默认 `AGENTS.adoc`（含已存在 `AGENTS.md` 时就地融合、不重命名）。
-  9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；
-     "是否有价值、是否长篇大论"属语义判断，交人 review，不设字符数阈值以免误伤。
+  9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；不设字符数阈值以免误伤。
+
  1. 规范要点防线：根目录 AGENTS.adoc 必须仍含"完整性校验含干净子 agent 复核"底线。
  2. 规范优先级防线：specs/core/execution.adoc 必须有 L1/L2/L3 分级与最高关注项、
      （P1 git mv / P2 完整性校验 / P3 内容不减少 / P4 读取与上下文纪律 / P5 不可逆操作
@@ -157,10 +158,10 @@
      用户的手工编辑——故撤掉该判据（用户口径：删了就是不算数，不要再补）。
      由 `check_entry_doc_manifest`、`_check_install_entry_placeholder_lines` 与
      `check_install_codeblock` 钉住。
- 27. 防线清单与删除记账：`main()` 里直接接线的防线个数、反例用例个数、以及
+ 27. 防线清单与删除记账：`CHECKS` 序列里的防线个数、反例用例个数、以及
      `script/check_effective.py` 台账里点名的防线函数名，四者都不得在无记账的情况下减少：
      另加**清单编号须严格递增**（重排/插入/删除后不得出现重号）。此前"删了却全绿"有四条
-     实证路径：①一道防线被从 `main()` 摘掉（代码并进别的防线）、它的 8 条反例用例一并被删，
+     实证路径：①一道防线被从执行序列摘掉（代码并进别的防线）、它的 8 条反例用例一并被删，
      `check_specs.py` 报 OK、单测全通过、台账上的"抓手数"也没变；②台账备注里的防线名改成
      不存在的名字仍报"有抓手"（判据只看文件在不在）；③清单条目被整条删掉时编号断开、而清单
      描述不参与一致性核对；④**重排编号时把两条并成同一个号**（本项目实测：新增一条「防线清单
@@ -523,6 +524,12 @@
   python3 script/check_specs.py --help
 
 退出码：0 通过，1 存在不规范项。
+
+**核对边界（一次声明，取代逐条重复同一句口径）**：本文件每道防线只核**文本与文件形态**；
+`GUARD_CHECK_LIMITS` 给出机械核对覆盖不到的两类，凡越出这两类的结论一律不得由机械判定
+（逐条防线里不再各写一句"某次是否真的……交人复核"——同一句话写 90 遍既是信息密度判据③
+「同义反复」的形态，也把"边界是什么"绑在人的记性上）。
+
 """
 
 import argparse
@@ -579,6 +586,16 @@ SOFT_FILE_SIZE_HINT = 30000
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # AGENTS_COMMON.adoc 是通用规范入口，位于仓库根目录（引用方以仓库根为基准解析
 # 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
+# 机械防线的**核对边界**（结构化声明，取代逐条在 err()/台账备注里写一句口径——同一句
+# 话重复 90 次既是信息密度判据③「同义反复」的形态，也把"边界是什么"绑在人的记性上）。
+# 判据：本清单给出**机械核对覆盖不到的两类**，其余一律应进 `err()` 的判据文字。
+# ① 运行时事实：机械看不到执行过程（某次到底跑没跑、发没发、读了几遍）；
+# ② 语义判断：判据是否仍成立、内容是否有废话、拆分是否由实害驱动。
+# 由 `check_criteria_not_axis_guard` 的 `机械核对边界` 小节钉住其存在性与这两类取值。
+GUARD_CHECK_LIMITS = (
+    "运行时事实（本仓库不可见：某次执行的实际行为、平台侧记录、产物正文）",
+    "语义判断（判据是否仍成立、内容质量、机制在真实环境会不会发生）",
+)
 GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # 项目自身维护层目录：只对"维护规范集合（或同类共享资产）的项目"生效的规范——
@@ -619,6 +636,17 @@ JAVA_TEST_SPLIT_MARKERS = {
 # 本轮实测——维护方 P7 的『要求』被压成两句骨架，"要求/依据/判定标准"三个轴名都还在、
 # 防线全绿，而被整段抽掉。教训当时只在脚本注释里，规范正文侧读不到（判据存在但不可见
 # ＝同构复发），故把它写进维护方清单并机械钉住：小节名、核对对象、判定标准、必配反例四条。
+# 维护方自查层（`specs-project-maintainer/`）的文件名单（**唯一来源**）：`AGENTS.adoc` 的
+# 登记与"目录里有没有漏登记的文件"都用它。写死两份名单会让"新增一个维护方文件"时
+# 一边记得、一边忘掉（本仓库实测：新增 `guards.adoc` 后校验报红，红的是漏登记的那一处）。
+MAINTAINER_LAYER_FILES = (
+    "specs-project-maintainer/priority.adoc",
+    "specs-project-maintainer/spec-lifecycle.adoc",
+    "specs-project-maintainer/verify.adoc",
+    "specs-project-maintainer/context.adoc",
+    "specs-project-maintainer/guards.adoc",
+)
+
 CRITERIA_NOT_AXIS_SECTION = "机械防线的核对对象是"
 CRITERIA_NOT_AXIS_KEYS = (
     (("机械防线须钉**判据本体**", "判定标准里能拿去核对的那句话"),
@@ -630,6 +658,12 @@ CRITERIA_NOT_AXIS_KEYS = (
     (("轴名齐全", "判据被抽走", "必须报红"),
      "须写明必配反例用例：『轴名齐全、判据被抽走』的改造下防线必须报红"
      "（没有这条反例，防线的实际效力无从证明）"),
+    (("机械核对边界", "运行时事实", "语义判断"),
+     "须写明**机械核对覆盖不到的两类**（运行时事实 / 语义判断）——即"
+     "『机械只核文本与文件形态，越出这两类的结论不得由机械判定』这一条边界声明。"
+     "缺它则每道防线只能各写一句『某次是否真的……交人复核』：同一句话重复 90 遍，"
+     "边界随各条措辞漂移，且防线作者无从知道『哪些不该由机械判』"
+     "（本轮实测：该句式在 check_specs.py 出现 91 处、在台账中出现 114 处）"),
 )
 
 # 验证规范（通用层）：其「验证总纲」「规范验证」两节是**改完规范后的语义复核定式**——
@@ -1235,10 +1269,7 @@ def check_maven_mirror_guard():
     算出这个路径，也不得再出现"随平台另取一套缓存目录"与项目内临时目录这类第二落点、
     以及换落点的入口；家目录取不到时须报错退出、不得静默换地方。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("Maven 仓库与镜像防线检查")
     rel = "specs/stack/maven.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -1495,6 +1526,97 @@ REFINEMENT_DELIVERY_ANCHORS = (
 )
 
 
+# ---- 信息密度防线（`specs/general/doc.adoc`「信息密度（每句须承载）」）----
+# 用户要求（本轮）："各高校研究生、博士生的毕业论文，各大主流期刊的论文都有什么要求？
+# 哪些是能引入到规范里来的？对当前项目有用的"——查证后取「学术文体用信息密度衡量冗余」
+# 这一跨文体判据，落成 `specs/general/doc.adoc` 的可判定条目。
+#
+# 缺该判据时的失效：`doc.adoc`「简洁」只到"禁止长篇大论"（**方向**）、`review.adoc`
+# 「精炼性」只判"同一描述有几处"（跨处重复面）——**只有一处、完全不重复的一段文字
+# 通篇是废话时，两条都判不了**：既不能说它重复、也没有可以拿去核对的一句话。
+#
+# 本条**钉判据本体、不钉轴名**（与 check_criteria_not_axis_guard 同口径）：只核
+# "「信息密度」这一节在不在"属防线空转——判定标准与边界被抽走时照样全绿。
+INFO_DENSITY_SECTION = "信息密度（每句须承载）"
+DOC_SPEC = "specs/general/doc.adoc"
+INFO_DENSITY_ANCHORS = (
+    ("与精炼性的分工（两把尺子）",
+     ("与 `specs/general/review.adoc`「精炼性」是两件事、两把尺子",
+      "同一描述有几处", "单处里有多少句是废话", "仍可能通篇是废话"),
+     "不分工时，本条会被读成精炼性的重复条目而合并删除；而两者判的是不同对象"
+     "（跨处的重复面 / 单处的密度）——合并即少一把尺子"),
+    ("每一句都要有承载（含判定标准）",
+     ("每一句都要有承载（L2）", "判定标准（任一命中即违规）",
+      "复述", "空话", "同义反复", "可有可无的铺垫"),
+     "缺判定标准时本条自身不可判定（「有没有废话」交回执行者凭感觉），"
+     "退化成又一句「要注意简洁」"),
+    ("限定语不得降格为表意不明",
+     ("陈述句不得降格为表意不明（L2）", "不承载信息的限定语", "须写出边界"),
+     "缺则「为了看起来严谨而写的不承载信息的限定语」无从判定，"
+     "而这正是学术文体与规范文体里最常见的冗余形态"),
+    ("与 P3 的边界（不得反用删内容）",
+     ("边界（防反用，L1）", "内容不减少",
+      "只有\"这一句没有承载\"才是", "违反 P3"),
+     "缺这条边界时，本条会被反用成「这一段很长就删短」——直接撞最高关注项 P3"
+     "（内容不减少），也会把多条判据压成一句口号"),
+    ("适用面",
+     ("适用面（L2）", "不适用"),
+     "缺适用面时会被套到代码与测试断言上（那是 coding.adoc「代码质量」的判据面），"
+     "造成高频误伤"),
+    ("存量边界",
+     ("发现即改、不单独发动全库清理（L2）", "随动迁移"),
+     "缺则会被读成「立刻发动全库瘦身」（一次性大改造）"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "**GB/T 7713.2-2022**", "**GB/T 7713.1-2025**",
+      "ISO/IEC Directives Part 2", "ISO/IEC/IEEE 29148"),
+     "依据被删时「学术文体以信息密度衡量冗余」这一来源无从核对，"
+     "而它正是本条与「精炼性」得以分家的理由。**标准名单独成对加粗**：本仓库实测的"
+     "写坏形态是 `**GB/T 7713.2-2022（学术论文编写规则**`（标准名与编号错位），"
+     "按『关键字在不』核会全绿而读者读到的依据是坏的——故核成对加粗的**标准名本身**"),
+)
+# 两处**动作落点**同口径（防「规则写了、别处不引」）：
+#   ① `doc.adoc`「文档质量」的「简洁」条须一行指向本条（执行者从"简洁"进得去）；
+#   ② `review.adoc`「精炼性」须一行写明分工（从"精炼性"进得去）。
+INFO_DENSITY_XREF = (
+    ("specs/general/doc.adoc", "「简洁」",
+     # 钉的是「简洁」条**正文里那半句互引**（不是节名本身——节名在任何版本里都在，
+     # 只核节名属防线空转：互引被删掉时照样绿）
+     ("⑤ **简洁**", "说清核心即可（\"信息密度\"是它的可判定形式"),
+     "「简洁」条不指向本条时，本条只能靠整份读 doc.adoc 才被发现——"
+     "而「简洁」正是执行者判断「这段该不该短」的入口"),
+    ("specs/general/review.adoc", "「精炼性」",
+     ("与「信息密度」的分工", "信息密度（每句须承载）"),
+     "「精炼性」不写明分工时，两条会被读成同一件事（或本条被当重复删掉）——"
+     "而「精炼性」是每次 review 与重构的必查项，入口就在这里"),
+)
+
+
+def _subsection_text(text: str, keyword: str):
+    """按**节标题关键词**取某个三级节的正文（`=== ` 起、到下一个同级或更高级标题止）。
+
+    与 `_section_text`（二级节）互补：`=== ` 及更深层在 `_split_adoc_sections` 里归入
+    所属二级节，故"某三级小节是否自成一体"用二级节取法判不出来（整段二级节都算命中）。
+    代码块（`----` 定界）内的伪标题同样不计入。
+    """
+    lines = text.split("\n")
+    start, in_block = None, False
+    for idx, line in enumerate(lines):
+        if line.strip() == "----":
+            in_block = not in_block
+        if in_block:
+            continue
+        m = re.match(r"^(=+)\s+(\S.*)$", line)
+        if not m:
+            continue
+        if start is None:
+            if len(m.group(1)) == 3 and keyword in m.group(2):
+                start = idx
+            continue
+        if len(m.group(1)) <= 3:      # 同级或更高级标题：本小节结束
+            return "\n".join(lines[start:idx])
+    return "\n".join(lines[start:]) if start is not None else ""
+
+
 def _section_anchor_check(rel, section_title, anchors):
     """公共实现：某文件某节的要点锚点须齐（三节共用，避免三份各自漂移）。"""
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -1518,10 +1640,7 @@ def _section_anchor_check(rel, section_title, anchors):
 def check_quality_guard():
     """『代码质量（新产出即高质）』防线：十项下限、判定标准与依据不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("代码质量防线检查")
     _section_anchor_check(QUALITY_SPEC, QUALITY_SECTION, QUALITY_ANCHORS)
     with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
@@ -1558,10 +1677,7 @@ def check_quality_guard():
 def check_generation_efficiency_guard():
     """『生成效率 / token 纪律』防线：两条判据、边界条与调度器登记不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("生成效率与 token 纪律防线检查")
     _section_anchor_check(CONTEXT_SPEC, GEN_EFF_SECTION, GEN_EFF_ANCHORS)
     _section_anchor_check(CONTEXT_SPEC, TOKEN_SECTION, TOKEN_ANCHORS)
@@ -1583,10 +1699,7 @@ def check_generation_efficiency_guard():
 def check_after_change_review_guard():
     """『改动后复核』防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("改动后复核防线检查")
     _section_anchor_check(VERIFY_SPEC, AFTER_REVIEW_SECTION, AFTER_REVIEW_ANCHORS)
     _section_anchor_check(REVIEW_SPEC, CHANGE_REVIEW_SECTION, CHANGE_REVIEW_ANCHORS)
@@ -1621,9 +1734,6 @@ def check_refinement_guard():
         收敛形态、与 P3 的边界、两类不得被当成重复的形态；
       * **动作落点**在改完即审的固定动作里（`specs/general/review.adoc`）与提示词公共片段
         `delivery`（review/refactor 两个提示词都 include，故改一处即两处生效）。
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （"这次有没有真的收敛"属语义判断，交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
     """
     phase("精炼性防线检查（同一描述只写一处）")
     _section_anchor_check(REVIEW_SPEC, REFINEMENT_SECTION, REFINEMENT_ANCHORS)
@@ -1655,13 +1765,84 @@ def check_refinement_guard():
     phase_done()
 
 
+def check_info_density_guard():
+    """『信息密度（每句须承载）』防线：判据本体、两处互引与依据行不得被删或降级。
+
+    用户要求（本轮）："各高校研究生、博士生的毕业论文，各大主流期刊的论文都有什么要求？
+    哪些是能引入到规范里来的？对当前项目有用的"。查证后（国家标准全文公开系统，
+    GB/T 7713.1-2025 / GB/T 7713.2-2022 等）取的唯一一条是**学术文体用信息密度衡量冗余**
+    ——它补的是本项目此前的真空：`doc.adoc`「简洁」只有方向（"禁止长篇大论"）、
+    `review.adoc`「精炼性」只判跨处重复，**单处里的废话两处都判不了**。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "「信息密度」这一节在不在"属防线空转——判定标准与边界被抽走时照样全绿。故逐条核
+    `INFO_DENSITY_ANCHORS`（每项要求「规则 + 判定标准 + 边界」里的**可核对那句话**），
+    并核两处互引（`doc.adoc`「简洁」与 `review.adoc`「精炼性」各一行）与依据行。
+    「这次写的东西有没有废话」属语义判断，交人/子 agent 复核。
+    """
+    phase("信息密度（每句须承载）防线检查")
+    doc_path = os.path.join(REPO_ROOT, *DOC_SPEC.split("/"))
+    if not os.path.isfile(doc_path):
+        err(f"缺少 {DOC_SPEC}——「{INFO_DENSITY_SECTION}」的判据无处承载", DOC_SPEC)
+    else:
+        with open(doc_path, encoding="utf-8") as fh:
+            section = _subsection_text(fh.read(), INFO_DENSITY_SECTION)
+        if not section:
+            err(f"{DOC_SPEC} 缺少「{INFO_DENSITY_SECTION}」小节——该条失去落点"
+                "（缺判据时执行者按「能跑就行 / 能省则省」收敛：只有一处、完全不重复的"
+                "一段废话两处都判不了）", DOC_SPEC)
+        else:
+            for name, tokens, why in INFO_DENSITY_ANCHORS:
+                for token in tokens:
+                    if token not in section:
+                        err(f"「{INFO_DENSITY_SECTION}」缺少要点：{name}"
+                            f"（应含 `{token}`）——{why}", DOC_SPEC)
+            # 依据行的**标准名须单独成对加粗**：本仓库实测的写坏形态是
+            # `**GB/T 7713.2-2022（学术论文编写规则**`（标准名与编号错位）——
+            # 按"关键字在不在"核会全绿，而读者读到的这条依据本身是坏的。
+            basis = _subsection_text(section, "依据（标准名/编号）") or section
+            for std in ("GB/T 7713.2-2022", "GB/T 7713.1-2025"):
+                if f"**{std}**" not in basis:
+                    err(f"「{INFO_DENSITY_SECTION}」依据行的标准名 `{std}` 未单独成对加粗"
+                        "（本仓库实测的写坏形态是 `**GB/T 7713.2-2022（学术论文编写规则**`："
+                        "关键字都在、标准名与编号却错位）——标准名与括号里的说明须各自成对",
+                        DOC_SPEC)
+    # 两处动作落点：从「简洁」与「精炼性」两个入口都要进得去（只写一处时另一处读不到）
+    for rel, where, tokens, why in INFO_DENSITY_XREF:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"信息密度防线被破坏：缺少 {rel}——{where} 与本条的分工无处承载", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        # 判据本体：只核"这一节/这条在不在"属防线空转。故要求**同时命中**该入口的
+        # 关键短语与指向本条节名的互引（缺任一个都说明"从该入口进不去"）。
+        for token in tokens:
+            if token not in text:
+                err(f"信息密度防线被破坏：{rel} 缺 `{token}`——{why}", rel)
+    # 依据行须在图书馆有可逐字核对的落点（否则「依据只存名称」）
+    lib = "library/sources.adoc"
+    lib_path = os.path.join(REPO_ROOT, *lib.split("/"))
+    if not os.path.isfile(lib_path):
+        err(f"缺少 {lib}——本条的 GB/T 7713 依据无处核对", lib)
+    else:
+        with open(lib_path, encoding="utf-8") as fh:
+            lib_text = fh.read()
+        for token, why in (
+            ("GB/T 7713 系列", "图书馆须有该主题段，否则正文里的标准号无处逐字核对"),
+            ("GB/T 7713.2-2022", "正文引用的现行版本须在图书馆暴露版本与状态"),
+            ("GB/T 7713.1-2025", "GB/T 7713.1 的现行版本是 2025 版（2006 版已废止）"),
+            ("已废止", "换版关系不写明即会把废止版本当现行引用（source.adoc「引用现行版本」）"),
+            ("同义性", "须写明取舍面：只取判据、不搬其文档构件"),
+        ):
+            if token not in lib_text:
+                err(f"信息密度防线被破坏：{lib} 缺 `{token}`——{why}", lib)
+
+
 def check_asciidoctor_syntax():
     """若环境有 asciidoctor，做一次语法编译验证。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("AsciiDoc 语法编译验证")
     if shutil.which("asciidoctor") is None:
         log("  提示: 未检测到 asciidoctor，跳过语法编译验证"
@@ -1884,10 +2065,7 @@ def check_stack_consistency():
 def check_dispatcher_layers():
     """『加载调度器分层结构防线』：五个加载层（+项目自身维护层）的层头与各自条目不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("加载调度器分层结构检查")
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         text = fh.read()
@@ -1925,10 +2103,7 @@ def check_dispatcher_layers():
 def check_dispatcher_registry():
     """调度器登记完整性：被引用的规范文件必须都在调度器中登记。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("调度器登记完整性检查")
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         registered = set(extract_specs_refs(fh.read(), ""))
@@ -2321,10 +2496,7 @@ def _check_install_no_python_section():
 def check_spec_fetch_guard():
     """『规范抓取防线』：随规范分发的取文件脚本不得被删、入口不得拆散或退化。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范抓取（安装取文件）防线检查")
     targets = {
         "script/fetch-specs.py": ("fetch-specs.py", "跨平台逻辑代码"),
@@ -2444,10 +2616,7 @@ def check_spec_fetch_guard():
 def check_shared_cache_guard():
     """『规范抓取落点防线』：副本只取到**用户家目录下的一处**（无第二落点）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范抓取落点防线检查")
     _check_install_entry_placeholder_lines()
     rel = "script/fetch-specs.py"
@@ -2642,9 +2811,6 @@ def check_entry_doc_manifest():
         的形态为准**（用户已点名不要 `= Agent 规范入口` 标题与那三节；曾经核过，结果是把
         用户删掉的三节又"补"了回去）。核字面值时"措辞精炼"与"判据被换成笼统说法"分不开，
         故按要点核：只拦"笼统说法/缺路径"，不拦写法优化。
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**（"某次安装
-    是否真把项目信息写进去了"属运行时行为，交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
     """
     phase("入口文档持久化防线检查（入口文档清单）")
     spec_path = os.path.join(REPO_ROOT, *ENTRY_DOC_SPEC.split("/"))
@@ -2778,17 +2944,22 @@ def check_install_repeat_update_guard():
 
 # ---- 『防线清单与删除记账』的基线（改了就报红，逼"删了什么"留下痕迹）----
 # 三道数字都是**本仓库自身的记账**，不是规范判据：
-#   * 接线数：`main()` 里直接调用的 `check_*()` 个数。删除/摘出一道防线曾经"零痕迹"
-#     （本轮实测：一道防线被从 `main()` 摘掉、它的 8 条反例用例也被删，而
+#   * 接线数：`CHECKS` 序列里编排的 `check_*` 个数。删除/摘出一道防线曾经"零痕迹"
+#     （本轮实测：一道防线被从执行序列摘掉、它的 8 条反例用例也被删，而
 #     `check_specs.py` 与全部单测仍然全绿、台账上的"抓手数"也不变）；
-#   * 用例数：`check_specs_test.py` 里的 `def test_` 个数（含 `check_effective_test.py`）。
-#     反例用例是防线的实际效力来源，被整批删掉时数字会掉；
+#   * 用例数：全部 `*_test.py` 里的 `def test_` 个数（`check_specs_test.py` +
+#     `check_effective_test.py` 的实际总数）。反例用例是防线的实际效力来源，被整批删掉时
+#     数字会掉；基线须与这里**实取的总数**同源（它同时含 check_effective_test.py，
+#     写成"只数 check_specs_test.py"会让基线长期低于实际数——本仓库实测：基线 974、
+#     总数 985，删掉十余条用例都不会掉到线下）；
 #   * 台账函数名：`check_effective.py` 必须**逐条声明**这条规范由哪一道防线钉住——该防线
 #     须**真实存在**且**真的会被调用**（"定义了但没人调"的防线看起来还在、却永远不会执行）。
 #     台账是"哪条规范由谁钉住"的唯一视图；旧判据只核"备注里点名的名字存在"，**没点名就
 #     没核对**，于是"有抓手"这个数字可以靠把防线名删掉维持（删名字比删防线容易得多）。
-GUARD_WIRING_BASELINE = 86
-GUARD_TEST_BASELINE = 974
+GUARD_WIRING_BASELINE = 90
+GUARD_TEST_BASELINE = 995
+
+
 def _read_ledger_no_grip_declared():
     """从台账 `script/check_effective.py` 读出「无机械抓手」的声明措辞（唯一真源）。
 
@@ -2808,43 +2979,56 @@ LEDGER_GRIP_DECLARED_GUARD = re.compile(r"`(check_[a-z0-9_]+_guard)`")
 NO_GRIP_DECLARED = _read_ledger_no_grip_declared()
 
 
-def _guard_wiring_count(src: str) -> int:
-    """数 `main()` 里**直接调用**的防线函数个数（只数 4 空格缩进的顶层调用行）。
+def _checks_block(src: str) -> str:
+    """取 `CHECKS = (...)` 序列块的正文（`CHECKS` 是防线执行次序的唯一来源）。"""
+    m = re.search(r"(?ms)^CHECKS = \((.*?)^\)", src)
+    return m.group(1) if m else ""
 
-    口径刻意取窄：只认 `main()` 函数体内、缩进恰好 4 空格的 `check_xxx()` 行——
-    嵌套调用（如 `check_adoption_guard` 内部再调的公共内容自足两道）是同一道防线链，
-    不重复计数；注释与字符串里的字样不会被匹配（行首是 `#`/引号）。
+
+def _guard_wiring_count(src: str) -> int:
+    """数 `CHECKS` 序列里的防线个数（**唯一来源是序列，不是 `main()` 的正文**）。
+
+    口径刻意取窄：只认序列里以 `check_xxx,` 起行的元素——嵌套调用（如
+    `check_adoption_guard` 内部再调的公共内容自足两道）属同一道防线链，不重复计数。
+    为什么不再按 `main()` 正文数：那里一旦改成 `for check in CHECKS()` 就文本上数不到，
+    而把接线判据绑在"`main()` 里怎么写的"上，等于让改一次编排写法就把全部防线误报成
+    "没人调用"。序列是数据：数它与 `main()` 怎么执行它无关。
     """
-    m = re.search(r"^def main\(argv=None\).*?(?=^if __name__|^def )", src, re.S | re.M)
-    if not m:
-        return 0
-    return len(re.findall(r"(?m)^ {4}(check_[a-z0-9_]+)\(\)$", m.group(0)))
+    return len(re.findall(r"(?m)^ {4}(check_[a-z0-9_]+),$", _checks_block(src)))
+
+
+def _module_level_fn_body(src: str, name: str) -> str:
+    """取**模块级** `def name(` 的函数体（自函数名起，到下一个模块级 `def` 行止）。
+
+    "下一个 `def` 行"必须是**行首无缩进**的：嵌套里的 `def` 缩进在函数内，按 `def` 裸匹配
+    会在第一个内层 `def` 处截断，把该函数剩余部分的调用漏掉。定义在文件里的**最后**一个
+    模块级函数没有后继 `def`，此时才取到文件尾。
+    """
+    mm = re.search(r"(?m)^def " + re.escape(name) + r"\(", src)
+    if mm is None:
+        return ""
+    start = mm.end()
+    nxt = re.search(r"(?m)^def ", src[start:])
+    return src[start:start + nxt.start()] if nxt else src[start:]
 
 
 def _guard_wired_closure(src: str) -> set:
-    """算出**真的会被执行**的防线集合（`main()` 直接调用 + 其函数体内可达的调用）。
+    """算出**真的会被执行**的防线集合（`CHECKS` 序列 + 其函数体内可达的调用）。
 
-    只看 `main()` 那一行会把"被别的防线带着跑的"误判成未调用（本仓库实证形态：
+    只看序列会把"被别的防线带着跑的"误判成未调用（本仓库实证形态：
     公共内容自足两道由 `check_adoption_guard` 收尾调用）。故按可达闭包展开，
     与 `check_wiring_guard` 的口径一致——两处若各写一套，会出现"接线的说跑了、
     台账的说没跑"的矛盾结论。
+
+    **判据不得依赖防线在文件里的先后**：函数体的取法只到**下一个模块级 `def`** 为止，
+    不得因"写在前面的函数恰好定义在后面"而不同（否则把一道防线挪到前面，就会让它体内
+    对后续函数的调用被算成"可达"——而它与序列无关）。
     """
-    m = re.search(r"^def main\(argv=None\).*?(?=^if __name__|^def )", src, re.S | re.M)
-    if not m:
-        return set()
-
-    def _fn_body(name):
-        mm = re.search(r"(?m)^def " + re.escape(name) + r"\(", src)
-        if mm is None:
-            return ""
-        start = mm.end()
-        nxt = re.search(r"(?m)^def ", src[start:])
-        return src[start:start + nxt.start()] if nxt else src[start:]
-
-    wired = set(re.findall(r"(?m)^ {4}(check_[a-z0-9_]+)\(\)$", m.group(0)))
+    wired = set(re.findall(r"(?m)^ {4}(check_[a-z0-9_]+),$", _checks_block(src)))
     frontier = list(wired)
     while frontier:
-        for name in re.findall(r"\b(check_[a-z0-9_]+)\(", _fn_body(frontier.pop())):
+        body = _module_level_fn_body(src, frontier.pop())
+        for name in re.findall(r"\b(check_[a-z0-9_]+)\(", body):
             if name not in wired:
                 wired.add(name)
                 frontier.append(name)
@@ -2934,7 +3118,7 @@ def _ledger_entries() -> list:
 def check_guard_manifest():
     """『防线清单与删除记账』：防线的增删必须留下痕迹，清单本身的描述必须与实际一致。
 
-    背景（本轮实测复现的三桩"删了却全绿"）：①一道防线被从 `main()` 摘掉、它的 8 条
+    背景（本轮实测复现的三桩"删了却全绿"）：①一道防线被从执行序列摘掉、它的 8 条
     反例用例一并被删，`check_specs.py` 报 OK、单测全通过、"抓手数"也没变；②台账
     `script/check_effective.py` 的备注里点名的防线名改成不存在的名字（`check_THIS_GUARD_IS_GONE`）
     仍报"有抓手"——判据只看文件在不在；③脚本头部清单出现断号（条目被删）无人核对，
@@ -2943,7 +3127,6 @@ def check_guard_manifest():
     故本检查把三件事变成可核对的：**接线数**（不得减少）、**反例用例数**（不得减少）、
     **台账点名的防线名**（必须真实存在且真的会被调用）。数字变了就得改基线——
     改基线这个动作本身让"删了什么"在 diff 里可见。
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**。
     """
     phase("防线清单与删除记账检查")
     src = _read_script_src("script/check_specs.py")
@@ -2958,7 +3141,7 @@ def check_guard_manifest():
         err(f"防线接线数从基线 {GUARD_WIRING_BASELINE} 减到 {wiring}——**每摘掉一道防线都要留下"
             f"记账**：说明「删的是哪一道、为什么删、由谁承接」，并把 `GUARD_WIRING_BASELINE` "
             "改成新值（改基线这个动作让删除在 diff 里可见）。不记账就减数＝防线静默消失"
-            "（本仓库实测：一道防线被摘出 main() 后，脚本与全部单测仍全绿）",
+            "（本仓库实测：一道防线被摘出执行序列后，脚本与全部单测仍全绿）",
             "script/check_specs.py")
 
     # "定义了但没人调"的防线：看起来还在（函数体完好、台账也点了名），但永远不会执行。
@@ -3298,10 +3481,7 @@ def _substance_chars(text: str) -> int:
 def check_filler_docs():
     """『文档不得注水』机械兜底（只拦机械可判定、必然成立的形态）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("文档注水检查")
     files = collect_adoc_files()
     for i, rel in enumerate(files, 1):
@@ -3331,10 +3511,7 @@ def check_filler_docs():
 def check_principle_guard():
     """校验规范"要点防线"仍在（防『定义完整性校验却不执行/被意外误删』）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范要点防线检查")
     path = os.path.join(REPO_ROOT, "AGENTS.adoc")
     rel = os.path.relpath(path, REPO_ROOT).replace("\\", "/")
@@ -3352,10 +3529,7 @@ def check_principle_guard():
 def check_priority_guard():
     """『规范优先级防线』：最高关注项、分级定义与落点必须仍在、且级别未被改动。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范优先级防线检查")
     rel_exec = "specs/core/execution.adoc"
     exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
@@ -3462,10 +3636,8 @@ def check_priority_guard():
     else:
         with open(PROJECT_FILE, encoding="utf-8") as fh:
             own = fh.read()
-        for rel in ("specs-project-maintainer/priority.adoc",
-                    "specs-project-maintainer/spec-lifecycle.adoc",
-                    "specs-project-maintainer/verify.adoc",
-                    "specs-project-maintainer/context.adoc"):
+        # 名单以 `MAINTAINER_LAYER_FILES` 为唯一来源（新增一个维护方文件时只改名单一处）
+        for rel in MAINTAINER_LAYER_FILES:
             if rel not in own:
                 err(f"{rel} 未在维护方项目规范入口 AGENTS.adoc 登记"
                     "（不会被加载、其中规则实际失效）", "AGENTS.adoc")
@@ -3474,10 +3646,7 @@ def check_priority_guard():
 def check_spec_admission_guard():
     """『规范准入防线』：分类/准入规范、其调度器登记与提案校验要点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范准入防线检查")
     rel_admission = os.path.relpath(ADMISSION_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(ADMISSION_FILE):
@@ -3530,10 +3699,7 @@ def check_spec_admission_guard():
 def check_lifecycle_guard():
     """『任务生命周期防线』：节点自查、验证边界与拆分判据不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("任务生命周期防线检查")
     rel_exec = os.path.relpath(EXECUTION_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(EXECUTION_FILE):
@@ -3632,10 +3798,7 @@ def check_lifecycle_guard():
 def check_line_ending_guard():
     """『换行符防线』：跨平台行尾规则（LF 基准 + Windows 批处理 CRLF）不得被删或弱化。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("换行符防线检查")
     rel = os.path.relpath(ENCODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(ENCODING_FILE):
@@ -3697,10 +3860,7 @@ def check_line_ending_guard():
 def check_java_test_naming():
     """『Java 测试类命名防线』：四类测试后缀与测试类拆分裁决的判据不得在任一处被删或漂移。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("Java 测试类命名防线检查")
     rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_TEST_FILE):
@@ -3931,10 +4091,7 @@ def check_budget_guard():
 def check_delegation_guard():
     """『从属者与能力自评防线』：两类"定义了却不会被执行"的机制要点必须仍在。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("从属者与能力自评防线检查")
     for rel, key, desc in (
         ("AGENTS_COMMON.adoc", "从属者", "入口驱动加载（子 agent/被引用方不靠自报）"),
@@ -4054,10 +4211,7 @@ def check_delegation_guard():
 def check_adoption_guard():
     """『接纳面防线』：公共内容被未知项目加载时的可控性（运行契约）不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("接纳面防线检查（未知项目加载）")
     # 运行契约的**单一落点**是 verify.adoc（testing.adoc / context.adoc 同名节只留一跳入口）
     rel_pub = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
@@ -4109,10 +4263,7 @@ def check_adoption_guard():
 def check_ci_cd_guard():
     """『CI/CD 与平台协作防线』：CICD 校验链完整性与 CNB 对象钉定要点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("CI/CD 与平台协作防线检查")
     # ① CI/CD 规范：校验链完整 / 触发范围 / 依赖可用 / 超时
     rel_ci = "specs/general/ci-cd.adoc"
@@ -4179,10 +4330,7 @@ def check_ci_cd_guard():
 def check_self_check_guard():
     """『自检防线』：执行前自检规范与其必加载层落点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("自检防线检查")
     rel = os.path.relpath(SELF_CHECK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SELF_CHECK_FILE):
@@ -4220,10 +4368,7 @@ def check_self_check_guard():
 def check_verify_guard():
     """『规范验证防线』：验证口径（三视角/效力等级/总纲/规范验证）与其维护方落点不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("规范验证防线检查")
     rel_public = os.path.join("specs", "general", "verify.adoc").replace(os.sep, "/")
     path_public = os.path.join(REPO_ROOT, *rel_public.split("/"))
@@ -4320,10 +4465,7 @@ def check_verify_guard():
 def check_public_content_has_no_private_refs():
     """公共内容不得把**本仓库私有物当成可执行抓手/可读文档**引用（③可控性的机械抓手）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("公共内容私有引用检查（③可控性）")
     # 私有物名 → 说明；匹配时要求同行出现"维护语境"词，避免把合法提及误判为引用
     private_names = ("script/check_specs.py", "script/check_effective.py",
@@ -4371,10 +4513,7 @@ def _has_library_path_ref(line: str) -> bool:
 def check_public_content_is_self_contained():
     """『公共内容自足性防线』：公共内容（`AGENTS_COMMON.adoc` + `specs/`）不得引用私有落点。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("公共内容自足性检查（不引用私有落点）")
     for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
         rel = _rel_of(f)
@@ -4407,10 +4546,7 @@ def check_public_content_is_self_contained():
 def check_public_facing_docs_stay_self_contained():
     """『公开面文档自足性防线』：会被**分发给引用方/在公开站点渲染**的文档不得指向维护方自查层。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("公开面文档自足性检查（README/PROMPTS/INSTALL 不指向维护方层）")
     for rel in ("README.adoc", "PROMPTS.adoc", "INSTALL.adoc"):
         path = os.path.join(REPO_ROOT, rel)
@@ -4429,10 +4565,7 @@ def check_public_facing_docs_stay_self_contained():
 def check_no_mechanism_claims_in_public():
     """公共内容不得**声明机械防线的存在**（防"机械防线随规范分发"的错觉）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("公共内容不得声明机械防线检查（元信息）")
     claim_words = ("当前", "目前", "已由", "另有", "本仓库", "本项目")
     for f in [_rel_of(GENERIC_FILE), _rel_of(PROMPTS_FILE), _rel_of(README_FILE)] \
@@ -4465,10 +4598,7 @@ def check_no_mechanism_claims_in_public():
 def check_source_guard():
     """『来源防线』：依据与来源真实性规范及其要点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("来源防线检查")
     rel = os.path.relpath(SOURCE_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SOURCE_FILE):
@@ -4534,10 +4664,7 @@ def _iter_prompt_files():
 def check_dev_flow_guard():
     """『开发流程防线』：先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("开发流程防线检查")
     # ① 必加载层底线
     rel_ex = "specs/core/execution.adoc"
@@ -4721,10 +4848,7 @@ def check_dev_flow_guard():
 def check_checklist_guard():
     """『清单逐项与文档-脚本一致性防线』：把"可机械核对却被漏掉"的判定点补成抓手。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("清单逐项与文档-脚本一致性防线检查")
 
     # 1) 准入判定：自称"九问"则条目须为 9 条
@@ -4940,10 +5064,7 @@ RENAME_SPLIT_GUARD_KEYS = (
 def check_rename_split_guard():
     """『重命名与内容修改须分两个提交防线』：用户提出的 P7 要求不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("重命名与内容修改须分两个提交防线检查")
     rel_git = "specs/general/git.adoc"
     path = os.path.join(REPO_ROOT, *rel_git.split("/"))
@@ -5096,9 +5217,6 @@ def check_rename_split_guard():
 def check_criteria_not_axis_guard():
     """『防线的核对对象是判据本体、不是轴名』防线：本轮实测教训不得只活在代码注释里。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
 
     实证失效（本轮）：维护方最高关注项 P7 的『要求』被压成两句骨架——"要求/依据/
     判定标准"三个轴名都还在、防线全绿，而**可核对的判据**（批量改名收在同一个提交、
@@ -5154,10 +5272,7 @@ def check_criteria_not_axis_guard():
 def check_runtime_env_guard():
     """『运行环境须与项目声明一致』防线：用户提出的硬性要求不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("运行环境须与项目声明一致防线检查")
     rel_ci = "specs/general/ci-cd.adoc"
     path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
@@ -5271,10 +5386,7 @@ def check_runtime_env_guard():
 def check_registry_mirror_guard():
     """『包源与镜像源防线』：推荐的包源地址**已实测可用**、且**换源有次序与降级边界**。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("包源与镜像源防线检查")
     rel = "specs/general/dependency.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -5356,10 +5468,7 @@ def check_registry_mirror_guard():
 def check_throughput_guard():
     """『执行吞吐』防线：轮次纪律的判据、常驻层引用与调度器登记不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("执行吞吐防线检查")
     rel = "specs/general/context.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -5384,6 +5493,9 @@ def check_throughput_guard():
         ("凭据一次固化", "固化为可复用形态"),
         ("缓存与镜像就近、不重配", "不覆盖、不重配"),
         ("长流程不留零信息等待（L1）", "零信息等待"),
+        # 用户提出的要件「相同内容不得重复读取」在**留证侧**的落点：判定标准要可核对，
+        # 不能只有一句"不重复读"。缺「判定标准」时该条退化成自觉要求（本轮补）。
+        ("不重复读的判定标准（可核对）", "同一路径在一次任务里被读第二次"),
     ]
     for name, token in required:
         if token not in section:
@@ -5493,10 +5605,7 @@ PERF_LIBRARY_ANCHORS = (
 def check_performance_guard():
     """『性能测试防线』：测量与记录两半的要点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("性能测试防线检查")
     path = os.path.join(REPO_ROOT, *PERF_SPEC.split("/"))
     if not os.path.isfile(path):
@@ -5560,64 +5669,208 @@ def check_performance_guard():
     phase_done()
 
 
-def check_wiring_guard():
-    """『防线接线完整性』：每个 `check_*` 都必须被 `main()` 真正调用——防"定义了却不执行"。
+# 防线清单表（`specs-project-maintainer/guards.adoc`）里每行的形态：`| 序号 | \`防线名\` | 用途 |`
+GUARDS_MANIFEST_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*`(check_[a-z0-9_]+)`\s*\|", re.M)
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
+
+# 调度器里**允许出现的细节类型**：文件路径引用、加载触发特征（可判读的识别特征）、以及
+# "该文件承载什么主题"的一句话。**不允许**把该文件的条目清单、判定标准、取值面抄进来——
+# 那会让调度器成为上游落点（`specs/general/terminology.adoc`「数据字典」的「反膨胀」：
+# 上游落点不得因收录下游细节而显著变大），且与 §数据字典「只引名称」相抵。
+DISPATCHER_DETAIL_MARKERS = (
+    "判定标准", "任一命中", "判据见", "适用面（L1", "例外（L1", "边界（L1",
+    "本文件不复述", "唯一落点", "不得降级",
+)
+
+
+def check_dispatcher_no_details_guard():
+    """『调度器不承担细节』：加载调度器只登记"哪个文件 + 何时加载"，不抄该文件的条目。
+
+    **为什么需要它**：调度器的加载项曾被逐项扩写成"小抄"——把一个文件的条目名、适用面、
+    例外与边界成串写在那一行里（本仓库实测：最长一条 815 字符、单文件 3 KB 的条目清单被
+    抄进常驻层）。三处危害：① 常驻层被下游细节撑大（每次会话都付上下文）；② **抄一遍就是
+    第二处会各自漂移的正文**（改了下游忘了改调度器，执行者按调度器理解会走错）；
+    ③ 与《数据字典》的「反膨胀」（上游落点不得被下游细节撑大）直接相抵。
+
+    **判据（可机械核对）**：调度器各层的加载项里不得出现**条目级**细节词；允许写的是
+    文件路径、加载触发特征、"该文件承载的主题"。**边界（防误伤）**：识别特征本身可以很长
+    （它必须可判读），故本条只拦"判定标准/任一命中/例外"这类**条目内部**的措辞。
+    """
+    phase("调度器不承担细节检查（只登记，不抄条目）")
+    if not os.path.isfile(GENERIC_FILE):
+        err("找不到 AGENTS_COMMON.adoc，无法核对调度器条目形态", "AGENTS_COMMON.adoc")
+        phase_done()
+        return
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"== 分类与懒加载（加载调度器）(.*?)== 技术栈扩展约定", text, re.S)
+    if m is None:
+        err("AGENTS_COMMON.adoc 未找到「分类与懒加载（加载调度器）」节——"
+            "条目形态核对失去落点", "AGENTS_COMMON.adoc")
+        phase_done()
+        return
+    bad = []
+    for lineno, line in enumerate(m.group(1).split("\n"), 1):
+        if not line.startswith("* "):
+            continue
+        for marker in DISPATCHER_DETAIL_MARKERS:
+            if marker in line:
+                bad.append((lineno, marker, line[:60]))
+    if bad:
+        for lineno, marker, head in bad:
+            err(f"调度器加载项出现条目级细节词『{marker}』（`{head}…`）——"
+                "调度器只写『哪个文件 + 何时加载』，条目清单/判定标准/适用面与例外写在该文件里；"
+                "抄进调度器就是第二份会各自漂移的正文，还把常驻层撑大"
+                "（判据见 specs/general/terminology.adoc「反膨胀」与 specs/general/doc.adoc"
+                "「名称的定义按作用域归档、引用只写名称」）", "AGENTS_COMMON.adoc", lineno)
+    else:
+        log("  调度器条目形态合规：只登记文件与触发特征，未抄条目细节")
+    phase_done()
+
+
+def check_ledger_source_paths_guard():
+    """『台账来源列须指向真实文件』：`check_effective.py` 的每条来源都要能打开。
+
+    **为什么需要它**：台账的来源列曾被写成集束引用（`文件A + specs/general/testing.adoc`），
+    而**判据其实不在那个文件里**（本仓库实测：9 条来源写 `specs/general/testing.adoc`，
+    实际判据在 `verify.adoc` / `context.adoc`）。来源指错时，读者按它去核对会读到
+    "这个文件里没有这条"——台账因此从"可核对"退化成"看着像有出处"。
+
+    **判据（可机械核对）**：台账每条的来源列里出现的每个 `*.adoc` 路径**都必须真实存在**；
+    集束引用（`A + B`）按其列出的每个路径逐一看。**边界**：本条不管"来源指得对不对"
+    （那是语义判断，交人/子 agent 复核），只管"指的那个文件在不在"。
+    """
+    phase("台账来源路径检查（来源列须指向真实文件）")
+    rel = "script/check_effective.py"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+        err(f"找不到 {rel}——台账来源无从核对", rel)
+        phase_done()
+        return
+    src = _read_script_src(rel) or ""
+    bad = []
+    for entry in re.finditer(r'^\s{4}\(\s*"([^"]+)",\s*\n?\s*"([^"]+)"', src, re.M):
+        name, source = entry.group(1), entry.group(2)
+        for path in re.findall(r"[A-Za-z0-9_./-]+\.adoc", source):
+            if not os.path.isfile(os.path.join(REPO_ROOT, *path.split("/"))):
+                bad.append((name, path))
+    if bad:
+        for name, path in bad:
+            err(f"台账条目『{name}』的来源 `{path}` **不存在**——"
+                "来源指错时读者按它核对会读到『这个文件里没有这条』，台账从可核对退化"
+                "成看着像有出处；请改成判据真正所在的那个文件", rel)
+    else:
+        log("  台账来源路径合规：每条来源指向的文件都存在")
+    phase_done()
+
+
+def check_guard_order_guard():
+    """『防线次序与清单表一致』：`CHECKS` 的执行次序必须 = 防线清单表里的次序。
+
+    为什么需要它：次序此前只存在于 `main()` 正文的行序里，**改一处位置没有任何判据**
+    （实测：把某道防线从编排中段移到末尾，脚本与 985 条单测全绿）。本轮把次序提成
+    显式的 `CHECKS` 序列，再由本防线与 `specs-project-maintainer/guards.adoc` 逐行对账。
+
+    判据（三条）：① 两处的防线名逐一相同且次序一致；② 清单表的序号连续；③ 条数相同。
+    """
+    phase("防线次序与清单表一致性检查（`CHECKS` ↔ guards.adoc）")
+    # `_read_script_src` 以"相对仓库根路径"为缓存键：夹具换根后仍可能命中上一轮的值，
+    # 故本条核脚本自身的场景（与本文件同路径）须显式清该键，否则"脚本缺失"的场景
+    # 会静默读到本文件自己的 `CHECKS`（本仓库实测：该反例反而报了"次序不一致"）。
+    REPO_SCRIPT_SRC_CACHE.pop("script/check_specs.py", None)
+    src = _read_script_src("script/check_specs.py") or None
+    if src is None:
+        err("找不到 script/check_specs.py，无法核对防线次序", "script/check_specs.py")
+        phase_done()
+        return
+    seq = re.findall(r"(?m)^ {4}(check_[a-z0-9_]+),$", _checks_block(src))
+    if not seq:
+        err("script/check_specs.py 缺少 `CHECKS` 序列——防线次序失去唯一来源", "script/check_specs.py")
+        phase_done()
+        return
+    # 路径**按当前的 `PROJECT_SPECS_DIR` 现算**，不在模块级固化：模块常量在 import 时
+    # 就绑定了当时的仓库根，夹具换根后它仍指向真实仓库——于是"清单表缺失"这类反例
+    # 会静默读到真文件（本仓库实测：该防线在夹具里怎么改都读不到夹具内容）。
+    manifest_path = os.path.join(PROJECT_SPECS_DIR, "guards.adoc")
+    if not os.path.isfile(manifest_path):
+        err("缺少 specs-project-maintainer/guards.adoc——防线清单（有哪些防线、按什么次序跑）"
+            "失去落点；`CHECKS` 的次序没有任何可读处，改次序时意图无从追溯",
+            "specs-project-maintainer/guards.adoc")
+        phase_done()
+        return
+    with open(manifest_path, encoding="utf-8") as fh:
+        manifest = fh.read()
+    rows = GUARDS_MANIFEST_ROW.findall(manifest)
+    if not rows:
+        err("specs-project-maintainer/guards.adoc 未找到「执行次序与用途」表——"
+            "次序核对失去判据（表被改写或删掉时须报红，不得静默放行）",
+            "specs-project-maintainer/guards.adoc")
+        phase_done()
+        return
+    nums = [int(n) for n, _ in rows]
+    names = [n for _, n in rows]
+    if nums != list(range(1, len(nums) + 1)):
+        err(f"防线清单表序号不连续：{nums[:8]}…（共 {len(nums)} 行）——"
+            "序号断了说明有条目被整条删掉；删条目须连带改序号并说明"
+            "（否则读者按序号核对照点时，缺的那一项无从发现）",
+            "specs-project-maintainer/guards.adoc")
+    if names != seq:
+        only_seq = [n for n in seq if n not in names]
+        only_manifest = [n for n in names if n not in seq]
+        detail = []
+        if only_seq:
+            detail.append(f"只在 `CHECKS` 里：{only_seq}")
+        if only_manifest:
+            detail.append(f"只在清单表里：{only_manifest}")
+        if not detail:
+            # 两处**集合相同、次序不同**是最难发现的一种：逐行对账要给出第一处分叉，
+            # 否则报错信息只说"不一致"、修的人得自己逐行比 89 行（实测形态：对调两道防线）。
+            i = next(j for j, (a, b) in enumerate(zip(seq, names)) if a != b)
+            detail.append(f"第 {i + 1} 处起次序不同：`CHECKS` 是 {seq[i]}、清单表是 {names[i]}")
+        err("防线次序不一致：`script/check_specs.py` 的 `CHECKS` 序列与 "
+            "specs-project-maintainer/guards.adoc 的清单表不是同一串（" + "；".join(detail)
+            + "）——次序是刻意安排的，两处必须逐一同序；改一侧就必须同步另一侧"
+            "（本轮实测：把某道防线从编排中段移到末尾，脚本与全部单测全绿、无人发现）",
+            "specs-project-maintainer/guards.adoc")
+    else:
+        log(f"  防线次序与清单表一致：{len(seq)} 道，逐一同序")
+    phase_done()
+
+
+def check_wiring_guard():
+    """『防线接线完整性』：`CHECKS` 序列里的每道防线都须真实存在、每个已定义防线都须可达。
+
+    两条判据都可机械核对：① 序列里的每个名字都有函数定义；② 每个已定义的 `check_*`
+    都在序列里**直接列出、或经序列中某防线的函数体可达**（闭包口径与 `check_guard_manifest`
+    一致——两处各写一套会出现"接线的说跑了、台账的说没跑"）。
+    **次序不在此判**：`CHECKS` 就是次序的唯一来源，它与
+    `specs-project-maintainer/guards.adoc` 清单表的一致性由 `check_guard_order_guard` 守。
     """
     phase("防线接线完整性检查（定义了必须被执行）")
-    path = os.path.join(REPO_ROOT, "script", "check_specs.py")
-    if not os.path.isfile(path):
+    src = _read_script_src("script/check_specs.py")
+    if src is None:
         err("找不到 script/check_specs.py，无法核对防线接线", "script/check_specs.py")
         phase_done()
         return
-    with open(path, encoding="utf-8") as fh:
-        src = fh.read()
-    defined = set(re.findall(r"^def (check_[a-z0-9_]+)\(", src, re.M))
-    m = re.search(r"^def main\(", src, re.M)
-    if m is None:
-        err("script/check_specs.py 缺少 main()——防线无统一入口，接线无从核对",
+    if not _checks_block(src).strip():
+        err("script/check_specs.py 缺少 `CHECKS` 序列——防线的执行次序失去唯一来源，"
+            "接线与次序都无从核对（次序是刻意安排的，不得靠 `main()` 正文里的行序隐式表达）",
             "script/check_specs.py")
         phase_done()
         return
-    def _strip_comments(text):
-        """去掉注释与 docstring，只留可执行代码——防"注释里提到某防线"被误判为已接线。"""
-        text = re.sub(r'"""(?:.|\n)*?"""', "", text)
-        return "\n".join(re.sub(r"#.*$", "", ln) for ln in text.split("\n"))
-    body_start = m.end()
-    nxt = re.search(r"^def ", src[body_start:], re.M)
-    body = src[body_start:body_start + nxt.start()] if nxt else src[body_start:]
-    direct = set(re.findall(r"\b(check_[a-z0-9_]+)\(", _strip_comments(body)))
-    # 被 main() 直接调用的防线，其函数体内的调用同样属于"被编排到"（如
-    # check_verification_guard 末尾调用的两个公共内容自足性防线）——按可达闭包展开。
-    def _fn_body(name):
-        mm = re.search(r"^def " + name + r"\(", src, re.M)
-        if mm is None:
-            return ""
-        start = mm.end()
-        nxt2 = re.search(r"^def ", src[start:], re.M)
-        seg = src[start:start + nxt2.start()] if nxt2 else src[start:]
-        return _strip_comments(seg)
-    wired = set(direct)
-    frontier = list(direct)
-    while frontier:
-        for name in re.findall(r"\b(check_[a-z0-9_]+)\(", _fn_body(frontier.pop())):
-            if name not in wired:
-                wired.add(name)
-                frontier.append(name)
+    defined = set(re.findall(r"(?m)^def (check_[a-z0-9_]+)\(", src))
+    wired = _guard_wired_closure(src)
     unwired = sorted(defined - wired)
     orphan = sorted(wired - defined)
     if unwired:
-        err("防线接线不完整：以下 check_* 已定义但未在 main() 中调用（"
-            + "、".join(unwired) + "）——即『定义了却不执行』：该防线从未被 main() 编排，"
-            "check_specs.py 与配套测试都会全绿而它一次也没跑过", "script/check_specs.py")
+        err("防线接线不完整：以下 check_* 已定义但任何地方都不会被执行（"
+            + "、".join(unwired) + "）——既不在 `CHECKS` 序列里、也不被序列中任何防线调用，"
+            "即『定义了却不执行』：check_specs.py 与配套测试都会全绿而它一次也没跑过",
+            "script/check_specs.py")
     if orphan:
-        err("main() 调用了不存在的防线：" + "、".join(orphan)
+        err("`CHECKS` 序列点名了不存在的防线：" + "、".join(orphan)
             + "——接线与实现不一致", "script/check_specs.py")
     if not unwired and not orphan:
-        log(f"  防线接线完整：{len(defined)} 道防线全部在 main() 中被调用")
+        log(f"  防线接线完整：{len(defined)} 道防线全部会被执行")
     phase_done()
 
 
@@ -5738,10 +5991,7 @@ LIBRARY_QUOTE_ANCHORS = (
 def check_library_guard():
     """『图书馆防线』：依据须查得到、对得上、引用不悬空（不在默认引用面内的内容）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("图书馆防线检查")
     if not os.path.isfile(LIBRARY_INDEX):
         err("缺少图书馆入口 library/README.adoc——"
@@ -5863,10 +6113,7 @@ def check_library_guard():
 def check_library_locating_guard():
     """『依据定位防线』：馆无限大时"怎么准确定位到哪个文件"的协议不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("依据定位防线检查（馆无限大时的定位协议）")
     if not os.path.isfile(LIBRARY_INDEX):
         err("缺少图书馆入口 library/README.adoc——『依据的定位协议』无处承载"
@@ -5980,10 +6227,7 @@ _REF_SCOPE_BAD_EXEMPT = ("不是", "并非", "≠", "错误", "不得写", "纠�
 def check_ref_scope_wording_guard():
     """『默认引用面口径防线』：不得再把本仓库内容写成"私有 / 不对外发布"。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("默认引用面口径检查（不得写成私有/不对外发布）")
     for rel in collect_adoc_files():
         if _is_historical(rel):
@@ -6008,10 +6252,7 @@ def check_ref_scope_wording_guard():
 def check_dependency_view_guard():
     """『依赖关系文档防线』：模块间依赖的唯一视图（完整、UML、可直达、不过期）不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("依赖关系文档防线检查")
     rel = os.path.relpath(DEPENDENCY_VIEW_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(DEPENDENCY_VIEW_FILE):
@@ -6086,10 +6327,7 @@ def check_dependency_view_guard():
 def check_index_page_guard():
     """『索引页触发判据防线』：索引页只对"已承载实质文档"的目录要求，空壳不建、索引只做导航。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("索引页触发判据防线检查")
     if not os.path.isfile(DOC_FILE):
         err("缺少文件 specs/general/doc.adoc——『索引页触发判据』的落点丢失"
@@ -6157,7 +6395,6 @@ def check_data_dictionary_guard():
 
     判据在 `specs/general/terminology.adoc` 正文里；本函数只核**文本与文件形态**
     （"某个名称到底该归哪一档、某处是否真的复述了定义"属语义判断，交人/子 agent 复核）。
-    **用户点名/实证失效**与逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
     """
     phase("数据字典防线检查（按作用域归档、只引名称、新增与调整即生效）")
     rel_t = _rel_of(TERMINOLOGY_FILE)
@@ -6231,10 +6468,7 @@ def check_data_dictionary_guard():
 def check_changelog_entry_guard():
     """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("变更日志条目形态检查（单行条目）")
     path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
     if not os.path.isfile(path):
@@ -6266,10 +6500,7 @@ def check_changelog_entry_guard():
 def check_changelog_structure_guard():
     """『变更日志组织形态与表格形态防线』：组织方式、两形态与表格列义不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("变更日志组织形态与表格形态检查")
     if not os.path.isfile(CHANGELOG_STRUCTURE_FILE):
         err("缺少 specs/general/changelog.adoc——组织形态与表格形态的规则落点消失",
@@ -6392,10 +6623,7 @@ HTTP_EVIDENCE_KEYS = (
 def check_commit_message_guard():
     """『提交信息防线』：提交信息的书写规则不得被删或降级，且依据如实标注。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("提交信息防线检查")
     rel = os.path.relpath(COMMIT_MESSAGE_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMIT_MESSAGE_FILE):
@@ -6414,10 +6642,7 @@ def check_commit_message_guard():
 def check_http_semantics_guard():
     """『HTTP 接口语义防线』：方法与状态码的协议语义条文、级别与依据须齐备。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("HTTP 接口语义防线检查")
     rel = os.path.relpath(HTTP_SEMANTICS_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(HTTP_SEMANTICS_FILE):
@@ -6446,10 +6671,7 @@ def check_http_semantics_guard():
 def check_review_guard():
     """『评审备注落点防线』：问题/事项的备注落点判据不得被删、两个方向的引用不得断开。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("评审备注落点防线检查")
     rel = os.path.relpath(REVIEW_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(REVIEW_FILE):
@@ -6491,10 +6713,7 @@ def check_review_guard():
 def check_quote_line_guard():
     """『引文段落防线』：引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断编译）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("引文段落防线检查（禁裸 > 起头的引文行）")
     hits = []
     for rel in collect_adoc_files():
@@ -6518,10 +6737,7 @@ def check_quote_line_guard():
 def check_maven_mirror_guard():
     """Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("Maven 仓库与镜像防线检查")
     rel = "specs/stack/maven.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -6579,10 +6795,7 @@ def _split_adoc_sections(text: str):
 def _section_text(text: str, keyword: str):
     """按**节标题关键词**取某个二级节的正文（标题行 + 节内全部行）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     for title, body in _split_adoc_sections(text):
         if keyword in title:
             return body
@@ -6633,10 +6846,7 @@ def _names_in_zone(zone_body: str, rel: str) -> bool:
 def check_public_content_coverage():
     """『公共内容覆盖面防线』：公共内容的入口清单须完整、且与实际文件一致。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("公共内容覆盖面检查（入口清单与实际一致）")
     if not os.path.isfile(PUBLIC_FILE):
         err("缺少公共内容入口索引 PUBLIC.adoc——"
@@ -6703,10 +6913,7 @@ def check_public_content_coverage():
 def check_abstraction_adoption_guard():
     """『抽象与接入成本防线』：对外能力的可替换点须有唯一装配点、须有可用默认。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("抽象与接入成本防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -6775,10 +6982,7 @@ def check_abstraction_adoption_guard():
 def check_config_class_guard():
     """『配置类不写逻辑防线』：配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("配置类不写逻辑防线检查")
     # (a)(b) 通用层条文 + 判定标准
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
@@ -6844,10 +7048,7 @@ def check_config_class_guard():
 def check_external_script_guard():
     """『跨语言执行脚本的落点防线』：被执行的另一语言脚本须放资源文件夹、扩展名取被调语言。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("跨语言执行脚本的落点防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -6978,10 +7179,7 @@ def check_external_script_guard():
 def check_cross_platform_script_guard():
     """『跨环境脚本防线』：一份逻辑 + 薄入口不得被删或降级为"入口里也能写点逻辑"。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("跨环境脚本防线检查")
     rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SCRIPT_SPEC_FILE):
@@ -7183,10 +7381,7 @@ SCRIPT_HEADER_SECTION = "脚本头部注释（文档头）"
 def check_script_header_guard():
     """『脚本头部注释（文档头）防线』：文档头先行与"细节不随维护丢失"的条文不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("脚本头部注释（文档头）防线检查")
     rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SCRIPT_SPEC_FILE):
@@ -7323,10 +7518,7 @@ SCRIPT_SELFDOC_SECTION = "脚本文档的承载位置与协作粒度（默认写
 def check_script_selfdoc_guard():
     """『脚本自述文档防线』：脚本默认单打独斗、文档随脚本落盘（不逐脚本另建独立文档）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("脚本自述文档（承载位置与协作粒度）防线检查")
     rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SCRIPT_SPEC_FILE):
@@ -7431,10 +7623,7 @@ def check_script_selfdoc_guard():
 def check_comment_preservation_guard():
     """『评论不得删除防线』：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("评论不得删除防线检查")
     for rel, keys, desc in (
             ("specs/platform/cnb.adoc",
@@ -7499,10 +7688,7 @@ def check_comment_preservation_guard():
 def check_reuse_precedent_guard():
     """『既有实现与先例优先防线』：先查项目已有能力与先例，禁止用手写原生写法绕过。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("既有实现与先例优先防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -7580,10 +7766,7 @@ def check_reuse_precedent_guard():
 def check_lombok_constructor_guard():
     """『构造方法不手写、优先 lombok 防线』：无参/必参/全参构造一律由 lombok 注解生成。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("构造方法不手写（优先 lombok）防线检查")
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_STACK_FILE):
@@ -7665,10 +7848,7 @@ DOC_TYPE_NOTATION_SECTION = "文档中提及类型优先写类名 + import，不
 def check_doc_type_notation_guard():
     """『文档类型指代（类名 + import）防线』：文档里写类名、不写类全名。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("文档类型指代（类名 + import）防线检查")
     rel_doc = os.path.relpath(DOC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(DOC_FILE):
@@ -7749,10 +7929,7 @@ def check_doc_type_notation_guard():
 def check_conversion_guard():
     """『对象转换防线』：多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("对象转换（多层嵌套对象优先声明式映射）防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -7926,10 +8103,7 @@ def check_conversion_guard():
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("持久化访问（类型安全查询构造）防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -8057,10 +8231,7 @@ def check_persistence_access_guard():
 def check_api_contract_reuse_guard():
     """『请求/响应类优先移动复用 + HTTP 接口路径优先中划线』防线。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("请求/响应类复用与接口路径中划线防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
@@ -8174,10 +8345,7 @@ def check_api_contract_reuse_guard():
 def check_api_naming_guard():
     """『Feign 接口命名带所属域/项目前缀防线』：Feign 接口的命名前缀不得退回"随手取名"。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("Feign 接口命名带所属域前缀防线检查")
     rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace(chr(92), "/")
     if not os.path.isfile(CODING_FILE):
@@ -8261,10 +8429,7 @@ def check_api_naming_guard():
 def check_prompts_primary():
     """『提示词主侧重与优先级防线』：侧重方向与分级规则不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("提示词主侧重与优先级防线检查")
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
 
@@ -8359,10 +8524,7 @@ def check_prompts_primary():
 def check_env_marker_guard():
     """『环境标志与专用口径防线』：环境专用口径不得脱离标志、也不得漏掉中性口径。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("环境标志与专用口径防线检查")
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
@@ -8395,10 +8557,7 @@ def check_env_marker_guard():
 def check_scope_boundary_guard():
     """『改动范围边界防线』：未声明即拒绝越界改动的边界不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("改动范围边界防线检查")
     # ① 通用层：工作空间边界 + 平台上的仓库边界两节都在、要点齐备
     rel_g = "specs/general/scope.adoc"
@@ -8507,10 +8666,7 @@ def check_scope_boundary_guard():
 def check_npc_merge_guard():
     """『NPC 禁合并防线』：NPC/CI 执行者不得合并、且不因人工授权豁免的要点不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("NPC 禁合并防线检查")
     # (a)-(d) 公共内容侧：specs/platform/cnb.adoc
     rel = "specs/platform/cnb.adoc"
@@ -8574,10 +8730,7 @@ def check_npc_merge_guard():
 def check_self_dispatch_guard():
     """『不得自行发评论唤起自己防线』：执行者不得把任务在执行中重新发起一次。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("不得自行发评论唤起自己防线检查")
     # ① 平台层：入口一节内的同节 L1 条
     rel = "specs/platform/cnb.adoc"
@@ -8749,10 +8902,7 @@ def check_self_dispatch_guard():
 def check_comment_dispatch_guard():
     """『评论唤起新实例防线』：评论即派发入口的要点不得被删或降级。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("评论唤起新实例防线检查")
     # ① 平台层：CNB 的派发入口一节与四处要点
     rel = "specs/platform/cnb.adoc"
@@ -8868,10 +9018,7 @@ def check_comment_dispatch_guard():
 def check_squash_commit_guard():
     """『压缩提交防线』：用户要求"压缩提交"时的判据、禁止形态与新旧 sha 对应关系不得被删。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("压缩提交防线检查")
     rel = "specs/platform/cnb.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -8956,10 +9103,7 @@ def check_squash_commit_guard():
 def check_merge_relationship_guard():
     """『合并关系防线』：压缩/解决冲突后，**目标分支仍须是本分支的祖先**。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("合并关系防线检查")
     rel = "specs/platform/cnb.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -9011,10 +9155,7 @@ DELIVERY_GUARD_KEYS = (
 def check_delivery_guard():
     """『交付形态与报告落点防线』：不得中途冒过程性叙述、不得只交付不汇报。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("交付形态与报告落点防线检查")
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
@@ -9098,10 +9239,7 @@ def check_delivery_guard():
 def check_changelog_timing_guard():
     """『变更日志声明优先防线』：changelog **除非主动声明，否则不新增、不修改**（本仓库特有）。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("变更日志登记时机防线检查")
     rel_agents = "AGENTS.adoc"
     path_agents = os.path.join(REPO_ROOT, rel_agents)
@@ -9212,10 +9350,7 @@ _PROMPTS_INDEX_POINTERS = ("不复述正文", "正文只写在", "一处维护�
 def check_prompts_index_guard():
     """『登记处索引形态防线』：`PROMPTS.adoc` 的公共约定可以只做索引，但**每条边界必须可达**。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("提示词登记处索引形态防线检查")
     rel = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(PROMPTS_FILE):
@@ -9239,10 +9374,7 @@ def check_prompts_index_guard():
 def check_prompt_delivery_surface_guard():
     """『提示词取值路径与装配状态防线』：取值口径不得退回与实测不符的印象式说法。
 
-    判据在下方 `err()` 的说明与 `specs/` 正文里；本函数只核**文本与文件形态**
-    （行为、语义与运行时事实交人/子 agent 复核）。**用户点名/实证失效**与
-    逐项覆盖见 `script/check_effective.py` 的机制登记表（同一条不写两遍）。
-    """
+"""
     phase("提示词取值路径与装配状态防线检查")
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
@@ -9321,6 +9453,106 @@ def check_prompt_delivery_surface_guard():
                 "维护方入口须登记该口径与具名抓手（否则后来者无从知道这条存在）", rel_agents)
     phase_done()
 
+# 防线的**执行次序**（唯一来源）：`main()` 按本序列依次执行，故防线的定义位置与编排
+# 位置相互独立。次序是刻意安排的——先跑基础台账（引用/链接/节名/登记），再跑要点防线
+# （判据本体），最后跑编译类校验。
+# **次序本身也是落点**：同一序列由 `specs-project-maintainer/guards.adoc` 的清单表
+# 按同一次序复述（那张表是"有哪些防线、按什么次序跑"的可读落点，由
+# `check_guard_order_guard` 双向核对）——改这里的次序必须同步改那张表。
+CHECKS = (
+    check_refs_exist,
+    check_link_refs,
+    check_section_refs,
+    check_stack_consistency,
+    check_dispatcher_registry,
+    check_dispatcher_layers,
+    check_forbidden_patterns,
+    check_historical_notes,
+    check_install_codeblock,
+    check_spec_fetch_guard,
+    check_shared_cache_guard,
+    check_entry_doc_manifest,
+    check_install_repeat_update_guard,
+    check_guard_manifest,
+    check_filler_docs,
+    check_principle_guard,
+    check_priority_guard,
+    check_spec_admission_guard,
+    check_self_check_guard,
+    check_git_mv_selfcheck,
+    check_budget_guard,
+    check_file_size_hint,
+    check_delegation_guard,
+    check_verify_guard,
+    check_lifecycle_guard,
+    check_adoption_guard,
+    check_ci_cd_guard,
+    check_no_mechanism_claims_in_public,
+    check_public_facing_docs_stay_self_contained,
+    check_source_guard,
+    check_line_ending_guard,
+    check_java_test_naming,
+    check_library_guard,
+    check_library_locating_guard,
+    check_ref_scope_wording_guard,
+    check_changelog_entry_guard,
+    check_changelog_structure_guard,
+    check_commit_message_guard,
+    check_http_semantics_guard,
+    check_review_guard,
+    check_quote_line_guard,
+    check_dependency_view_guard,
+    check_index_page_guard,
+    check_data_dictionary_guard,
+    check_public_content_coverage,
+    check_prompts_primary,
+    check_env_marker_guard,
+    check_npc_merge_guard,
+    check_squash_commit_guard,
+    check_merge_relationship_guard,
+    check_scope_boundary_guard,
+    check_config_class_guard,
+    check_abstraction_adoption_guard,
+    check_reuse_precedent_guard,
+    check_external_script_guard,
+    check_cross_platform_script_guard,
+    check_script_header_guard,
+    check_script_selfdoc_guard,
+    check_comment_preservation_guard,
+    check_comment_dispatch_guard,
+    check_self_dispatch_guard,
+    check_delivery_guard,
+    check_changelog_timing_guard,
+    check_prompt_delivery_surface_guard,
+    check_prompts_index_guard,
+    check_api_contract_reuse_guard,
+    check_api_naming_guard,
+    check_persistence_access_guard,
+    check_conversion_guard,
+    check_lombok_constructor_guard,
+    check_doc_type_notation_guard,
+    check_dev_flow_guard,
+    check_checklist_guard,
+    check_rename_split_guard,
+    check_criteria_not_axis_guard,
+    check_runtime_env_guard,
+    check_wiring_guard,
+    check_guard_order_guard,
+    check_dispatcher_no_details_guard,
+    check_ledger_source_paths_guard,
+    check_maven_mirror_guard,
+    check_registry_mirror_guard,
+    check_throughput_guard,
+    check_performance_guard,
+    check_quality_guard,
+    check_generation_efficiency_guard,
+    check_after_change_review_guard,
+    check_refinement_guard,
+    check_info_density_guard,
+    check_asciidoctor_syntax,
+)
+
+
 def main(argv=None) -> int:
     """命令行入口：解析参数、顺序执行全部检查、汇总错误并返回退出码。
 
@@ -9342,93 +9574,10 @@ def main(argv=None) -> int:
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")
     print()
+    for check in CHECKS:
+        check()
 
-    check_refs_exist()
-    check_link_refs()
-    check_section_refs()
-    check_stack_consistency()
-    check_dispatcher_registry()
-    check_dispatcher_layers()
-    check_forbidden_patterns()
-    check_historical_notes()
-    check_install_codeblock()
-    check_spec_fetch_guard()
-    check_shared_cache_guard()
-    check_entry_doc_manifest()
-    check_install_repeat_update_guard()
-    check_guard_manifest()
-    check_filler_docs()
-    check_principle_guard()
-    check_priority_guard()
-    check_spec_admission_guard()
-    check_self_check_guard()
-    check_git_mv_selfcheck()
-    check_budget_guard()
-    check_file_size_hint()
-    check_delegation_guard()
-    check_verify_guard()
-    check_lifecycle_guard()
-    check_adoption_guard()
-    check_ci_cd_guard()
-    check_no_mechanism_claims_in_public()
-    check_public_facing_docs_stay_self_contained()
-    check_source_guard()
-    check_line_ending_guard()
-    check_java_test_naming()
-    check_library_guard()
-    check_library_locating_guard()
-    check_ref_scope_wording_guard()
-    check_changelog_entry_guard()
-    check_changelog_structure_guard()
-    check_commit_message_guard()
-    check_http_semantics_guard()
-    check_review_guard()
-    check_quote_line_guard()
-    check_dependency_view_guard()
-    check_index_page_guard()
-    check_data_dictionary_guard()
-    check_public_content_coverage()
-    check_prompts_primary()
-    check_env_marker_guard()
-    check_npc_merge_guard()
-    check_squash_commit_guard()
-    check_merge_relationship_guard()
-    check_scope_boundary_guard()
-    check_config_class_guard()
-    check_abstraction_adoption_guard()
-    check_reuse_precedent_guard()
-    check_external_script_guard()
-    check_cross_platform_script_guard()
-    check_script_header_guard()
-    check_script_selfdoc_guard()
-    check_comment_preservation_guard()
-    check_comment_dispatch_guard()
-    check_self_dispatch_guard()
-    check_delivery_guard()
-    check_changelog_timing_guard()
-    check_prompt_delivery_surface_guard()
-    check_prompts_index_guard()
-    check_api_contract_reuse_guard()
-    check_api_naming_guard()
-    check_persistence_access_guard()
-    check_conversion_guard()
-    check_lombok_constructor_guard()
-    check_doc_type_notation_guard()
-    check_dev_flow_guard()
-    check_checklist_guard()
-    check_rename_split_guard()
-    check_criteria_not_axis_guard()
-    check_runtime_env_guard()
-    check_wiring_guard()
-    check_maven_mirror_guard()
-    check_registry_mirror_guard()
-    check_throughput_guard()
-    check_performance_guard()
-    check_quality_guard()
-    check_generation_efficiency_guard()
-    check_after_change_review_guard()
-    check_refinement_guard()
-    check_asciidoctor_syntax()
+
 
     print()
     if errors:

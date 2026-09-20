@@ -10,8 +10,8 @@
 == 启动脚本（同名 .bat）
 
 * **`.ps1` 脚本须配一个同名 `.bat` 启动脚本**（如 `foo.ps1` 配 `foo.bat`）：`.ps1` 无法直接双击运行，且受 PowerShell 执行策略限制、命令行运行（需显式 `powershell -File ...`）也很麻烦，故须提供一个 `.bat` 文件作为启动入口，便于直接双击或命令行运行。
-* **`.bat` 启动脚本的落点与写法属批处理栈**：编码（纯 ASCII、不写 BOM）、行尾（CRLF）、块语句/引用/续行的坑，以及"启动脚本为何是 Windows 侧入口"的完整条文见 `specs/stack/batch.adoc`（**批处理专属规则的唯一落点**，本文件不复制）。本处只重申与本栈绑定的一条要求——**`.ps1` 的启动由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略**；`.bat` 与 `.ps1` **同名**、成对存在、同步维护（`.ps1` 改名/移动时同步改同名 `.bat` 的对应调用，避免启动入口失效）。
-* **启动脚本须在 `cmd.exe` 下可解析、不依赖本地编码（L1）**：`.bat` 会被 `cmd.exe` 按**系统 ANSI 代码页**解析，且**按字节读行尾**——**带 BOM 的 UTF-8、或 LF 行尾都会让启动脚本解析失败**。故 **`.bat` 与 `.ps1` 同名但格式要求不同**（`.bat` 纯 ASCII + CRLF，`.ps1` UTF-8 + CRLF），二者分别按 `specs/stack/batch.adoc`「编码与行尾」与本文件「编码与行尾」保存。
+* **`.bat` 启动脚本的落点与写法属批处理栈（唯一落点，本文件不复制）**：编码（纯 ASCII、不写 BOM）、行尾（CRLF）、**块语句/引用/续行的坑**、"启动脚本为何是 Windows 侧入口"、以及 `-ExecutionPolicy Bypass` 的完整条文都在 `specs/stack/batch.adoc`（含「需要 PowerShell 能力时按本文件写法由 `.bat` 承接」一条，那里同时给出三条齐备的参考形态）。本处**只留与本栈绑定的一句**：`.ps1` 的启动由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，**不要求用户手动修改系统执行策略**。
+* **同名但格式要求不同**：`.bat` 纯 ASCII + CRLF、`.ps1` UTF-8 + CRLF——**按字节读行尾的 `cmd.exe` 遇 BOM 或 LF 会直接解析失败**，故两者**分别**按 `specs/stack/batch.adoc`「编码与行尾」与本文件「编码与行尾」保存。
 
 == 作为跨环境入口（Windows 与 Linux 并存时）
 
