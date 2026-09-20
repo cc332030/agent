@@ -6153,13 +6153,12 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         "= CNB 规范（平台层）\n\n"
         "== 合并请求的合并主体（NPC 禁合并）\n"
         "* **CNB NPC 严禁合并（L1）**，**授权不免除**。\n\n"
-        "== 压缩提交（提交历史的整理）\n"
-        "* **压缩提交＝提交历史整理，不属禁止行为（L1）**：判定标准："
-        "①**压缩对象只有本次任务产生的、尚未合入目标分支的临时中间提交**；"
-        "②**内容零变化**——压缩前后**逐字节相同**；③**只作用于本次任务自己的 PR 源分支**，"
-        "**不动目标分支**、不动他人分支。\n"
-        "* **禁止的压缩形态（L1）**：①**他人（或其它任务）的提交**；②**已合入目标分支**的历史；"
-        "③压缩后**内容出现任何差异**；④**扩大范围**。\n"
+        "== 压缩提交（提交历史的整理，平台侧追加口径）\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**；"
+        "本节只写本平台的追加口径。\n"
+        "* **压缩提交＝提交历史整理，不属禁止行为（L1）**："
+        "压缩**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支。\n"
+        "* **禁止的压缩形态（平台侧追加）**：①**他人（或其它任务）的提交**；②**已合入目标分支**的历史。\n"
         "* **须先确认无人在用旧对象（L1）**：确认**无他人正基于该分支的旧 sha 工作**"
         "（**已派发、正等待结论**）；确需执行时须**明确告知受影响方**新 sha、并把旧 sha 上的结论**标为过期**。\n"
         "* **压缩后须声明新旧 sha 对应关系（L1）**：写明“**新 sha 为 X，旧 sha Y 作废**”，并如实列出**被压缩掉的中间 sha**；"
@@ -6177,9 +6176,11 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         self.write("specs/platform/cnb.adoc", self.CNB)
         self.write(
             "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
             "* CNB 平台 → cnb（**压缩提交（提交历史整理的判据）**、**对象钉定与可追溯**）\n")
         self.write(
             "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；工具无关）**\n"
             "* `specs/platform/` — 平台层：cnb（**压缩提交（提交历史整理：判据与禁止形态）**、"
             "**对象钉定与可追溯**）\n"
             "* **压缩提交要照做、合并仍不做**：压缩提交不构成“可以合并”的依据。\n")
@@ -6210,21 +6211,17 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         # 反例（关键词堆砌式假绿）：只留节名与一句口号，判据被抽掉
         self._write_valid()
         cnb = self.CNB
-        cnb = cnb.replace("②**内容零变化**——压缩前后**逐字节相同**；", "")
-        cnb = cnb.replace("；③**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支", "")
+        cnb = cnb.replace("压缩**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支。", "")
         self.write("specs/platform/cnb.adoc", cnb)
         cm.check_squash_commit_guard()
-        self.assertIn("内容零变化", self.error_texts())
+        self.assertIn("作用域", self.error_texts())
 
     def test_forbidden_forms_removed_reports(self):
         # 反例：禁止形态被删 → 顺手把他人提交/已合入历史一并压掉、或夹带改动，无判据可拦
         self._write_valid()
         self.write("specs/platform/cnb.adoc",
-                   self.CNB.split("* **禁止的压缩形态（L1）**")[0].replace(
-                       "③**只作用于本次任务自己的 PR 源分支**",
-                       "③**内容零变化**、**逐字节相同**、只动本次任务**自己的 PR 源分支**")
-                   .replace("尚未合入目标分支的临时中间提交", "尚未合入目标分支的临时中间提交")
-                   + "* **对象钉定与可追溯**\n")
+                   self.CNB.replace("* **禁止的压缩形态（平台侧追加）**：①**他人（或其它任务）的提交**；"
+                                    "②**已合入目标分支**的历史。\n", ""))
         cm.check_squash_commit_guard()
         self.assertIn("禁止的压缩形态", self.error_texts())
 
@@ -6367,6 +6364,332 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
                    "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
         cm.check_merge_relationship_guard()
         self.assertIn("不吞掉合并提交", self.error_texts())
+
+
+class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
+    """钉住『冲突与压缩提交防线』：先解冲突、再压缩（最终只有一个提交），解冲突后须核查是否丢内容。
+
+    用户原话："当提出压缩提交时，有冲突要先解决冲突，解决冲突+压缩提交，最后应当只有一个提交；
+    解决版本工具冲突后，需要核查是否丢失内容。" 两件事都属"工作区看起来对、判据在别处"：
+    取一侧收尾后文件照旧能编译、冲突标记也没了，而少了的内容只在提交历史里看得出来。
+
+    **分层是本组用例的核心**：用户随后明确"**git 规范也要**"且"**我说的版本管理，可没说 cnb、git，
+    万一我用的 svn？**"——故规则本体（工具无关）必须在**通用层**，git 侧的核对命令在 **git 层**，
+    平台层只留追加口径并**指向通用层**。本组覆盖"规则本体退回平台层""git 侧落地缺失"    "平台层不指向通用层"，以及原有的顺序条/反向判据/核查条/失效形态/接口缺失/按节取文本等反例。
+    """
+
+    VC = (
+        "= 版本管理规范（通用层）\n\n"
+        "== 为什么把版本管理与某个工具分开写\n\n"
+        "本文件只写**工具无关**的规则本体；引用方用 git 还是 **SVN** 都读得到，"
+        "**不得把某工具的命令当成规则前提**。\n\n"
+        "== 冲突处理\n\n"
+        "* 冲突须自动解决。\n"
+        "* **冲突与压缩提交同时提出时：先解冲突、再压缩，最终只有一个提交（L1）**："
+        "① **先解决冲突**，② **再压缩提交**，③ 交付形态是**最终只有一个提交**。"
+        "**判定标准**：① 拿\"还有冲突\"当不做压缩的理由，或反过来拿\"要压缩\"当不解冲突的理由"
+        "（两者都落地才算完成）；② 解冲突与压缩各自留了一个提交；"
+        "③ 只解了冲突、没压缩。\n"
+        "* **\"只被要求压缩、没被要求解决冲突\"也要先解冲突（L1）**：触发面不限于同时或先后"
+        "提出两件事——用户**只要求**\"压缩提交\"、**没提**解决冲突，而当前分支与目标分支"
+        "**实际存在冲突**时，同样须先解冲突、再压缩；不得把\"用户没提解决冲突\"读成\"不用做\"。"
+        "**判定标准**：① 报\"已压缩提交\"却**对冲突只字未提**；② **以\"用户没提解决冲突/没被要求\""
+        "为由只压不解决**；③ 把解决冲突做成**照抄目标分支的文件内容后另起一个单亲提交**"
+        "（目标分支**并非本分支的祖先**）；④ 拿\"要求里只写了压缩\"当挡箭牌。\n"
+        "* **解决冲突后须核查是否丢失内容（L1）**：不得凭\"没有冲突标记了\"就认为解决完毕。"
+        "**判定标准**：① 用\"**整体取一侧**\"收尾、不做逐处对照；② 只核\"文件能编译\"；"
+        "③ 汇报\"冲突已解决\"却不给出**核查判据**。**该用哪些判据随对象定**：文本类按内容侧对照，"
+        "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n\n"
+        "== 压缩提交（提交历史整理）\n"
+        "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
+        "**压缩不能替代解冲突**。\n"
+    )
+
+    GIT = (
+        "= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n"
+        "* 规则本体见 `specs/general/version-control.adoc`；本节只写 git 上用什么命令判。\n"
+        "* **核对命令（L1）**：`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
+        "`git diff --cached -M --summary` 应显示 `rename`；不得用 `git checkout --ours/--theirs` 整体取一侧。\n"
+        "* **\"最终只有一个提交\"的核对命令（L1）**：`git log --oneline <目标分支>..HEAD` 应**只有一条**。\n"
+    )
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 冲突处理（平台侧追加口径）\n\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「冲突处理」**；本节只写追加口径：\n\n"
+        "* 并行任务冲突照常自动解决。\n"
+        "* 交付形态按本平台表达：**该合并请求的源分支上最终只有一个提交**"
+        "（`git log --oneline <目标分支>..HEAD` **只有一条**）。\n"
+        "* **\"只被要求压缩提交\"时冲突处置不豁免（L1，本题的用户点名形态）**：要求只写了压缩、"
+        "**没被要求不等于可以搁置**；③ 用照抄目标分支内容 + 单亲提交冒充已解决时，"
+        "目标分支**并非本分支的祖先**（判据 `git merge-base --is-ancestor <目标分支> <分支>`）。"
+        "解冲突是在**当前分支内**完成、**不是合并**（与「NPC 禁合并」各自独立、互不豁免）。\n\n"
+        "== 合并请求的合并主体（NPC 禁合并）\n* **严禁合并**。\n\n"
+        "== 压缩提交（提交历史的整理，平台侧追加口径）\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**；"
+        "本节只写本平台的追加口径。\n"
+        "* **与「冲突处理」的接口（L1）**：用户提出压缩提交而分支上**还有冲突**时"
+        "**不得把冲突留在原地只做压缩**——须按「冲突处理」节**先解冲突、再压缩**。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/version-control.adoc", self.VC)
+        self.write("specs/general/git.adoc", self.GIT)
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
+            "* CNB 平台 → cnb（**冲突与压缩提交同时提出（先解冲突、再压缩、最终只有一个提交；"
+            "解冲突后须核查是否丢内容）**与**只被要求压缩提交**（没被要求解决冲突时也不豁免））\n")
+        self.write(
+            "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；**先解冲突、再压缩、"
+            "最终只有一个提交**、**解冲突后须核查是否丢内容**、**只被要求压缩**时冲突处置也不豁免）**\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_conflict_resolution_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_general_file_missing_reports(self):
+        # 反例：规则本体无处承载（用户口称『版本管理』、未点名 git/CNB，规则本体必须在通用层）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "version-control.adoc"))
+        cm.check_conflict_resolution_guard()
+        self.assertIn("缺少文件", self.error_texts())
+        self.assertIn("version-control.adoc", self.error_texts())
+
+    def test_git_file_missing_reports(self):
+        # 反例：git 侧落地无处承载（用户点名『git 规范也要』）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：通用层整节被删 → 先解冲突再压缩与解冲突后的核查都失去落点
+        self._write_valid()
+        self.write("specs/general/version-control.adoc",
+                   "= 版本管理规范（通用层）\n\n== 压缩提交（提交历史整理）\n* 另议。\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("冲突处理", self.error_texts())
+
+    def test_order_clause_removed_reports(self):
+        # 反例：顺序与交付形态被抽掉 → "还有冲突"或"要压缩"任一都能当另一个的挡箭牌
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **冲突与压缩提交同时提出时：先解冲突、再压缩，最终只有一个提交（L1）**："
+            "① **先解决冲突**，② **再压缩提交**，③ 交付形态是**最终只有一个提交**。", "\n")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("最终只有一个提交", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号，反向判据被抽走
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 拿\"还有冲突\"当不做压缩的理由，或反过来拿\"要压缩\"当不解冲突的理由"
+            "（两者都落地才算完成）；② 解冲突与压缩各自留了一个提交；"
+            "③ 只解了冲突、没压缩。\n", "务必谨慎。\n", 1)
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("拿", self.error_texts())
+
+    def test_integrity_check_clause_removed_reports(self):
+        # 反例：解冲突后的核查条被删 → "取一侧收尾"就算解决完毕，丢内容无人发现
+        self._write_valid()
+        vc = self.VC.replace("* **解决冲突后须核查是否丢失内容（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("解决冲突后须核查是否丢失内容", self.error_texts())
+
+    def test_integrity_criteria_removed_reports(self):
+        # 反例：失效形态与三档核查判据被抽掉 → "核查"退化成"没有冲突标记就算完"
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 用\"**整体取一侧**\"收尾、不做逐处对照；② 只核\"文件能编译\"；"
+            "③ 汇报\"冲突已解决\"却不给出**核查判据**。**该用哪些判据随对象定**：文本类按内容侧对照，"
+            "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n",
+            "务必仔细核对。\n")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("核查判据", self.error_texts())
+
+    def test_tool_agnostic_declaration_removed_reports(self):
+        # 反例：通用层**定性节**里丢了"工具无关"声明 → 规则被读成 git 专属，与用户"没说 cnb、git"相抵。
+        # 判据**按定性节取文本**：正文别处顺手提一句"换用 SVN 同样成立"顶不了声明本身。
+        self._write_valid()
+        vc = self.VC.replace("本文件只写**工具无关**的规则本体", "本文件只写**git 上**的规则本体")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("定性节", self.error_texts())
+
+    def test_tool_agnostic_keywords_outside_section_do_not_cover(self):
+        # 反例：定性节里"工具无关"被删、但**文件别处**（另一节的引号引用里）还留着"工具无关"与"SVN"
+        # → 全文匹配会读成齐备；按节取文本必须报红
+        self._write_valid()
+        vc = self.VC.replace("本文件只写**工具无关**的规则本体", "本文件只写**git 上**的规则本体")
+        vc += "\n== 其它\n\n* 换用 SVN 同样成立，本规则与工具无关。\n"
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("定性节", self.error_texts())
+
+    def test_reverse_criteria_half_removed_reports(self):
+        # 反例：反向判据只留前半句（本项两个关键词按 AND 判）→ 执行者仍能把"要压缩"当不解冲突的理由
+        self._write_valid()
+        vc = self.VC.replace("，或反过来拿\"要压缩\"当不解冲突的理由（两者都落地才算完成）", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("要压缩", self.error_texts())
+
+    def test_git_layer_delivery_criteria_needs_command(self):
+        # 反例：git 层把可核对命令删了、只留一句"应只有一条" → 判据退化成断言，无从核对
+        self._write_valid()
+        git = self.GIT.replace("`git log --oneline <目标分支>..HEAD` 应**只有一条**",
+                               "提交记录应**只有一条**")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_squash_section_not_pointing_to_general_reports(self):
+        # 反例：平台层**「压缩提交」节**把规则本体抄回平台层（「冲突处理」节还指一句）
+        # → 全文匹配会假绿，必须按该节自己的正文核对
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**",
+            "**本节定压缩提交的规则本体**")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("「压缩提交」节", self.error_texts())
+
+    def test_squash_interface_removed_reports(self):
+        # 反例：与「压缩提交」的接口被删 → "冲突正多、先压成一个干净的提交"式自我豁免复发
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
+            "**压缩不能替代解冲突**。\n", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("压缩不等于解冲突", self.error_texts())
+
+    def test_git_layer_criteria_removed_reports(self):
+        # 反例：git 侧核对命令被抽掉 → 用户点名"git 规范也要"落了空
+        self._write_valid()
+        git = self.GIT.replace("`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
+                               "`git diff --cached -M --summary` 应显示 `rename`；", "")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_squash_section_interface_removed_reports(self):
+        # 反例：平台层**「压缩提交」节**的接口条被删（「冲突处理」节还写着同口径）
+        # → 全文匹配会假绿，必须按该节自己的正文核对
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "* **与「冲突处理」的接口（L1）**：用户提出压缩提交而分支上**还有冲突**时"
+            "**不得把冲突留在原地只做压缩**——须按「冲突处理」节**先解冲突、再压缩**。\n", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("「压缩提交」节", self.error_texts())
+
+    def test_git_section_emptied_but_keywords_elsewhere_reports(self):
+        # 反例：git 层本节被掏空、命令搬到另一节 → 全文匹配会假绿，须按节取文本
+        self._write_valid()
+        git = ("= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n另议。\n\n"
+               "== 其它节\n\n* 顺手提一句：`--ours`/`--theirs` 不可取、`git diff --name-status`\n"
+               "  与 `rename`、`git log --oneline` **只有一条**。\n")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_not_pointing_to_general_reports(self):
+        # 反例：平台层不再指向通用层规则本体 → 规则本体又退回平台层（非 CNB/非 git 读不到）
+        self._write_valid()
+        cnb = self.CNB.replace("**规则本体（工具无关）在 `specs/general/version-control.adoc`「冲突处理」**",
+                               "本节定冲突处理")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("version-control.adoc", self.error_texts())
+
+    def test_section_scoped_text_reports(self):
+        # 反例：条文从「冲突处理」节被搬走、别处还提一句 → 全文匹配会假绿
+        self._write_valid()
+        vc = self.VC.replace("== 冲突处理", "== 其它节")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("冲突处理", self.error_texts())
+
+    def test_squash_only_trigger_removed_reports(self):
+        # 反例（用户本轮点名的形态）：通用层只写"同时/先后提出两件事"，把"**只被要求压缩、
+        # 没被要求解决冲突**"这一触发面抽掉 → 执行者照字面只做压缩、把冲突搁置
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **\"只被要求压缩、没被要求解决冲突\"也要先解冲突（L1）**：触发面不限于同时或先后"
+            "提出两件事——用户**只要求**\"压缩提交\"、**没提**解决冲突，而当前分支与目标分支"
+            "**实际存在冲突**时，同样须先解冲突、再压缩",
+            "* 另议：用户**只要求**\"压缩提交\"、**没提**解决冲突时，另议")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩", self.error_texts())
+
+    def test_squash_only_criteria_removed_reports(self):
+        # 反例：触发面在、判定标准被抽（只剩口号）→"报已压缩却对冲突只字未提"无从判定
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 报\"已压缩提交\"却**对冲突只字未提**；② **以\"用户没提解决冲突/没被要求\""
+            "为由只压不解决**；③ 把解决冲突做成**照抄目标分支的文件内容后另起一个单亲提交**"
+            "（目标分支**并非本分支的祖先**）；④ 拿\"要求里只写了压缩\"当挡箭牌。", "务必谨慎。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_platform_squash_only_clause_removed_reports(self):
+        # 反例：平台层的触发面被删 → 本平台上的派发形态（要求常只写一件事）恰好漏掉这条
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "* **\"只被要求压缩提交\"时冲突处置不豁免（L1，本题的用户点名形态）**：要求只写了压缩、"
+            "**没被要求不等于可以搁置**；③ 用照抄目标分支内容 + 单亲提交冒充已解决时，"
+            "目标分支**并非本分支的祖先**（判据 `git merge-base --is-ancestor <目标分支> <分支>`）。"
+            "解冲突是在**当前分支内**完成、**不是合并**（与「NPC 禁合并」各自独立、互不豁免）。\n",
+            "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩提交", self.error_texts())
+
+    def test_dispatcher_squash_only_feature_removed_reports(self):
+        # 反例：调度器缺"只被要求压缩提交"这一识别特征 → 该触发面永不被加载
+        self._write_valid()
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
+            "* CNB 平台 → cnb（**冲突与压缩提交同时提出（先解冲突、再压缩、最终只有一个提交；"
+            "解冲突后须核查是否丢内容）**）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩提交", self.error_texts())
+
+    def test_readme_squash_only_clause_removed_reports(self):
+        # 反例：公开面只看得见"同时提出"那一种触发面
+        self._write_valid()
+        self.write(
+            "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；**先解冲突、再压缩、"
+            "最终只有一个提交**、**解冲突后须核查是否丢内容**）**\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例：调度器未登记通用层加载项 → 规则在、但没人会读到
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "* CNB 平台 → cnb（**冲突与压缩提交**）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：公开面看不到这条默认动作
+        self._write_valid()
+        self.write("README.adoc", "* `specs/platform/` — 平台层：cnb（压缩提交）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("README", self.error_texts())
 
 
 class TestCheckConfigClassGuard(CheckSpecsTestCase):
@@ -13203,6 +13526,43 @@ class TestCheckGuardOrderGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
         cm.check_guard_order_guard()
         self.assertIn("guards.adoc", self.error_texts())
+
+
+class TestLedgerSourceEntries(CheckSpecsTestCase):
+    """钉住台账来源列的**解析口径**：含裸 `"` 的条目名不得让该条被整条跳过。
+
+    本仓库实测：旧判据按"行首 4 空格 + 两个双引号串"直接匹配，121 条台账只命中 118 条
+    ——`落点口径须写对：…写成"私有/不对外发布"` 这类**名字里带裸引号**的条目被静默漏掉，
+    把它的来源改成不存在的路径，`check_ledger_source_paths_guard` 照样全绿
+    （"看着核对过、其实漏了三条"）。故解析改为按字符串字面量逐字段取。
+    """
+
+    _LEDGER = (
+        'MECHANISMS = [\n'
+        '    ("名字里带\\"裸引号\\"的条目", "NOPE/missing.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        '    ("普通条目", "specs/general/doc.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        ']\n')
+
+    def test_entries_with_quote_are_parsed(self):
+        # 名字里带裸引号的条目**必须**被解析到（旧正则下它整条不见）
+        entries = cm._ledger_source_entries(self._LEDGER)
+        self.assertEqual(len(entries), 2)
+        self.assertIn("NOPE/missing.adoc", [s for _, s in entries])
+
+    def test_guard_checks_quote_entry_source(self):
+        # 该条目的来源不存在时必须报红——不报说明它又被跳过了
+        self.write("script/check_effective.py", self._LEDGER)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("不存在", self.error_texts())
+
+    def test_guard_checks_normal_entry_source(self):
+        # 普通条目的来源同样逐条核对（防"修了一处、漏了另一处"）
+        ledger = self._LEDGER.replace("specs/general/doc.adoc", "NOPE/also-missing.adoc")
+        self.write("script/check_effective.py", ledger)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("also-missing.adoc", self.error_texts())
 
 
 class TestCheckGuardManifest(CheckSpecsTestCase):
