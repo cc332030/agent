@@ -669,6 +669,107 @@ try:
 except AttributeError:
     pass
 
+# ---- 规则数据与脚本的隔离（外部规则引擎）--------------------------------------
+# 防线的**规则措辞**（要核哪个文件、哪一节、哪些锚点、缺失时的说明）一律放
+# `script/specs-rules/` 目录下的规则文件；本脚本只保留通用原语与"某道防线由哪些规则
+# 组成"的接线。规则文件**一类规则一个**（按被测落点切分），加载侧按目录**自动扫描**。
+# 隔离的动因：规则一变就要改脚本（措辞、节名、锚点散落在近百处防线函数体里），
+# 且同一套"取节 → 逐组核锚点 → 报错"的实现被复制了近百遍——改一处判据要改 N 处。
+# 判据与边界见 `specs/general/script.adoc`「规则与脚本的隔离（规则数据外置）」。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rules_engine  # noqa: E402  （须先补 sys.path：本脚本可能按文件路径被加载）
+
+
+class RulesContext:
+    """`rules_engine.Rules` 的上下文：只提供"读文本 + 取节 + 报错"这几件事。
+
+    刻意保持窄接口：规则引擎不直接读仓库、不碰 `errors`，故单测可注入夹具、
+    引擎源码里不可能藏任何具体规范措辞。
+    """
+
+    def read(self, rel):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            return None
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    def section(self, text, title):
+        return _section_text(text, title)
+
+    def subsection(self, text, keyword):
+        return _subsection_text(text, keyword)
+
+    def bullet(self, section, prefix):
+        return _bullet_text(section, prefix)
+
+    def prompt_files(self):
+        return [os.path.relpath(f, REPO_ROOT).replace(os.sep, "/")
+                for f in _iter_prompt_files()]
+
+    def err(self, msg, path="", line=0):
+        err(msg, path, line)
+
+
+_RULES_SPEC = None
+
+
+def _rules_spec():
+    """规则数据落点（与脚本同目录的规则**目录**）；现场推导，便于单测重定向。
+
+    登记的是**目录**、不是文件名清单：加一个规则文件不必改本脚本（自动扫描加载）——
+    "一类规则一个文件、脚本只登记目录"正是本脚本与规则数据隔离后的加载口径。
+    """
+    global _RULES_SPEC
+    if _RULES_SPEC is None:
+        _RULES_SPEC = rules_engine.default_rules_spec(
+            os.path.dirname(os.path.abspath(__file__)))
+    return _RULES_SPEC
+
+
+def _bootstrap_rules_tokens():
+    """导入期读出规则数据里的"名单/锚点"段（模块级常量要用，不能等 `main()`）。"""
+    try:
+        return rules_engine.load_rule_files(_rules_spec()).get("tokens", {})
+    except rules_engine.RulesError:
+        return {}
+
+
+# 规则数据（锚点组/名单）在**导入期**就位：这些常量在模块级被其它定义引用。
+_RULES_TOKENS = _bootstrap_rules_tokens()
+
+# 规则引擎实例：首次用到时构造（单测会重定向 `REPO_ROOT`，故不在导入期读仓库）。
+RULES = None
+
+
+# 本轮阶段内已经跑过的防线名（见 `phase()`）：同名防线的规则只执行一遍。
+_RULES_RUN_THIS_PHASE = set()
+
+
+def run_rule_guard(guard: str) -> None:
+    """跑某道防线的规则（`guard` 为配置里的键，与防线函数同名）。
+
+    同一阶段内同名防线只跑一遍：防线函数按落点分多处判断，规则步骤自身已声明各自
+    核对的落点（文件缺失由步骤自报），重复执行只会把同一条问题重复报出。
+    """
+    global RULES
+    if guard in _RULES_RUN_THIS_PHASE:
+        return
+    _RULES_RUN_THIS_PHASE.add(guard)
+    if RULES is None:
+        try:
+            RULES = rules_engine.Rules(
+                rules_engine.load_rule_files(_rules_spec()), RulesContext())
+        except rules_engine.RulesError as exc:
+            err(f"{exc}；规则数据外置后它是规则措辞的唯一来源——缺失即整批防线空转，"
+                "不得静默跳过", "script/specs-rules")
+            return
+    try:
+        RULES.run(guard)
+    except rules_engine.RulesError as exc:
+        err(f"规则执行失败：{exc}", "script/specs-rules")
+
+
 # 必加载层体积预算（字节）：AGENTS_COMMON.adoc + specs/core/ 的**上限**（不是目标）。
 # 常驻层每次会话无条件加载，故须有机械天花板；超限即要求先归位（判归属/层级）、再新增，
 # 见 specs-project-maintainer/spec-lifecycle.adoc「规范集合的自身重构」。
@@ -714,10 +815,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ① 运行时事实：机械看不到执行过程（某次到底跑没跑、发没发、读了几遍）；
 # ② 语义判断：判据是否仍成立、内容是否有废话、拆分是否由实害驱动。
 # 由 `check_criteria_not_axis_guard` 的 `机械核对边界` 小节钉住其存在性与这两类取值。
-GUARD_CHECK_LIMITS = (
-    "运行时事实（本仓库不可见：某次执行的实际行为、平台侧记录、产物正文）",
-    "语义判断（判据是否仍成立、内容质量、机制在真实环境会不会发生）",
-)
+GUARD_CHECK_LIMITS = _RULES_TOKENS["GUARD_CHECK_LIMITS"]
 GENERIC_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
 SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # 项目自身维护层目录：只对"维护规范集合（或同类共享资产）的项目"生效的规范——
@@ -745,7 +843,7 @@ SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
 # 学习就会漏掉该类测试。故机械钉住两侧的四类后缀判据。
 JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
 # 四类测试后缀（全项目统一命名契约，不得自创变体）
-JAVA_TEST_SUFFIXES = ("Tests", "BootTests", "PerfTests", "IT")
+JAVA_TEST_SUFFIXES = _RULES_TOKENS["JAVA_TEST_SUFFIXES"]
 # 测试类拆分裁决契约（一个被测类可拆多个类，但只按需求/分类拆、不得滥拆）：
 # 规范侧须留的三段判据——可拆声明 / 同分类同属性须归一类 / 禁止滥拆。
 # 这三段是**单一语义**（"可拆但不得滥拆"）的判据，被删或被改成"只准一个测试类"即口径漂移。
@@ -761,13 +859,7 @@ JAVA_TEST_SPLIT_MARKERS = {
 # 维护方自查层（`specs-project-maintainer/`）的文件名单（**唯一来源**）：`AGENTS.adoc` 的
 # 登记与"目录里有没有漏登记的文件"都用它。写死两份名单会让"新增一个维护方文件"时
 # 一边记得、一边忘掉（本仓库实测：新增 `guards.adoc` 后校验报红，红的是漏登记的那一处）。
-MAINTAINER_LAYER_FILES = (
-    "specs-project-maintainer/priority.adoc",
-    "specs-project-maintainer/spec-lifecycle.adoc",
-    "specs-project-maintainer/verify.adoc",
-    "specs-project-maintainer/context.adoc",
-    "specs-project-maintainer/guards.adoc",
-)
+MAINTAINER_LAYER_FILES = _RULES_TOKENS["MAINTAINER_LAYER_FILES"]
 
 CRITERIA_NOT_AXIS_SECTION = "机械防线的核对对象是"
 CRITERIA_NOT_AXIS_KEYS = (
@@ -1044,63 +1136,25 @@ LIBRARY_DIR = os.path.join(REPO_ROOT, "library")
 LIBRARY_INDEX = os.path.join(LIBRARY_DIR, "README.adoc")
 # 入口必须登记的主题文件（"登记集合须与实际文件双向一致"只要靠这个常量即可成立：
 # 实际多出未登记文件 → 报错；本常量里的文件缺失 → 也报错）
-LIBRARY_TOPICS = ("sources.adoc", "adoption.adoc", "usage.adoc", "throughput.adoc",
-                   "performance.adoc", "quality.adoc", "mirrors.adoc")
+LIBRARY_TOPICS = _RULES_TOKENS["LIBRARY_TOPICS"]
 # 『规范准入与自身取舍的依据』主题（library/adoption.adoc）的要点锚点：
 # 该主题承载"本集合自己承认的更严取舍与组织约定"，其价值全在"同义性差异必须写明"
 # ——若这几句被删，读者会把本站更严取舍（配置类不写逻辑、先例优先优先级、NPC 禁合并）
 # 当成外部标准原文，从而误判其可引用性（`specs/general/source.adoc`「外部引用」）。
 # 锚点分两组：①承认同义性差异的句式；②每条取舍的判据句（标准说了什么 / 本站加严了什么）。
-_LIBRARY_ADOPTION_ANCHORS = (
-    "== 同义性差异与覆盖点（本集合自己承认的）",
-    "本文件是依据图书馆的主题之一",
-    "**借用其原则**",
-    '**未**规定"配置类中任何逻辑一律禁止"',
-    "**未**规定此优先级顺序",
-    '**均未**规定"某一类执行者绝对不得合并"',
-    "是本项目自身的组织约定",
-)
+_LIBRARY_ADOPTION_ANCHORS = _RULES_TOKENS["_LIBRARY_ADOPTION_ANCHORS"]
 # 『依据的写入与关联』主题（library/usage.adoc）的要点锚点：
 # 该主题回答图书馆此前没有判据的两件事——**何时该写、写什么**（触发特征与不写判据）与
 # **依据与规则怎么关联、怎么反查**（两侧各写一半、只取一份不遍历的解析算法）。
 # 缺这几句，"写依据"重新变成靠自觉：AI 不主动写、写什么全凭发挥，或把规则本体抄进馆（第二真源）。
-_LIBRARY_USAGE_ANCHORS = (
-    "== 一、什么时候该把依据写进图书馆（触发特征）",
-    "== 二、依据与规则怎么关联（关联协议）",
-    "=== 反查解析算法（只取一份，不遍历）",
-    "== 三、默认引用面与非引用面（外部项目怎么处理）",
-    "判据是问句，不是印象",
-    "以下情形**不写**",
-    "**入库必写项**",
-    "**终止条件（L1）**",
-    "**只取一段（馆特别大时）**",
-)
+_LIBRARY_USAGE_ANCHORS = _RULES_TOKENS["_LIBRARY_USAGE_ANCHORS"]
 # 『依据的定位协议』（library/README.adoc）的要点锚点：
 # 图书馆**没有体量与范围上限**（link:README.adoc[]「放什么、不放什么」），将来可能特别大；
 # 于是引用方要在**不全量下载**的前提下准确定位"这条依据在哪个文件"。缺这几句，定位重新退化成
 # ①整馆下载、②按主题名猜文件名、③把图书馆当全文检索引擎——而**主键是内容（Git 对象）、
 # 不是路径**这一点若不写明，"文件改名即断档"会反复出现（本仓库的图书馆自身就搬过落点）。
-_LIBRARY_LOCATING_USAGE_ANCHORS = (
-    "== 四、引用方怎么准确定位依据（不全量下载）",
-    "**主键是内容、不是路径**",
-    "**协议不承载的东西（形态约束，L1）**",
-    "**终止条件（L1，同上）**",
-    "**取用侧是游客**",
-    "**只有 https、没有仓库、没有 git**",
-    "**文件名不承担定位（短、无语义，L1）**",
-)
-_LIBRARY_LOCATING_ANCHORS = (
-    '== 为什么还要有"定位协议"（馆可以无限大）',
-    "== 依据的定位协议（入口 + 索引 + 单点取值）",
-    "**第一步：入口 = 常驻层里的固定地址（不要自己拼地址）**",
-    "**版本固化（可选加固，不得写成前置）**",
-    "**分段取值（馆特别大时怎么只取一段）**",
-    "**形态约束（L1）**",
-    "**文件名协议（短、无语义、不承担定位）**",
-    "**作者侧**",
-    "**取用侧**是**游客**",
-    "**不解析页面结构**",
-)
+_LIBRARY_LOCATING_USAGE_ANCHORS = _RULES_TOKENS["_LIBRARY_LOCATING_USAGE_ANCHORS"]
+_LIBRARY_LOCATING_ANCHORS = _RULES_TOKENS["_LIBRARY_LOCATING_ANCHORS"]
 # 图书馆主题**文件名**的上限（字符数，含扩展名）：图书馆的检索键是**依据名**
 # （经入口「主题登记」表解析），**文件名不是主键、也不承担语义**——它却被读进每一次链接与每一次
 # 目录列举，故"名字写成一句话"会让每个读者反复为它付上下文，且制造"改名即断档"的错觉。
@@ -1126,16 +1180,9 @@ _LOCATING_COMMIT_PREREQ_PATTERNS = (
 )
 # 豁免：历史记录（`CHANGELOG.adoc` 记的是**当时口径**，不得改写）；以及**引用/否定该错误
 # 表述本身**的句子（含"不得/不要/走不通/取不到/失效/误区"等词）。
-_LOCATING_COMMIT_PREREQ_EXEMPT = ("不得", "不要", "不能", "走不通", "取不到", "失效", "误区",
-                                  "错误", "反例", "本站失效")
+_LOCATING_COMMIT_PREREQ_EXEMPT = _RULES_TOKENS["_LOCATING_COMMIT_PREREQ_EXEMPT"]
 
-_LIBRARY_LOCATING_SOURCE_MARKERS = (
-    "== 依据的定位与取值（git / RFC 9110）",
-    "In its first form, the command provides the content or the type of an object in the repository.",
-    "names the **blob or tree** at the given path",
-    "The 206 (Partial Content) status code indicates that the server is",
-    "**未实测**",
-)
+_LIBRARY_LOCATING_SOURCE_MARKERS = _RULES_TOKENS["_LIBRARY_LOCATING_SOURCE_MARKERS"]
 
 # 『包源与镜像源』防线（check_registry_mirror_guard）：
 # 规则本体在通用层（次序 + 逐级降级 + 先实测 + 不覆盖既有配置 + 推荐非强制），
@@ -1143,22 +1190,7 @@ _LIBRARY_LOCATING_SOURCE_MARKERS = (
 # 锚点须**能区分语义**：只留"已配置过**"这类任何措辞都会命中的片段，等于只拦得住
 # "整条被删"、拦不住"边界被改写"（正是本防线要防的失效形态），故每条的锚点取判据句。
 REGISTRY_SECTION = "包源（包仓库/镜像站）的选用"
-REGISTRY_ANCHORS = (
-    ("次序：就近/平台内 → 所在地区主流公共源 → 邻近境外源 → 更远境外源",
-     ("就近/平台内已优化的源", "主流公共源", "地理上邻近的其他境外源", "更远的境外源站"),
-     "次序被删后，'换源'重新退化成凭感觉挑一个"),
-    ("逐级降级、不得跳级", ("只有当上一级", "未配置过任何源时"),
-     "缺这条会把'优先次序'读成'必须用某一家'，或反过来直接跳到最远一级"),
-    ("先实测可用再启用、一次配置到位", ("先对候选源做一次**真实请求**", "一次配置到位", "不得**在每一轮里反复重试"),
-     "缺这条会'边构建边撞'或每轮重试同一个源（正是用户要求'先测试避免浪费时间'的落点）"),
-    ("不覆盖引用方既有配置、已配置过即沿用",
-     ("已配置过**包源时**一律沿用", "未配置过任何源\"时才动手配置", "**推荐源不是强制源**"),
-     "缺这条会把引用方既有私服/镜像配置重配一遍，或把推荐读成必须用某一家"),
-    ("推荐非强制、用户声明优先", ("**推荐源不是强制源**", "用户/项目声明的源永远优先"),
-     "缺这条会把推荐写成强制，与'用不了就换其他源'的初衷相反"),
-    ("实测取值与条件须可复核", ("结果须可复核", "取值与条件"),
-     "缺这条结论会只剩一句'已换国内源'，后人无法复核"),
-)
+REGISTRY_ANCHORS = _RULES_TOKENS["REGISTRY_ANCHORS"]
 # 『包源与镜像源』依据主题（library/mirrors.adoc）的要点锚点：该主题的价值全在
 # "外部材料与本站取舍分界 + 实测取值可复核"。锚点须能区分语义——只留"取样条件"
 # 四个字，任何写了这句话的文档都会命中（假绿）；故取判据句本身。
@@ -1226,6 +1258,11 @@ def detail(msg: str) -> None:
 def phase(name: str) -> None:
     """标记一个检查阶段的开始。"""
     log(f"▶ {name}...")
+    # 每道防线函数只跑一次自己的规则：同一条规则常被多处落点共用（一处引用一段文本），
+    # 而防线函数会按**落点**分几处判断（`if os.path.isfile(...)` 各写一次）。
+    # 规则步骤自身已按落点声明了核对对象（文件缺失由步骤自报），故**同一阶段内同名防线
+    # 只执行一遍**——否则一处缺失会被重复报出 N 遍，把真正的问题埋进噪音里。
+    _RULES_RUN_THIS_PHASE.clear()
 
 
 def phase_done() -> None:
@@ -1286,7 +1323,7 @@ def _rel_of(path: str) -> str:
 # 与"原位于…迁移至…"这类历史陈述（见 specs/general/changelog.adoc）。故它虽有语法形态、
 # 须纳入语法编译（防模板/换行被破坏），但**引用存在性、节名引用、链接格式、历史来源声明**
 # 四类检查对它一律不适用——历史条目里的旧路径"查不到"是记录本身，不是悬空/违规。
-HISTORICAL_FILES = ("CHANGELOG.adoc",)
+HISTORICAL_FILES = _RULES_TOKENS["HISTORICAL_FILES"]
 # 『变更日志条目形态』（`specs/general/changelog.adoc`「条目书写」）：主格式为**单行**
 # ——`版本号 | 日期 | 变更摘要`，条目内不得换行、不得写成多段。真实失效（本项目实测）：
 # 变更日志被当成追加区，同一条目被**多行续写**（heredoc / 多次 append），
@@ -1446,164 +1483,15 @@ QUALITY_LIBRARY = "library/quality.adoc"
 
 # 每条：要点名 → 须同时命中的锚点（规则 + 判定标准 + 依据 三件套；只查一处关键词会在
 # 换成另一种说法保留、实际要求被抽掉 时假绿）。
-QUALITY_ANCHORS = (
-    ("适用面与存量边界",
-     ("**适用面（先读）**", "**写任何新代码、改任何既有代码**时适用", "**新增的那一部分永远按本节判**"),
-     "适用面不写明时，执行者会把本条当作「存量也要全库改造」或「只管新文件」两种极端"),
-    ("不得引入坏味道（L1）",
-     ("新代码不得引入坏味道（L1）", "重复代码", "过长函数", "依恋情结", "注释代替澄清"),
-     "坏味道清单被压成「注意代码质量」后不可判定（判据退化成口号）"),
-    ("职责单一与嵌套上限（L1）",
-     ("职责单一、结构清晰（L1）", "三层以内", "一句话说清"),
-     "没有嵌套上限与「一句话说清职责」这两个可核对判据时，「结构清晰」无从判定"),
-    ("命名表意（L1）",
-     ("命名表意、不用缩写（L1）", "同一概念在项目中只有一个叫法", "拼音"),
-     "命名条缺「全文一致」与「禁缩写/拼音/数字后缀」时，只剩「命名要清晰」这类不可判定的话"),
-    ("可读性优先（L1）",
-     ("可读性优先（L1）", "魔法值", "同一表达式不重复求值"),
-     "可读性条被删后，「短写法」重新压过可读性（与表达式与调用写法同源、此处只重申）"),
-    ("失败与边界显式处理（L1）",
-     ("显式处理失败与边界（L1）", "不得吞异常", "边界条件必须显式处理"),
-     "不写「不得吞异常 / 边界须显式处理」时，新代码会把失败与边界留给运行期"),
-    ("无资源泄漏（L1）",
-     ("无资源泄漏（L1）", "确定性释放", "成对释放"),
-     "资源释放条缺「确定性释放机制 / 成对释放」时会被读成「靠 GC 也行」"),
-    ("无并发隐患（L1）",
-     ("无并发隐患（L1）", "共享可变状态", "锁范围与顺序"),
-     "并发条缺「共享可变状态须有明确同步策略」时，「没写同步」不会被判错"),
-    ("性能不写退化写法（L2）",
-     ("性能不写退化写法（L2）", "循环内", "N+1"),
-     "可预见的性能退化（循环内 IO/查询、循环内拼串、N+1）不点名时，新代码照写"),
-    ("测试与文档跟得上（L1）",
-     ("测试与文档跟得上（L1）", "新功能", "文档注释"),
-     "新功能必须配测试、行为改动须同步文档这两条不写，质量下限会漏掉「改动面」"),
-    ("交付前质量自检（L1）",
-     ("交付前质量自检（L1）", "逐条自查", "能过机械判据是下限"),
-     "没有「交付前逐条自查、机械判据只是下限」这一条，质量要求会被当成「编译过了就合格」"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "ISO/IEC 25010", "ISO/IEC/IEEE 12207",
-      "Martin Fowler", "Clean Code", "SEI CERT"),
-     "依据被删到只剩名称或整段消失时，读者无法核对「质量下限」的依据是否仍成立"),
-)
+QUALITY_ANCHORS = _RULES_TOKENS["QUALITY_ANCHORS"]
 
-GEN_EFF_ANCHORS = (
-    ("先定完成判据（L1）",
-     ("先定完成判据，再动手（L1）", "什么算做完", "返工来源"),
-     "没有「先定完成判据」这一条，生成效率会退化成「多跑几轮试试」"),
-    ("一次做对一次做完（L1）",
-     ("一次做对一次做完（L1）", "一次改到位", "碎片推进", "本轮交付之后是否需要再改同一批文件"),
-     "这条给出的正是「剩下的重来从哪来」的根因；缺则「分步推进」重新成为默认"),
-    ("延后验证、一次到位（L1）",
-     ("延后验证、一次到位（L1）", "攒到一处", "重启一次构建", "**存在真实依赖**"),
-     "缺「延后验证 + 例外口径」时，会把每次小改都重启构建（与执行吞吐的构建输出一次取到"
-     "同向，但本条管「要不要现在跑」）"),
-    ("失败一次查根因（L1）",
-     ("失败一次就查根因，不靠重试撞对（L1）", "同一问题上被执行第二遍", "新认识"),
-     "不写「不得靠重试撞对」，「改一处跑一次」就会被当成正常迭代（实证：轮次间隔占墙钟 65%）"),
-    ("按需读取、不全量预处理（L1）",
-     ("按需读取、不全量预处理（L1）", "全量预读", "低信号"),
-     "缺则「先把可能有用的资料全读一遍」重新成为默认，输入膨胀且准确率下降"),
-    ("批量化同类操作（L2）",
-     ("批量化同类操作（L2）", "批量一次做完", "脚本化"),
-     "同类操作串行的代价（每轮重付全上下文）不写时，没人会去合并"),
-    ("任务边界一次说清（L2）",
-     ("任务边界一次说清（L2）", "一次把边界与产物形态说清", "先做一版看看"),
-     "缺则「先做一版看看」被当成探需求的手段，做完再问必然返工"),
-    ("依据名代替复述（L2）",
-     ("依据名代替复述（L2）", "第二真源"),
-     "「依据名代替复述」与 token 纪律同源，缺则复述照写（既费篇幅又制造第二真源）"),
-    ("不重做已做完的事（L2）",
-     ("不重做已做完的事（L2）", "再确认一次", "再跑一遍看看"),
-     "缺则已确认的结论会被重复确认、已跑的校验被重复跑"),
-    ("收尾一次收敛（L2）",
-     ("收尾一次收敛（L2）", "一次写完", "零散补齐"),
-     "缺则汇报与留证被拖成多轮零散补齐"),
-    ("效率不得越过质量（L1，边界）",
-     ("效率不得越过质量（L1，本节的边界）", "不得用于减少", "**更少的质量**"),
-     "边界条缺位时，本节可被读成「为省一轮可以跳过校验/复核/留证」——那正是用户要求"
-     "不得出现的形态（不能影响效率和效果）"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "ISO/IEC/IEEE 25010", "Anthropic",
-      "Agent Skills"),
-     "依据被删时，「轮次当成本」的来源无从核对（外部材料讲注意力预算、不给执行侧判据）"),
-)
+GEN_EFF_ANCHORS = _RULES_TOKENS["GEN_EFF_ANCHORS"]
 
-TOKEN_ANCHORS = (
-    ("两个概念的区分（不是一回事）",
-     ("**不是一回事**", "提高 token 利用率", "节省 token", "**手段大幅重叠**"),
-     "缺这条就直接回答不了用户的问题（「是一回事吗」），且会把「省 token」当唯一目标、"
-     "顺手牺牲完整性"),
-    ("利用率判据：输入须被用到（L1）",
-     ("利用率判据：输入须", "**用到了**", "答不出用途", "无效输入"),
-     "没有「每份输入都要说出用在哪里」这个可核对判据，「利用率」只剩口号"),
-    ("约束放外部、不进上下文（L1）",
-     ("约束放在外部、不进上下文（L1）", "落成文件", "对话里每次请求都要重发"),
-     "缺则规则/清单/参数只留在对话里（每次请求重发），利用率永远上不去"),
-    ("少复述、多引用（L1）",
-     ("少复述、多引用（L1）", "复述", "依据名"),
-     "缺则模型把已知内容抄一遍当产出（输入很大、有效产出很小）"),
-    ("不重复读、不重复贴（L1）",
-     ("不重复读、不重复贴（L1）", "只读一次", "只贴一次"),
-     "缺则同一份文件被反复读入，纯浪费"),
-    ("只记结论与取值、不带原始日志（L1）",
-     ("只记结论与取值、不带原始日志（L1）", "原始日志", "取值 + 来源"),
-     "缺则汇报里灌日志（既是 token 也是注意力浪费；与性能测试「只记结果不记过程」同向）"),
-    ("三件事不得让步（L1，边界）",
-     ("三件事不得为省 token 让步（L1，本条的边界）", "**功能完整性**",
-      "**代码质量**", "**验证完整**"),
-     "边界条是本条存在的前提（用户明确「会影响效率和效果就不加」）——缺位即等于允许以"
-     "省 token 为名缩功能、降质量、漏校验"),
-    ("成本须可说明（L2）",
-     ("成本须可说明、不得以", "说不出来即应砍掉"),
-     "缺则「不贵」这类含糊说法可以带过（与运行契约的成本维度同源）"),
-    ("不设必须量化 token 的要求",
-     ("不设", "必须量化 token", "输入有没有被用上"),
-     "量化要求被塞进来时既增加开销、又不可核对（本集合的取舍须写明）"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "ISO/IEC/IEEE 25010",
-      "ISO/IEC Directives Part 2"),
-     "依据被删时，「引用不复述」与「性能效率可度量」的来源无从核对"),
-)
+TOKEN_ANCHORS = _RULES_TOKENS["TOKEN_ANCHORS"]
 
-AFTER_REVIEW_ANCHORS = (
-    ("①机械手段必须先跑且跑全（L1）",
-     ("机械手段必须先跑、且跑全（L1", "全量扫描", "报红就地修复"),
-     "缺「必须先跑、跑全、报红不留红」时，「改完跑一下」会被读成「跑一条像样的命令就行」"),
-    ("②干净子 agent 复核不可漏（L1，有了就忽略、没有就加）",
-     ("干净子 agent 的语义复核不可漏（L1", "有了就忽略", "没有就加", "项目自身规范"),
-     "这条正是用户点名的要求：必须 review、干净子 agent 不能漏；"
-     "「有了就忽略、没有就加」缺任一半，都会要么重复写第二份、要么永远没人补"),
-    ("③三视角一并回答、一次读取分栏",
-     ("三视角一并回答、一次读取分栏列（L1", "完整性", "有效性与认知质量", "接纳面"),
-     "缺则复核退化成单一视角（只看完整性、漏掉有效性与接纳面）"),
-    ("④三态台账、不得写散文（L1）",
-     ("三态台账", "未发现问题", "悬置", "不得合并"),
-     "缺「三态分列、不得合并」时，「查不出」与「没做」无法分辨"),
-    ("⑤子 agent 不可用时的降级留证（L1）",
-     ("子 agent 不可用时的降级与留证（L1", "不得跳过复核", "外部来源", "标注独立性边界"),
-     "缺则环境不支持子 agent 时会把「没复核」写成「已复核」，或据此停任务"),
-    ("本节的边界（只对规范类改动）",
-     ("只对规范类改动（B 类）", "代码类改动不做三视角"),
-     "缺边界则代码类改动被拖进概念性流程（把可控的验证做成不可控的多步流程）"),
-)
+AFTER_REVIEW_ANCHORS = _RULES_TOKENS["AFTER_REVIEW_ANCHORS"]
 
-CHANGE_REVIEW_ANCHORS = (
-    ("每次改动后的常规 review（L1）",
-     ("每次改动后的常规 review（L1）", "本次改动的全部产物", "按改动性质取值"),
-     "缺「每次」与「按性质取值」时，review 只在专门做 review 的任务里发生"),
-    ("改完即审的固定动作（L1）",
-     ("改完即审", "跑", "比", "核", "留"),
-     "缺固定动作（跑机械手段 / 比基线 / 核改动清单 / 留证）时，「审」没有可核对的落点"),
-    ("规范类改动不得只跑机械手段（L1）",
-     ("规范类改动不得只跑机械手段（L1", "跑绿了", "不等于"),
-     "缺则「机械全绿」会被当成「复核已做」"),
-    ("复核者不可用时（L1）",
-     ("复核者不可用时（L1", "不跳过复核", "如实标悬置"),
-     "缺则复核者不可用会被读成「这次免了」"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "IEEE 1028", "ISO 10007"),
-     "依据被删时，「每次改动都要评审」的来源无从核对（本集合严于 IEEE 1028 的「有评审发生」）"),
-)
+CHANGE_REVIEW_ANCHORS = _RULES_TOKENS["CHANGE_REVIEW_ANCHORS"]
 
 # 『精炼性（同一描述只写一处）』防线：用户本轮点名的两条要求——"精炼性规范应该在 review
 # 及重构时强制生效""依旧有很多相同的描述在不同的地方，不满足精炼性的要求"。
@@ -1615,29 +1503,7 @@ CHANGE_REVIEW_ANCHORS = (
 # 都通过 `delivery` 片段带上"重复面的处理"——否则"精炼性"只是通用层里的一段文字，
 # 在 review 与重构任务里不会被执行（正是用户说的"应该在 review 及重构时强制生效"）。
 REFINEMENT_SECTION = "精炼性（同一描述只写一处）"
-REFINEMENT_ANCHORS = (
-    ("重复面是必查项（L1）",
-     ("重复面是必查项（L1）", "没发现重复", "没查过重复"),
-     "缺「必查项 + 与『没查过』的分界」时，精炼性退回成一句口号：不查也算做到了"),
-    ("判定标准（逐条可核对）",
-     ("判定标准（任一命中即为重复描述）", "以完整表述出现", "改一处要记得改 N 处"),
-     "缺判定标准则本条自身也不可判定（「什么算重复」交回执行者凭感觉）"),
-    ("收敛形态（L1）",
-     ("收敛形态（L1）", "一处完整定义", "其余位置只留"),
-     "缺收敛形态时「发现重复」没有规定的处置方式，容易滑向「删掉了事」"),
-    ("与 P3 的边界（L1）",
-     ("不得以去重换缺失（L1", "须留下可达的引用", "一律保留"),
-     "缺这条边界时，去重会以「删掉重复」的名义删掉唯一那份内容（与内容不减少的底线冲突）"),
-    ("两类形态不得被当成重复收敛",
-     ("不得被当成重复收敛", "最高关注项与其引用", "各自的承接"),
-     "缺则会把「刻意强调的引用」与「分层承接」误当重复合并掉（本仓库已实证过的误删形态）"),
-    ("篇幅与重复是两件事",
-     ("是两件事", "不是字多字少"),
-     "缺则精炼性会被读成「写短点」，长的条目被无理由砍内容"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "ISO 10007", "ISO/IEC/IEEE 29148"),
-     "依据被删时，「同一要求只应有唯一表述落点」的来源无从核对"),
-)
+REFINEMENT_ANCHORS = _RULES_TOKENS["REFINEMENT_ANCHORS"]
 # `delivery` 片段里"重复面的处理"须在的要点（两个提示词共用同一片段，改一处即两处生效）
 REFINEMENT_DELIVERY_ANCHORS = (
     ("重复面的处理（L1",
@@ -1665,41 +1531,7 @@ REFINEMENT_DELIVERY_ANCHORS = (
 # "「信息密度」这一节在不在"属防线空转——判定标准与边界被抽走时照样全绿。
 INFO_DENSITY_SECTION = "信息密度（每句须承载）"
 DOC_SPEC = "specs/general/doc.adoc"
-INFO_DENSITY_ANCHORS = (
-    ("与精炼性的分工（两把尺子）",
-     ("与 `specs/general/review.adoc`「精炼性」是两件事、两把尺子",
-      "同一描述有几处", "单处里有多少句是废话", "仍可能通篇是废话"),
-     "不分工时，本条会被读成精炼性的重复条目而合并删除；而两者判的是不同对象"
-     "（跨处的重复面 / 单处的密度）——合并即少一把尺子"),
-    ("每一句都要有承载（含判定标准）",
-     ("每一句都要有承载（L2）", "判定标准（任一命中即违规）",
-      "复述", "空话", "同义反复", "可有可无的铺垫"),
-     "缺判定标准时本条自身不可判定（「有没有废话」交回执行者凭感觉），"
-     "退化成又一句「要注意简洁」"),
-    ("限定语不得降格为表意不明",
-     ("陈述句不得降格为表意不明（L2）", "不承载信息的限定语", "须写出边界"),
-     "缺则「为了看起来严谨而写的不承载信息的限定语」无从判定，"
-     "而这正是学术文体与规范文体里最常见的冗余形态"),
-    ("与 P3 的边界（不得反用删内容）",
-     ("边界（防反用，L1）", "内容不减少",
-      "只有\"这一句没有承载\"才是", "违反 P3"),
-     "缺这条边界时，本条会被反用成「这一段很长就删短」——直接撞最高关注项 P3"
-     "（内容不减少），也会把多条判据压成一句口号"),
-    ("适用面",
-     ("适用面（L2）", "不适用"),
-     "缺适用面时会被套到代码与测试断言上（那是 coding.adoc「代码质量」的判据面），"
-     "造成高频误伤"),
-    ("存量边界",
-     ("发现即改、不单独发动全库清理（L2）", "随动迁移"),
-     "缺则会被读成「立刻发动全库瘦身」（一次性大改造）"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "**GB/T 7713.2-2022**", "**GB/T 7713.1-2025**",
-      "ISO/IEC Directives Part 2", "ISO/IEC/IEEE 29148"),
-     "依据被删时「学术文体以信息密度衡量冗余」这一来源无从核对，"
-     "而它正是本条与「精炼性」得以分家的理由。**标准名单独成对加粗**：本仓库实测的"
-     "写坏形态是 `**GB/T 7713.2-2022（学术论文编写规则**`（标准名与编号错位），"
-     "按『关键字在不』核会全绿而读者读到的依据是坏的——故核成对加粗的**标准名本身**"),
-)
+INFO_DENSITY_ANCHORS = _RULES_TOKENS["INFO_DENSITY_ANCHORS"]
 # 两处**动作落点**同口径（防「规则写了、别处不引」）：
 #   ① `doc.adoc`「文档质量」的「简洁」条须一行指向本条（执行者从"简洁"进得去）；
 #   ② `review.adoc`「精炼性」须一行写明分工（从"精炼性"进得去）。
@@ -1985,78 +1817,11 @@ JAVA_SERIAL_SECTION = "序列化（`Serializable`）"
 JAVA_SPEC = "specs/stack/java.adoc"
 CODING_SPEC = "specs/general/coding.adoc"
 
-JAVA_SERIAL_ANCHORS = (
-    ("已实现者须显式声明（L1）",
-     ("须显式声明 `serialVersionUID`（L1）", "**必须显式声明**", "父类已实现"),
-     "不写「已声明实现者必须显式声明、含父类已实现」时，本条会退化成「建议加上」——"
-     "而它要治的正是「未显式声明 ⇒ 由类结构推导 ⇒ 结构一变即 InvalidClassException」"),
-    ("缺省取值 1L 与配置实时读取",
-     ("取 `1L`", "`lombok.config`", "**实时取值**"),
-     "缺省值不写死时『默认值是多少』回到执行者手里（本条的动因就是用户被警告反复打扰）；"
-     "不要求实时读取 `lombok.config` 则与既有配置冲突"),
-    ("`@Serial`（JDK 14+）",
-     ("`@Serial`", "编译期报出", "JDK 14"),
-     "缺则显式声明照样可能拼错、且拼错要等运行期才发现"),
-    ("不为未实现者补（L1，防顺手扩大面）",
-     ("不为未实现 `Serializable` 的类型补（L1）", "**不得**为「消警告」", "顺手给它加 `implements Serializable`"),
-     "这是用户原话里点名的边界（「仅限已经实现了 Serializable 的类型，没实现不自动加 Serializable 实现」）——"
-     "缺则执行者会为『消警告』把类改成可序列化契约的一部分"),
-    ("显式声明优先于抑制（L1）",
-     ("显式声明优先于抑制（L1）", "`@SuppressWarnings`", "警告与弃用"),
-     "缺则「抑制掉警告」会被当成完成——与 `specs/general/coding.adoc`「警告与弃用」的"
-     "「新代码不得引入警告」相抵"),
-    ("判定标准与存量口径",
-     ("判定标准（任一命中即违规）", "存量处理」随动迁移"),
-     "缺判定标准时本条自身不可判定；缺存量口径则会变成一次性全库改造（与 P3 邻接口径冲突）"),
-    ("依据行（标准名/编号）",
-     ("依据（标准名/编号）", "Java Object Serialization Specification", "Java 官方 API 文档",
-      "**「默认取 `1L`」是本集合的取值**"),
-     "依据被删时「为什么必须显式声明、为什么默认 1L」的来源无从核对；"
-     "不写「1L 属本集合取值」则会被读成标准的明文要求"),
-)
+JAVA_SERIAL_ANCHORS = _RULES_TOKENS["JAVA_SERIAL_ANCHORS"]
 
-JAVA_VAL_VAR_ANCHORS = (
-    ("优先 val、可变才 var（L1）",
-     ("局部变量强制使用 `val`/`var`，且优先 `val`、可变才用 `var`（L1）",
-      "必须且一律**使用 `val`/`var`", "先取 `val`", "例外档、不是并列选项"),
-     "缺则「`val`/`var` 随意二选一」重新成立（用户要求的是『优先 val』——"
-     "不可变优先于可变，不是两者等价）"),
-    ("判定标准（用 var 却没重新赋值即违规）",
-     ("判定标准（任一命中即违规）", "用 `var` 声明的局部变量此后从未重新赋值"),
-     "这是本条唯一能机械核对的那句话——缺则「优先 val」只是口号"),
-    ("例外（类型推断不清）",
-     ("例外（L2）", "类型推断结果不清晰", "以 `null` 字面量初始化"),
-     "缺例外口径时复杂泛型/匿名类处会被迫写出不可读的推断写法，反而降低可读性"),
-    ("未引入 lombok 时按 var 执行 + 字段不得用",
-     ("未引入 lombok 时", "没有 `val`", "字段不得使用"),
-     "`val` 是 lombok 提供的能力——缺「未引入时按 `var` 兜底」会逼出为 `val` 另引依赖；"
-     "缺「字段不得使用」则 `val`/`var` 会被误用到字段上"),
-    ("依据行与「本集合取值」定性",
-     ("依据（标准名/编号）", "Project Lombok 官方文档", "Google Java Style Guide",
-      "是本集合对 lombok 的判据化取值"),
-     "不写「更严、属本集合取值」时，读者会以为风格指南规定必须用 `val`"),
-)
+JAVA_VAL_VAR_ANCHORS = _RULES_TOKENS["JAVA_VAL_VAR_ANCHORS"]
 
-CHAIN_CALL_ANCHORS = (
-    ("链式调用一律换行（L1，长度不是判据）",
-     ("链式调用一律换行（L1）", "每个环节各占一行", "长度不是判据", "不得**因为「这行放得下」而写成一行"),
-     "缺「长度不是判据」时本条会退回通行风格的『按行宽决定』——"
-     "而用户点名要治的正是「很短就写一行」这个裁量点"),
-    ("判定标准（同行两处及以上环节即违规）",
-     ("判定标准（任一命中即违规）", "两处及以上"),
-     "判定标准是唯一可核对的那句话；缺则「多短算短」回到执行者手里"),
-    ("例外（L2，单层调用与断言）",
-     ("例外（L2）", "单个不可再分的原子表达式", "测试断言"),
-     "无例外口径时单层调用（`a.b()`）也会被拆行——那不是收益、只是刷行数"),
-    ("边界（只改形态、不改语义）",
-     ("边界（防反用）", "只规定换行形态、不改变求值语义与调用顺序"),
-     "缺边界则本条会被反用成「把链改成多个中间变量 / 分步 return」，"
-     "那是另一件事且会改变链式语义（与 P3 邻接的可读性口径冲突）"),
-    ("依据行与「本集合取值」定性",
-     ("依据（标准名/编号）", "Google Java Style Guide", "阿里巴巴 Java 开发手册",
-      "是本集合的判据化取值"),
-     "不写「严于通行风格（按行宽）」时，读者会以为风格指南就是这么规定的"),
-)
+CHAIN_CALL_ANCHORS = _RULES_TOKENS["CHAIN_CALL_ANCHORS"]
 
 
 def check_info_density_guard():
@@ -2341,8 +2106,8 @@ def check_java_serial_guard():
 # 两个实现都探测不到时**报错**：语法验证是"确定项"（文件能否编译、include 目标在不在，
 # 二值可判），跳过它等于把已声明的校验手段变成摆设——用户口径：**不得省略**。
 # 空串是"未指定"：默认取仓库根（REPO_ROOT 现场推导，见 _detect_asciidoc_processor）。
-ASCIIDOC_PROCESSORS = ("asciidoctor", "asciidoc")
-ADOC_ROOTS = ("",)
+ASCIIDOC_PROCESSORS = _RULES_TOKENS["ASCIIDOC_PROCESSORS"]
+ADOC_ROOTS = _RULES_TOKENS["ADOC_ROOTS"]
 
 
 def _collect_adoc_files(root_dir):
@@ -2479,21 +2244,7 @@ def check_toolchain_present_guard():
     else:
         with open(ci_path, encoding="utf-8") as fh:
             ci = fh.read()
-        for keys, desc in (
-                (("不得因缺工具而静默跳过", "L1"),
-                 "条文本体与级别：缺工具须装齐、不得静默跳过，且须标 L1"
-                 "（否则会被当成『尽力而为』放过）"),
-                (("先探测", "装齐", "自动跳过"),
-                 "判定标准须可逐条核对：跑之前先探测工具、缺则装齐；把"
-                 "『环境里没有就自动跳过』显式判为不符合本条"),
-                (("未执行", "不得记作通过"),
-                 "降级路径须写明：装不上时如实标『未执行 + 原因』，不得记作通过"),
-                (("安装方式", "install"),
-                 "须给出安装方式（命令级），否则执行者知道要装却不知道装什么")):
-            missing = [k for k in keys if k not in ci]
-            if missing:
-                err(f"校验工具链齐备防线被破坏：{rel_ci} 缺失 {missing}——{desc}"
-                    "（本仓库实证：语法验证段写着、环境里没工具、脚本却报 OK）", rel_ci)
+        run_rule_guard("check_toolchain_present_guard")
     # ② 本仓库落点：AGENTS.adoc 须点名脚本、探测次序与安装命令
     rel_own = "AGENTS.adoc"
     own_path = os.path.join(REPO_ROOT, *rel_own.split("/"))
@@ -2502,17 +2253,7 @@ def check_toolchain_present_guard():
     else:
         with open(own_path, encoding="utf-8") as fh:
             own = fh.read()
-        for keys, desc in (
-                (("check_asciidoctor_syntax",),
-                 "须点名承载该检查的那道防线（否则读者只看得到一句原则）"),
-                (("`check_asciidoctor_syntax` 会**直接报错**", "不再\"跳过\""),
-                 "须写明缺工具时**报错而非跳过**（这条是本防线的失效模式："
-                 "写成『跳过』时脚本会长期报绿）"),
-                (("gem install asciidoctor",),
-                 "须给出安装命令（README/workflow 只是路径，命令要能照抄）")):
-            missing = [k for k in keys if k not in own]
-            if missing:
-                err(f"校验工具链齐备防线被破坏：{rel_own} 缺失 {missing}——{desc}", rel_own)
+        run_rule_guard("check_toolchain_present_guard")
     # ③ CI：安装步骤 + **装后校验**（只"装"不校验时，装失败仍会退回"缺工具也绿"）。
     # 判据按**每步实际执行的命令**取值（见 `_workflow_runs`）：教程式注释、步骤名、
     # 排在安装之前的版本输处、以及"装与校验分成两步"都会被拦下——这几种形态下
@@ -3721,8 +3462,41 @@ def check_install_repeat_update_guard():
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
-GUARD_WIRING_BASELINE = 97
-GUARD_TEST_BASELINE = 1135
+# **本次记账（规则与脚本的隔离）**：接线数 93 → 94（新增 `check_rule_script_separation_guard`，
+# 钉住"规则数据外置、配置缺失即报错、报错文案随数据走"）；用例数 1041 → 1077
+# （`script/rules_engine_test.py` 的 36 条：引擎各步骤的命中/缺失两向、取节失败即报错、
+# 配置非法即致命错、配置防线名须被脚本接线）。两笔都是**净增**，无删除。
+# **本轮追加（规则文件按落点切分 + 自动扫描加载）**：
+#   * 规则数据由**单文件**（`script/specs-rules.json`）改为**目录**
+#     （`script/specs-rules/`，一类规则一个文件、按被测落点切分）——用户口径："不要把所有
+#     文件的规则都放到一个文件里（很容易冲突，且不好管理）"；
+#   * 加载侧改为**登记目录 + 自动扫描**（`rules_engine.load_rule_files` /
+#     `default_rules_spec`），加一个规则文件**不必改脚本**——用户口径："自动扫描规则文件加载"。
+#   接线数与防线数不变（94）；用例数 1077 → 1085（`rules_engine_test.py` 36 → 44 条：
+#   多文件扫描/合并/同名键报错/空目录报错/新步骤类型 `text_block_groups` 的新增用例）。
+# **本轮追加（格式换 TOML）**：规则文件后缀 `.json` → `.toml`（`rules_engine` 的
+#   `RULES_FILE_SUFFIX` 单点定义、改用标准库 `tomllib` 解析）；`rules_engine_test.py`
+#   新增「同名表头由语法直接拒绝」1 条，用例数 1150 → 1151。
+# **解决冲突一轮（与 main 合并）**：目标分支 main 在本分支开工后并入两笔与本轮同源的内容，
+#   两笔都不得丢，故按合并后的实取数回填两个基线：
+#     * **接线数 97 → 98**：main 新增 `check_conflict_resolution_guard`（冲突与压缩提交——
+#       通用层规则本体 / git 侧落地 / 平台侧追加口径三处分别按节核对），本分支的
+#       `check_rule_script_separation_guard` 保持——`CHECKS` 序列里两道同时在序，
+#       清单表同步为 98 行、编号 1..98 连续。
+#     * **用例数 1151 → 1180**：合并 main 侧 `check_conflict_resolution_guard` 与
+#       `check_squash_commit_guard` 的新增反例用例后同源实测（`Ran 1180 tests ... OK`）。
+#     * **规则数据同口径迁移**：main 新增/改写的规则措辞一并外置到规则数据——
+#       `check_squash_commit_guard` 的组按 main 现文回填进 `cnb.toml`；
+#       `check_conflict_resolution_guard` 的规则落 `version-control.toml`（一类规则一个文件、
+#       按被测落点切分），防线函数体只留 `run_rule_guard(...)` 接线，三处死代码
+#       （`_vc_conflict_section`/`_vc_scope_section`/`_vc_squash_section`）随之删除。
+# **本轮复核修复（同源实测）**：用例数 1180 → 1182——`rules_engine_test.py` 新增
+#   「报错文案里写了引擎不认识的占位符即报错」1 条（实测形态：`{rel_exec}` 未被替换、
+#   原样留在报错正文里），`check_specs_test.py` 新增「同一处缺失不得被重复报出」1 条
+#   （同一防线名被多处落点重复接线时，实测 12 条报错里只有 4 条是不同问题）。
+GUARD_WIRING_BASELINE = 98
+GUARD_TEST_BASELINE = 1182
+
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
 #   随防线一并删除，净变动按合并后实取数记全——不按两侧各自数目相加，避免基线虚高后
@@ -3811,6 +3585,18 @@ GUARD_TEST_BASELINE = 1135
 #       `Ran 1106 tests ... OK`）——基线只允许"不低于实测"，故按实测回填。
 #     非脚本侧冲突同样两侧并留：`AGENTS_COMMON.adoc` / `README.adoc` 的技术栈与通用层
 #     说明同时保留「Java 字段接口只加 get 不加 set」与 main 的「SQL 写法 / `sql.adoc`」。
+#   **解冲突一轮（PR #167 冲突处置，也是本轮要求）**：与 main 再次冲突，两侧新增一并保留，
+#   两个基线各按**合并后的实取数**回填（不按两侧各自数目相加，避免基线虚高后"删用例不报红"）：
+#     * 接线数 **96(两侧) → 97**：本分支的 `check_rule_script_separation_guard` 与 main 的
+#       `check_entity_dto_guard` / `check_java_interface_accessor_guard` / `check_alter_merge_guard`
+#       各类一道，在 `CHECKS` 序列里各占一个位置，一道都不丢；清单表同步为 97 行、
+#       编号 1..97 连续，与 `CHECKS` 逐一同序。
+#     * 用例数 **1106 / 1085 → 1150**：两侧用例都保留后同源实测
+#       （口径＝`script/` 下全部 `*_test.py` 的 `test_*` 方法数逐条相加）——只允许"不低于实测"。
+# **本轮（规则文件格式换成 TOML）**：用户口径"配置文件格式换成 toml"。接线数与防线数不变
+# （97）；用例数 1150 → 1151（`rules_engine_test.py` 净增 1 条：TOML 同名表头由语法直接拒绝
+# 的反例；另有 3 条随格式改名/改写：纯 TOML 校验、非法 TOML 报错、合法 TOML 读入）。
+# 判据侧新增一处确定项：`script/specs-rules/` 下须存在 `*.toml`（换回别的格式即报红）。
 
 def _read_ledger_no_grip_declared():
     """从台账 `script/check_effective.py` 读出「无机械抓手」的声明措辞（唯一真源）。
@@ -4008,15 +3794,21 @@ def check_guard_manifest():
             "（函数体完好、台账也点了名），但永远不会执行；要么接线、要么删掉并记账",
             "script/check_specs.py")
 
-    test_src = _read_script_src("script/check_specs_test.py") or ""
-    eff_src = _read_script_src("script/check_effective_test.py") or ""
-    tests = len(re.findall(r"(?m)^\s+def (test_[A-Za-z0-9_]+)\(", test_src))
-    tests += len(re.findall(r"(?m)^\s+def (test_[A-Za-z0-9_]+)\(", eff_src))
+    # 用例数口径：`script/` 下**全部** `*_test.py` 的 `test_*` 方法数逐条相加
+    # （与"防线放在哪个文件"无关——新增一个测试文件时该数随之增长，不必回填口径）。
+    tests = 0
+    script_dir = os.path.join(REPO_ROOT, "script")
+    if os.path.isdir(script_dir):
+        for fn in sorted(os.listdir(script_dir)):
+            if not fn.endswith("_test.py"):
+                continue
+            src_i = _read_script_src(f"script/{fn}") or ""
+            tests += len(re.findall(r"(?m)^\s+def (test_[A-Za-z0-9_]+)\(", src_i))
     if tests < GUARD_TEST_BASELINE:
         err(f"防线反例用例数从基线 {GUARD_TEST_BASELINE} 减到 {tests}——**反例用例是防线的"
             "实际效力来源**（一条防线被删时常连带删掉它的全部反例，而脚本与单测仍全绿）；"
             "确实要删就得说明删了哪些、为什么删（并同步 `GUARD_TEST_BASELINE`）。"
-            f"**本数是两处**——`script/check_specs_test.py` 与 `script/check_effective_test.py`"
+            f"**本数是 `script/` 下全部 `*_test.py`**"
             f"（各文件的 `test_*` 方法数逐条相加，当前 {tests}）；只核**数量不得减少**，"
             "同文件内改名/增删一进一出都能维持该数，故别把它读成「某条用例仍在」",
             "script/check_specs_test.py")
@@ -4261,8 +4053,7 @@ def check_section_refs():
 # 占位词：整段除它之外没有任何实质内容时，才算"无实质内容的占位段"。
 # 判定刻意**不含字符数阈值**——"参考：""内容为：" 这类短引导句是正常文档写法，
 # 按字数判注水必然误伤；短不等于水，篇幅问题属语义判断、交人 review。
-FILLER_PLACEHOLDER_WORDS = ("此处", "本段", "待补", "待完善", "待补充", "后续补充",
-                            "内容同上", "详见上文", "TODO", "略")
+FILLER_PLACEHOLDER_WORDS = _RULES_TOKENS["FILLER_PLACEHOLDER_WORDS"]
 FILLER_DUP_MIN_CHARS = 12       # 判重段落的实质字符下限（只滤掉"重复标点/符号行"，短而真实的重复条目仍应报）
 FILLER_MIN_SUBSTANCE_CHARS = 4  # 段落"实质字符"下限：低于此值视为格式分隔行（如 `：`、`——`），不判注水
 # 承载实质内容的行结构：列表条目、表格行、链接、块属性、注释行
@@ -4483,15 +4274,7 @@ def check_priority_guard():
         err(f"{rel_priority} 未找到 P6 条目正文——协作执行者选择的口径失去落点", rel_priority)
     else:
         p6 = p6_m.group(0)
-        for keys, desc in ((("不得点名外部 Agent", "同 Agent 身份", "降级"),
-                            "P6 须与公共侧同口径写『强制同 Agent、不得点名外部 NPC、"
-                            "不可用时降级为本人串行或如实标悬置而不换外部来源』"),
-                           (("要求（L1，最高", "依据"),
-                            "P6 的级别与依据行仍须保留（级别不得被静默改动、依据不得整段删除）")):
-            missing = [k for k in keys if k not in p6]
-            if missing:
-                err(f"规范优先级防线被破坏：{rel_priority} 的 P6（协作执行者选择）缺失 "
-                    f"{missing}——{desc}", rel_priority)
+        run_rule_guard("check_priority_guard")
         if "备选" in p6 or "同源不可用" in p6:
             err(f"规范优先级防线被破坏：{rel_priority} 的 P6 正文出现旧口径字样"
                 "（『外部来源作备选』/『同源不可用』）——该口径已被公共侧收紧为"
@@ -5547,28 +5330,7 @@ def check_dev_flow_guard():
         err(f"缺少文件 {rel_ex}——「先规划后执行」的底线无处承载", rel_ex)
     else:
         ex = open(path_ex, encoding="utf-8").read()
-        for keys, desc in (
-            (("动手前先摸清现状与最佳方案（L1）", "先调研最佳实践", "先规划后执行",
-              "调整内容一类需求", "先找现成可参照的既有标准与更优设计"),
-             "须有「动手前先摸清现状与最佳方案」L1 条且含**需求侧先找参照物**"
-             "（用户提需求/新增与调整同属一类时，先查有无现成可参照的标准与更优设计；"
-             "缺此半条则『调研最佳实践』只在执行者自愿时发生）"),
-            (("不得绕开既有体系另写一套（L1）", "允许另写一套的条件只有三个", "不留两套并存"),
-             "须有「不得绕开既有体系另写一套」L1 条与三个允许条件（防『新写一套能满足需求』被当成完成）"),
-            (("大范围改动先确认（L1）", "不得替用户判定某段既有流程", "已废弃"),
-             "须有「大范围改动先确认」L1 条与『是否废弃由用户认定』（旧流程的废弃不能被执行者自行认定）"),
-            (("改动前先定基线（L1）", "扫描项目声明的全部校验手段", "完整可用时必须先跑通",
-              "落盘留证", "复跑同一套校验", "够不够用", "先按用例设计判据 review 既有用例",
-              "本次改动的直接相关面", "不阻断动手"),
-             "须有「改动前先定基线」L1 条且含扫描/跑通/留证/复跑四要素 + **基线完整性（L2）**"
-             "（清单够不够用、先 review 既有用例、只补本次直接相关面、无关缺口不阻断）"),
-            (("基线是否已定", "是否与基线逐项比对"),
-             "任务生命周期表的「方案」「验证」两节点须带基线条（缺则该节点到点不会问基线）"),
-        ):
-            missing = [k for k in keys if k not in ex]
-            if missing:
-                err(f"开发流程防线被破坏：{rel_ex} 缺失要点 {missing}——{desc}；"
-                    "该要求不得删除、不得降级为建议", rel_ex)
+        run_rule_guard("check_dev_flow_guard")
     # ② 通用层展开
     rel_pl = "specs/general/planning.adoc"
     path_pl = os.path.join(REPO_ROOT, *rel_pl.split("/"))
@@ -5577,46 +5339,7 @@ def check_dev_flow_guard():
             "（必加载层只剩底线，条件判据与判定标准无处可查）", rel_pl)
     else:
         pl = open(path_pl, encoding="utf-8").read()
-        for keys, desc in (
-            (("先查现状（L1）", "不得凭印象或标题推断", "核实方式"),
-             "须有「先查现状」L1 与『不得凭印象推断/须列核实方式』"),
-            (("先调研最佳方案（L1）", "备选方案与取舍依据", "能交差"),
-             "须有「先调研最佳方案」L1（含备选方案与取舍依据、不得只给『能交差』的写法）"),
-            (("需求先找参照物（L1）", "新增与调整同属一类", "业界标准/权威约定",
-              "既有通行设计范式", "本项目既有条目与先例", "既有实现与先例优先",
-              "查不到", "未确证", "查到更优的设计就用更优的"),
-             "须有「需求先找参照物」L1 条（调整内容一类需求先检索①业界标准/权威约定"
-             "②既有通行设计范式③本项目既有条目与先例三条路；查不到须能说出查证方式并标未确证；"
-             "有更优设计用更优的；缺此条则『用户怎么说就怎么收』仍是合规路径）"),
-            (("说不出参照物与检索动作", "有标准可循却自造一套说法",
-              "有更优设计却仍按原口述照收",
-              "判定标准", "收的是哪一条", "不得只留结论、不留取舍", "依据"),
-             "「需求先找参照物」须带可核对判定标准（说不出参照物/自造一套说法/照收口述不说明理由"
-             "三类命中即不合规），并写明**收的是哪一条须留痕**、**判定标准与依据各自成行**"
-             "（判定标准句被抽走、或该条只剩一句口号时须报红）"),
-            (("默认改在既有实现上（L1）", "确实无法承载", "已被用户确认废弃",
-              "已被证明优于", "不留两套并存"),
-             "须有「不得绕开既有体系另写一套」的三个允许条件与处置要求"),
-            (("大动之前先确认（L1）", "保持原状", "是否废弃只能由用户认定"),
-             "须有「大范围改动先确认」L1（未确认前保持原状、废弃由用户认定）"),
-            (("动手前先定基线", "扫描既有验证手段（L1）", "能跑通即跑通、并落盘留证（L1）",
-              "不完整或本来就红时怎么办（L1，防把基线变成硬性前置）", "没有任何校验手段",
-              "留证不等于",
-              "红的还是红的", "基线用于改完复跑（L1）", "既有用例不得为迁就改动而改判"),
-             "「动手前先定基线」须齐备扫描/跑通留证/**无手段与红测试不阻断**/复跑/与测试侧接口"
-             "（缺降级分支会把基线变成引用方的硬性前置）"),
-            (("基线的完整性：手段与用例够不够用（L2）", "先按这些判据 review 既有用例",
-              "复核了哪些角度与样本", "正常路径", "异常路径", "正反例成对", "步骤与前置",
-              "本次改动的直接相关面", "无关的存量缺口", "不阻断", "用例设计", "测试有效性"),
-             "「动手前先定基线」须含**基线完整性（L2）**条：手段与用例可能不完整（边界/正反例/步骤），"
-             "先 review 既有用例并给出复核角度与未覆盖项，只补本次直接相关面、无关存量缺口不阻断"
-             "（缺此条则『扫一遍声明的命令』仍会被当成完整基线）"),
-            (("ISO 10007",),
-             "基线条须给依据（ISO 10007 配置管理与变更控制）"),
-        ):
-            missing = [k for k in keys if k not in pl]
-            if missing:
-                err(f"开发流程防线被破坏：{rel_pl} 缺失要点 {missing}——{desc}", rel_pl)
+        run_rule_guard("check_dev_flow_guard")
     # ②b 验证侧：覆盖全部既定校验手段 ≠ 手段/用例够用（基线完整性的验证侧口径）
     rel_v = "specs/general/verify.adoc"
     path_v = os.path.join(REPO_ROOT, *rel_v.split("/"))
@@ -5624,15 +5347,7 @@ def check_dev_flow_guard():
         err(f"缺少文件 {rel_v}——验证侧口径无处承载", rel_v)
     else:
         v = open(path_v, encoding="utf-8").read()
-        for keys, desc in (
-            (("验证须覆盖项目的全部既定校验手段（L1）", "本身可能不完整", "先按 link:testing.adoc[]「用例设计」review",
-              "哪些未覆盖", "本次改动的直接相关面"),
-             "「验证须覆盖项目的全部既定校验手段」须补『被跑的那一套够不够用』——手段与被跑用例本身可能不完整，"
-             "须先按用例设计判据 review 并说明未覆盖/未确证项（只钉『跑全了』会漏掉『跑的那套本来就不全』）"),
-        ):
-            missing = [k for k in keys if k not in v]
-            if missing:
-                err(f"开发流程防线被破坏：{rel_v} 缺失要点 {missing}——{desc}", rel_v)
+        run_rule_guard("check_dev_flow_guard")
     # ③ 测试侧：老用例不得为迁就改动而改判 + 兼容不了先确认
     rel_t = "specs/general/testing.adoc"
     path_t = os.path.join(REPO_ROOT, *rel_t.split("/"))
@@ -5640,38 +5355,14 @@ def check_dev_flow_guard():
         err(f"缺少文件 {rel_t}——回归/兼容口径无处承载", rel_t)
     else:
         t = open(path_t, encoding="utf-8").read()
-        for keys, desc in (
-            (("重构后须**同时满足既有用例与新用例**", "既有用例不得为迁就重构而改判",
-              "相关功能被显式移除", "前后完整兼容", "Semantic Versioning"),
-             "须有「重构后须同时满足既有用例与新用例」L1（含『既有用例不得改判、除功能被移除』"
-             "与兼容性定义依据）——否则「让老用例变绿」会重成默认做法"),
-            (("兼容性无法满足时先确认（L1）", "兼容不了", "老旧废弃流程",
-              "不得自行取舍"),
-             "须有「兼容性无法满足时先确认」L1（含老旧废弃流程与『不得自行取舍』）"),
-        ):
-            missing = [k for k in keys if k not in t]
-            if missing:
-                err(f"开发流程防线被破坏：{rel_t} 缺失要点 {missing}——{desc}", rel_t)
+        run_rule_guard("check_dev_flow_guard")
     # ④ 提示词侧：两个片段须在，且两个提示词都引入
     rel_cf = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/").replace(os.sep, "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
         err(f"缺少提示词公共片段 {rel_cf}——基线/兼容口径无处承载", rel_cf)
     else:
         cf = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("tag::baseline-and-compat[]", "先查现状、再谈方案", "先定基线",
-              "大动之前先确认", "不得绕开既有实现另写一套", "都不是不动手的理由",
-              "基线清单还要核", "够不够用", "review 既有用例", "无关的存量缺口",
-              "调整内容一类需求", "先找现成可参照的既有标准与更优设计"),
-             "须有 `baseline-and-compat` 片段（动手前：现状/最佳方案/基线（含清单够不够用）/大动先确认/不另写一套）"),
-            (("tag::compat[]", "既有用例不得为迁就改动而改判", "新老用例在同一套校验里同时全绿",
-              "兼容不了就停下确认", "验证须与基线比对"),
-             "须有 `compat` 片段（改动后：老用例不得改判/新老同时成立/兼容不了先确认/与基线比对）"),
-        ):
-            missing = [k for k in keys if k not in cf]
-            if missing:
-                err(f"开发流程防线被破坏：{rel_cf} 缺失要点 {missing}——{desc}；"
-                    "提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条", rel_cf)
+        run_rule_guard("check_dev_flow_guard")
     files = _iter_prompt_files()
     if not files:
         err("prompts/ 下未找到任何任务提示词文档（除 `_` 前缀公共片段外）", "prompts/")
@@ -5778,29 +5469,13 @@ def check_checklist_guard():
             vtext = fh.read()
         # 钉"整条要求仍在"而非"关键词出现过一次"——须同时命中该条的多处要素，
         # 否则别处一句"三态"字样即可让检查假绿（这正是本防线要防的失效模式）。
-        for keys, desc in ((("三态台账", "悬置", "未发现问题", "不得合并"),
-                            "留证须按三态台账（通过/未发现问题/悬置）分列、不得合并"),
-                           (("通过**（附判据与取值）", "悬置**（附"),
-                            "三态各自的附带信息（判据取值 / 未确证原因与剩余风险）")):
-            missing = [k for k in keys if k not in vtext]
-            if missing:
-                err(f"{rel_v} 缺失三态台账要素 {missing}——{desc}，留证会退化成散文结论"
-                    "（\"查不出\"与\"没做\"无法分辨）", rel_v)
+        run_rule_guard("check_checklist_guard")
     rel_c = "specs/general/collab.adoc"
     c_path = os.path.join(REPO_ROOT, *rel_c.split("/"))
     if os.path.isfile(c_path):
         with open(c_path, encoding="utf-8") as fh:
             ctext = fh.read()
-        for keys, desc in ((("硬超时", "到点即视为失联", "不得无限等待"),
-                            "派发子 agent 须自带可判定的时限，到点视为失联（防任务永久挂起）"),
-                           (("超时的处置", "放弃该子 agent", "如实"),
-                            "超时后须放弃 + 如实标悬置，不得无限等待、不得写成已通过"),
-                           (("时限取值须有判据", "一次性、边界明确、可超时"),
-                            "时限取值须有判据、优先选可超时的一次性派发形式")):
-            missing = [k for k in keys if k not in ctext]
-            if missing:
-                err(f"{rel_c} 缺失硬超时要素 {missing}——{desc}；语义复核会再次卡死且无人负责",
-                    rel_c)
+        run_rule_guard("check_checklist_guard")
 
     # 4) 文档↔脚本一致性：文档里点名的 check_* / 脚本名须真实存在
     script_names = set()
@@ -5843,17 +5518,7 @@ def check_checklist_guard():
 # 判据能否覆盖"某个具体项目该怎么取版本"属语义判断，交人/子 agent 复核。
 RUNTIME_ENV_SECTION = "运行环境须与项目声明一致"
 
-RENAME_SPLIT_ITEM_LABELS = (
-    "**一句话规则**",
-    "**适用对象与判定标准（L1）**",
-    "**分量大小不是理由（L1）**",
-    "**提交顺序（L1）**",
-    "**无损拆分（L1，判定标准）**",
-    "**两个提交都要进本次交付（L1）**",
-    "**「压缩提交」的请求不覆盖本条（L1）**",
-    "**例外（只有一条，L1）**",
-    "**可执行抓手（引用方项目自检）**",
-)
+RENAME_SPLIT_ITEM_LABELS = _RULES_TOKENS["RENAME_SPLIT_ITEM_LABELS"]
 
 # 「重命名与内容修改须分两个提交」各条**自身**的必需要点（键首项＝该条轴标题的前缀）。
 # 这条轴存在的理由：整节关键词核对会被相邻条款的字样兜住——只留轴标题、正文被抽空
@@ -5965,22 +5630,7 @@ def check_rename_split_guard():
                 "（本条的每一项都是用户提出要求的一部分，不得删除、不得降级为建议）", rel_git)
     # 条目内核对：只留轴标题、正文被抽空（或要求被搬进相邻条目）时，
     # 按"整节关键词"的核对会被相邻条款的字样兜住——故逐条取其**自身**的 bullet 文本再核。
-    for keys, desc in RENAME_SPLIT_ITEM_KEYS:
-        prefix, anchors = keys[0], keys[1:]
-        item_text = _bullet_text(section, prefix[0])
-        if item_text is None:
-            continue  # 轴标题已由上面的条目核对报错，不重复发声
-        missing = [k for k in anchors if k not in item_text]
-        if missing:
-            err(f"重命名与内容修改防线被破坏：{rel_git} 的『{keys[0]}』**正文**缺失 {missing}"
-                f"——{desc}；该条被抽空或要求被搬进相邻条目即等于这条要求失效"
-                "（本条的每一项都是用户提出要求的一部分，不得删除、不得降级为建议）", rel_git)
-    for keys, desc in RENAME_SPLIT_GUARD_KEYS:
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"重命名与内容修改防线被破坏：{rel_git} 的「重命名与内容修改须分两个提交」"
-                f"缺失要点 {missing}——{desc}；本条是用户明确提出的最高关注项 P7，"
-                "不得删除、不得降级为建议", rel_git)
+    run_rule_guard("check_rename_split_guard")
     # 必加载层重申行
     rel_exec = "specs/core/execution.adoc"
     exec_path = os.path.join(REPO_ROOT, *rel_exec.split("/"))
@@ -5989,31 +5639,14 @@ def check_rename_split_guard():
     else:
         with open(exec_path, encoding="utf-8") as fh:
             exec_text = fh.read()
-        for keys, desc in ((("重命名与内容修改须分两个提交（L1 最高关注项 P7）",),
-                            "必加载层须有 P7 的重申行（该层每次会话无条件加载）"),
-                           (("只做重命名、内容逐字节不变",),
-                            "重申行须保留判定形态（只做重命名、内容逐字节不变）")):
-            missing = [k for k in keys if k not in exec_text]
-            if missing:
-                err(f"重命名与内容修改防线被破坏：{rel_exec} 缺失 {missing}——{desc}",
-                    rel_exec)
+        run_rule_guard("check_rename_split_guard")
     # 公共入口的铁律登记
     common_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
     if os.path.isfile(common_path):
         with open(common_path, encoding="utf-8") as fh:
             common = fh.read()
         iron = common.split("== 最高优先级铁律（先读）", 1)[-1].split("\n== ", 1)[0]
-        for keys, desc in ((("同一文件的重命名与内容修改必须分两个提交", "最高关注项 P7"),
-                            "「最高优先级铁律」须登记 P7（进门必读，缺则下次会话读不到）"),
-                           (("内容逐字节不变", "再改内容"),
-                            "铁律行须保留两提交与各自只做一件事的判据形态"),
-                           (("重命名与内容修改须分两个提交（默认固定动作）",),
-                            "铁律行须指向权威定义节名（否则读者只知道要拆两个提交、"
-                            "不知道判据与自检命令在哪）")):
-            missing = [k for k in keys if k not in iron]
-            if missing:
-                err(f"重命名与内容修改防线被破坏：AGENTS_COMMON.adoc 的「最高优先级铁律」"
-                    f"缺失 {missing}——{desc}", "AGENTS_COMMON.adoc")
+        run_rule_guard("check_rename_split_guard")
     else:
         err("缺少 AGENTS_COMMON.adoc——P7 的进门必读登记无从核对", "AGENTS_COMMON.adoc")
     # 维护方不可降级清单
@@ -6027,25 +5660,7 @@ def check_rename_split_guard():
             err(f"{rel_priority} 未找到最高关注项 P7 条目——不可降级清单被少列一项", rel_priority)
         else:
             seg = pm.group(0)
-            for keys, desc in ((("要求（L1，最高",), "P7 须标明级别 L1、最高"),
-                               (("**依据**",), "缺失『**依据**』行——依据可压缩为标准名/编号，"
-                                "但不得整段删除"),
-                               (("判定标准",), "P7 须有可逐条核对的判定标准"),
-                               # 本轮实测：这一条曾被压成"第一个只做重命名、第二个再改内容"
-                               # 两句骨架——**可核对的判据全被抽掉**（批量改名收在同一个
-                               # 提交、不按文件个数分摊、未点名时只压临时中间提交且本条
-                               # 原样保留），而"要求/依据/判定标准"三个轴名都还在，防线全绿。
-                               # 故这里钉的是**判据本身**，不是轴名。
-                               (("不按文件个数分摊",), "P7 的『要求』须写明批量改名收在同一个"
-                                "改名提交里、不按文件个数分摊——缺则多文件改名会被读成"
-                                "『每个文件各开一个改名提交』"),
-                               (("未点名本条", "原样保留"), "P7 的『要求』须写明与「压缩提交」"
-                                "的接口：未点名本条时只压临时中间提交、本条的两个提交原样保留"
-                                "——缺则『用户说要合并 → 本条失效』的读法重新可用")):
-                missing = [k for k in keys if k not in seg]
-                if missing:
-                    err(f"重命名与内容修改防线被破坏：{rel_priority} 的 P7 缺失 {missing}"
-                        f"——{desc}", rel_priority)
+            run_rule_guard("check_rename_split_guard")
         # 概览行须把"条款本身 L1"的那几项**完整列名**：清单是 P1-P7 七项，L1 项为
         # P1/P2/P3/P5/P6/P7（P4 条款本身是 L2）。只找 "P7" 字样不够——本轮实测：
         # 旧概览写成 "P1/P2/P3/P5/P7"，把 P6（协作执行者选择）漏在"规范性铁律"之外，
@@ -6076,13 +5691,7 @@ def check_rename_split_guard():
                 err(f"{rel_cnb} 的「压缩提交」缺少与 P7 的接口条目（『压缩对象不含改名提交 + 内容修改提交』）"
                     "——平台侧可自行把『要压缩』读成『压回一个』", rel_cnb)
             else:
-                for keys, desc in ((("别名", "不是"), "接口条须写明那两个提交**不是**本节的临时中间提交（否则『要压缩』即被读成『压回一个』）"),
-                                   (("原样保留",), "接口条须写明未点名本条时那两个提交**原样保留**"),
-                                   (("例外", "点名"), "接口条须写明与 git 规范『例外』对齐（声明须点名重命名与内容修改）")):
-                    missing = [k for k in keys if k not in iface]
-                    if missing:
-                        err(f"重命名与内容修改防线被破坏：{rel_cnb} 的「压缩提交」与 P7 的接口缺失 {missing}"
-                            f"——{desc}（该接口条的**正文**须自带这些要点，被抽空或搬到别处即等于失效）", rel_cnb)
+                run_rule_guard("check_rename_split_guard")
     else:
         err(f"缺少 {rel_cnb}——P7 与「压缩提交」的接口无从核对", rel_cnb)
     phase_done()
@@ -6123,13 +5732,7 @@ def check_criteria_not_axis_guard():
         phase_done()
         return
     section = m.group(0)
-    for keys, desc in CRITERIA_NOT_AXIS_KEYS:
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"『判据本体而非轴名』防线被破坏：{rel_pri} 的"
-                f"「{CRITERIA_NOT_AXIS_SECTION}」缺失 {missing}——{desc}"
-                "（本轮实测教训：轴名齐全、判据被抽走时防线全绿；该通则不得被删、"
-                "不得降级、不得只留在脚本注释里）", rel_pri)
+    run_rule_guard("check_criteria_not_axis_guard")
     # 该通则须在**维护方自己的落点**可读到（这份文件由 AGENTS.adoc 登记、维护时加载）
     if not os.path.isfile(PROJECT_FILE):
         err("缺少 AGENTS.adoc——维护方层的登记入口丢失，通则的加载面无从核对",
@@ -6165,27 +5768,7 @@ def check_runtime_env_guard():
         phase_done()
         return
     section = m.group(0)
-    for keys, desc in (
-        (("（L1）", "严禁"), "条文须标注 L1 并保留『严禁/不得』的强制用语"),
-        (("也能正常跑通流程，也不得换", "能跑通"),
-         "须写明『即使换个版本也能跑通也不得换』——缺这句则本条最易被「能跑通」合理化掉"),
-        (("判定标准", "与项目声明**不一致**", "任一命中即违规"),
-         "判定标准须可逐条核对（执行所用版本与项目声明不一致即违规 + 任一命中即不合规）"
-         "——只留一句口号则无法判定是否被遵守"),
-        (("声明落点", "不得**为满足本条另建一份版本声明"),
-         "声明落点须写明取项目**已有声明**、不得另立第二真源（多一份必然漂移，"
-         "且会出现两个互相冲突的版本来源）"),
-        (("降级路径", "未声明", "未确证", "不得记为通过"),
-         "须写明降级路径（未声明先确认 / 声明环境不可得时如实说明并把结论标未确证、"
-         "不得记为通过 / 临时诊断结论须回声明环境复核）——缺则本条会把引用方卡死在"
-         "装不出声明环境的场景上，或让「用别的版本跑绿」被记成通过"),
-        (("依据", "ISO/IEC/IEEE 29148", "The Twelve-Factor App"),
-         "依据行须在（依据可压成标准名/编号，但不得整段删除）"),
-    ):
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"运行环境防线被破坏：{rel_ci} 的「{RUNTIME_ENV_SECTION}」缺失要点 {missing}"
-                f"——{desc}；本条是用户明确提出的硬性要求（L1），不得删除、不得降级", rel_ci)
+    run_rule_guard("check_runtime_env_guard")
 
     # 三处引用：必加载层、验证、基线
     rel_exec = "specs/core/execution.adoc"
@@ -6224,16 +5807,7 @@ def check_runtime_env_guard():
     if os.path.isfile(common_path):
         with open(common_path, encoding="utf-8") as fh:
             common = fh.read()
-        for keys, desc in ((("识别特征", RUNTIME_ENV_SECTION),
-                            "加载调度器须有本条的加载项与识别特征（如项目有声明运行环境的落点、"
-                            "要跑构建/测试/脚本）——缺则该条永远不会被加载，规则实际失效"),
-                           (("换个版本也能跑通",), "调度器条目须保留「换版本也能跑通也不得换」的口径"),
-                           (("java.version", ".nvmrc", "python-version"),
-                            "调度器条目须点出声明落点的常见形态（否则执行者不知道去哪取值）")):
-            missing = [k for k in keys if k not in common]
-            if missing:
-                err(f"运行环境防线被破坏：AGENTS_COMMON.adoc 缺失 {missing}——{desc}",
-                    "AGENTS_COMMON.adoc")
+        run_rule_guard("check_runtime_env_guard")
     else:
         err("缺少 AGENTS_COMMON.adoc——运行环境的调度器登记无从核对", "AGENTS_COMMON.adoc")
 
@@ -6425,55 +5999,10 @@ PERF_LIBRARY = "library/performance.adoc"
 
 # 每条：小标题级要点 → 须同时命中的锚点（只查一处关键词会在"换个说法保留、实际要求被抽掉"
 # 时假绿；故每条给 2~4 个锚点，覆盖"规则 + 判定标准 + 依据名"三件套）。
-PERF_SECTION_ANCHORS = (
-    ("承载与触发（何时需要性能测试）",
-     ("按性能敏感度判定", "多方案选型需要数据佐证", "不得一律加、也不得漏掉真敏感点"),
-     "何时需要性能测试的判据被删后，执行者会一律加（噪声用例）或一律不加（漏掉真敏感点）"),
-    ("独立与对比测试",
-     ("独立性（L1）", "类别至少 3 类", "含当前项目使用的那一类作基准"),
-     "对比测试缺了基准那一类，则\"要不要换\"无从判起（只剩候选方案之间的相对比较）"),
-    ("排除初始化干扰与测量口径",
-     ("排除初始化干扰（L1）", "测量口径须可核对（L1）",
-      "预热轮次、测量轮次", "运行环境"),
-     "测量口径不写明时，成绩不可核对、不可复现（\"只报一个孤立数字\"重新成为默许形态）"),
-    ("离散度与样本量",
-     ("离散度与样本量（L1）", "至少 3 次有效采样", "无显著差异"),
-     "缺离散度/样本量时，单次采样会被当成结论、噪声会被当成胜出"),
-    ("公平比较与计时区间",
-     ("公平比较（L1）", "同一进程", "计时区间界定（L1）", "消费结果"),
-     "公平比较与计时区间是微基准的两个经典失效（一组热一组冷、结果被 JIT 消除）"),
-    ("记录落点与必留证据",
-     ("记录（成绩与依据落在哪、记到什么程度）", "落点（L1）", "每次运行的必留证据（L1",
-      "未选方案为什么不选"),
-     "落点与必留证据被删后，\"记到什么程度\"回到靠发挥：要么只留一句结论、要么把原始日志灌进文档"),
-    ("成绩取数与组合矩阵",
-     ("成绩怎么取数（L1", "终值（均值或中位数）+ 离散度", "方案编号",
-      "与基线之比"),
-     "取数规则与组合矩阵是\"记录各方案成绩\"的可判定形态；缺则成绩表只剩孤立的均值"),
-    ("优化日志与只记结果",
-     ("优化日志（L2", "只记结果不记过程（L1）", "不保留的改动也"),
-     "优化日志（含失败尝试）与\"不记过程\"是一对：前者留住方向与教训、后者拦住把日志灌进文档"),
-    ("迭代、归因与方向",
-     ("闭环迭代（L1）", "收益判定用实测、不用估计", "瓶颈归因与方向（L1）",
-      "优化方向与思路（L1）", "结果分析须给出原因与对策（L1）", "给出对应的解决方案"),
-     "迭代闭环与归因是用户要求的核心（\"不断反复进行瓶颈优化\"\"优化的方向和思路也要记录，避免踩坑\"）"),
-    ("结论落点、时效与不变行为",
-     ("结论的落点（L1）", "结论的时效（L2）", "优化不得改变行为（L1）", "结果反哺基线（L2）"),
-     "结论只留在性能文档 = 落地后无人知道为何这么选；优化改行为 = 把重构做成了功能变更"),
-)
+PERF_SECTION_ANCHORS = _RULES_TOKENS["PERF_SECTION_ANCHORS"]
 
 # 图书馆依据主题（library/performance.adoc）：依据不得只剩名称——外部材料与"本站取舍"的分界须写明
-PERF_LIBRARY_ANCHORS = (
-    "== 当初要解决的失效（本项目实证）",
-    "== 外部材料：JMH 官方文档（OpenJDK，微基准的行业事实标准）",
-    "== 同义性差异与覆盖点（本集合自己承认的）",
-    "https://github.com/openjdk/jmh",
-    "ISO/IEC/IEEE 25010",
-    "ISO/IEC/IEEE 29119-4",
-    "未逐字取回",
-    "非逐字摘录",
-    "本集合自己的判据化取舍",
-)
+PERF_LIBRARY_ANCHORS = _RULES_TOKENS["PERF_LIBRARY_ANCHORS"]
 
 
 def check_performance_guard():
@@ -6551,10 +6080,7 @@ GUARDS_MANIFEST_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*`(check_[a-z0-9_]+)`\s*\|"
 # "该文件承载什么主题"的一句话。**不允许**把该文件的条目清单、判定标准、取值面抄进来——
 # 那会让调度器成为上游落点（`specs/general/terminology.adoc`「数据字典」的「反膨胀」：
 # 上游落点不得因收录下游细节而显著变大），且与 §数据字典「只引名称」相抵。
-DISPATCHER_DETAIL_MARKERS = (
-    "判定标准", "任一命中", "判据见", "适用面（L1", "例外（L1", "边界（L1",
-    "本文件不复述", "唯一落点", "不得降级",
-)
+DISPATCHER_DETAIL_MARKERS = _RULES_TOKENS["DISPATCHER_DETAIL_MARKERS"]
 
 
 def check_dispatcher_no_details_guard():
@@ -6812,11 +6338,7 @@ def check_wiring_guard():
 # （"官方文本已取回"可复取比对 vs "官方网页已取回"仅题名可对 vs "未逐字取回"不引其字句）。
 # 常量化后由 check_library_guard 机械钉住：标记整体被删（依据被悄悄压成"看起来很权威的
 # 名称"）即报错——grep 在 sources.adoc 命中只说明文档正文举例还在，不等于防线覆盖到它。
-LIBRARY_SOURCE_MARKERS = (
-    "官方文本已取回",
-    "官方网页已取回",
-    "未逐字取回",
-)
+LIBRARY_SOURCE_MARKERS = _RULES_TOKENS["LIBRARY_SOURCE_MARKERS"]
 
 
 def _lib_resolve(target: str):
@@ -6878,39 +6400,8 @@ def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: boo
 
 # 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
 # 只有在此列内的写法才被当作"路径"核对存在性——防止把普通词/文件名约定当路径误报）。
-_LIB_ROOT_FILES = ("AGENTS.adoc", "AGENTS_COMMON.adoc", "AGENTS.md", "PUBLIC.adoc",
-                   "README.adoc", "PROMPTS.adoc", "CHANGELOG.adoc", "INSTALL.adoc",
-                   "check_specs.py", "check_effective.py", "clean_tmp.py",
-                   "_common.txt", "review.adoc", "refactor.adoc")
-LIBRARY_QUOTE_ANCHORS = (
-    "Software Reviews and Audits",
-    "IEEE Standard for Information Technology--Systems Design--Software Design Descriptions",
-    "Software and systems engineering — Software testing — Part 4: Test techniques",
-    "Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model",
-    "ISO/IEC Directives, Part 2 — Principles and rules for the structure and drafting",
-    "Ergonomics of human-system interaction — Part 110: Interaction principles",
-    "Key words for use in RFCs to Indicate Requirement Levels",
-    "Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words",
-    "UTF-8, a transformation format of ISO 10646",
-    "Date and Time on the Internet: Timestamps",
-    "The OAuth 2.0 Authorization Framework",
-    "Best Current Practice for OAuth 2.0 Security",
-    "The 'Basic' HTTP Authentication Scheme",
-    "Digital Identity Guidelines: Authentication and Lifecycle Management",
-    "Deserialization of Untrusted Data",
-    "Observable Timing Discrepancy",
-    "Generation of Error Message Containing Sensitive Information",
-    "Active Debug Code",
-    "Dependency specification for Python Software Packages",
-    "Style Guide for Python Code",
-    "Docstring Conventions",
-    "**/IT*.java",
-    "**/*ITCase.java",
-    "**/*TestCase.java",
-    "MAJOR version when you make incompatible API changes",
-    "In many IETF documents, several words",
-    "when they are in all capitals as shown below",
-) + LIBRARY_SOURCE_MARKERS
+_LIB_ROOT_FILES = _RULES_TOKENS["_LIB_ROOT_FILES"]
+LIBRARY_QUOTE_ANCHORS = _RULES_TOKENS["LIBRARY_QUOTE_ANCHORS"]
 
 
 def check_library_guard():
@@ -7146,7 +6637,7 @@ _REF_SCOPE_BAD_PATTERNS = (
 # 豁免：历史记录（`CHANGELOG.adoc` 记录的是**当时口径**，不得改写）；以及**引用/澄清
 # 该错误表述本身**的句子（含"不是/并非/≠/不得写/错"等词），以及"私有落点/私有抓手名"
 # 这类自足性用语（与发布与否无关）。
-_REF_SCOPE_BAD_EXEMPT = ("不是", "并非", "≠", "错误", "不得写", "纠正", "区分")
+_REF_SCOPE_BAD_EXEMPT = _RULES_TOKENS["_REF_SCOPE_BAD_EXEMPT"]
 
 
 def check_ref_scope_wording_guard():
@@ -7196,40 +6687,7 @@ def check_dependency_view_guard():
     else:
         section = m.group(0)
     if section:
-        for keys, desc in (
-            ((DEPENDENCY_DOC_PATH, "多模块", "文档根目录"),
-             "落点与位置：多模块项目须有固定路径 `doc/dependency.adoc`，且写明它放在文档根目录"
-             "（使站点导航与 AI 可按固定路径直达）——路径不固定则『先查本文档』无从执行"),
-            (("完整", "全部模块", "模块之间"),
-             "完整（L1）：须列出**当前项目全部模块之间**的依赖关系，"
-             "且写明『完整』的含义是模块之间、而非第三方库清单（否则读者仍要去读构建文件）"),
-            (("UML", "依赖箭头"),
-             "UML 优先（L1）：依赖关系须以 UML 图为主（模块用组件/包、依赖用依赖箭头），"
-             "**不得只写一段文字描述**——文字无法枚举全部模块对"),
-            (("先读本视图", "不重启依赖树解析"),
-             "先说清『查依赖关系优先查本文档』：涉及依赖判断时先读本视图、回答完即止，"
-             "不得每次重新解析依赖树（否则本条等于没写）"),
-            (("没有本视图时", "本次任务内", "补全后再用"),
-             "文档缺失则新增（L1）：多模块项目没有本视图时须在本次任务内新增/补全，"
-             "不得以『存量还没有』为由跳过（否则规则只对已合规的项目生效）"),
-            (("同一提交内", "更新本视图"),
-             "同提交同步（L1）：模块之间增删依赖、新增/拆分模块后须在同一提交内更新本视图——"
-             "视图过期比没有更坏（读者会按它得出错误结论）"),
-            (("不得再在它的依赖清单里重复声明", "新增依赖前先读本视图"),
-             "不重复声明（L1）：模块已被（直接或间接）依赖时不得重复声明同一依赖，"
-             "且须写明新增依赖前先读本视图（这是本条要消灭的那个失效本身）"),
-            (("不替代构建工具", "第三方库"),
-             "文档与工具各司其职（L2）：本视图不替代构建工具的依赖树"
-             "（依赖树只描述第三方库的传递关系、与模块间依赖不是一回事），冲突时以构建文件为准"),
-            (("依据", "ISO/IEC/IEEE 42010", "UML"),
-             "依据行：须标注标准名/编号（架构描述与 UML 记法、可追溯性、显式声明依赖），"
-             "否则后人无从判断它还成不成立"),
-        ):
-            missing = [k for k in keys if k not in section]
-            if missing:
-                err(f"依赖关系文档防线被破坏：{rel}「{DEPENDENCY_VIEW_SECTION}」"
-                    f"缺失要点 {missing}——{desc}；该条对应用户报告的真实失效"
-                    "（模块已间接依赖却又加一次），不得删除、不得降级为建议", rel)
+        run_rule_guard("check_dependency_view_guard")
     # 加载调度器：设计文档条目须指向它（多模块项目不知道有这份视图 = 规则不会被触发）
     generic = open(GENERIC_FILE, encoding="utf-8").read()
     if DEPENDENCY_VIEW_SECTION not in generic:
@@ -7267,26 +6725,7 @@ def check_index_page_guard():
             "「每个模块都补一个 doc/README.adoc」并批量生成空壳索引（用户报告的真实失效）",
             "specs/general/doc.adoc")
     else:
-        for keys, desc in (
-            (("已承载实质文档", "已存在", "实质文档"),
-             "触发判据（L1）：索引页只在目录**已承载实质文档**时才需要——"
-             "判据是该目录是否已有本级或更深的实质 `.adoc`/`.md`，不得停在「每级目录须有索引页」"),
-            (("空目录", "仅有索引页", "不建"),
-             "空壳不建（L1）：空目录/仅有索引页「自己」的目录一律不建索引页，"
-             "不得为「补索引」先建 `doc/` 目录再放一个 `README.adoc`（这正是批量空壳的成因）"),
-            (("只做导航", "不得把上一级文档", "换个壳复制"),
-             "索引只做导航（L1）：索引页只指向下级/同级真实文档，"
-             "不得把上一级文档（如模块 README）的内容换个壳复制一份——"
-             "指向的目标全是别处同一份内容、不含本级自身信息即属空壳，发现即删"),
-            (("模块级导航由模块 `README` 承担", "不必", "另设一层索引"),
-             "模块级导航归属（L1）：模块总入口本就是模块 `README`，模块内若无独立功能文档，"
-             "不必再在 `doc/` 下另设一层索引——否则索引页只是把模块 README 的目录功能复制一份"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"索引页触发判据防线被破坏：specs/general/doc.adoc 缺失要点 {missing}——{desc}；"
-                    "该条对应用户报告的真实失效（48 个模块被批量补上同构空壳 `doc/README.adoc`），"
-                    "不得删除、不得降级为建议", "specs/general/doc.adoc")
+        run_rule_guard("check_index_page_guard")
     # 模块级规范：模块 doc 索引条目须同样写明"按需"判据（否则按模块规范学习时会重新读宽）
     if not os.path.isfile(DOC_MODULE_FILE):
         err("缺少文件 specs/general/doc-module.adoc——模块 doc 索引的「按需」判据落点丢失",
@@ -7334,10 +6773,7 @@ def check_data_dictionary_guard():
             "判据是「只引名称、按作用域归档」这套可核对的规则，不是「要建术语表」这类口号；"
             "整节被删即口径全失", rel_t)
     else:
-        for keys, desc in DATA_DICTIONARY_KEYS:
-            missing = [k for k in keys if k not in ttext]
-            if missing:
-                err(f"数据字典防线被破坏：{rel_t} 缺失要点 {missing}——{desc}", rel_t)
+        run_rule_guard("check_data_dictionary_guard")
         # 作用域分档须**逐档在分档表里**。判定用**表格行的严格形态**
         # （`^|` + 可选强调/代码 `*`\``` + 档位名），不是裸子串：本轮实测，`f"| {scope}"` 这种
         # 子串判定只要正文里出现一处 `| 全局 |` 形态（甚至只是行内代码/表格示例）即**假绿**，
@@ -7433,11 +6869,7 @@ def check_changelog_structure_guard():
         phase_done()
         return
     text = open(CHANGELOG_STRUCTURE_FILE, encoding="utf-8").read()
-    for keys, desc in CHANGELOG_STRUCTURE_KEYS + CHANGELOG_TABLE_KEYS:
-        missing = [k for k in keys if k not in text]
-        if missing:
-            err(f"变更日志组织形态防线被破坏：specs/general/changelog.adoc 缺失要点 "
-                f"{missing}——{desc}", "specs/general/changelog.adoc")
+    run_rule_guard("check_changelog_structure_guard")
     # 两种条目形态须择一（"不得混用"这句没了，项目会同时维护两套形态）
     if "不得混用" not in text or "流水式" not in text or "表格式" not in text:
         err("变更日志组织形态防线被破坏：specs/general/changelog.adoc 须写明两种条目形态"
@@ -7451,11 +6883,7 @@ def check_changelog_structure_guard():
             "library/sources.adoc")
     else:
         etext = open(CHANGELOG_EVIDENCE_FILE, encoding="utf-8").read()
-        for keys, desc in CHANGELOG_EVIDENCE_KEYS:
-            missing = [k for k in keys if k not in etext]
-            if missing:
-                err(f"变更日志形态依据被破坏：library/sources.adoc 缺失要点 {missing}——{desc}",
-                    "library/sources.adoc")
+        run_rule_guard("check_changelog_structure_guard")
     phase_done()
 
 
@@ -7557,10 +6985,7 @@ def check_commit_message_guard():
         phase_done()
         return
     text = open(COMMIT_MESSAGE_FILE, encoding="utf-8").read()
-    for keys, desc in COMMIT_MESSAGE_KEYS:
-        missing = [k for k in keys if k not in text]
-        if missing:
-            err(f"提交信息防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    run_rule_guard("check_commit_message_guard")
     phase_done()
 
 
@@ -7574,10 +6999,7 @@ def check_http_semantics_guard():
         err(f"缺少 {rel}——HTTP 接口语义（方法安全/幂等、状态码）无处承载", rel)
     else:
         text = open(HTTP_SEMANTICS_FILE, encoding="utf-8").read()
-        for keys, desc in HTTP_SEMANTICS_KEYS:
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"HTTP 接口语义防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+        run_rule_guard("check_http_semantics_guard")
     phase_done()
 
     phase("HTTP 接口语义依据检查（图书馆）")
@@ -7585,11 +7007,7 @@ def check_http_semantics_guard():
         err("缺少 library/sources.adoc——HTTP 接口语义的依据无处承载", "library/sources.adoc")
     else:
         etext = open(HTTP_EVIDENCE_FILE, encoding="utf-8").read()
-        for keys, desc in HTTP_EVIDENCE_KEYS:
-            missing = [k for k in keys if k not in etext]
-            if missing:
-                err(f"HTTP 接口语义依据被破坏：library/sources.adoc 缺失要点 {missing}——{desc}",
-                    "library/sources.adoc")
+        run_rule_guard("check_http_semantics_guard")
     phase_done()
 
 
@@ -7701,44 +7119,15 @@ def check_maven_mirror_guard():
 # （正是用户点名要防的一面，也是本集合 L1「不得覆盖引用方既有配置」的同源失效）。
 MAVEN_SPEC = "specs/stack/maven.adoc"
 MAVEN_PARALLEL_SECTION = "构建并行度"
-MAVEN_PARALLEL_ANCHORS = (
-    ("默认启用多线程构建（L2）",
-     ("默认启用多线程构建（L2）", "默认开 `-T`", "`--threads 1C`", "不写 `-T` 即默认单线程"),
-     "缺则『不写 -T 用单线程跑』重新成为默认（多核机器上的构建时长白付）"),
-    ("配置过即以配置为准（L2，防覆盖引用方既有配置）",
-     ("配置过即以配置为准（L2）", "`.mvn/maven.config`", "不得覆盖、不得重复追加", "优先探测的落点"),
-     "缺则执行者会为了统一口径去改引用方的构建配置（用户点名要防的一面）"),
-    ("并行度只到模块粒度（L1）",
-     ("并行度只到模块粒度（L1）", "模块间", "同一模块禁止并行构建"),
-     "缺则『并行只作用于模块之间』被读成『模块内也并发』，与同一模块禁止并行构建冲突"),
-    ("测试并行与并行构建默认为两件事（L2）",
-     ("测试并行与并行构建默认为两件事（L2）", "forkCount", "reuseForks",
-      "默认只启用构建并行，不因本条去开测试并行"),
-     "缺则要么把 -T 当成测试也并行了、要么顺手把测试并行一起开（改变既有行为、高频误伤）"),
-    ("构建产物不得因并行而退化（L2）",
-     ("构建产物不得因并行而退化（L2）", "收窄并行度", "不得整体退回单线程"),
-     "缺则并行下的偶发失败会被用『整体退回单线程』或『重试撞过』处置（放弃收益且掩盖根因）"),
-)
+MAVEN_PARALLEL_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_ANCHORS"]
 # 依据名（标准名/编号）须在节内可核对——「引用不替代规则本身」的前提是依据名还在
 MAVEN_PARALLEL_BASIS = ("Maven 官方命令行参考", "Apache Maven Surefire", "ISO/IEC/IEEE 25010")
 # 图书馆两处依据落点：① 官方原文与逐字摘（sources.adoc）② 本站取舍与同义性差异（adoption.adoc）
-MAVEN_PARALLEL_SOURCE_ANCHORS = (
-    "-T,--threads Thread count",
-    "defining `.mvn/maven.config` file",
-    "Default : 1",
-    "By default, Surefire does not execute tests in parallel",
-)
+MAVEN_PARALLEL_SOURCE_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_SOURCE_ANCHORS"]
 MAVEN_PARALLEL_ADOPTION_ANCHOR = "「Maven 默认启用多线程构建、以项目配置为准」是本站的判据化取舍"
 # 提示词公共片段（执行侧的开并行动作落点）与两个提示词的引入：
 MAVEN_PARALLEL_PROMPT_TAG = "build-parallel"
-MAVEN_PARALLEL_PROMPT_ANCHORS = (
-    "配过就一律沿用、不覆盖、不重复追加",
-    "项目已经配过并行度时以项目配置为准",
-    "没配过",
-    "`-T 1C`",
-    "并行到模块粒度为止",
-    "只对 Maven 多模块构建生效",
-)
+MAVEN_PARALLEL_PROMPT_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_PROMPT_ANCHORS"]
 
 
 def check_maven_parallel_guard():
@@ -7867,25 +7256,6 @@ def _section_text(text: str, keyword: str):
         if keyword in title:
             return body
     return ""
-
-
-def _vc_squash_section(text: str):
-    """取 `specs/general/version-control.adoc` 的「压缩提交」一节正文（与上同一条口径）。
-
-「压缩不等于解冲突」这两句是本防线的接口判据，**必须写在该节自己的正文里**——
-全文匹配时把它们挪进「冲突处理」节即可让接口句消失而仍判齐备。
-    """
-    return _section_text(text, "压缩提交")
-
-
-def _vc_scope_section(text: str):
-    """取 `specs/general/version-control.adoc` 里"工具无关性"的定性节正文。
-
-该声明属"为什么把**版本管理**与**某个工具**分开写"的定性节。**按节取文本**：
-全文匹配时，文件里任何一处出现"工具无关"与 `SVN`（正文别处顺手提一句"换用 SVN 同样成立"）
-即可顶替该声明，声明本身被改成 git 专属也照样假绿。
-    """
-    return _section_text(text, "为什么")
 
 
 def _names_in_zone(zone_body: str, rel: str) -> bool:
@@ -8018,39 +7388,7 @@ def check_abstraction_adoption_guard():
         else:
             section = m.group(0)
         if section:
-            for keys, desc in (
-                (("唯一装配点", "不得要求多个使用点各自提供同一实现或同一配置"),
-                 "L1（a）唯一装配点：可替换点只有一处声明/装配落点，"
-                 "不得要求多个使用点各自提供同一实现或同一配置"),
-                (("可替换点须有可用默认", "禁止既无默认又不声明"),
-                 "L1（b）可用默认：每个可替换点须有默认实现/默认值，"
-                 "给不出默认时须显式声明必填失败，禁止既无默认又不声明"),
-                (("次数不随使用点数量增加", "出现次数 > 1"),
-                 "判定标准可执行：须给出可逐条核对的判定（同一实现/配置在接入方的"
-                 "出现次数不随使用点数量增加），否则只剩口号、无法判定"),
-                (("二者必居其一",),
-                 "判定标准可执行（b）：须写明'有默认'与'显式必填声明'二者必居其一，"
-                 "否则'给不出默认'会被当成默认的豁免"),
-                (("L1", "L2"),
-                 "级别标注：须标出 L1/L2（否则条文会被当成建议，"
-                 "或全部按 L1 反过来挤掉合理裁量）"),
-                (("自动装配", "ServiceLoader"),
-                 "要点：能自动装配/约定生效的不得要求接入方逐点手写（L2）"),
-                (("限定符", "参数穿透", "作用域"),
-                 "要点：多实现用限定符声明式区分、禁逐层传参；跨层级对象用作用域/上下文承载（L2）"),
-                (("存量边界", "随动迁移", "不发动全库改造"),
-                 "存量边界：该条严于「每个使用点各传一遍实现」的常见既成做法，"
-                 "须写明适用于新写的对外能力与改到的既有抽象（随动迁移、不发动全库改造），"
-                 "否则会被读成「必须立即全量重构」"),
-                (("ISO/IEC 25010", "ISO/IEC/IEEE 29148", "The Twelve-Factor App"),
-                 "依据行：须标注标准名/编号（易用性与可维护性属质量特性、"
-                 "需求须单一无歧义可验证、配置外置与依赖显式声明），否则后人无从判断它还成不成立"),
-            ):
-                missing = [k for k in keys if k not in section]
-                if missing:
-                    err(f"抽象与接入成本防线被破坏：{rel_coding}「{ABSTRACTION_ADOPTION_SECTION}」"
-                        f"缺失要点 {missing}——{desc}；该条来自用户的真实设计失效报告，"
-                        "不得删除、不得降级为建议", rel_coding)
+            run_rule_guard("check_abstraction_adoption_guard")
     # 技术栈承接：Spring「配置」须引用该节、不复制条文
     rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SPRING_STACK_FILE):
@@ -8077,29 +7415,7 @@ def check_config_class_guard():
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("配置类不写逻辑", "任何情况都不允许", "ConfigurationProperties"),
-             "条文：须有『配置类不写逻辑』条、写明『任何情况都不允许』（无例外），"
-             "并点名 `@ConfigurationProperties` 一类承载配置的类"),
-            (("POJO", "工具类或服务"),
-             "边界与去向：须写明配置类只保持 POJO 的基本功能、逻辑下沉到工具类或服务"
-             "（不写去向则逻辑无处安放，执行者只能塞回去）"),
-            (("判定标准", "条件分支", "对外部对象"),
-             "判定标准：须给出可逐条核对的形态（条件分支/循环、计算与对外访问、"
-             "`@Bean` 装配形态），否则只剩一句口号、无法判定"),
-            (("存量处理", "随动迁移"),
-             "存量边界：该条严于框架常规用法（Spring 官方允许配置类里放派生 getter），"
-             "须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
-             "否则等于静默推翻引用方既有做法"),
-            (("识别特征", "Config", "Properties", "Options", "Settings"),
-             "识别特征：须按 Config/Properties/Options/Settings 等命名识别，"
-             "否则命名不规范的配置类会被漏过"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"配置类不写逻辑防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条是用户明确要求的硬性约定（无例外），不得删除、不得降级为建议",
-                    rel_coding)
+        run_rule_guard("check_config_class_guard")
     # (c) 技术栈识别特征：Java / Spring 两侧
     for path, keys, desc in (
         (JAVA_STACK_FILE,
@@ -8155,40 +7471,7 @@ def check_external_script_guard():
         else:
             section = m.group(0)
         if section:
-            for keys, desc in (
-                (("资源文件夹", "不得"),
-                 "L1（a）落点：跨语言脚本须独立成文件放在资源文件夹、不得内联在宿主语言"
-                 "代码里（字符串字面量/拼接/模板/多行字符串）"),
-                (("扩展名", "取被调语言自身的扩展名", "MyBatis"),
-                 "L1（b）扩展名：须取被调语言自身的扩展名，无通用扩展名时取该技术明确"
-                 "支持的文件形式（如 MyBatis 的 `*.xml` 承载 SQL）——缺则退回无语义扩展名"),
-                (("从资源读取后执行",),
-                 "L1（c）读取方式：须写明脚本是按资源读取后执行，否则'放文件'会退化成"
-                 "'放文件但把内容读进字符串再拼装'，高亮与错误校验的收益随之消失"),
-                (("加载时机", "性能敏感", "第一次使用", "classpath"),
-                 "L1（d）加载时机：须写明性能敏感路径不得每次使用都去读资源——资源进 "
-                 "classpath 后发布即不变，须第一次使用时读取一次并缓存；缺则'争分夺秒'"
-                 "的调用（如 Redis 操作）会每次都去读一遍资源（用户报告的第二个场景）"),
-                (("需求要求内容会变", "不适用缓存"),
-                 "L1（d）反面边界：须写明需求要求内容会变的（如转 PDF 的 HTML 模板）"
-                 "不适用缓存、按是否需重读决定——缺则被读成'一律读一次缓存'，"
-                 "把需求的可变内容冻结在首次读到的版本上"),
-                (("判定标准", "SELECT", "字符串拼接", "每次使用都重新读取"),
-                 "判定标准：须给出可逐条核对的判定（宿主语言里出现被调语言语句文本、"
-                 "以拼接/格式化/插值/模板组装、扩展名不对、性能敏感路径每次重新读取），"
-                 "否则只剩口号、无法判定"),
-                (("反例", "多行字符串"),
-                 "反例：须点出典型反例（Java 拼 SQL、Lua 内联成字符串、shell 片段写进 "
-                 "Python 字符串），否则判据不可判定"),
-                (("OWASP", "ISO/IEC 25010"),
-                 "依据行：须标注标准名/编号（OWASP 参数化查询、可维护性、需求须可验证"
-                 "与性能效率），否则后人无从判断它还成不成立"),
-            ):
-                missing = [k for k in keys if k not in section]
-                if missing:
-                    err(f"跨语言执行脚本防线被破坏：{rel_coding}「{EXTERNAL_SCRIPT_SECTION}」"
-                        f"缺失要点 {missing}——{desc}；该条是用户明确要求的跨语言约定，"
-                        "不得删除、不得降级为建议", rel_coding)
+            run_rule_guard("check_external_script_guard")
     # 技术栈承接：Java 落点 + Spring 引用（规则被指向、不复制条文）
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_STACK_FILE):
@@ -8236,16 +7519,7 @@ def check_external_script_guard():
         err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
     else:
         common = open(common_path, encoding="utf-8").read()
-        for keys, desc in (
-            (("跨语言执行脚本的落点", "SQL/Lua"),
-             "调度器的通用编码加载项须含该条识别特征（缺则永不加载）"),
-            (("跨语言脚本", "src/main/resources/"),
-             "调度器的 Java 技术栈登记须含跨语言脚本的识别特征（缺则 Java 项目不知道需加载）"),
-        ):
-            missing = [k for k in keys if k not in common]
-            if missing:
-                err(f"跨语言执行脚本防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
+        run_rule_guard("check_external_script_guard")
     # 公开说明同步（README 的目录说明）
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
@@ -8283,81 +7557,7 @@ def check_cross_platform_script_guard():
         phase_done()
         return
     section = m.group(0)
-    for keys, desc in (
-        (("入口层不得承载逻辑", "判定标准"),
-         "须写明**入口层不得承载逻辑**并给可判定判据（整份入口可逐行解释为"
-         "'定位逻辑代码 → 转交全部参数 → 返回退出码'三件事）——缺这句，入口又会变成"
-         "'顺便处理一下参数'，两平台各写一遍是本条要防的核心失效"),
-        (("入口层不为逻辑层添第二套选项语义", "例外", "转义"),
-         "须写明入口**不为逻辑层添第二套选项语义**（只转交、不解释参数、不设默认值、"
-         "不吞参数），并写明 `cmd.exe`/PowerShell 需转义时的例外——"
-         "缺则'不得自行解析参数'会被读成'连必要的转义都禁止'（那是做不到的："
-         "`cmd.exe` 承载不了某些字符），或反过来留下'入口可以自己定默认值'的口子"),
-        (("入口层须让退出码可判定", "exit /b", "LASTEXITCODE"),
-         "须写明入口**让退出码可判定**并给三平台的可核对写法——"
-         "`cmd.exe` 不写 `exit /b %errorlevel%` 时退出码是最后一条命令的（不等于逻辑代码的），"
-         "这是'看起来在转交、实际丢失成败'的最常见形态"),
-        (("不得**在 `.sh` 里再写一遍", "只允许**一份薄壳", "该平台版本"),
-         "须写明**不得在另一平台的入口里重写逻辑**——'Windows 的我可以不写、顺手写个 sh 版本"
-         "更快'正是本条的失效形态"),
-        (("跨平台逻辑层", "一份"),
-         "须写明逻辑**只写一份**放在跨平台逻辑层（一份跨平台逻辑代码）里——"
-         "缺则'分两层'退化成'两个入口各写一份'。**此处刻意不用「跨平台逻辑脚本」这个说法**："
-         "它把「脚本」一词同时给了入口与逻辑两层，读者会据此把跨平台的那一份也当成「脚本」、"
-         "进而按脚本的可执行要求去要求它（那正是让用户敲 `python3 foo.py` 的由来）——"
-         "故两层分别称「逻辑代码」与「入口脚本」，名字本身即区分二者"),
-        (("CRLF", "LF", "纯 ASCII"),
-         "入口文件须**按各自平台规范落盘**（`.bat`/`.cmd` 与 `.ps1` 用 CRLF、`.sh` 用 LF、"
-         "`.bat` 纯 ASCII）——入口是平台专属文件，行尾/编码错则入口本身就跑不起来"),
-        (("实现语言取舍", "Python", "Node.js", "Go", "Rust"),
-         "须给出**实现语言取舍**（环境好搭建/不易出错/好维护/兼容性/效率的默认取向："
-         "Python 3 与 Node.js 优先、单文件分发用 Go/Rust）——"
-         "缺则执行者只能凭'哪个顺手'选语言"),
-        (("同处一目录", "同名", "主名"),
-         "须写明入口与逻辑代码**同处一目录、主名相同**（逻辑 `foo.py` → 入口 `foo.sh`/"
-         "`foo.bat`，不另建 `bin/`/`script/`/`windows/`）——缺则入口一分散，改逻辑时连带改"
-         "入口、又改出第二份；也是用户明确要求的落点约定"),
-        (("不加前后命令", "必要参数", "直接执行"),
-         "须写明入口**须由解释器原生可执行、调用方不加前后命令**（只给脚本名即可跑；"
-         "`bash foo.sh` / `python3 foo.py` / `powershell -File foo.ps1` 属违规），"
-         "并写明'脚本自身功能参数属必要参数'的例外——缺则用户'不希望脚本执行前后加命令和参数'"
-         "的要求无法判定（要么入口跑不起来、要么被读成连功能参数也不许加）"),
-        (("入口语言取舍", ".bat`/`.cmd`", "`.sh`"),
-         "须写明**入口语言取舍**（入口语言按平台默认具备者选：Windows 取 `.bat`/`.cmd`、"
-         "Linux/macOS 取 `.sh`；不得为一侧入口引入对方平台要另装的运行时；编译型单文件分发时"
-         "同一二进制兼作两平台入口）——缺则执行者会按'逻辑层用什么语言'给入口选语言"
-         "（逻辑用 Python 就写 `.py` 当入口），把安装步骤推给调用方"),
-        (("不得要求调用方先做前置动作", "请先"),
-         "须写明**入口不设前置步骤**（不要求调用方先 `cd`/设环境变量/`chmod +x`/装依赖）——"
-         "缺则入口把配置责任推给用户，'拿来就能跑'落空"),
-        (("不得为“跑逻辑”自加命令", "一一对应"),
-         "须写明入口**不得为跑逻辑自加命令、也不得给逻辑代码塞参数**（调用前的 `cd`/`mkdir`/"
-         "安装/下载/校验，或转交时多加了固定参数）——缺则'只转交'被绕过，入口又开始做别的事"),
-        (("薄壳之外不得多做", "与逻辑层调用等价", "不等价"),
-         "须写明**薄壳之外不得多做、但可以做「把逻辑层当命令直接跑」的薄壳**（判定标准：入口里"
-         "出现与「把调用方给的参数交给逻辑代码」**不等价**的动作即违规；「先探测解释器、一个都"
-         "没有就报错退出非 0」仍属薄壳）——缺则「入口不承载逻辑」被读成「入口只许有一条形态」，"
-         "把「另留一个只跑逻辑的入口脚本」这种正当形态也一起禁掉"),
-        (("安装/下载/解压任何运行时", "不属", "代为获取运行时"),
-         "须写明**入口不得为「让逻辑跑起来」而安装/下载/解压运行时、包或依赖**（`apt`/`apk`/"
-         "`yum`/`pip`/`winget`、`curl | sh` 一类都不属薄壳），且**代为获取运行时不是入口的职责**"
-         "——要么由人按本平台既有软件分发方式完成、要么在**人已交互登录、能看见命令与报错的正常"
-         "会话**里由 agent 完成，不得在入口或非交互执行里静默发生——缺则「让逻辑跑起来」被读成"
-         "「入口自己想办法搞一个运行时」（把环境差异与不可控的系统改动带进入口）"),
-        (("不拿裸 shell 当逻辑层",),
-         "须写明**不拿裸 shell 当逻辑层**（bash 在 Windows 上不可得或来自 Git Bash/WSL、"
-         "cmd 在 Linux 上不可用）——缺则逻辑又被写进 shell，平台差异回到逻辑层"),
-        (("不得假设自身所处目录", "cd"),
-         "须写明逻辑代码**不得假设自身所处目录**（入口以绝对路径调用、不 `cd`）——"
-         "缺则入口一 `cd`，逻辑代码里的相对路径在本地与 CI 下行为不同"),
-        (("（L1）",),
-         "条文须标注级别——本条的'薄壳/不写两遍'是不可豁免的底线，标成建议即等于没有"),
-    ):
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"跨环境脚本防线被破坏：{rel_script}「{CROSS_PLATFORM_SCRIPT_SECTION}」"
-                f"缺失要点 {missing}——{desc}；本条是用户明确要求的跨平台约定，"
-                "不得删除、不得降级为建议", rel_script)
+    run_rule_guard("check_cross_platform_script_guard")
     # 技术栈侧：三个脚本栈文件须各自指向本条的入口约定（引用不复制）+ 各栈的落点/命名与
     # 入口语言取值（用户在通用层之外明确要求"各平台入口的语言选择也要选好、脚本执行前后不加
     # 命令和参数、逻辑代码和入口脚本放一个位置下且名字相同"——只写通用层，各栈执行者读不到）
@@ -8411,10 +7611,7 @@ def check_cross_platform_script_guard():
         if CROSS_PLATFORM_SCRIPT_SECTION not in btext:
             err(f"{brel} 未指向「{CROSS_PLATFORM_SCRIPT_SECTION}」——Windows 入口被用作"
                 "跨环境入口时读不到'薄壳、不写逻辑、原样透传参数与退出码'的口径", brel)
-        for keys, desc in BATCH_STACK_KEYS:
-            missing = [k for k in keys if k not in btext]
-            if missing:
-                err(f"批处理栈缺失要点 {missing}——{desc}", brel)
+        run_rule_guard("check_cross_platform_script_guard")
     # 批处理栈不得被 powershell.adoc 复制（引用不复制）：`.bat` 的编码/行尾条文只该有一处
     ps_path = os.path.join(SPECS_DIR, "stack", "powershell.adoc")
     if os.path.isfile(ps_path):
@@ -8427,16 +7624,7 @@ def check_cross_platform_script_guard():
     common_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
     if os.path.isfile(common_path):
         common = open(common_path, encoding="utf-8").read()
-        for keys, desc in ((("跨环境脚本", "`.bat`/`.cmd` 与 `.sh` 成对"),
-                            "加载调度器的脚本加载项须有本条的识别特征——"
-                            "缺则该条永远不会被触发加载，规则实际失效"),
-                           (("specs/stack/batch.adoc",),
-                            "加载调度器的技术栈层须登记批处理栈——"
-                            "缺则'写一个批处理脚本'没有触发特征、`.bat` 的专属规则实际失效"),):
-            missing = [k for k in keys if k not in common]
-            if missing:
-                err(f"跨环境脚本防线被破坏：AGENTS_COMMON.adoc 缺失 {missing}——{desc}",
-                    "AGENTS_COMMON.adoc")
+        run_rule_guard("check_cross_platform_script_guard")
     else:
         err("缺少 AGENTS_COMMON.adoc——跨环境脚本的调度器登记无从核对", "AGENTS_COMMON.adoc")
     # 公开说明同步（README 的目录说明）+ 依据入馆（同义性差异）
@@ -8484,43 +7672,7 @@ def check_script_header_guard():
         phase_done()
         return
     section = m.group(0)
-    for keys, desc in (
-        (("文档头先行", "头部注释必须先行", "待办占位"),
-         "须写明**头部注释先行**（动手第一步就写、不是收尾补；不得只留 `TODO`/待补占位；"
-         "改动后同提交同步）——缺这句，本条退回成'要写文档'，交付时文档头与实现早已不同步"),
-        (("脚本必须写文档头",),
-         "须写明**脚本必须写文档头**（承担实际功能的脚本都要有条目化文档头；只有一次性几行的"
-         "临时命令可省并仍须一行用途）——缺则'没有文档头的脚本'仍是默许形态"),
-        (("**关键约定与设计决策**（**不得省略**）", "放弃了哪些备选"),
-         "条目清单须含**关键约定与设计决策**（约定与出处、为什么这么做与放弃了哪些备选做法、"
-         "兜底与已知限制）并写明**不得省略**——只要求'定位、用法、环境变量、副作用'时，"
-         "本条要防的失效（为什么这么取边界、放弃了什么，事后无从查）原样存在"),
-        (("设计决策写成可核对的记录", "决策 + 理由 + 边界"),
-         "须写明设计决策写成**决策 + 理由 + 边界**、并给判定标准（只见'怎么做'没有'为什么'、"
-         "记了备选方案却不说不选的理由、只写决定不写依据）——缺则'记录设计思路'会被写成一段"
-         "叙述，读者仍无法据此判断'这条约定今天还成不成立'"),
-        (("不写硬编码数值", "抽象描述或常量名", "两处真源"),
-         "须写明**取值写抽象描述或常量名、不写硬编码数值**并给判定标准（注释出现与常量重复的"
-         "字面数值／抄死的目录名与默认值／同一取值两处各写一遍）——缺则'改代码不改注释'的"
-         "文档说谎重新成为默许形态（用户报告：脚本很多细节随维护丢失）"),
-        (("不写进方法体", "文件级文档注释"),
-         "须写明**决策留头部/文件级文档注释、不落进方法体**（方法体只记内部局部决策与边界）"
-         "——缺则方案取舍被抄进每个方法，改一处必漏另一处"),
-        (("内容移交独立文档（L1）", "该移交而未移交"),
-         "须写明**超出头部块注释容量的内容移交独立文档**并一行链接回指、给判定标准——"
-         "缺则要么文档头堆成长文（正文规范又变成没人读的墙），要么内容被'写短点'删掉"),
-        (("行数不设限",),
-         "须写明头部注释**篇幅不设上限**（内容不因'写短点'删减、也不因超长判不合格）——"
-         "缺则'简洁'会被读成篇幅配额，把内容要求折成字数"),
-        (("入口的注释边界", "不得复述"),
-         "须写明**入口注释只写入口自己、不复述逻辑层契约**（参数语义、默认值、行为与副作用）"
-         "——缺则同一份契约写两处（改逻辑不改入口注释，按入口注释用会得到错误结论）"),
-    ):
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"脚本头部注释防线被破坏：{rel_script}「{SCRIPT_HEADER_SECTION}」"
-                f"缺失要点 {missing}——{desc}；本条是用户明确要求的'文档先行也适用于脚本，"
-                "脚本很多细节可能随着维护丢失'，不得删除、不得降级为建议", rel_script)
+    run_rule_guard("check_script_header_guard")
 
     # 技术栈侧：Python 用模块 docstring 承载文档头；三个入口栈写明入口注释边界
     for name, keys, desc in (
@@ -8620,27 +7772,7 @@ def check_script_selfdoc_guard():
         phase_done()
         return
     section = m.group(0)
-    for keys, desc in (
-        (("单打独斗", "相互独立"),
-         "须写明脚本**默认单打独斗**、拆成多个脚本时**各脚本相互独立**（不是同一模块）——"
-         "缺则多脚本会被当成'一个多模块项目'、按模块给每个脚本各建一篇文档"),
-        (("多行文档注释", "多行普通/块注释", "普通注释"),
-         "须写明承载方式的**三级优先级**（多行文档注释 → 多行普通/块注释 → 普通注释）——"
-         "缺则'写在脚本里'没有可判定的形态，文档头会被降格成零散单行注释"),
-        (("不另建独立文档", "一律用**文档注释**承载"),
-         "须写明文档**默认写在脚本里、不另建独立文档**，并写明有文档注释机制的语言一律用"
-         "文档注释承载——缺则'为脚本另建 .adoc'重新成为默许形态"),
-        (("超出头部块注释的容量", "命中即违规"),
-         "须写明**唯一例外**是内容确已超出头部块注释容量时的移交，并给判定标准——"
-         "缺则'能拆成两处写'会被当成另建文档的理由（判据是内容量、不是能不能拆）"),
-        (("大规模团队式协作", "例外，不是默认"),
-         "须写明**大规模团队式协作是例外、不是默认**——缺则该例外会外推成所有脚本的默认文档组织"),
-    ):
-        missing = [k for k in keys if k not in section]
-        if missing:
-            err(f"脚本自述文档防线被破坏：{rel_script}「{SCRIPT_SELFDOC_SECTION}」"
-                f"缺失要点 {missing}——{desc}；本条依据用户口径（脚本单打独斗、文档直接写在脚本里、"
-                "多行文档注释/多行普通注释/普通注释三级优先级），不得删除或降级", rel_script)
+    run_rule_guard("check_script_selfdoc_guard")
 
     # 通用编码侧：注释定位条须带脚本例外并指回本节
     coding = os.path.join(SPECS_DIR, "general", "coding.adoc")
@@ -8706,6 +7838,53 @@ def check_script_selfdoc_guard():
     phase_done()
 
 
+SCRIPT_RULES_SECTION = "规则与脚本的隔离（规则数据外置）"
+
+
+def check_rule_script_separation_guard():
+    """『规则与脚本的隔离』防线：规则数据外置与"配置缺失即报错"不得被删或降级。
+
+    用户口径（本轮）："脚本的规则强制要求需要和脚本隔离（避免因规则变更导致不停修改
+    脚本），拆分出脚本文件和规则配置文件"。若该节被删或降级，规则措辞会重新长回脚本里
+    （改一条判据要动 .py、同一段实现再被复制 N 遍）。
+    """
+    phase("规则与脚本的隔离防线检查")
+    rel_script = os.path.relpath(SCRIPT_SPEC_FILE, REPO_ROOT).replace(os.sep, "/")
+    if not os.path.isfile(SCRIPT_SPEC_FILE):
+        err(f"缺少文件 {rel_script}——『{SCRIPT_RULES_SECTION}』的通用层落点丢失"
+            "（该条跨语言，须收在通用脚本规范而非某一技术栈）", rel_script)
+        phase_done()
+        return
+    text = open(SCRIPT_SPEC_FILE, encoding="utf-8").read()
+    m = re.search(r"^== " + re.escape(SCRIPT_RULES_SECTION) + r"(?:\\s|$).*?(?=^== |\\Z)",
+                  text, re.S | re.M)
+    if m is None:
+        err(f"规则与脚本的隔离防线被破坏：{rel_script} 缺少「{SCRIPT_RULES_SECTION}」节——"
+            "规则措辞又会重新散落在脚本里，改一条规则要动脚本", rel_script)
+        phase_done()
+        return
+    run_rule_guard("check_rule_script_separation_guard")
+    # 本方自身的落点：规则配置文件与引擎须真实存在（"声明了隔离"与"真在做隔离"须分得清）
+    for rel, desc in (
+        ("script/specs-rules/", "规则数据目录（锚点组/名单/落点/报错文案；一类规则一个文件、"
+                                "**纯数据 TOML**，按目录自动扫描加载）"),
+        ("script/rules_engine.py", "通用引擎（取文件 → 取节 → 逐组核锚点 → 报错）"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.rstrip("/").split("/"))
+        if not os.path.exists(path):
+            err(f"缺少 {rel}——{desc}不在，『规则与脚本的隔离』只剩条文", rel)
+    # 规则文件的格式：须是**纯数据 TOML**（本集合的选用）——用 `.json` 等旧格式时
+    # 判据本体与加载侧会各指一套（改一处漏一处），故在此一并核。
+    rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if os.path.isdir(rules_dir):
+        names = [f for f in os.listdir(rules_dir) if not f.startswith(".")]
+        if not [f for f in names if f.endswith(rules_engine.RULES_FILE_SUFFIX)]:
+            err(f"script/specs-rules/ 下没有任何 *{rules_engine.RULES_FILE_SUFFIX}——"
+                "规则文件的格式取 TOML（纯数据、标准库可读、重复表头由语法拒绝），"
+                "换成别的格式等于把「两处真源」再引回来", "script/specs-rules/")
+    phase_done()
+
+
 def check_comment_preservation_guard():
     """『评论不得删除防线』：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）。
 
@@ -8753,13 +7932,7 @@ def check_comment_preservation_guard():
     # 调度器识别特征与公开说明同步（缺则该条永远不会被加载 / 找不到）
     if os.path.isfile(GENERIC_FILE):
         gtext = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("评论不得删除",), "调度器须有本条的识别特征（否则该禁令永远不会被触发加载）"),
-        ):
-            missing = [k for k in keys if k not in gtext]
-            if missing:
-                err(f"评论不得删除防线被破坏：AGENTS_COMMON.adoc 缺失要点 {missing}——{desc}",
-                    "AGENTS_COMMON.adoc")
+        run_rule_guard("check_comment_preservation_guard")
     else:
         detail("  跳过：未找到 AGENTS_COMMON.adoc，『评论不得删除』的调度器识别特征未校验"
                "（不代表通过）")
@@ -8782,25 +7955,7 @@ def check_reuse_precedent_guard():
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("既有实现与先例优先", "L1"),
-             "条文：须有「既有实现与先例优先」条并标 L1（防被降级成建议）"),
-            (("不得以语言内置写法绕过既有能力",),
-             "条文：须有「不得以语言内置写法绕过既有能力」条，"
-             "否则『有先例也照写原生』的失效会重新出现"),
-            (("IdUtil", "CIdUtils", "UUID"),
-             "反例：须点出 UUID 手写这类典型反例，判据才可判定"),
-            (("CollUtil.isNotEmpty", "isEmpty"),
-             "反例：须点出集合判空手写这类典型反例，判据才可判定"),
-            (("先例", "依赖"),
-             "判定动作：须写明先查项目自有能力/先例、再查已引入依赖，"
-             "否则『先查』无落点"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"既有实现与先例优先防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户报告的真实失效，不得删除、不得降级为建议",
-                    rel_coding)
+        run_rule_guard("check_reuse_precedent_guard")
     # Java 栈：优先级顺序与现成 API
     rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_SYNTAX_FILE):
@@ -8860,35 +8015,7 @@ def check_lombok_constructor_guard():
             "（该条是 Java 栈专属，须收在技术栈层而非通用层）", rel_java)
     else:
         jt = open(JAVA_STACK_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("无参 / 必参 / 全参构造优先用 lombok、不手写", "L1"),
-             "条文：须有该条并标 L1（防被降级成建议——『尽量用 lombok』读起来无害，"
-             "于是『手写更直观』重新成立）"),
-            (("@NoArgsConstructor",),
-             "无参构造：须点明用 `@NoArgsConstructor`，否则遇到无参构造时无落点"),
-            (("@RequiredArgsConstructor",),
-             "必参构造：须点明用 `@RequiredArgsConstructor`（用户明确要求『必参』这一档），"
-             "否则执行者只记得全参、必参构造仍手写"),
-            (("@AllArgsConstructor",),
-             "全参构造：须点明用 `@AllArgsConstructor`"),
-            (("同时标多个构造注解",),
-             "并存：须写明同时需要多个构造时**同时标多个注解**，"
-             "否则会为『合并成一个手写构造』而放弃注解"),
-            (("判定标准", "手写的构造方法"),
-             "判定标准：须写明『类中出现手写的构造方法且可由注解表达』即违规，"
-             "否则只剩一句口径、读者无法判断自己是否命中"),
-            (("例外（L2", "注释"),
-             "例外：须有例外条并限定在『注解表达不了的动作』（校验/规范化/防御性拷贝）、"
-             "且须写明原因；缺例外条会把既有正当做法一刀切"),
-            (("存量", "execution.adoc"),
-             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造）"),
-            (("依据", "ISO/IEC 25010"),
-             "依据行：须保留标准名/编号（依据不得只剩名称、也不得整段删除）"),
-        ):
-            missing = [k for k in keys if k not in jt]
-            if missing:
-                err(f"构造方法不手写防线被破坏：{rel_java} 缺失要点 {missing}——{desc}",
-                    rel_java)
+        run_rule_guard("check_lombok_constructor_guard")
         # 措辞不得回退成建议（L1 是用户口径：优先 lombok 而不是手写）
         for token in ("尽量用 lombok", "建议优先用 lombok", "可手写构造方法", "允许手写构造方法"):
             if token in jt:
@@ -9097,39 +8224,7 @@ def check_doc_type_notation_guard():
             "（该条跨语言，须收在通用文档规范而非某一技术栈）", rel_doc)
     else:
         text = open(DOC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            ((DOC_TYPE_NOTATION_SECTION + "（L2）",),
-             "条文：须有该条并**在条目标题上标 L2**（防被删或降级成建议——降级后写类全名会"
-             "重新变成个人选择；级别与条目标题须在同一处，别处出现 L2 不算）"),
-            (("类名", "import", "不得"),
-             "正反两面：须同时写明『先短类名 + 必要时就近 import』与『不得用类全名充当标识』，"
-             "只写正面（要写类名）拦不住『包路径整条塞进句子』这一实际失效"),
-            (("同名类冲突",),
-             "判据：三个必要情形之一『同名类冲突』（两个短名相同的类型，短名无法区分时"
-             "限定到能区分的粒度）"),
-            (("无代码示例可承载", "import"),
-             "判据：三个必要情形之二『无代码示例可承载 import』（纯文档通篇没有代码块）"),
-            (("不在本仓库的 classpath 内",),
-             "判据：三个必要情形之三『该类型不在本仓库的 classpath 内』（读者无法据短名解析、"
-             "也给不出可解析的 import）——这正是用户口径的『除非不在 classpath 才能写类全名』，"
-             "被写成『只要在仓库/项目内就禁』即偏严、后半句失效"),
-            (("本仓库的依赖/可解析范围",),
-             "跨语言口径：通用层须写明 'classpath' 取『本仓库的依赖/可解析范围』、"
-             "各语言按等价依赖树理解，否则非 JVM 语言读到该词无法执行"),
-            (("路径与坐标", "不是类型名"),
-             "例外边界：须写明路径与坐标（link/@see 的文件路径）不是类型名、照常写全，"
-             "否则会被读成『凡全限定皆禁』而写出错误引用"),
-            (("@ConditionalOnClass", "main-class", "反射"),
-             "例外边界：须写明字符串与配置里必须全限定的场合（@ConditionalOnClass 类名、"
-             "main-class、反射按名加载、import 本身）属逻辑实现、不受本条约束"),
-            (("不做存量", "随动"),
-             "存量口径：须写明不做一次性替换、随动调整，否则会被扩成『全库扫一遍改全限定』"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"文档类型指代防线被破坏：{rel_doc} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户提出的规范要求，不得删除、不得降级为建议",
-                    rel_doc)
+        run_rule_guard("check_doc_type_notation_guard")
     # Java 栈落点
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_STACK_FILE):
@@ -9151,19 +8246,7 @@ def check_doc_type_notation_guard():
     rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(GENERIC_FILE):
         ct = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("不写类全名", "包名 + 类名"),
-             "文档条目的识别特征：写注释/文档/格式条目须含『优先写类名 + import、不写类全名』"
-             "与『文中出现包名 + 类名形态的指代』，否则写文档时该条永不被触发加载"),
-            (("类型指代", "全限定类名", "classpath"),
-             "Java 技术栈条目的识别特征：Java 条目须含『类型指代：写类名 + import、"
-             "不写全限定类名』（含 {@link} 成员引用与配置/反射照旧的边界），"
-             "否则 Java 项目写 javadoc 时该条永不被触发加载"),
-        ):
-            missing = [k for k in keys if k not in ct]
-            if missing:
-                err(f"文档类型指代防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
+        run_rule_guard("check_doc_type_notation_guard")
     phase_done()
 
 
@@ -9178,40 +8261,7 @@ def check_conversion_guard():
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            ((CONVERSION_SECTION,),
-             "条文：须有「对象转换（多层嵌套对象的转换）」节，作为该条的抽象形态落点"),
-            (("首选声明式映射", "优先"),
-             "首选路径：须写明**优先**用声明式映射完成转换（去掉优先口径即退回「怎么顺手怎么写」）"),
-            (("达标判据", "一处来源", "静默"),
-             "判据：须写明判据是**目标式**的——同一份转换只有一处来源、结构变化时不静默漏字段"
-             "（缺则判据退回「用没用某个库」）"),
-            (("主动声明", "备注原因"),
-             "备注原因：须写明除主动声明外优先声明式映射、确需手写时备注原因"
-             "（缺则「手写须写理由」这一动作丢失）"),
-            (("等价路径同样合规",),
-             "多条路径：须写明深拷贝/结构复制工具、序列化中转、手工构建器等等价路径同样合规"
-             "（缺则该条易被读成「必须用某个库」、与用户「不做强制性限制」的口径相抵）"),
-            (("无嵌套（单层）的转换不在本条范围内",),
-             "范围：须写明**无嵌套（单层）的转换不在本条范围内**"
-             "（不是例外、是本条不管；口径按嵌套判、不得按字段数判）"),
-            (("纯数据结构类",),
-             "落点：须写明映射声明不塞进纯数据结构类（与「类设计」的纯数据结构类不写逻辑一致）"),
-            (("例外与边界（L2", "表达不了"),
-             "例外与边界：须写明映射声明表达不了的语义不适用本条"
-             "——例外被写宽即等于给出一个随时可套用的豁免口"),
-            (("存量边界", "随动迁移"),
-             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
-             "否则等于静默推翻引用方既有的手写转换"),
-            (("依据", "ISO/IEC 25010"),
-             "依据行：须标标准名/编号（防依据被整段删除后无从追溯）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"对象转换防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户提出的规范建议（多层嵌套对象转换优先用 MapStruct、"
-                    "建议不手写转换代码），不得删除、不得回退成强制面",
-                    rel_coding)
+        run_rule_guard("check_conversion_guard")
         # 建议层口径：条文与判据不得被写成强制面（用户明确要求不做强制性限制）
         for token in ("不允许手写转换代码", "不得手写转换代码", "一律用既有转换库"):
             if token in text:
@@ -9246,36 +8296,7 @@ def check_conversion_guard():
             rel_java)
     else:
         jtext = open(JAVA_STACK_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            ((JAVA_CONVERSION_SECTION, "coding.adoc"),
-             "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按"
-             "栈文件学仍会手写转换）"),
-            (("优先用 MapStruct",),
-             "条文：须点名**优先**用 MapStruct（用户口径「使用 mapstruct 的优先性」）"),
-            (("建议不手写转换代码",),
-             "条文：须写明**建议**不手写转换代码（用户原文口径，非强制）"),
-            (("不做强制性限制", "等价路径同样合规"),
-             "非强制：须写明不做强制性限制、等价路径（深拷贝/序列化中转等）同样合规"
-             "——写成强制面即与用户「不是强制，但是建议」相抵"),
-            (("@Mapper",),
-             "写法落点：须给出 `@Mapper` 映射接口这一声明形态，否则读者不知道「声明在哪写」"),
-            (("映射方法自动调用",),
-             "嵌套与集合：须写明对象含对象、集合含对象由**映射方法自动调用/集合映射方法**表达"
-             "（多层嵌套这一靶心的推荐写法落点）；并须写明手写循环不构成违规"),
-            (("不并存两套写法", "先例优先"),
-             "先例优先：须写明项目已有转换工具/既有 Converter 先例时跟随先例、不新增第二套写法"),
-            (("无嵌套（单层）的转换不在本条范围内",),
-             "范围：须同步写明单层转换不在本条范围内（与通用层同口径）"),
-            (("备注", "原因"),
-             "备注原因：须写明确需手写时在代码注释写明原因（与通用层同口径）"),
-            (("例外与边界（L2",),
-             "例外须标级并写明边界（无例外条文则把既有做法一刀切）"),
-            (("存量", "execution.adoc"),
-             "存量边界：须指向「规范变更的存量处理」（随动迁移）"),
-        ):
-            missing = [k for k in keys if k not in jtext]
-            if missing:
-                err(f"对象转换防线被破坏：{rel_java} 缺失要点 {missing}——{desc}", rel_java)
+        run_rule_guard("check_conversion_guard")
         for token in ("不允许手写转换代码", "不得手写转换代码"):
             if token in jtext:
                 err(f"对象转换防线被破坏：{rel_java} 出现强制措辞 `{token}`——"
@@ -9287,18 +8308,7 @@ def check_conversion_guard():
         err(f"缺少加载调度器 {rel_common}", rel_common)
     else:
         ctext = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("多层嵌套对象", "手写"),
-             "通用层『编写代码』条目须带该条的抽象识别特征（何时命中），否则读到它的场景"
-             "（写对象转换代码）不会触发加载"),
-            (("对象转换", "MapStruct"),
-             "Java 技术栈登记须带该条识别特征（含 MapStruct 与「建议不手写转换代码」），"
-             "否则 Java 项目按栈登记加载时看不到这条"),
-        ):
-            missing = [k for k in keys if k not in ctext]
-            if missing:
-                err(f"对象转换防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
+        run_rule_guard("check_conversion_guard")
         # 通用层调度条目不得带框架专名（识别特征要触发"写转换代码"而不是"Java 项目"）
         start = ctext.find("  ** 编写代码 →")
         end = ctext.find("\n  ** ", start + 1)
@@ -9523,36 +8533,7 @@ def check_persistence_access_guard():
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("持久化访问（数据库/缓存等）",),
-             "条文：须有「持久化访问（数据库/缓存等）」节，作为该条的抽象形态落点"),
-            (("统一入口（L1）",),
-             "统一入口：须写明持久化操作走该技术给定的统一入口（**不点名具体框架**），"
-             "并标 L1（防被降级成建议）"),
-            (("优先用类型安全/声明式查询构造 API（L1）", "方法引用", "findByXxx"),
-             "替代形态优先：须写明优先且一律使用类型安全/声明式查询构造 API（以方法引用/"
-             "属性名引用表达列名、声明式方法名如 `findByXxx`、类型化 Criteria），标 L1"),
-            (("替代优先（L1）", "表达不了"),
-             "替代优先：须写明技术自带的替代写法（类型安全/声明式形态）强制优先、"
-             "仅在表达不了时才退回通用构造器且须写明理由（无此条则'无法替代'的边界无处可判）"),
-            (("判定标准", "字符串", "绕过"),
-             "判定标准：须给出可逐条核对的**抽象**形态（构造器 `new`、字符串写列名、"
-             "绕过统一入口），否则只剩一句口号"),
-            (("例外与边界", "跨语言执行脚本的落点"),
-             "例外与边界：须写明本条不禁止跨语言语句的承载（映射文件）与类型安全 API "
-             "表达不了的语义（退回时调用入口不变），否则会与「跨语言执行脚本的落点」互相打架"),
-            (("存量边界", "随动迁移"),
-             "存量边界：须指向「规范变更的存量处理」（随动迁移、不发动全库改造），"
-             "否则等于静默推翻引用方既有的 `new` 用法"),
-            (("依据", "ISO/IEC 25010"),
-             "依据行：须标标准名/编号（防依据被整段删除后无从追溯）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"持久化访问防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户明确提出的硬性要求（强制走统一入口、禁止 `new` 查询构造器），"
-                    "不得删除、不得降级为建议",
-                    rel_coding)
+        run_rule_guard("check_persistence_access_guard")
         # 通用层不得出现具体框架专名（替换主语测试：本文件适用于所有编程语言）
         for token, desc in (
             ("IService",
@@ -9576,50 +8557,14 @@ def check_persistence_access_guard():
             rel_java)
     else:
         jtext = open(JAVA_STACK_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("持久化访问（MyBatis-Plus / JPA 等）", "coding.adoc"),
-             "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按"
-             "栈文件学仍会随手 new）"),
-            (("lambdaQuery", "lambdaUpdate", "ktQuery", "ktUpdate"),
-             "四个成员方法名须齐全（`lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`）——"
-             "漏掉 `kt*` 会让 Kotlin 项目学不全、漏掉 `lambdaUpdate` 则更新侧无落点"),
-            (("new QueryWrapper", "子类", "new LambdaQueryWrapper"),
-             "禁止面须点名 `new QueryWrapper` 的**子类**（含 `new LambdaQueryWrapper`）——"
-             "用户要求'禁止 new QueryWrapper 及其子类'，只写非 Lambda 形态即被放宽"),
-            (("Wrappers",),
-             "`IService` 之外的落点须给出（`Wrappers` 的 lambda 静态方法或 Mapper 注解/`*.xml`），"
-             "否则'无法替代'时执行者无处可去、只能继续 new"),
-            (("例外（L2", "理由"),
-             "例外须标级并写明'须写清理由'（无例外条文则等于把既有写法一刀切，"
-             "无例外且不写理由则等于留后门）"),
-            (("判定标准", "字符串", "方法引用"),
-             "判定标准：须给出可逐条核对的形态（构造器 new / 字符串列名 / 绕过 IService），"
-             "含'可用方法引用表达却写字符串'这一条"),
-            (("随动迁移", "execution.adoc"),
-             "存量边界：须指向「规范变更的存量处理」（随动迁移）"),
-        ):
-            missing = [k for k in keys if k not in jtext]
-            if missing:
-                err(f"持久化访问防线被破坏：{rel_java} 缺失要点 {missing}——{desc}",
-                    rel_java)
+        run_rule_guard("check_persistence_access_guard")
     # 加载调度器：通用层去框架专名 + Java 栈含四个成员方法与禁止面
     rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(GENERIC_FILE):
         err(f"缺少加载调度器 {rel_common}", rel_common)
     else:
         ctext = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("持久化访问（数据库/缓存等）", "统一入口"),
-             "通用层『编写代码』条目须带该条的抽象识别特征（含'统一入口'），否则读到它的场景"
-             "（写持久化访问代码）不会触发加载"),
-            (("MyBatis-Plus 持久化访问", "lambdaQuery", "ktQuery", "new QueryWrapper"),
-             "Java 技术栈登记须带该条识别特征（含四个成员方法与禁止面），"
-             "否则 Java 项目按栈登记加载时看不到这条"),
-        ):
-            missing = [k for k in keys if k not in ctext]
-            if missing:
-                err(f"持久化访问防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
+        run_rule_guard("check_persistence_access_guard")
         # 通用层调度条目不得带框架专名（识别特征要触发'写持久化代码'而不是'Java 项目'）
         dispatcher_coding_start = ctext.find("  ** 编写代码 →")
         dispatcher_coding_end = ctext.find("\n  ** ", dispatcher_coding_start + 1)
@@ -9651,31 +8596,7 @@ def check_api_contract_reuse_guard():
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            ((CONTRACT_REUSE_SECTION, "L1"),
-             "条文：须有该条并标 L1（防被降级成建议、退回「另建一套更省事」）"),
-            (("数据库实体类", "不移动"),
-             "例外一：须写明数据库实体类除用户声明外不移动（它跟随表结构归属）"),
-            (("第三方类型", "例外"),
-             "例外二：须写明「类里引用了第三方类型」才可另建，否则例外面无从判定"),
-            (("本项目自身的依赖不算三方依赖",),
-             "边界：须写明本项目自身的依赖不算三方依赖——该字句被抽掉即等于给出一个随时可套用的豁免口"
-             "（「它依赖本项目别的模块」就能另建一套）"),
-            (("移动而非复制", "同步更新全部引用"),
-             "动作：须写明是移动（并同步更新原引用）而非复制——只复制会立刻产生两个可独立演化的定义"),
-            (("判定标准", "同名或仅差包名"),
-             "判定标准：须含可逐条核对的反例（新建同构类 / 同名或仅差包名 / 复制不改原引用 / "
-             "以「依赖本项目其他模块」为由拒绝移动 / 移动数据库实体类而无声明）"),
-            (("随动迁移", "全库"),
-             "存量口径：须写存量随动迁移（不发动全库改造），否则会被读成「必须立即全库搬类」"),
-            (("依据",),
-             "依据：须保留依据名（该条属本集合更严取舍，依据只写名称/编号、不写全文）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"请求/响应类复用防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户提出的真实失效（同一数据契约出现两个定义、字段与校验各自漂移），"
-                    "不得删除、不得降级为建议、不得放开例外与边界", rel_coding)
+        run_rule_guard("check_api_contract_reuse_guard")
     # 技术栈层：HTTP 接口路径优先中划线（唯一落点）
     rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(SPRING_STACK_FILE):
@@ -9683,24 +8604,7 @@ def check_api_contract_reuse_guard():
             "（该条只在 Web 框架语境下有定义、不得写进通用层）", rel_spring)
     else:
         stext = open(SPRING_STACK_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            ((API_PATH_DASH_SECTION, "L1"),
-             "条文：须有该条并标 L1（防被降级成建议或删除）"),
-            (("下划线", "驼峰"),
-             "判据须可判定：须点名禁止下划线与驼峰（只写「优先中划线」无法判定「哪些写法算违规」）"),
-            (("服务路由", "已发布"),
-             "两处照旧：服务路由/网关前缀与已发布且外部依赖的对外路径须明文照旧，"
-             "否则会被读成「所有路径都要改名」（对外路径改名即破坏既有调用方）"),
-            (("判定标准", "混用"),
-             "判定标准：须含可逐条核对的反例（出现 `_` / 路径片段用驼峰或大写 / 同一接口内混用）"),
-            (("存量处理",),
-             "存量口径：须写存量随动迁移，不发动全库改名"),
-            (("命名", "java.adoc"),
-             "分工：须写明本条只管路径字符串，类名与标识符命名另按命名规则（防两条规则混用）"),
-        ):
-            missing = [k for k in keys if k not in stext]
-            if missing:
-                err(f"接口路径防线被破坏：{rel_spring} 缺失要点 {missing}——{desc}", rel_spring)
+        run_rule_guard("check_api_contract_reuse_guard")
     # 通用层不得出现路径命名专条（归属：HTTP 路径只在 Web 框架语境下有定义）
     if os.path.isfile(CODING_FILE):
         ctext = open(CODING_FILE, encoding="utf-8").read()
@@ -9714,16 +8618,7 @@ def check_api_contract_reuse_guard():
         err(f"缺少加载调度器 {rel_common}", rel_common)
     else:
         gtext = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("请求响应类优先移动复用", "本项目自身的依赖不算三方依赖"),
-             "调度器通用层条目须带识别特征（何时命中、例外与边界），否则该条永远不会被触发加载"),
-            (("接口路径优先用中划线", "路由路径"),
-             "调度器 Spring 条目须带接口路径的识别特征（写/改路由路径即命中），否则 Spring 执行者读不到"),
-        ):
-            missing = [k for k in keys if k not in gtext]
-            if missing:
-                err(f"接口路径/契约复用防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
+        run_rule_guard("check_api_contract_reuse_guard")
     # 公开面：README 目录说明（读者按 README 学习时须能看到这两条存在）
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
@@ -9765,31 +8660,7 @@ def check_api_naming_guard():
             rel_coding)
     else:
         text = open(CODING_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("Feign 接口命名带所属域/项目前缀", "L1"),
-             "条文：须有该条并标 L1（防被降级成建议、退回随手取名）"),
-            (("只此一类", "其他对外接口"),
-             "范围：须写明本条**只约束 Feign 接口**、其他对外接口不在内——"
-             "用户明确「目前只需要考虑 feign，不需要考虑其他对外接口」，"
-             "范围标注被删等于判定面可被自行放大"),
-            (("已存在的固定前缀", "先例优先"),
-             '判据：须写明「优先使用已有的固定前缀」（先例优先），否则等于要求现场发明一套'),
-            (("词首", "UcUserApi", "OucUserApi"),
-             '判据须可判定：须给出「无先例时按项目名取词首组合」与 `UcUserApi`/`OucUserApi` 实例，'
-             "否则读者无法判断自己是否命中"),
-            (("Feign", "Api"),
-             '适用面：须点名 Feign 声明式 HTTP 客户端接口与固定的接口后缀，否则「给接口加前缀」'
-             '会被读成「所有接口」或「只加后缀」'),
-            (("判定", "同一"),
-             "判定标准：须含可逐条核对的反例（有固定前缀却另取一套 / 同类接口有的带有的不带）"),
-            (("全名", "拼全名"),
-             "边界：须写明前缀只承载归属、不拼服务全名（防把业务信息堆进类名）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"接口命名防线被破坏：{rel_coding} 缺失要点 {missing}——{desc}；"
-                    "该条对应用户提出的真实失效（同域同类 Feign 接口碰名、按名看不出归属），"
-                    "不得删除、不得降级为建议、不得放大到其他对外接口", rel_coding)
+        run_rule_guard("check_api_naming_guard")
         for wide in ("对外提供或跨服务/跨项目调用的接口", "RPC/服务契约接口"):
             if wide in text:
                 err(f"接口命名防线被破坏：{rel_coding} 出现被用户排除的宽口径「{wide}」——"
@@ -9979,35 +8850,7 @@ def check_scope_boundary_guard():
             "（本地/服务器场景下『不得改入口工作空间以外的文件』这条通用规则缺失）", rel_g)
     else:
         text = open(path_g, encoding="utf-8").read()
-        for keys, desc in (
-            (("== 工作空间边界（不依赖任何平台）", "只允许修改本次任务的工作空间", "入口工作空间"),
-             "工作空间边界节：须有该节，且禁令按『只允许修改本次任务的工作空间（入口工作空间）』"
-             "表达——离开平台（本地/服务器/容器）时『文件都在』，这条才是拦得住的那一条"),
-            (("== 平台上的仓库边界（代码托管平台）", "入口项目", "只改当前项目"),
-             "平台上的仓库边界节：须有该节，且写明平台把可写范围放大成『有权访问的全部仓库』、"
-             "禁令按当前项目（入口项目）表达——否则平台场景下无人拦"),
-            (("未声明即拒绝", "引用 ≠ 授权", "不构成改动"),
-             "未声明即拒绝 + 引用不等于授权：用户引用了工作空间以外的文件/其他项目不构成授权，"
-             "未声明一律拒绝（这是本条的价值所在，写成『尽量』或省掉即失效）"),
-            (("判定标准", "自我豁免", "顶替"),
-             "判定标准：须给出可逐条核对的越界形态（改动对象不在入口工作空间内 / 以『引用过它』"
-             "为由自我豁免 / 转交他人顶替），否则只剩一句口号、无法判定"),
-            (("已知例外", "用户显式声明", "只读"),
-             "已知例外：唯一的解禁情形是用户**显式声明**把该处纳入本次范围，"
-             "且用户声明『只读/禁止改动』优先——不写例外则要么自相矛盾（连用户明说能改的地方"
-             "也不敢改）、要么给『看着办』留口子"),
-            (("拒绝的形态", "拒绝不等于任务失败"),
-             "拒绝的形态：须如实说明依据与需补的声明、其余可做的部分照常完成，"
-             "不得默默照做、也不得只回一句『不能做』就停摆"),
-            (("只读与对照照常做", "不在禁止之列"),
-             "防『拒绝即停摆』的另一面：读取/对照被引用的外部文件不属禁止之列（禁的是改动），"
-             "否则规则会被执行成『引用的东西都不能用』"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"改动范围边界防线被破坏：{rel_g} 缺失要点 {missing}——{desc}；"
-                    "本条对应用户明确要求收窄的执行边界（『引用被误当成授权』），"
-                    "不得删除、不得降级为建议", rel_g)
+        run_rule_guard("check_scope_boundary_guard")
     # ② 平台层：CNB 口径仍在（引用方按平台加载时读得到），且明写通用口径在通用层
     rel_p = "specs/platform/cnb.adoc"
     path_p = os.path.join(REPO_ROOT, *rel_p.split("/"))
@@ -10015,23 +8858,7 @@ def check_scope_boundary_guard():
         err(f"缺少文件 {rel_p}——『变更范围只限当前项目』的平台侧口径无处承载", rel_p)
     else:
         text = open(path_p, encoding="utf-8").read()
-        for keys, desc in (
-            (("变更范围只限当前项目", "只允许修改当前项目", "入口项目"),
-             "主体禁令：只允许修改当前项目（本次任务的入口项目），越出该项目的改动不得执行"
-             "（须有节名与禁令本身）"),
-            (("未声明即拒绝", "引用 ≠ 授权", "不构成授权"),
-             "未声明即拒绝 + 引用不等于授权（平台侧同口径）"),
-            (("判定标准", "自我豁免", "顶替"),
-             "判定标准（平台侧同口径，须可逐条核对）"),
-            (("例外", "用户显式声明", "只读"),
-             "已知例外（平台侧同口径）"),
-            (("../general/scope.adoc",),
-             "须指向通用层规则本体（只写在平台层的话，非平台场景下读不到这条边界）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"改动范围边界防线被破坏：{rel_p} 缺失要点 {missing}——{desc}；"
-                    "不得删除、不得降级为建议", rel_p)
+        run_rule_guard("check_scope_boundary_guard")
     # ③ 提示词侧：prompts/_common.txt 的 scope-boundary 片段 + 两个提示词代码块内引入
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
@@ -10044,24 +8871,7 @@ def check_scope_boundary_guard():
             err(f"{rel_common} 缺少 `scope-boundary` 片段——提示词会被未知项目复制执行，"
                 "漏了这层则复制出去的那份没有这条边界", rel_common)
         else:
-            for keys, desc in (
-                (("只允许修改本次任务的工作空间", "入口工作空间"),
-                 "主体禁令：只允许修改本次任务的工作空间（入口工作空间）"),
-                (("只允许修改当前项目", "入口项目"),
-                 "平台侧口径：在代码托管平台上按『只允许修改当前项目（入口项目）』表达"
-                 "（提示词会被复制到任意项目执行，两处都要有）"),
-                (("引用 ≠ 授权", "不构成改动它的授权"),
-                 "引用不等于授权：引用了工作空间以外的文件/其他项目只构成读取许可、"
-                 "不构成改动授权"),
-                (("必须拒绝", "依据"),
-                 "拒绝的形态：发现越界须拒绝并说明依据，不得默默照做"),
-                (("显式声明", "只读"),
-                 "已知例外：用户显式声明纳入范围；用户声明『只读/禁止改动』优先"),
-            ):
-                missing = [k for k in keys if k not in block]
-                if missing:
-                    err(f"改动范围边界防线被破坏：{rel_common} 的 `scope-boundary` "
-                        f"片段缺失要点 {missing}——{desc}", rel_common)
+            run_rule_guard("check_scope_boundary_guard")
     # 两个提示词代码块内都须引入该片段（少一处则该提示词复制出去后没有这条边界）
     files = _iter_prompt_files()
     if not files:
@@ -10087,29 +8897,7 @@ def check_npc_merge_guard():
         err(f"缺少文件 {rel}——『NPC 禁合并』要求无处承载（平台层规范缺失）", rel)
     else:
         text = open(path, encoding="utf-8").read()
-        for keys, desc in (
-            (("合并请求的合并主体", "NPC 禁合并", "严禁合并"),
-             "主体禁令：CNB NPC/CI 执行者一律不得合并合并请求（须有节名与禁令本身）"),
-            (("人工要求", "直接授权", "必须拒绝", "授权不免除"),
-             "无豁免：人工明确要求/直接授权也必须拒绝，且写明『授权不免除该禁令』"),
-            (("判定标准", "合并动作", "豁免", "顶替"),
-             "判定标准：须给出可逐条核对的违规形态（执行了合并/以授权为由豁免/转交他人顶替），"
-             "否则只剩一句口号、无法判定"),
-            (("不是合并", "解决冲突", "同步目标分支"),
-             "边界：明确『推送分支/解决分支内冲突/同步目标分支都不是合并』，"
-             "避免与「冲突处理」节的自动解决冲突自相矛盾、也不误伤合法操作"),
-            (("== 分支与合并请求统一", "只能修改同一个分支"),
-             "同文件既有规则不得被新节顶掉（本轮实测犯过：新增节点把「冲突处理」整段"
-             "替换掉，规则凭空消失而 check_specs.py 全绿——文件只是变短、无引用悬空）："
-             "「分支与合并请求统一」须在且含『只能修改同一个分支』"),
-            (("== 冲突处理", "自动解决冲突"),
-             "同文件既有规则不得被新节顶掉：「冲突处理」须在且含『自动解决冲突』"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"NPC 禁合并防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
-                    "本条是『用户明确要求也不照做』的唯一一类操作，最易被『顺手满足用户』冲掉，"
-                    "不得删除、不得降级为建议（L1）", rel)
+        run_rule_guard("check_npc_merge_guard")
     # (e) 提示词公共片段：prompts/_common.txt 的 delivery 片段
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
@@ -10118,17 +8906,7 @@ def check_npc_merge_guard():
         common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
         block = common.split("tag::delivery[]", 1)[-1].split("end::delivery[]", 1)[0] \
             if "tag::delivery[]" in common else ""
-        for keys, desc in (
-            (("合并一律不做", "无环境区分"),
-             "公共片段 `delivery` 须含『合并一律不做（L1，无环境区分）』一条"),
-            (("直接授权", "也必须拒绝", "授权不免除"),
-             "公共片段须写明人工直授也必须拒绝、授权不免除（提示词会被复制到未知项目执行）"),
-        ):
-            missing = [k for k in keys if k not in block]
-            if missing:
-                err(f"NPC 禁合并防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 {missing}——"
-                    f"{desc}；提示词会被未知项目复制执行，漏了这层则复制出去的那份没有这条禁令",
-                    rel_common)
+        run_rule_guard("check_npc_merge_guard")
     # (f) 公开提示词入口：PROMPTS.adoc 的公共约定
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(PROMPTS_FILE):
@@ -10151,65 +8929,7 @@ def check_self_dispatch_guard():
         err(f"缺少文件 {rel}——『不得自行发评论唤起自己』的平台侧口径无处承载", rel)
     else:
         text = open(path, encoding="utf-8").read()
-        for keys, desc in (
-            (("评论唤起新实例（平台侧的派发入口）",),
-             "须有该节（自派禁令是本节的同节条，节被删则禁令无处承载）"),
-            (("不得以评论派发唤起自己", "L1", "防无限派发"),
-             "须有该 L1 条本体（标题与级别齐备才算强制点，不是一句提示）"),
-            (("点名唤起自己", "同一实例名"),
-             "禁令对象须写清：本次执行中再发一条评论点名**自己**（同一点名/同一实例名），"
-             "否则会被读成'只是不许 @ 别人'"),
-            (("也不得转由他人", "代发"),
-             "须含'转由他人/其他执行者代发亦不算拦住'——否则把自派外包出去就绕过了"),
-            (("判定标准", "本次执行期间", "自我豁免", "实际发了这条评论", "转交他人"),
-             "须有可逐条核对的判定标准四态（①新增评论指向本次唤起名 ②以'分两步更清楚'等"
-             "自我豁免 ③实际发出这条评论、把任务在执行中重新发起一次 ④转交他人代发）"),
-            (("这条评论发出去没有", "不是这次执行有没有因此结束"),
-             "判据须钉在'这条评论发出去没有'——否则'不在同一进程内所以不算'会成为新的借口"),
-            (("先停", "停下确认", "由**人**"),
-             "须给正当形态：先停 + 只输出一次'停下确认'，由**人**另发一条评论决定是否再来一次"),
-            (("一次评论就是一次派发", "派发者的动作"),
-             "须写明根因：一次评论 = 一次派发，**发起下一次是派发者的动作、不是执行者的动作**"),
-            (("只在本平台（CNB）成立", "本平台之外不适用", "不得援引该条拒做"),
-             "适用面：『须由与执行者相同的 Agent 承担验证』**只在本平台上成立**"
-             "（本平台之外不适用、不得援引该条拒做或把任务停在中间）——否则该要求会被外推成"
-             "平台无关的通用前提，非 CNB 环境会把『没有同 Agent 子执行者』读成『所以不能验证/不能交付』"
-             "（本项目实证：用户澄清『这个只适用于 cnb』）"),
-            (("不在公共内容", "`AGENTS_COMMON.adoc` + `specs/`", "不会取到它"),
-             "写入面：须写明条文的写入面本就在平台层、**不在公共内容里**"
-             "（引用方按入口加载时不会取到它——这正是本条只属 CNB 而不外推的原因）"),
-            (("由谁承担", "项目自身的取舍", "IEEE 1028"),
-             "依据与定性：须写明『由谁承担』是项目自身取舍（标准只要求有独立、可核对的评审发生、"
-             "未规定复核者须是同一产品），防把本集合取舍误记为标准硬要求"),
-            (("不提供**时", "降级路径", "不因此缺失"),
-             "降级与不阻断：环境确实不提供同 Agent 子执行者时须走降级路径、"
-             "**验证与交付不因此缺失**（须与『不得据本条拒做』一起读）"),
-            (("复核者的来源", "不是复核的发起方式", "各自独立"),
-             "『不能艾特自己』与『同 Agent 复核』的关系须写明：**复核者来源要求 ≠ 复核发起方式**——"
-             '两条各自独立、不互相构成例外（否则会被读成"为了满足同 Agent 就可以自派"，'
-             '或反过来"不许自派所以就不必复核"）'),
-            (("执行者不得用", "去 @ 自己", "不因目的是"),
-             "须明写『**不得用“为了满足同 Agent 复核”去 @ 自己**』——本条最容易被合理化成自派："
-             "把“再要一个干净上下文来复核”当成正当理由，实际发出的是自派评论"),
-            (("能不能拿到", "动手前判定", "CNB_EVENT"),
-             "『能不能拿到同 Agent 子执行者』须给**可判定的判据**且**在动手前判定**"
-             "（核对方式只有两条：加载调度器明示的派发方式 / 环境标志实测）——"
-             '否则会退化成"我感觉拿不到"或"先干完再说"，事后补记无法核对'),
-            (("一个任务只由", "人", "在本次执行内"),
-             "须写明：一个任务只由**人**决定起几次执行，缺的复核**在本次执行内**按降级路径补"
-             "（本人串行 + 标独立性边界，或标悬置 + 写剩余风险）"),
-            (("照常交付", "复核缺口如实标出", "不得混写"),
-             '交付形态：**照常交付**并把"可信的独立复核不可得 + 已做的替代核对 + 剩余风险"'
-             '如实写明；**"已交付 + 校验全绿 + 复核缺口如实标出"不得混写成"已复核通过"**'),
-            (("换取一次新执行来做复核", "已复核通过", "停在中间"),
-             '判定标准三态：①用 @ 自己或请他人 @ 自己换取一次新执行来做复核 '
-             '②把"拿不到独立复核"写成"已复核通过" ③以"等下一轮复核"为由不交付'),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"不得自行发评论唤起自己防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
-                    "本条对应用户提出的收紧要求（不能艾特自己），不得删除、不得降级为建议",
-                    rel)
+        run_rule_guard("check_self_dispatch_guard")
     # ② 通用层：派发入口一节的同口径条
     rel_c = "specs/general/collab.adoc"
     path_c = os.path.join(REPO_ROOT, *rel_c.split("/"))
@@ -10217,33 +8937,7 @@ def check_self_dispatch_guard():
         err(f"缺少文件 {rel_c}——『派发入口』的通用侧自派禁令无处承载", rel_c)
     else:
         ctext = open(path_c, encoding="utf-8").read()
-        for keys, desc in (
-            (("执行者不得自行发评论唤起自己", "L1", "防无限派发"),
-             "通用层须有平台无关的同口径 L1 条（'评论即入口'不只在 CNB 成立）"),
-            (("发起下一次是\"派发者\"的动作",),
-             "须写明根因：发起下一次是派发者的动作（执行者'想分步'不是派发的依据）"),
-            (("先停", "由**人**", "跨轮分步由人决定"),
-             "须给正当形态与判据：先停 + 由人另发评论决定要不要再来一次"),
-            (("platform/cnb.adoc",),
-             "须指向平台层同口径条（两处读法一致，防只在一侧成立）"),
-            (("同 Agent 的适用面", "先定条件再谈强制", "不是无条件成立的规则"),
-             "适用面须在通用层写明：『须由与执行者相同的 Agent 承担』**不是无条件成立的规则**、"
-             "**以平台层写明为前提**（否则通用层会被当成平台无关的强制前提）"),
-            (("平台层未写明", "不得援引本条拒做", "平台层写明该前提成立"),
-             "成立条件须写清：平台层写明该前提成立 → 按本条强制；平台层未写明 → 不得援引本条拒做、"
-             "照做该职责（防『没有同 Agent 子执行者』被读成『不能验证/不能交付』）"),
-            (("项目自身的取舍", "未规定复核者须是同一产品"),
-             "定性：须写明『由谁承担』是项目自身取舍、标准未规定复核者须是同一产品"
-             "（防把本集合取舍误记为 IEEE 1028 等标准的要求）"),
-            (("复核者的来源", "复核的发起", "一个任务只由人决定起几次执行", "拿不到同 Agent 子执行者时"),
-             "通用层的对应条：**来源要求 ≠ 发起方式**（不得把\"满足同 Agent\"读成\"必须再发一条评论\"）、"
-             "拿不到同 Agent 子执行者时按降级路径**在本次执行内**补、**交付照常**且缺口如实写明——"
-             "这是自派禁令在非 CNB 场景下的配套判据，缺则该禁令会被读成\"不许复核\"或\"必须自派\""),
-        ):
-            missing = [k for k in keys if k not in ctext]
-            if missing:
-                err(f"不得自行发评论唤起自己防线被破坏：{rel_c} 缺失要点 {missing}——{desc}",
-                    rel_c)
+        run_rule_guard("check_self_dispatch_guard")
     # ②' 三视角复核落点：执行者选择须带适用面（防被当成平台无关的强制前提）
     rel_v = "specs/general/verify.adoc"
     path_v = os.path.join(REPO_ROOT, *rel_v.split("/"))
@@ -10251,19 +8945,7 @@ def check_self_dispatch_guard():
         err(f"缺少文件 {rel_v}——三视角复核的执行者选择无落点", rel_v)
     else:
         vtext = open(path_v, encoding="utf-8").read()
-        for keys, desc in (
-            (("其适用面由平台层限定",),
-             "三视角的执行者选择须标注适用面由平台层限定（不同口径的平台不得被同一条强判）"),
-            (("不是平台无关的强制前提", "平台层写明该前提成立",
-              "不得援引本条跳过复核"),
-             "须写明：『由与执行者相同的 Agent 承担』不是平台无关的强制前提——"
-             "平台层写明该前提成立时按强制判，平台不提供同 Agent 子执行者时"
-             "不得援引本条跳过复核或把任务停在中间"),
-        ):
-            missing = [k for k in keys if k not in vtext]
-            if missing:
-                err(f"不得自行发评论唤起自己防线被破坏：{rel_v} 缺失要点 {missing}——{desc}",
-                    rel_v)
+        run_rule_guard("check_self_dispatch_guard")
     # ③ 题面侧：两个提示词各须有一条同口径步骤
     files = _iter_prompt_files()
     if not files:
@@ -10271,13 +8953,7 @@ def check_self_dispatch_guard():
     for f in files:
         rel_f = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
         ftext = open(f, encoding="utf-8").read()
-        for keys, desc in ((("不得自行发评论唤起自己", "防无限派发", "一次评论 = 一次派发",
-                             "由**人**另发一条评论"),
-                            "代码块内须有一条同口径步骤（'发起下一次'由人决定，执行者只停）"),):
-            missing = [k for k in keys if k not in ftext]
-            if missing:
-                err(f"不得自行发评论唤起自己防线被破坏：{rel_f} 缺失要点 {missing}——{desc}",
-                    rel_f)
+        run_rule_guard("check_self_dispatch_guard")
     # ④ 登记处：公开面
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(PROMPTS_FILE):
@@ -10323,39 +8999,7 @@ def check_comment_dispatch_guard():
         err(f"缺少文件 {rel}——『评论唤起新实例』的平台侧口径无处承载", rel)
     else:
         text = open(path, encoding="utf-8").read()
-        for keys, desc in (
-            (("评论唤起新实例（平台侧的派发入口）",),
-             "须有该节（平台侧的派发入口：评论 + @ + 说清要求 = 发起一次执行）"),
-            (("新增一条评论", "说清要求"),
-             "入口形态：在 Issue/PR 下新增一条评论、@ 某个 NPC 并说清要求"),
-            (("不放宽任何派发约束", "collab.adoc"),
-             "边界：本条只讲『往哪派』，不放宽任何派发约束、也不构成『可以点名外部 Agent』的"
-             "例外（否则与『不得点名外部 Agent / 外部 NPC』『强制同 Agent』直接冲突）"),
-            (("一次评论 = 一次派发", "评论里写清", "不得自行假定"),
-             "任务边界：一次评论 = 一次派发，要求须在评论里写清（目标/边界/产物形态/验证口径），"
-             "未写清不得自行假定后开工"),
-            (("干净上下文", "显式要求", "沿用该 Issue/PR 的既有上下文"),
-             "『用干净上下文』：默认沿用既有上下文，须在评论里**显式要求**才生效（写成默认即失真）"),
-            (("规范仍须按入口重新加载", "不清约束"),
-             "干净上下文只清历史对话、不清约束（规范须重新按入口加载）——否则会被执行成"
-             "『上下文干净了所以不用再读规范』"),
-            (("要求不是保证", "如实说明本次实际读到的上下文范围"),
-             "可核对性：『要求干净上下文』属降低风险的措施、不是保证，须如实说明实际上下文范围"),
-            (("唤起不等于自动开工", "只有寒暄"),
-             "仅 @ 一下/只有寒暄不构成派发，不得据此自行开工（防『@ 一下就开始乱改』）"),
-            (("仅作举例",),
-             "平台层正文里的具体实例名须显式标注为本仓库举例，"
-             "防被未知项目照抄成通用要求"),
-            (("缺项", "列出缺失项"),
-             "要求缺项/判据不满足时须回复拒绝并列出缺失项、留证落在该条评论下"),
-            (("不豁免任何派发判据",),
-             "『干净上下文』不豁免任何派发判据（写清这一句才能拦住『我要求了干净上下文所以不用照判据』）"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"评论唤起新实例防线被破坏：{rel} 缺失要点 {missing}——{desc}；"
-                    "本条是用户明确要求收录的派发入口说明，不得删除、不得降级为建议",
-                    rel)
+        run_rule_guard("check_comment_dispatch_guard")
     # ② 通用层：平台无关的同一机制
     rel_c = "specs/general/collab.adoc"
     path_c = os.path.join(REPO_ROOT, *rel_c.split("/"))
@@ -10363,37 +9007,7 @@ def check_comment_dispatch_guard():
         err(f"缺少文件 {rel_c}——『派发入口』的通用侧口径无处承载", rel_c)
     else:
         ctext = open(path_c, encoding="utf-8").read()
-        for keys, desc in (
-            (("== 派发入口（往哪派、派什么）",),
-             "通用层须有「派发入口」节（『评论即入口』不只在一个平台上成立）"),
-            (("评论", "@", "即在该任务单下新增一次执行"),
-             "机制本体：评论 + 点名 + 说清要求 = 一次执行（平台无关表述）"),
-            (("不豁免本文件的任何派发判据",),
-             "边界：该入口不豁免本文件的任何派发判据（同 Agent 强制、钉定对象、硬超时一律照判）"),
-            (("一次评论 = 一次派发", "不得自行假定"),
-             "任务边界：一次评论 = 一次派发、要求须写清、未写清不得自行假定后开工"),
-            (("干净上下文", "不清约束", "环境能力"),
-             "『用干净上下文』：可要求、须自评环境能力、且只清历史对话不清约束"),
-            (("不豁免本文件任何派发判据", "不意味着"),
-             "『干净上下文』不豁免任何派发判据、也不意味着连本次对象钉定都要另取一套"
-             "（两种误读都要在文本里被消解）"),
-            (("派发者", "不是\"执行者\"的手段", "不得自行发一条评论"),
-             "执行者不得自行发评论唤起另一个 Agent/NPC 接手自己的活"
-             "（那是点名外部 Agent 的禁止形态，且会让任务挂起）"),
-            (("写清", "缺项", "不得开工"),
-             "要求缺项/判据不满足时须在原评论下回复拒绝并列出缺失项，不得开工、"
-             "也不得拿『他没写清』当擅自扩大范围的挡箭牌（防把入口读成无限授权）"),
-            (("留证落点", "评论下的回复"),
-             "留证落点须写明（该条评论下的回复）——否则事后无法核对是否合规"),
-            (("一条评论 = 一次派发", "N 次派发"),
-             "计数口径：一条评论 = 一次派发；同一任务单下另起一条评论即另一次派发；"
-             "一条评论点名多个对象按对象个数计 N 次（防与调用量控制口径打架）"),
-            (("评论不是交付", "文件操作强制检查"),
-             "入口边界：发评论不等于完成/不等于可以改文件，改动仍按本任务自己的范围与规范判"),
-        ):
-            missing = [k for k in keys if k not in ctext]
-            if missing:
-                err(f"评论唤起新实例防线被破坏：{rel_c} 缺失要点 {missing}——{desc}", rel_c)
+        run_rule_guard("check_comment_dispatch_guard")
     # ③ 加载调度器：两处识别特征（缺则规则写了也不会被加载）
     rel_g = "AGENTS_COMMON.adoc"
     if not os.path.isfile(GENERIC_FILE):
@@ -10403,17 +9017,7 @@ def check_comment_dispatch_guard():
                "『评论唤起新实例』的调度器识别特征与公开说明未校验（不代表通过）")
     if os.path.isfile(GENERIC_FILE):
         gtext = open(GENERIC_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("派发入口（评论唤起新实例：",),
-             "多 agent 协作条目须含『派发入口（评论唤起新实例：…）』识别特征"
-             "（否则该入口的通用口径永远不会被加载）"),
-            (("cnb.adoc", "在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行"),
-             "CNB 平台条目须含『在 Issue/PR 里发评论 @ 某个 NPC 发起一次执行』识别特征"
-             "（否则平台侧口径永远不会被加载）"),
-        ):
-            missing = [k for k in keys if k not in gtext]
-            if missing:
-                err(f"评论唤起新实例防线被破坏：{rel_g} 缺失要点 {missing}——{desc}", rel_g)
+        run_rule_guard("check_comment_dispatch_guard")
     else:
         err(f"缺少文件 {rel_g}——加载调度器缺失，评论唤起口径不会被加载", rel_g)
 
@@ -10438,53 +9042,9 @@ def check_squash_commit_guard():
         err(f"缺少文件 {rel}——『压缩提交』要求无处承载（平台层规范缺失）", rel)
     else:
         text = open(path, encoding="utf-8").read()
-        for keys, desc in (
-            (("== 压缩提交",),
-             "节：平台层须有「压缩提交」一节（本平台上的追加口径）"),
-            (("只作用于本次任务自己的 PR 源分支", "不动目标分支"),
-             "作用域：只动本次任务自己的 PR 源分支，不动目标分支、不动他人分支"),
-            (("specs/general/version-control.adoc", "规则本体"),
-             "规则归属：压缩提交的**规则本体（工具无关）**须指向 `specs/general/version-control.adoc`——"
-             "用户口称的是「版本管理」、没说 git/CNB，规则本体写进平台层会让非 CNB/非 git 的引用方读不到"
-             "（与「改动范围边界」同一条归位口径）"),
-            (("禁止的压缩形态", "他人（或其它任务）的提交", "已合入目标分支"),
-             "禁止形态（平台侧追加）：同一分支上并行任务提出的提交、已合入目标分支的历史"
-             "（其余通用形态在 `specs/general/version-control.adoc`，缺则平台侧最危险的两条无判据可依）"),
-            (("须先确认无人在用旧对象", "确认**无他人正基于该分支的旧 sha 工作**",
-              "已派发、正等待结论", "标为过期"),
-             "先确认：压缩会 force push，执行前须确认无他人正基于旧 sha 工作（已派发/等待结论），"
-             "确需执行须告知并可把旧结论标为过期（**四条关键词须同时命中**——只留标题即被拦："
-             "实测初版只钉'确认'与'标为过期'两句，把整条改写成「附注」这类不含关键词的写法即可绕过）"),
-            (("--force-with-lease", "不得**用裸 `git push --force`"),
-             "推送口径：须写明用 `--force-with-lease`（带租约的强推）、不得用裸 `--force`"),
-            (("一般口径**不适用于本条的压缩提交", "授权范围仅限本次 PR 的源分支"),
-             "与一般口径的关系：须写明『AI 不做强推』的一般口径**不适用于本条压缩提交**，"
-             "且授权范围仅限本次 PR 的源分支（否则执行者会以『不许强推』为由拒绝用户的压缩要求）"),
-             (("与「NPC 禁合并」互不豁免", "压缩提交**不是合并**", '不构成\"可以合并\"的依据'),
-             "与「NPC 禁合并」的接口：须写明压缩提交不是合并、照做；但其也不构成『可以合并』"
-             "的依据（两节目的一处被删，就会出现『历史都整理干净了，顺手合了吧』式的自我豁免）"),
-            (("压缩后须声明新旧 sha 对应关系", "新 sha 为 X，旧 sha Y 作废",
-              "按旧 sha 复核的结论视为过期", "被压缩掉的中间 sha"),
-             "对应关系声明：压缩后须写明新旧 sha 对应关系、旧 sha 上的复核结论视为过期"
-             "（否则下游按已失效的 sha 复核，结论错位——本仓库已有这类实证）"),
-            (("合规动作、不是违规改写",),
-             "对象钉定侧口径：『压缩提交后强推』须在「对象钉定与可追溯」一侧被标为合规动作，"
-             "否则下游会把合规的 sha 变化当成违规改写历史"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"压缩提交防线被破坏：{rel} 缺失要点 {missing}——{desc}；本条是用户可明确"
-                    "要求、执行者应当照做的合规动作，不得删除、不得降级为建议（L1）", rel)
+        run_rule_guard("check_squash_commit_guard")
         # (g) 同文件既有「NPC 禁合并」不得被顶掉（两节相邻、最易在改写时互相吃掉）
-        for keys, desc in (
-            (("== 合并请求的合并主体（NPC 禁合并）", "严禁合并", "授权不免除"),
-             "「NPC 禁合并」须与本节并存（压缩提交不是它、也不能顶掉它）"),
-            (("== 对象钉定与可追溯", "压缩提交/强推会替换对象"),
-             "「对象钉定与可追溯」须仍在且保留压缩提交/强推的对应关系条文"),
-        ):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"压缩提交防线被破坏：{rel} 缺失既有要点 {missing}——{desc}", rel)
+        run_rule_guard("check_squash_commit_guard")
     # (h) 调度器与 README 登记同步（缺则该节永远不会被加载 / 按目录说明读会漏掉）
     rel_common = "AGENTS_COMMON.adoc"
     common_path = os.path.join(REPO_ROOT, rel_common)
@@ -10501,28 +9061,8 @@ def check_squash_commit_guard():
         err(f"缺少 {rel_readme}——目录说明无从核对", rel_readme)
     else:
         readme = open(readme_path, encoding="utf-8").read()
-        for keys, desc in (
-            (("version-control.adoc", "压缩提交"),
-             "目录说明须登记通用层「版本管理」并同步『压缩提交』（规则本体工具无关，"
-             "用户口称『版本管理』、未点名 git/CNB）"),
-            (("压缩提交要照做、合并仍不做",),
-             "使用要点须写明『压缩提交要照做、合并仍不做』（否则公开面只看得见‘禁止’、"
-             "看不到用户可要求的这条）"),
-        ):
-            missing = [k for k in keys if k not in readme]
-            if missing:
-                err(f"压缩提交防线被破坏：{rel_readme} 缺失要点 {missing}——{desc}",
-                    rel_readme)
+        run_rule_guard("check_squash_commit_guard")
     phase_done()
-
-
-def _vc_conflict_section(text: str):
-    """取 `specs/general/version-control.adoc` 的「冲突处理」一节正文。
-
-**按节取文本**（不按全文匹配）：同一文件别处也会提到"冲突"（「压缩提交」节的"压缩不等于解冲突"），
-全文匹配会把"条文从本节里删了、别处还提了一句"读成齐备。
-    """
-    return _section_text(text, "冲突处理")
 
 
 def check_conflict_resolution_guard():
@@ -10539,218 +9079,12 @@ def check_conflict_resolution_guard():
 故**规则本体（工具无关）写在通用层** `specs/general/version-control.adoc`——引用方用 git、SVN
 或别的版本管理工具都读得到；**git 侧的落地命令**写 `specs/general/git.adoc`；平台层只留追加口径。
 本防线对三处**分别按节/按文件**核对，任何一处把条文删了、或把规则退回"只对 git/CNB 成立"即报红。
+
+规则措辞（核哪个文件、哪一节、哪些锚点、缺失时的说明）在规则数据文件
+`script/specs-rules/version-control.toml`，本函数只留接线。
     """
     phase("冲突与压缩提交防线检查")
-    # (a) 通用层：规则本体（工具无关）
-    rel_vc = "specs/general/version-control.adoc"
-    path_vc = os.path.join(REPO_ROOT, *rel_vc.split("/"))
-    if not os.path.isfile(path_vc):
-        err(f"缺少文件 {rel_vc}——『版本管理』的规则本体无处承载"
-            "（用户口称『版本管理』、未点名 git/CNB，规则本体必须落在通用层）", rel_vc)
-    else:
-        text_vc = open(path_vc, encoding="utf-8").read()
-        section = _vc_conflict_section(text_vc)
-        if not section:
-            err(f"{rel_vc} 未找到「冲突处理」一节——先解冲突、再压缩与解冲突后的核查失去落点", rel_vc)
-        else:
-            for keys, desc in (
-                (("先解冲突", "再压缩", "最终只有一个提交"),
-                 "顺序与交付形态：须写明有冲突时先解冲突、再压缩、最终只有一个提交"
-                 "（缺则'还有冲突'或'要压缩'任一都能当另一个的挡箭牌，交付形态少一半）"),
-                (('拿"还有冲突"当不做压缩的理由', '拿"要压缩"当不解冲突的理由'),
-                 "反向判据：须写明'拿还有冲突当不做压缩的理由'与'拿要压缩当不解冲突的理由'"
-                 "**两句都在**（本项两个关键词按 AND 判，任一缺失即缺要点）——"
-                 "只写正面顺序、或只写其中一句时，执行者仍可二选一交差"),
-                (('"只被要求压缩、没被要求解决冲突"也要先解冲突',
-                  "实际存在冲突"),
-                 "触发面写全：须写明**用户只要求压缩、没提解决冲突而分支实际有冲突**时同样"
-                 "须先解冲突（用户本轮点名：『当只提出压缩提交一个任务，没有提解决冲突的要求，"
-                 "但是目前有冲突，需要先解决冲突，再压缩提交』）——只写『同时/先后提出两件事』"
-                 "时，执行者会把『没被要求』读成『不用做』（本条与它的同义句按 AND 判，"
-                 "两句都在才算齐备）"),
-                (("对冲突只字未提", '以"用户没提解决冲突/没被要求"为由只压不解决',
-                  "照抄目标分支的文件内容后另起一个单亲提交",
-                  "并非本分支的祖先"),
-                 "判定标准四态：须可逐条核对——①报『已压缩提交』却对冲突只字未提；"
-                 "②以『用户没提/没被要求』为由只压不解决、或把冲突留到压缩之后再议；"
-                 "③用『照抄目标分支内容 + 单亲提交』冒充已解决（工作副本一致但目标分支不是祖先）；"
-                 "④拿『要求里只写了压缩』当挡箭牌——缺则只剩一句口号、无从判定"),
-                (("解决冲突后须核查是否丢失内容",),
-                 "核查要求：须有『解决冲突后须核查是否丢失内容』这一条 L1"),
-                (("整体取一侧",),
-                 "失效形态：须点名'整体取一侧收尾、不做逐处对照'这一失效"
-                 "（版本管理工具只会报哪里对不上、报不出哪些行再也回不来）"),
-                (("核查判据", "改名", "逐条核对两侧条目的并集"),
-                 "核查判据随对象定：须给出文本类（两侧改动逐处对照）、改名/移动/删除与文件数"
-                 "（按版本管理工具对移动的识别口径强制核对）、版本文档类（依赖清单与锁文件逐条"
-                 "核对两侧条目并集）三档判据，否则'核查'退化成'没有冲突标记就算完'"),
-            ):
-                missing = [k for k in keys if k not in section]
-                if missing:
-                    err(f"冲突与压缩提交防线被破坏：{rel_vc} 的「冲突处理」节缺失要点 {missing}——"
-                        f"{desc}；本条是用户明确提出的要求，不得删除、不得降级为建议（L1）", rel_vc)
-        # 通用层须显式声明"工具无关、不得把某工具命令当规则前提"。
-        # **同样按节取文本**：该声明本属通用层的定性节（本文件为「为什么把"版本管理"与
-        # "某个工具"分开写」）。全文匹配时，只要文件里任何地方出现"工具无关"与"SVN"
-        # （例如正文别处顺手提一句"换用 SVN 同样成立"），声明本身被改成 git 专属也照样假绿。
-        vc_scope = _vc_scope_section(text_vc)
-        if not vc_scope:
-            err(f"{rel_vc} 未找到工具无关性的定性节——『不得把某工具的命令当成规则前提』"
-                "这一声明失去落点（用户口称『版本管理』、未点名 git/CNB）", rel_vc)
-        else:
-            for keys, desc in (
-                (("工具无关", "SVN"),
-                 "工具无关性：通用层须在定性节里显式写明本规则工具无关（点名 git 之外的"
-                 "版本管理工具），不得把某工具的命令当成规则前提——用户原话是『版本管理』、"
-                 "**没说 cnb、git**，写成 git 专属即与该要求相抵"),
-            ):
-                missing = [k for k in keys if k not in vc_scope]
-                if missing:
-                    err(f"冲突与压缩提交防线被破坏：{rel_vc} 的定性节缺失要点 {missing}——{desc}",
-                        rel_vc)
-        # 「压缩提交」节须写明压缩不等于解冲突。**按节取文本**：同前，全文匹配时把这两句
-        # 挪到「冲突处理」节（冲突处理里按定义就有"压缩"字样）即可让该节的接口句消失而不报红。
-        vc_squash = _vc_squash_section(text_vc)
-        if not vc_squash:
-            err(f"{rel_vc} 未找到「压缩提交」一节——压缩不等于解冲突这一接口句失去落点", rel_vc)
-        else:
-            # 判据写成「节里不得同时缺两句」＝**差集覆盖**：修好缺的一句即报红解除，
-            # 不会在改掉某一句后把同一条重复报两次（报错须能指回"该补哪句"）。
-            missing = [k for k in ("压缩不等于解冲突", "压缩不能替代解冲突")
-                       if k not in vc_squash]
-            if missing:
-                err(f"冲突与压缩提交防线被破坏：{rel_vc} 的「压缩提交」节缺失接口句 {missing}"
-                    "——把冲突处整体取一侧后压成一个提交，是把丢内容藏进一个干净的提交里", rel_vc)
-    # (b) git 层：git 侧落地命令（用户点名"git 规范也要"）
-    rel_git = "specs/general/git.adoc"
-    path_git = os.path.join(REPO_ROOT, *rel_git.split("/"))
-    if not os.path.isfile(path_git):
-        err(f"缺少文件 {rel_git}——git 侧的核对命令无处承载（用户点名『git 规范也要』）", rel_git)
-    else:
-        text_git = open(path_git, encoding="utf-8").read()
-        # **按节取文本**（与通用层同一口径）：git 规范别处也会提到 `rename`、`--ours`（「文件移动
-        # 与重命名」节的强制核对就是这么写的），全文匹配会把"本节被掏空、别处还提一句"读成齐备
-        # （本仓库实测：本节正文改成"另议"、把命令搬到另一节，旧写法全绿）。
-        git_section = _section_text(text_git, "冲突与压缩提交")
-        if not git_section:
-            err(f"{rel_git} 未找到「冲突与压缩提交（git 侧落地）」一节"
-                "——git 侧核对命令失去落点（用户点名『git 规范也要』）", rel_git)
-        else:
-            for keys, desc in (
-                (("--ours", "--theirs"),
-                 "git 侧失效形态：须点名 `--ours`/`--theirs` 整体取一侧收尾这一失效"),
-                (("git diff --name-status", "rename"),
-                 "git 侧核对命令：须给出未识别为 rename / 强制核对的命令判据"),
-                (("`git log --oneline", "只有一条"),
-                 "『最终只有一个提交』的 git 侧判据：须给出可核对命令（`git log --oneline <目标分支>..HEAD`"
-                 "只有一条）——只留'应只有一条'这句口号不算判据（判据退化成断言，无从核对）"),
-            ):
-                missing = [k for k in keys if k not in git_section]
-                if missing:
-                    err(f"冲突与压缩提交防线被破坏：{rel_git} 的「冲突与压缩提交（git 侧落地）」节"
-                        f"缺失要点 {missing}——{desc}", rel_git)
-    # (c) 平台层：只留追加口径，且须指向通用层规则本体
-    rel = "specs/platform/cnb.adoc"
-    path = os.path.join(REPO_ROOT, *rel.split("/"))
-    if not os.path.isfile(path):
-        err(f"缺少文件 {rel}——平台层追加口径无处承载", rel)
-    else:
-        text = open(path, encoding="utf-8").read()
-        # 按节取「冲突处理」正文：同文件「压缩提交」节也指向通用层，全文匹配会在
-        # "冲突处理节不再指向通用层、压缩提交节还指一句"时假绿。
-        plat_section = ""
-        for title, body in _split_adoc_sections(text):
-            if title.startswith("冲突处理"):
-                plat_section = body
-                break
-        if not plat_section:
-            err(f"{rel} 未找到「冲突处理」一节——平台侧追加口径失去落点", rel)
-        else:
-            for keys, desc in (
-                (("specs/general/version-control.adoc", "规则本体"),
-                 "平台层「冲突处理」须指向通用层规则本体（工具无关）——"
-                 "把规则本体留在平台层会让非 CNB 的引用方读不到"),
-                (("只有一条",),
-                 "平台侧交付形态：须把『最终只有一个提交』按本平台表达"
-                 "（该合并请求的源分支上只有一条提交）"),
-                (('"只被要求压缩提交"时冲突处置不豁免', "没被要求不等于可以搁置"),
-                 "触发面写全（平台侧）：须写明本平台上『要求只写了压缩、没提解决冲突』时不构成"
-                 "不做的理由——缺则执行者按本平台的派发形态（要求常只写一件事）恰好会漏掉这条"),
-                (("并非本分支的祖先", "git merge-base --is-ancestor"),
-                 "平台侧判据：须给出『照抄目标分支内容 + 单亲提交冒充已解决』的可核对判据"
-                 "（`git merge-base --is-ancestor`——本平台据合并关系判定，工作树一致仍报冲突）"),
-                (("不是合并", "NPC"),
-                 "与「NPC 禁合并」的边界：须写明解冲突不是合并、两条各自独立互不豁免"
-                 "（否则会被读成『NPC 不能合并所以也不能解冲突』或反过来当豁免口）"),
-            ):
-                missing = [k for k in keys if k not in plat_section]
-                if missing:
-                    err(f"冲突与压缩提交防线被破坏：{rel} 的「冲突处理」节缺失要点 {missing}——{desc}",
-                        rel)
-        # 平台层「压缩提交」节同样不得把规则本体收回平台层（与 (c) 开头同一条归位口径，
-        # 但**必须按它自己的节核对**——同文件「冲突处理」节也指向通用层，全文匹配会在
-        # "压缩提交节把规则本体抄回平台层、冲突处理节还指一句"时假绿）。
-        plat_squash = ""
-        for title, body in _split_adoc_sections(text):
-            if title.startswith("压缩提交"):
-                plat_squash = body
-                break
-        if not isinstance(plat_squash, str):
-            err(f"{rel} 未找到「压缩提交」一节——平台侧追加口径失去落点", rel)
-        elif not all(k in plat_squash
-                     for k in ("specs/general/version-control.adoc", "「压缩提交」")):
-            err(f"冲突与压缩提交防线被破坏：{rel} 的「压缩提交」节未指向通用层规则本体"
-                "（引用形态为 `specs/general/version-control.adoc`「压缩提交」，**须带节名锚点**）"
-                "——把规则本体留在平台层、或只给文件名不给节名，非 CNB/非 git 的引用方都定位不到", rel)
-        elif not all(k in plat_squash for k in ("先解冲突", "不得把冲突留在原地只做压缩")):
-            # 台账与 `guards.adoc` 都声明本节须写全触发面（"只被要求压缩提交"时冲突处置不豁免）
-            # ——旧写法只核了"指向通用层"，声明与实现不一致（本仓库实测：把本节的接口条
-            # 整条删掉仍全绿）。
-            err(f"冲突与压缩提交防线被破坏：{rel} 的「压缩提交」节未写全与「冲突处理」的接口"
-                "（须写明有冲突时先解冲突、不得留在原地只做压缩）——台账与 `guards.adoc` 都声明"
-                "本节写全触发面，缺则该声明与实现不一致；平台上的派发常只写一件事，"
-                "本节是执行者读到那条触发面的落点", rel)
-    # (d) 调度器与 README：规则在、但没人会读到 / 公开面看不到
-    rel_common = "AGENTS_COMMON.adoc"
-    common_path = os.path.join(REPO_ROOT, rel_common)
-    if not os.path.isfile(common_path):
-        err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
-    else:
-        common = open(common_path, encoding="utf-8").read()
-        for keys, desc in (
-            (("version-control.adoc",),
-             "调度器须登记通用层「版本管理」加载项——缺则该文件永远不会被加载（规则在、但没人会读到）"),
-            (("冲突与压缩提交同时提出",),
-             "调度器 CNB 平台加载项须同步『冲突与压缩提交』识别特征"),
-            (("只被要求压缩提交",),
-             "调度器须登记『只被要求压缩提交、没被要求解决冲突』这一触发面——"
-             "缺则按本平台的派发形态（要求常只写一件事）时该条永不被加载"),
-        ):
-            missing = [k for k in keys if k not in common]
-            if missing:
-                err(f"冲突与压缩提交防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
-                    rel_common)
-    rel_readme = "README.adoc"
-    readme_path = os.path.join(REPO_ROOT, rel_readme)
-    if not os.path.isfile(readme_path):
-        err(f"缺少 {rel_readme}——目录说明无从核对", rel_readme)
-    else:
-        readme = open(readme_path, encoding="utf-8").read()
-        for keys, desc in (
-            (("version-control.adoc",),
-             "目录说明须登记通用层「版本管理」（`version-control.adoc`）——公开面看不到即等于没写"),
-            (("先解冲突、再压缩、最终只有一个提交",),
-             "目录说明须同步『先解冲突、再压缩』这一口径"),
-            (("只被要求压缩",),
-             "使用要点须写明『只被要求压缩、没被要求解决冲突时冲突处置也不豁免』"
-             "（否则公开面只看得见『同时提出』那一种触发面）"),
-            (("解冲突后须核查是否丢内容",),
-             "使用要点须写明『解冲突后须核查是否丢内容』（否则公开面看不到这条默认动作）"),
-        ):
-            missing = [k for k in keys if k not in readme]
-            if missing:
-                err(f"冲突与压缩提交防线被破坏：{rel_readme} 缺失要点 {missing}——{desc}",
-                    rel_readme)
+    run_rule_guard("check_conflict_resolution_guard")
     phase_done()
 
 
@@ -10822,12 +9156,7 @@ def check_delivery_guard():
     if not block:
         err(f"{rel_common} 缺少 `delivery` 片段——交付形态与报告落点失去落点", rel_common)
     else:
-        for keys, desc in DELIVERY_GUARD_KEYS:
-            missing = [k for k in keys if k not in block]
-            if missing:
-                err(f"交付形态与报告落点防线被破坏：{rel_common} 的 `delivery` 片段缺失要点 "
-                    f"{missing}——{desc}；本条对应用户报告的真实失效（一轮任务只冒了一句"
-                    "过程性废话、没有任何提交），不得删除、不得降级为建议", rel_common)
+        run_rule_guard("check_delivery_guard")
     # 题面侧：两个提示词各须有"交付即汇报"步骤（片段证不了题面）
     files = _iter_prompt_files()
     if not files:
@@ -10835,35 +9164,14 @@ def check_delivery_guard():
     for f in files:
         rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
         text = open(f, encoding="utf-8").read()
-        for keys, desc in ((("10. 交付即汇报", "有改动", "没有交付",
-                             "输出通道只有两条", "任何中间话一律不发"),
-                            "代码块内须有一条『交付即汇报』步骤、且写明**输出通道只有两条**"
-                            "（最终汇报 / 必须停下确认）与『此外任何中间话一律不发』"
-                            "（否则题面侧仍允许『只交付不汇报』『只冒一句、没有交付』，"
-                            "以及执行者自行认定『这属于必要的说明』的第三条通道）"),):
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"交付形态与报告落点防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+        run_rule_guard("check_delivery_guard")
     # 登记处：公开面（提示词入口与 README 使用要点）
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(PROMPTS_FILE):
         err(f"缺少公开提示词入口 {rel_prompts}——公共约定无处登记", rel_prompts)
     else:
         ptext = open(PROMPTS_FILE, encoding="utf-8").read()
-        for keys, desc in ((("交付即汇报", "过程性叙述", "没有改动却没说明",
-                             "输出通道只有两条", "除这两条之外的任何中间话一律不发"),
-                            "公共约定须同步『交付即汇报 + 输出通道只有两条 + "
-                            "过程性叙述不得作为评论发出 + 无改动须显式说明』"
-                            "（提示词会被未知项目复制执行，漏了这层"
-                            "则复制出去的那份没有这条边界）"),
-                           (("题目与片段的改动边界", "不扩大题面",
-                             "不得在两个提示词里各写一遍"),
-                            "维护约定须写明改动的边界：改题面属新版本，而『补片段缺口/补 "
-                            "include』只补片段与引用、不扩大题面、对已在执行的任务同样成立")):
-            missing = [k for k in keys if k not in ptext]
-            if missing:
-                err(f"交付形态与报告落点防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
-                    rel_prompts)
+        run_rule_guard("check_delivery_guard")
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
         rtext = open(README_FILE, encoding="utf-8").read()
@@ -10901,38 +9209,11 @@ def check_changelog_timing_guard():
         err(f"缺少项目规范入口 {rel_agents}——changelog 登记时机条无处承载", rel_agents)
     else:
         atext = open(path_agents, encoding="utf-8").read()
-        for keys, desc in (
-            (("登记时机", "除非用户主动声明", "一律不新增、不修改",
-              "check_changelog_timing_guard"),
-             "须有『登记时机（主动声明才算）：除非用户主动声明，否则一律不新增、不修改本文件』条，"
-             "并写明本防线抓手名——防该条被删或被降级成建议（执行者会重新把『改了东西』与"
-             "『该记一条』画等号，条目随每轮任务自发生长）"),
-            (("主动声明", "本次明确要求"),
-             "须给出『主动声明』的判据（用户**本次明确要求**新增/修改/整理/压缩 changelog"
-             "或改写其组织方式与条目形态）——只写『声明』而不定义什么算声明，"
-             "判据仍留在执行者手里（『这应该也算声明』重新可用）"),
-            (("未声明", "只要求更新文档或 README"),
-             "须点名**未声明的越界形态**（未提到该文件、只要求更新文档或 README、只说"
-             "『改动了什么』、把该条概括转述而未点名 changelog 与动作）——本条要治的正是"
-             "『用户只说改文档，执行者却顺手改了 changelog』，缺这一句则判据只剩正向一半"),
-            (("顺手补一条",),
-             "须保留『顺手补一条』这类常见越界形态（每轮改动顺带追加条目）"),
-        ):
-            missing = [k for k in keys if k not in atext]
-            if missing:
-                err(f"变更日志登记时机防线被破坏：{rel_agents} 缺失要点 {missing}——{desc}",
-                    rel_agents)
+        run_rule_guard("check_changelog_timing_guard")
     rel_eff = os.path.join("script", "check_effective.py")
     if os.path.isfile(os.path.join(REPO_ROOT, rel_eff)):
         etext = open(os.path.join(REPO_ROOT, rel_eff), encoding="utf-8").read()
-        for keys, desc in (
-            (("check_changelog_timing_guard", "除非主动声明，否则不新增、不修改"),
-             "须登记该条（定义了却没抓手＝这条又变成靠自觉，与它要治的失效同形）"),
-        ):
-            missing = [k for k in keys if k not in etext]
-            if missing:
-                err(f"变更日志登记时机防线被破坏：{rel_eff} 缺失要点 {missing}——{desc}",
-                    rel_eff)
+        run_rule_guard("check_changelog_timing_guard")
     else:
         err(f"缺少 {rel_eff}——『定义未执行』登记处缺失，本条成为无抓手条款", rel_eff)
     phase_done()
@@ -10959,7 +9240,7 @@ PROMPT_SURFACE_GUARD_KEYS = (
 
 # 图书馆侧的同一判据（本轮用户确认一并修复）：站点直链同为未装配的仓库字节，
 # 不得让读者按「站点 = 渲染视图」推断图书馆被装配过。
-PROMPT_SURFACE_LIBRARY_FILES = ("library/README.adoc", "library/usage.adoc", "library/sources.adoc")
+PROMPT_SURFACE_LIBRARY_FILES = _RULES_TOKENS["PROMPT_SURFACE_LIBRARY_FILES"]
 
 PROMPT_SURFACE_LIBRARY_KEYS = (
     (("未经处理器装配的仓库字节", "index.html", "正文区"),
@@ -11035,12 +9316,7 @@ def check_prompt_delivery_surface_guard():
         err(f"缺少提示词公共片段 {rel_common}——取值路径与装配状态无处承载", rel_common)
     else:
         common = open(COMMON_PROMPT_FILE, encoding="utf-8").read()
-        for keys, desc in PROMPT_SURFACE_GUARD_KEYS:
-            missing = [k for k in keys if k not in common]
-            if missing:
-                err(f"提示词取值路径防线被破坏：{rel_common} 缺失要点 {missing}——{desc}；"
-                    "本条对应用户指出的既有偏差（原表述与两条实际取值路径都不吻合），"
-                    "不得退回『渲染视图下已展开』这类与路径绑不上的笼统说法", rel_common)
+        run_rule_guard("check_prompt_delivery_surface_guard")
     # 题面侧：每个提示词的读取说明（片段证不了题面）
     files = _iter_prompt_files()
     if not files:
@@ -11048,34 +9324,14 @@ def check_prompt_delivery_surface_guard():
     for f in files:
         rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
         text = open(f, encoding="utf-8").read()
-        for keys, desc in PROMPT_SURFACE_PROMPT_KEYS:
-            missing = [k for k in keys if k not in text]
-            if missing:
-                err(f"提示词取值路径防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+        run_rule_guard("check_prompt_delivery_surface_guard")
     # 登记处：公开提示词入口（表 + 两条判据）
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(PROMPTS_FILE):
         err(f"缺少公开提示词入口 {rel_prompts}——取值路径与装配状态无处登记", rel_prompts)
     else:
         ptext = open(PROMPTS_FILE, encoding="utf-8").read()
-        for keys, desc in (
-            (("取值路径与装配状态", "已装配", "未装配"),
-             "入口须有『取值路径与装配状态』节并给三行判据表（IDE/asciidoctor/站点页面内 = 已装配；"
-             "远程原始文件地址、本地读取 = 未装配）"),
-            (("不是三种", "不同取值路径"),
-             "须写明三类是同一份文件的不同取值路径、不是三种『版本的提示词』"
-             "（防把未展开读成内容缺失/旧版）"),
-            (("站点直链 = 仓库字节", "index.html"),
-             "须有 L1 条：站点直链（非 HTML 文件）直出原文、与站点发布分支的同名文件逐字节一致，"
-             "站点上存在装配形态的只有 index.html 自己的正文区（『站点』不等于『已装配』）"),
-            (("实证与话术", "不得", "与路径绑不上"),
-             "须有 L1 条：描述取值路径须与实际抽样一致、不得留下『渲染视图下已展开』这类"
-             "与路径绑不上的笼统说法"),
-        ):
-            missing = [k for k in keys if k not in ptext]
-            if missing:
-                err(f"提示词取值路径防线被破坏：{rel_prompts} 缺失要点 {missing}——{desc}",
-                    rel_prompts)
+        run_rule_guard("check_prompt_delivery_surface_guard")
     # 图书馆侧：同一判据（本轮用户确认一并修复）
     for rel_lib, keys, desc in (
         (PROMPT_SURFACE_LIBRARY_FILES[0], PROMPT_SURFACE_LIBRARY_KEYS[0][0],
@@ -11173,6 +9429,7 @@ CHECKS = (
     check_cross_platform_script_guard,
     check_script_header_guard,
     check_script_selfdoc_guard,
+    check_rule_script_separation_guard,
     check_comment_preservation_guard,
     check_comment_dispatch_guard,
     check_self_dispatch_guard,
