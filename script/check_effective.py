@@ -249,6 +249,24 @@ MECHANISMS = [
      "check_info_density_guard",
      "check_info_density_guard 钉住**判据本体**七组要点（与「精炼性」的分工『同一描述有几处』对照『单处里有多少句是废话』且明写『仍可能通篇是废话』／每一句都要有承载 L2 含四条判定标准『复述·空话·同义反复·可有可无的铺垫』／限定语不得降格为表意不明／与 P3 的边界『内容不减少优先』『只有这一句没有承载才是』『压成口号属违反 P3』／适用面『不适用于代码与测试断言』／存量随动迁移／依据行 GB/T 7713.2-2022、GB/T 7713.1-2025、ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148），并钉住**两处入口互引**（`doc.adoc`「简洁」条正文里那半句、`review.adoc`「精炼性」的『与「信息密度」的分工』一行——只核节名不核这半句属防线空转）与**图书馆依据落点**（`library/sources.adoc` 的 GB/T 7713 系列主题段须含标准号、『已废止』换版关系与『同义性』取舍面）；"
      "**本条只钉要点文本仍在**——『某次产出里到底有没有废话』语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("SQL 写法（同表同类操作合并、独立成文件、带库名）",
+     "specs/general/sql.adoc「SQL 写法」（SQL 写法的唯一真源；SQL 是跨语言写法，不埋在技术栈文件里）",
+     "script/check_specs.py",
+     "check_alter_merge_guard",
+     "check_alter_merge_guard 钉住**判据本体**六组要点"
+     "（规则本体「同类操作」的定义与「目标数据库支持」前提、合并不了时的例外与须写明原因、"
+     "可逐条核对的判定标准、依据行 MySQL 官方文档、存量边界；"
+     "**本轮追加一组**：**DML 合并 + 「用户主动写的除外」例外（不改、不告警）+ 例外只适用于 DML**"
+     "（DDL 一定会锁表、故 DDL 侧无例外））"
+     "与**加载门**（调度器**通用层**登记 `specs/general/sql.adoc` + 识别特征 `ALTER TABLE`/`.sql`/库名/`INSERT`、`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」的**一跳引用**、登记路径须能被取回脚本的 `specs/*.adoc` 清单解析命中——本轮实测的失效形态是「文件建对了、判据也齐，但登记与引用两处都没接上」，判据存在而执行者走不到它）、**图书馆依据落点**"
+     "（`library/sources.adoc` 的 MySQL 官方文档条目（ALTER TABLE 与 Online DDL）"
+     "与「官方材料并未规定必须合并」的同义性标注）"
+     "——**同一事项只有一个真源**：用户追加的另两条写法（SQL 须独立成文件、写库名）"
+     "及其依据**不在这里再钉一份**（判据本体由 `check_external_script_guard` 钉，见"
+     "`specs-project-maintainer/spec-lifecycle.adoc`「新增规范的提案校验」的"
+     "「同一事项不得留两处真源」）；只核「有没有这条」属防线空转；"
+     "**本条只钉要点文本仍在**——「某条迁移到底该不该合并、有没有真的按表合并输出、"
+     "某次改的是不是用户主动写的 DML」语义判断（见 GUARD_CHECK_LIMITS）"),
     ("改完规范必做五件事：机械手段必跑全、干净子 agent 三视角复核不可漏（有了就忽略、没有就加）、三态台账、复核者不可用时的降级留证",
      "specs/general/verify.adoc「改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）」",
      "script/check_specs.py",
@@ -436,12 +454,15 @@ MECHANISMS = [
      "『要求/依据/判定标准』三个轴名都还在、防线全绿，而可核对的判据被整段抽掉；教训当时只写在 `script/check_specs.py` 与配套测试的注释里、"
      "**没有进规范正文**——下一个维护者读规范时看不到、只能靠翻脚本注释（判据存在但不可见＝同构复发）。"
      "『某道防线具体钉的是不是判据本体』语义判断（见 GUARD_CHECK_LIMITS）"),
-    ("压缩提交：用户可明确要求、执行者应当照做（内容零变化、只动本源分支、先确认无人在用旧对象、force-with-lease、声明新旧 sha 对应关系）", "specs/platform/cnb.adoc", "script/check_specs.py",
-     "check_squash_commit_guard", "check_squash_commit_guard 钉住八处要点（节与定性 / 判据含内容零变化 / 作用域 / 禁止形态 / 先确认无人在用旧对象 / `--force-with-lease` 与「一般强推口径不适用」 / 与「NPC 禁合并」互不豁免 / 新旧 sha 对应关系声明 + 对象钉定侧的『合规动作』标注 + 调度器与 README 同步），**两边的降级都拦**（把条文删掉/降成建议、以及把用户可要求的压缩提交读成「强推违规」）；『某次压缩是否真的内容零变化、是否真没人基于旧 sha 工作、是否真的用了带租约强推』运行时事实（见 GUARD_CHECK_LIMITS）"),
+    ("压缩提交：用户可明确要求、执行者应当照做（内容零变化、只动本源分支、规则本体工具无关；平台侧另含先确认无人在用旧对象、force-with-lease、声明新旧 sha 对应关系）", "specs/general/version-control.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
+     "check_squash_commit_guard", "check_squash_commit_guard 钉住平台层「压缩提交」的追加口径（节 / 作用域只动本源分支 / 禁止形态的平台侧追加 / 先确认无人在用旧对象 / `--force-with-lease` 与「一般强推口径不适用」 / 与「NPC 禁合并」互不豁免 / 新旧 sha 对应关系声明 + 对象钉定侧的『合规动作』标注）**并钉住规则归属**：通用层 `specs/general/version-control.adoc` 承载工具无关本体、平台层须指向它（用户口称『版本管理』、未点名 git/CNB，规则本体留在平台层会让非 CNB/非 git 的引用方读不到）；**两边的降级都拦**（把条文删掉/降成建议、以及把用户可要求的压缩提交读成「强推违规」）；『某次压缩是否真的内容零变化、是否真没人基于旧 sha 工作、是否真的用了带租约强推』运行时事实（见 GUARD_CHECK_LIMITS）"),
     ("重命名与内容修改须分两个提交（P7）；且『合并成一个提交/压缩提交』的请求**未点名本条**时不覆盖它", "specs/general/git.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
      "check_rename_split_guard", "check_rename_split_guard 钉住四处要点（git 规范「重命名与内容修改须分两个提交」整节的条目轴与要点、必加载层 `specs/core/execution.adoc` 的 P7 重申行、`AGENTS_COMMON.adoc`「最高优先级铁律」的登记、维护方清单 `specs-project-maintainer/priority.adoc` 的 P7 条目与级别），**并钉住与「压缩提交」的接口**：用户要求压缩提交/合并成一个提交而**未点名重命名与内容修改**时，压缩只作用于临时中间提交、这两个提交**原样保留**（平台层「压缩提交」须写同口径，防平台侧自行把『要压缩』读成『压回一个』）；例外的『声明』须点名重命名与内容修改、须预先声明（只说合并/压缩不算）；**并按「条目自身」而非「整节关键词」核对**——边界条与平台层接口条的判据（未点名/临时中间提交/原样保留/判定标准）须在**该条自己的正文**里，被抽空或搬进相邻条目即报错（否则相邻条款的字样会兜住已消失的要求；本仓库实测：仅留轴标题、正文另议时旧法静默通过）；『某次是否真的分成了两个提交、压缩是否真的没把它们压掉』属运行时事实（git 记录），机械无法判定，交人/子 agent 用 `git log --follow --name-status`、`git diff <改名提交>^ <改名提交> -M --stat`、`git log --diff-filter=R -M --name-status` 复核"),
     ("压缩/解决冲突后须保留与目标分支的合并关系（目标分支仍是本分支的祖先、合并提交保留双亲、压缩不吞掉合并提交）", "specs/platform/cnb.adoc", "script/check_specs.py",
      "check_merge_relationship_guard", "check_merge_relationship_guard 钉住根因形态（照抄目标分支文件内容后另起单亲提交→目标分支不是祖先→平台仍报 code_conflict）、可核对判据（`git merge-base` 等于目标分支最新提交、`git merge --no-ff` 保留双亲 / `git rev-list --parents -n1`）、`--is-ancestor` 为假这一假绿信号、以及『压缩不吞掉合并提交（它是已并入的凭据）』；『某次合并是否真的建了双亲关系』属运行时事实（git 记录），机械无法在静态文本上判定，交人/子 agent 用 `git merge-base --is-ancestor` 与 `git rev-list --parents` 复核"),
+    ("冲突与压缩提交：先解冲突、再压缩（最终只有一个提交），且解冲突后须核查是否丢内容（**工具无关**——版本管理工具，不限 git/CNB）", "specs/general/version-control.adoc + specs/general/git.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
+     "check_conflict_resolution_guard",
+     "check_conflict_resolution_guard 钉住三处（用户口称『版本管理』、未点名 git/CNB，故规则本体必须在通用层）：① **通用层 `specs/general/version-control.adoc`「冲突处理」**——三件要点（①先解冲突、再压缩、最终只有一个提交，含反向判据『拿还有冲突当不做压缩的理由』『拿要压缩当不解冲突的理由』；②**触发面写全**：『只被要求压缩、没被要求解决冲突也要先解冲突』——用户只要求压缩、没提解决冲突而分支实际有冲突时同样须先解冲突，含判定标准四态【用户本轮点名】；③解决冲突后须核查是否丢内容，含失效形态『整体取一侧收尾、不做逐处对照』与随对象定的三档核查判据）+ 工具无关性声明（点名 git 之外的版本管理工具如 SVN）+「压缩提交」节写明**压缩不等于解冲突**；② **git 层 `specs/general/git.adoc`「冲突与压缩提交（git 侧落地）」**——`--ours`/`--theirs` 取一侧这一失效、`git diff --name-status`/`rename` 强制核对、『最终只有一个提交』的 git 侧命令；③ **平台层 `specs/platform/cnb.adoc`**——只留追加口径且须**指向通用层规则本体**、交付形态按本平台表达，且**「冲突处理」与「压缩提交」两节都须写全触发面**（『只被要求压缩提交』时冲突处置不豁免、含祖先关系可核对判据与『解冲突不是合并』的边界）；另加调度器与 README 同步。**按节取文本**（同文件别处也提到『冲突』与『压缩』，全文匹配会把『条文从本节删了、别处还提了一句』读成齐备）；『某次解冲突是否真的两侧内容一条未丢、最终是否真的只有一个提交』属运行时事实（git 记录），机械只钉『要求文本仍在』，交人/子 agent 复核"),
     ("CNB NPC（CI/CD 执行者）严禁合并 PR、人工要求或直授也必须拒绝", "specs/platform/cnb.adoc", "script/check_specs.py",
      "check_npc_merge_guard", "check_npc_merge_guard 钉住六处要点（禁令本体 / 无豁免含『授权不免除』 / 可逐条核对的判定标准 / 与「冲突处理」不矛盾的边界 / 提示词公共片段 `delivery` 同口径 L1 条 / 公开提示词入口 PROMPTS.adoc 同步）；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("提示词取值路径与装配状态：不得给『渲染视图下已展开』这类与路径绑不上的笼统说法", "PROMPTS.adoc + prompts/_common.txt", "script/check_specs.py",

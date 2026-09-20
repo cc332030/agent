@@ -101,6 +101,36 @@ class CheckSpecsTestCase(unittest.TestCase):
     def error_texts(self) -> str:
         return "\n".join(cm.errors)
 
+    def capture_phase_log(self) -> list:
+        """捕获 `cm.log` 的阶段级输出，返回一个**实时增长**的列表（用例读它判收尾）。
+
+        `log()` 直接 `print`，故只有把 `print` 换成"追加进列表"才拿得到；用完须
+        `restore_phase_log()` 换回（否则后续用例的进度会被吞掉）。
+        """
+        self._phase_log = []
+        self._orig_log = cm.log
+        cm.log = self._phase_log.append
+        return self._phase_log
+
+    def restore_phase_log(self) -> None:
+        """还原 `cm.log`。"""
+        cm.log = self._orig_log
+        self._phase_log = []
+
+    def phase_closed(self, start: int, end: int | None = None) -> bool:
+        """`self._phase_log[start:end]` 这段输出里，每个 `▶ 阶段` 之后都有「✓ 完成」。
+
+        判据取"阶段之间有没有收尾"，不取"整段末尾是不是完成行"——后者在子进程式
+        收尾（`check_asciidoctor_syntax`）或末阶段时判不出来。**收尾行不按文案钉**：
+        文案由 `phase_done()` 决定，这里只判"这个阶段后面还有下一行输出"，
+        故改文案不会误报（钉文案属过度收紧，与 `check_criteria_not_axis_guard` 同口径）。
+        """
+        lines = (self._phase_log if end is None else self._phase_log[:end])[start:]
+        for idx, line in enumerate(lines):
+            if line.startswith("▶") and idx == len(lines) - 1:
+                return False
+        return True
+
 
 
 class TestCheckBudgetGuard(CheckSpecsTestCase):
@@ -3630,9 +3660,15 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("specs-project-maintainer/verify.adoc",
                    "= 验证的维护方落点\n\n维护方的验证义务与落点。\n")
         self.write("specs-project-maintainer/spec-lifecycle.adoc",
-                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分（防拆分成为新的失控源）\n\n"
                    "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
-                   "单独过准入九问。\n\n== 拆分后的自洽核对\n\n引用可达。\n")
+                   "单独过准入九问。\n\n"
+                   "**同一事项只有一个真源（L1，推荐程度与机械量级不构成另建落点的理由）**："
+                   "一条规则只在一处给真源、其余只做一跳引用（不构成第四条硬条件）。\n\n"
+                   "== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验（先校验、再登记、后写入）\n\n"
+                   "可机械校验的条目须同时补机械抓手；**同一事项不得留两处真源**——"
+                   "已钉过就不另建、只有判据形态不同才另建。\n")
         self.write("AGENTS.adoc", self._own_text())
 
     def test_valid_lifecycle_guard_passes(self):
@@ -3715,6 +3751,34 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc", self._own_text())
         cm.check_lifecycle_guard()
         self.assertIn("不拆就真的坏", self.error_texts())
+
+    def test_missing_single_source_rule_reports(self):
+        # 反例（本轮）：拆分判据里"同一事项只有一个真源"被删 -> 会出现另建一份判据本体
+        # （两处各改一次、两处漂移时先报红的那道未必是权威）
+        self._write_valid()
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
+                   "单独过准入九问。\n\n== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验\n\n可机械校验的条目须同时补机械抓手。\n")
+        self.write("AGENTS.adoc", self._own_text())
+        cm.check_lifecycle_guard()
+        self.assertIn("同一事项只有一个真源", self.error_texts())
+
+    def test_missing_duplicate_guard_trigger_reports(self):
+        # 反例（本轮）：提案校验里"不得留两处真源"的判据被删 -> 另建防线时不会先检索
+        self._write_valid()
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
+                   "**同一事项只有一个真源**、推荐程度与机械量级不构成另建落点的理由；"
+                   "单独过准入九问。\n\n"
+                   "== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验（先校验、再登记、后写入）\n\n"
+                   "可机械校验的条目须同时补机械抓手。\n")
+        self.write("AGENTS.adoc", self._own_text())
+        cm.check_lifecycle_guard()
+        self.assertIn("同一事项不得留两处真源", self.error_texts())
 
     def test_own_agents_missing_landing_reports(self):
         # 反例：本仓库落点未指向通用层边界节（本仓库口径与通用层脱钩）
@@ -5606,6 +5670,297 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         self.assertIn("废止", self.error_texts())
 
 
+class TestCheckAlterMergeGuard(CheckSpecsTestCase):
+    """钉住『SQL 写法（同表同类操作合并、独立成文件、写库名）』防线：判据本体 + 加载门。
+
+    用户要求（Issue #154）："调整规范 sql 下 alter 的同类操作（移动、新增等）可以合并为
+    一条 sql（支持的情况下，mysql 就支持），优先合并，不要每个字段写一条"；追加：
+    "insert update 等 dml 操作同理，但是用户主动写的除外（不改用户的，也不告警……此条只
+    使用于 dml，ddl 一定会锁表）"、"sql 应该要单独建个文件吧？"、
+    "写 sql 时，要带库名（ddl/dml强制）"；本轮再追加："应该要有个单独的 sql 规范文件"。
+
+    **真源位置（本轮调整）**：判据落在 `specs/general/sql.adoc`「SQL 写法」**一个节**
+    （SQL 是跨语言写法，不埋在某个技术栈文件的跨语言脚本条下）；故用例的夹具以该文件为准，
+    并覆盖**加载门**——本轮实测的失效形态是"文件建对了、判据也齐，但登记与引用两处都没接上"：
+    ① 调度器未登记（含**写成了别的技术栈文件**这一形态）、② Java 栈的「跨语言执行脚本」节
+    未指向真源、③ 登记里的路径取不回（引用方按公共输入加载时拿到死引用）。
+
+    另覆盖**"轴名齐全、判据被抽走"的反例本体**（「同类操作」定义、判定标准、例外、依据、
+    存量边界任一被抽掉必须报红），以及**第二处真源的反向核验**：「独立成文件」「写库名」
+    两条的判据本体由 `check_external_script_guard` 钉，本防线不得再钉一份。
+    """
+
+    SECTION = (
+        "== SQL 写法\n\n"
+        "* **独立成文件（L1）**：SQL 单独建文件（`.sql`）。\n"
+        "* **写库名（L1）**：表名用限定名称。\n"
+        "* **同表同类操作合并为一条（DDL 强制、DML 优先；L2）**：**同类操作**＝同一个动作、"
+        "作用在同一张表——**新增**（`ADD COLUMN`）、**移动**（`MODIFY COLUMN`）等——"
+        "在**目标数据库支持**在一条语句里并列时**须合并进一条**、**不得每个字段写一条**；"
+        "确实合并不了才分开写、并在该处写明原因（数据库不支持 / 必须串行 / "
+        "中间步骤有数据依赖）。\n"
+        "** **判定标准（任一命中即违规）**：① 同一张表同类别的 ≥2 个动作（≥2 个字段）"
+        "**写成 ≥2 条语句**，而目标数据库支持在一条语句里并列；② 按字段/按行**批量生成**时，"
+        "**生成脚本须按表合并输出**；③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+        "——那不是「同类操作」、**属过度合并**。\n"
+        "** **例外面（只适用于 DML）**：合并只约束**执行者本次新写的 DML**——"
+        "**用户主动写的 DML 一律不动、不告警**；**DDL 不适用这个例外**"
+        "（用户原话：「此条只使用于 dml，ddl 一定会锁表」）。**DML 优先合并**。\n"
+        "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n"
+        "* 依据（标准名/编号）：MySQL 官方文档（`ALTER TABLE` 语法、Online DDL）。\n\n"
+        "== 缓存与热点\n\n* 略。\n")
+
+    JAVA_SECTION = (
+        "= Java 规范\n\n"
+        "== 跨语言执行脚本（SQL / Lua 等）\n\n"
+        "* **SQL 写法（L1）**：SQL 独立成文件（`.sql` 放 `src/main/resources/`）、"
+        "语句带库名、同表同类操作合并为一条，判据见 `specs/general/sql.adoc`「SQL 写法」。\n")
+
+    JAVA_SECTION_NO_REF = (
+        "= Java 规范\n\n"
+        "== 跨语言执行脚本（SQL / Lua 等）\n\n"
+        "* **SQL（L1）**：SQL 单独建文件、按资源加载（`src/main/resources/`）。\n")
+
+    ENTRY = (
+        "* **写/改 SQL**（新建或改动 `.sql`、迁移脚本，或要写/改 `ALTER TABLE`/`INSERT`；"
+        "识别特征：SQL 写法——独立成文件、语句带库名、同表同类操作合并为一条）"
+        "→ `specs/general/sql.adoc`\n")
+
+    LIBRARY = (
+        "== 跨语言执行脚本（SQL / Lua 写资源文件，不写字符串拼接）\n\n"
+        "* **材料与用途**：\n"
+        "** **MySQL 官方文档**（`ALTER TABLE` 语法与 Online DDL 章节）："
+        "`ALTER TABLE tbl_name [alter_option [, alter_option] ...]`——"
+        "**一条语句可并列多个 alter_option**。\n"
+        "* **须注意的语义差异（同义性）**：**MySQL 官方文档给的是语法能力与代价说明，"
+        "并未规定「同表同类操作必须合并」**——「须合并、不得每个字段一条」是**本集合**"
+        "据此推出的判据化取舍（依据 ISO/IEC 25010 性能效率）。\n")
+
+    def _write(self, section=None, entry=None, java_section=None, library=None) -> None:
+        self.write("specs/general/sql.adoc",
+                   section if section is not None else self.SECTION)
+        self.write("specs/stack/java.adoc",
+                   java_section if java_section is not None else self.JAVA_SECTION)
+        self.write("AGENTS_COMMON.adoc",
+                   entry if entry is not None else self.ENTRY)
+        self.write("library/sources.adoc",
+                   library if library is not None else self.LIBRARY)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_file_removed_reports(self):
+        # 反例：真源文件被删 -> 判据无处承载
+        self.write("specs/stack/java.adoc", self.JAVA_SECTION)
+        self.write("AGENTS_COMMON.adoc", self.ENTRY)
+        self.write("library/sources.adoc", self.LIBRARY)
+        cm.check_alter_merge_guard()
+        self.assertIn("sql.adoc", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例：真源里的「SQL 写法」节被删 -> 该条失去落点
+        self._write(section="== 缓存与热点\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("SQL 写法", self.error_texts())
+
+    def test_rule_body_removed_reports(self):
+        # 反例（反例本体：轴名齐全、判据被抽走）：规则本体被压成一句口号
+        self._write(section=self.SECTION.replace(
+            "* **同表同类操作合并为一条（DDL 强制、DML 优先；L2）**：**同类操作**＝同一个动作、"
+            "作用在同一张表——**新增**（`ADD COLUMN`）、**移动**（`MODIFY COLUMN`）等——"
+            "在**目标数据库支持**在一条语句里并列时**须合并进一条**、**不得每个字段写一条**；",
+            "* **合并（L2）**：ALTER 要注意别写太多条；"))
+        cm.check_alter_merge_guard()
+        self.assertIn("规则本体", self.error_texts())
+
+    def test_exception_removed_reports(self):
+        # 反例：合并不了的例外被删 -> 本条被读成"任何情况都必须合并"
+        self._write(section=self.SECTION.replace(
+            "确实合并不了才分开写、并在该处写明原因（数据库不支持 / 必须串行 / "
+            "中间步骤有数据依赖）。", "不合并不合规。"))
+        cm.check_alter_merge_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准被抽走 -> "合没合并"交回执行者凭感觉
+        self._write(section=self.SECTION.replace(
+            "** **判定标准（任一命中即违规）**：① 同一张表同类别的 ≥2 个动作（≥2 个字段）"
+            "**写成 ≥2 条语句**，而目标数据库支持在一条语句里并列；② 按字段/按行**批量生成**时，"
+            "**生成脚本须按表合并输出**；③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+            "——那不是「同类操作」、**属过度合并**。\n", "** **注意**：尽量合并。\n"))
+        cm.check_alter_merge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_over_merge_ban_removed_reports(self):
+        # 反例：反向禁令（跨表/跨动作类型不属同类）被删 -> 会被读成"能塞进一条就塞"
+        self._write(section=self.SECTION.replace(
+            "③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+            "——那不是「同类操作」、**属过度合并**。", "。"))
+        cm.check_alter_merge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例：依据行被删 -> "优先合并"的来源无从核对（会被当成自定偏好）
+        self._write(section=self.SECTION.replace(
+            "* 依据（标准名/编号）：MySQL 官方文档（`ALTER TABLE` 语法、Online DDL）。\n", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_legacy_boundary_removed_reports(self):
+        # 反例：存量边界被删 -> 会被读成"立刻发动全库改写历史迁移"
+        self._write(section=self.SECTION.replace(
+            "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("存量边界", self.error_texts())
+
+    def test_dml_user_written_exemption_removed_reports(self):
+        # 反例（反例本体）：DML 条在、但"用户主动写的除外"例外被抽走
+        # -> 执行者会去改用户主动写的 DML（越权且可能把用户的锁行为改坏）
+        self._write(section=self.SECTION.replace(
+            "**用户主动写的 DML 一律不动、不告警**；", "DML 也要尽量合并；"))
+        cm.check_alter_merge_guard()
+        self.assertIn("除外", self.error_texts())
+
+    def test_dml_exception_scope_removed_reports(self):
+        # 反例：缺「DDL 不适用这个例外」-> 例外被错读到 DDL 上，退回"每条 ALTER 写一行"
+        self._write(section=self.SECTION.replace(
+            "**DDL 不适用这个例外**（用户原话：「此条只使用于 dml，ddl 一定会锁表」）。", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("DDL 不适用这个例外", self.error_texts())
+
+    # ---- 加载门（本轮新增：真源换了文件，登记/引用/可取回三处都要接上）----
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例：调度器根本没登记真源文件 -> 该文件不会被加载、判据齐备也无入口
+        self._write(entry="* **别的技术栈** → `specs/stack/other.adoc`\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_still_points_at_java_stack_reports(self):
+        # 反例（本轮实测的失效形态）：登记还停在旧落点（指向技术栈文件）——
+        # 真源文件永不被取回、也永不被加载
+        self._write(entry="* **Java 项目**（存在 `.java`）→ `specs/stack/java.adoc`。"
+                          "识别特征：**SQL 写法**（独立 `.sql` 文件、语句带库名、"
+                          "同表同类操作合并为一条 `ALTER TABLE`/`INSERT`/`UPDATE`）\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例：调度器识别特征缺 `ALTER TABLE` -> 改 SQL 时永不触发加载、判据实际失效
+        self._write(entry="* **写/改 SQL** → `specs/general/sql.adoc`\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("识别特征", self.error_texts())
+
+    def test_dispatcher_path_not_fetchable_reports(self):
+        # 反例（本轮实测的失效形态）：登记里的路径取不回——取回脚本按 `specs/*.adoc`
+        # 解析入口清单，路径层级写错（漏掉 `specs/`）时站点回落成首页、取到的其实是 HTML，
+        # 引用方读到的是死引用。判据即取回脚本用的那条正则。
+        self._write(entry=self.ENTRY.replace("`specs/general/sql.adoc`",
+                                             "`general/sql.adoc`"))
+        cm.check_alter_merge_guard()
+        self.assertIn("取回", self.error_texts())
+
+    def test_dispatcher_entry_without_path_reports(self):
+        # 反例：登记项整行没有仓库内路径（真源文件根本取不回来）
+        self._write(entry="* **写/改 SQL** → 见 SQL 规范一节\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_java_stack_reference_removed_reports(self):
+        # 反例：Java 栈的「跨语言执行脚本」节不再指向真源 -> Java 项目读该节时
+        # 不知道 SQL 写法另有真源（判据一处、其余一跳引用）
+        self._write(java_section=self.JAVA_SECTION_NO_REF)
+        cm.check_alter_merge_guard()
+        self.assertIn("specs/general/sql.adoc", self.error_texts())
+
+    def test_java_stack_section_removed_reports(self):
+        # 反例：Java 栈的该节被删 -> Java 项目执行 SQL 时没有落点可循
+        self._write(java_section="= Java 规范\n\n== 命名\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("跨语言执行脚本", self.error_texts())
+
+    def test_java_stack_landing_removed_reports(self):
+        # 反例：引用到了真源、但 Java 落点被抽走（`.sql` 放哪、怎么执行）——
+        # 引用成一个没有落地方式的指针
+        self._write(java_section=self.JAVA_SECTION.replace(
+            "（`.sql` 放 `src/main/resources/`）", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("落点", self.error_texts())
+
+    # ---- 图书馆依据落点 ----
+
+    def test_library_basis_removed_reports(self):
+        # 反例：图书馆没有该依据条目 -> 正文里的 MySQL 官方文档无处逐字核对（依据只剩名称）
+        self._write(library="== 别的标准\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_library_synonymity_note_removed_reports(self):
+        # 反例：图书馆不标注"官方材料未规定必须合并" -> 读者会把本集合的取舍当成 MySQL 的要求
+        self._write(library="== 跨语言执行脚本\n\n* **MySQL 官方文档**：有 `alter_option`。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("同义性", self.error_texts())
+
+    # ---- 第二处真源的反向核验 ----
+
+    def test_sql_file_body_not_pinned_here(self):
+        # 反向核验：「SQL 须独立成文件」的判据本体由 `check_external_script_guard` 钉，
+        # 把本处那条抽光时本防线**不**报红（否则就是同一条规范的第二处真源）。
+        self._write(section=self.SECTION.replace(
+            "* **独立成文件（L1）**：SQL 单独建文件（`.sql`）。", "* **SQL（L1）**：略。"))
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_database_name_body_not_pinned_here(self):
+        # 反向核验：同上——「写库名」的判据本体不在本防线。
+        self._write(section=self.SECTION.replace(
+            "* **写库名（L1）**：表名用限定名称。", "* **SQL（L1）**：略。"))
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_dml_library_basis_not_pinned_here(self):
+        # 反向核验：多值 `INSERT` 与 ISO/IEC 9075 两组依据被抽走时本防线也不报红
+        # （它们的判据本体在别处，依据再各钉一份同属重复）。
+        self._write(library="== 跨语言执行脚本\n\n"
+                           "* **MySQL 官方文档**：`ALTER TABLE` 可并列 `alter_option`，"
+                           "Online DDL 说明每动作默认各自执行。\n"
+                           "* **须注意的语义差异（同义性）**：**并未规定**必须合并，"
+                           "是**本集合**的取舍。\n")
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_merge_reason_criterion_not_pinned_here(self):
+        # 反向核验（第二处真源、此前评审发现的那处）：本防线的锚点里不得再出现
+        # "真源"之类的重复钉法（锚点已收成一处）。
+        self.assertTrue(all("真源" not in why for _, _, why in cm.ALTER_MERGE_ANCHORS))
+
+    def test_phase_closed(self):
+        # 反例（本轮实测）：函数末尾缺 phase_done() -> 本阶段在进度日志里以「▶」起头、
+        # 接着就被下一阶段的「▶」直接覆盖，既不报错也不显示完成。故补用例钉住。
+        self._write()
+        log = self.capture_phase_log()
+        try:
+            start = len(log)
+            cm.check_alter_merge_guard()
+            self.assertEqual([], cm.errors)
+            self.assertTrue(self.phase_closed(start))
+        finally:
+            self.restore_phase_log()
+
+    def test_phase_closed_detects_missing_done(self):
+        # 反向核验上面那条用例真的在判「本阶段被收尾」：直接 phase() 而不 phase_done()，
+        # 须判为未收尾（防判据写成恒真）。
+        log = self.capture_phase_log()
+        try:
+            start = len(log)
+            cm.phase("模拟阶段")
+            self.assertFalse(self.phase_closed(start))
+        finally:
+            self.restore_phase_log()
+
+
 class TestCheckJavaSerialGuard(CheckSpecsTestCase):
     """钉住『Java 序列化 / 局部变量推断 / 链式调用换行』防线：判据本体不得被删。
 
@@ -5798,13 +6153,12 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         "= CNB 规范（平台层）\n\n"
         "== 合并请求的合并主体（NPC 禁合并）\n"
         "* **CNB NPC 严禁合并（L1）**，**授权不免除**。\n\n"
-        "== 压缩提交（提交历史的整理）\n"
-        "* **压缩提交＝提交历史整理，不属禁止行为（L1）**：判定标准："
-        "①**压缩对象只有本次任务产生的、尚未合入目标分支的临时中间提交**；"
-        "②**内容零变化**——压缩前后**逐字节相同**；③**只作用于本次任务自己的 PR 源分支**，"
-        "**不动目标分支**、不动他人分支。\n"
-        "* **禁止的压缩形态（L1）**：①**他人（或其它任务）的提交**；②**已合入目标分支**的历史；"
-        "③压缩后**内容出现任何差异**；④**扩大范围**。\n"
+        "== 压缩提交（提交历史的整理，平台侧追加口径）\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**；"
+        "本节只写本平台的追加口径。\n"
+        "* **压缩提交＝提交历史整理，不属禁止行为（L1）**："
+        "压缩**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支。\n"
+        "* **禁止的压缩形态（平台侧追加）**：①**他人（或其它任务）的提交**；②**已合入目标分支**的历史。\n"
         "* **须先确认无人在用旧对象（L1）**：确认**无他人正基于该分支的旧 sha 工作**"
         "（**已派发、正等待结论**）；确需执行时须**明确告知受影响方**新 sha、并把旧 sha 上的结论**标为过期**。\n"
         "* **压缩后须声明新旧 sha 对应关系（L1）**：写明“**新 sha 为 X，旧 sha Y 作废**”，并如实列出**被压缩掉的中间 sha**；"
@@ -5822,9 +6176,11 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         self.write("specs/platform/cnb.adoc", self.CNB)
         self.write(
             "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
             "* CNB 平台 → cnb（**压缩提交（提交历史整理的判据）**、**对象钉定与可追溯**）\n")
         self.write(
             "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；工具无关）**\n"
             "* `specs/platform/` — 平台层：cnb（**压缩提交（提交历史整理：判据与禁止形态）**、"
             "**对象钉定与可追溯**）\n"
             "* **压缩提交要照做、合并仍不做**：压缩提交不构成“可以合并”的依据。\n")
@@ -5855,21 +6211,17 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         # 反例（关键词堆砌式假绿）：只留节名与一句口号，判据被抽掉
         self._write_valid()
         cnb = self.CNB
-        cnb = cnb.replace("②**内容零变化**——压缩前后**逐字节相同**；", "")
-        cnb = cnb.replace("；③**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支", "")
+        cnb = cnb.replace("压缩**只作用于本次任务自己的 PR 源分支**，**不动目标分支**、不动他人分支。", "")
         self.write("specs/platform/cnb.adoc", cnb)
         cm.check_squash_commit_guard()
-        self.assertIn("内容零变化", self.error_texts())
+        self.assertIn("作用域", self.error_texts())
 
     def test_forbidden_forms_removed_reports(self):
         # 反例：禁止形态被删 → 顺手把他人提交/已合入历史一并压掉、或夹带改动，无判据可拦
         self._write_valid()
         self.write("specs/platform/cnb.adoc",
-                   self.CNB.split("* **禁止的压缩形态（L1）**")[0].replace(
-                       "③**只作用于本次任务自己的 PR 源分支**",
-                       "③**内容零变化**、**逐字节相同**、只动本次任务**自己的 PR 源分支**")
-                   .replace("尚未合入目标分支的临时中间提交", "尚未合入目标分支的临时中间提交")
-                   + "* **对象钉定与可追溯**\n")
+                   self.CNB.replace("* **禁止的压缩形态（平台侧追加）**：①**他人（或其它任务）的提交**；"
+                                    "②**已合入目标分支**的历史。\n", ""))
         cm.check_squash_commit_guard()
         self.assertIn("禁止的压缩形态", self.error_texts())
 
@@ -6012,6 +6364,310 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
                    "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
         cm.check_merge_relationship_guard()
         self.assertIn("不吞掉合并提交", self.error_texts())
+
+
+class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
+    """钉住『冲突与压缩提交防线』：先解冲突、再压缩（最终只有一个提交），解冲突后须核查是否丢内容。
+
+    用户原话："当提出压缩提交时，有冲突要先解决冲突，解决冲突+压缩提交，最后应当只有一个提交；
+    解决版本工具冲突后，需要核查是否丢失内容。" 两件事都属"工作区看起来对、判据在别处"：
+    取一侧收尾后文件照旧能编译、冲突标记也没了，而少了的内容只在提交历史里看得出来。
+
+    **分层是本组用例的核心**：用户随后明确"**git 规范也要**"且"**我说的版本管理，可没说 cnb、git，
+    万一我用的 svn？**"——故规则本体（工具无关）必须在**通用层**，git 侧的核对命令在 **git 层**，
+    平台层只留追加口径并**指向通用层**。本组覆盖"规则本体退回平台层""git 侧落地缺失"    "平台层不指向通用层"，以及原有的顺序条/反向判据/核查条/失效形态/接口缺失/按节取文本等反例。
+    """
+
+    VC = (
+        "= 版本管理规范（通用层）\n\n"
+        "== 为什么把版本管理与某个工具分开写\n\n"
+        "本文件只写**工具无关**的规则本体；引用方用 git 还是 **SVN** 都读得到，"
+        "**不得把某工具的命令当成规则前提**。\n\n"
+        "== 冲突处理\n\n"
+        "* 冲突须自动解决。\n"
+        "* **冲突与压缩提交同时提出时：先解冲突、再压缩，最终只有一个提交（L1）**："
+        "① **先解决冲突**，② **再压缩提交**，③ 交付形态是**最终只有一个提交**。"
+        "**判定标准**：① 拿\"还有冲突\"当不做压缩的理由，或反过来拿\"要压缩\"当不解冲突的理由"
+        "（两者都落地才算完成）；② 解冲突与压缩各自留了一个提交；"
+        "③ 只解了冲突、没压缩。\n"
+        "* **\"只被要求压缩、没被要求解决冲突\"也要先解冲突（L1）**：触发面不限于同时或先后"
+        "提出两件事——用户**只要求**\"压缩提交\"、**没提**解决冲突，而当前分支与目标分支"
+        "**实际存在冲突**时，同样须先解冲突、再压缩；不得把\"用户没提解决冲突\"读成\"不用做\"。"
+        "**判定标准**：① 报\"已压缩提交\"却**对冲突只字未提**；② **以\"用户没提解决冲突/没被要求\""
+        "为由只压不解决**；③ 把解决冲突做成**照抄目标分支的文件内容后另起一个单亲提交**"
+        "（目标分支**并非本分支的祖先**）；④ 拿\"要求里只写了压缩\"当挡箭牌。\n"
+        "* **解决冲突后须核查是否丢失内容（L1）**：不得凭\"没有冲突标记了\"就认为解决完毕。"
+        "**判定标准**：① 用\"**整体取一侧**\"收尾、不做逐处对照；② 只核\"文件能编译\"；"
+        "③ 汇报\"冲突已解决\"却不给出**核查判据**。**该用哪些判据随对象定**：文本类按内容侧对照，"
+        "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n\n"
+        "== 压缩提交（提交历史整理）\n"
+        "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
+        "**压缩不能替代解冲突**。\n"
+    )
+
+    GIT = (
+        "= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n"
+        "* 规则本体见 `specs/general/version-control.adoc`；本节只写 git 上用什么命令判。\n"
+        "* **核对命令（L1）**：`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
+        "`git diff --cached -M --summary` 应显示 `rename`；不得用 `git checkout --ours/--theirs` 整体取一侧。\n"
+        "* **\"最终只有一个提交\"的核对命令（L1）**：`git log --oneline <目标分支>..HEAD` 应**只有一条**。\n"
+    )
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n"
+        "== 冲突处理（平台侧追加口径）\n\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「冲突处理」**；本节只写追加口径：\n\n"
+        "* 并行任务冲突照常自动解决。\n"
+        "* 交付形态按本平台表达：**该合并请求的源分支上最终只有一个提交**"
+        "（`git log --oneline <目标分支>..HEAD` **只有一条**）。\n"
+        "* **\"只被要求压缩提交\"时冲突处置不豁免（L1，本题的用户点名形态）**：要求只写了压缩、"
+        "**没被要求不等于可以搁置**；③ 用照抄目标分支内容 + 单亲提交冒充已解决时，"
+        "目标分支**并非本分支的祖先**（判据 `git merge-base --is-ancestor <目标分支> <分支>`）。"
+        "解冲突是在**当前分支内**完成、**不是合并**（与「NPC 禁合并」各自独立、互不豁免）。\n\n"
+        "== 合并请求的合并主体（NPC 禁合并）\n* **严禁合并**。\n\n"
+        "== 压缩提交（提交历史的整理，平台侧追加口径）\n"
+        "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**；"
+        "本节只写本平台的追加口径。\n"
+        "* **与「冲突处理」的接口（L1）**：有冲突时须先解冲突、再压缩。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/version-control.adoc", self.VC)
+        self.write("specs/general/git.adoc", self.GIT)
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
+            "* CNB 平台 → cnb（**冲突与压缩提交同时提出（先解冲突、再压缩、最终只有一个提交；"
+            "解冲突后须核查是否丢内容）**与**只被要求压缩提交**（没被要求解决冲突时也不豁免））\n")
+        self.write(
+            "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；**先解冲突、再压缩、"
+            "最终只有一个提交**、**解冲突后须核查是否丢内容**、**只被要求压缩**时冲突处置也不豁免）**\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_conflict_resolution_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_general_file_missing_reports(self):
+        # 反例：规则本体无处承载（用户口称『版本管理』、未点名 git/CNB，规则本体必须在通用层）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "version-control.adoc"))
+        cm.check_conflict_resolution_guard()
+        self.assertIn("缺少文件", self.error_texts())
+        self.assertIn("version-control.adoc", self.error_texts())
+
+    def test_git_file_missing_reports(self):
+        # 反例：git 侧落地无处承载（用户点名『git 规范也要』）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：通用层整节被删 → 先解冲突再压缩与解冲突后的核查都失去落点
+        self._write_valid()
+        self.write("specs/general/version-control.adoc",
+                   "= 版本管理规范（通用层）\n\n== 压缩提交（提交历史整理）\n* 另议。\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("冲突处理", self.error_texts())
+
+    def test_order_clause_removed_reports(self):
+        # 反例：顺序与交付形态被抽掉 → "还有冲突"或"要压缩"任一都能当另一个的挡箭牌
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **冲突与压缩提交同时提出时：先解冲突、再压缩，最终只有一个提交（L1）**："
+            "① **先解决冲突**，② **再压缩提交**，③ 交付形态是**最终只有一个提交**。", "\n")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("最终只有一个提交", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号，反向判据被抽走
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 拿\"还有冲突\"当不做压缩的理由，或反过来拿\"要压缩\"当不解冲突的理由"
+            "（两者都落地才算完成）；② 解冲突与压缩各自留了一个提交；"
+            "③ 只解了冲突、没压缩。\n", "务必谨慎。\n", 1)
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("拿", self.error_texts())
+
+    def test_integrity_check_clause_removed_reports(self):
+        # 反例：解冲突后的核查条被删 → "取一侧收尾"就算解决完毕，丢内容无人发现
+        self._write_valid()
+        vc = self.VC.replace("* **解决冲突后须核查是否丢失内容（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("解决冲突后须核查是否丢失内容", self.error_texts())
+
+    def test_integrity_criteria_removed_reports(self):
+        # 反例：失效形态与三档核查判据被抽掉 → "核查"退化成"没有冲突标记就算完"
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 用\"**整体取一侧**\"收尾、不做逐处对照；② 只核\"文件能编译\"；"
+            "③ 汇报\"冲突已解决\"却不给出**核查判据**。**该用哪些判据随对象定**：文本类按内容侧对照，"
+            "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n",
+            "务必仔细核对。\n")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("核查判据", self.error_texts())
+
+    def test_tool_agnostic_declaration_removed_reports(self):
+        # 反例：通用层**定性节**里丢了"工具无关"声明 → 规则被读成 git 专属，与用户"没说 cnb、git"相抵。
+        # 判据**按定性节取文本**：正文别处顺手提一句"换用 SVN 同样成立"顶不了声明本身。
+        self._write_valid()
+        vc = self.VC.replace("本文件只写**工具无关**的规则本体", "本文件只写**git 上**的规则本体")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("定性节", self.error_texts())
+
+    def test_tool_agnostic_keywords_outside_section_do_not_cover(self):
+        # 反例：定性节里"工具无关"被删、但**文件别处**（另一节的引号引用里）还留着"工具无关"与"SVN"
+        # → 全文匹配会读成齐备；按节取文本必须报红
+        self._write_valid()
+        vc = self.VC.replace("本文件只写**工具无关**的规则本体", "本文件只写**git 上**的规则本体")
+        vc += "\n== 其它\n\n* 换用 SVN 同样成立，本规则与工具无关。\n"
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("定性节", self.error_texts())
+
+    def test_reverse_criteria_half_removed_reports(self):
+        # 反例：反向判据只留前半句（本项两个关键词按 AND 判）→ 执行者仍能把"要压缩"当不解冲突的理由
+        self._write_valid()
+        vc = self.VC.replace("，或反过来拿\"要压缩\"当不解冲突的理由（两者都落地才算完成）", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("要压缩", self.error_texts())
+
+    def test_git_layer_delivery_criteria_needs_command(self):
+        # 反例：git 层把可核对命令删了、只留一句"应只有一条" → 判据退化成断言，无从核对
+        self._write_valid()
+        git = self.GIT.replace("`git log --oneline <目标分支>..HEAD` 应**只有一条**",
+                               "提交记录应**只有一条**")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_squash_section_not_pointing_to_general_reports(self):
+        # 反例：平台层**「压缩提交」节**把规则本体抄回平台层（「冲突处理」节还指一句）
+        # → 全文匹配会假绿，必须按该节自己的正文核对
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**",
+            "**本节定压缩提交的规则本体**")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("「压缩提交」节", self.error_texts())
+
+    def test_squash_interface_removed_reports(self):
+        # 反例：与「压缩提交」的接口被删 → "冲突正多、先压成一个干净的提交"式自我豁免复发
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
+            "**压缩不能替代解冲突**。\n", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("压缩不等于解冲突", self.error_texts())
+
+    def test_git_layer_criteria_removed_reports(self):
+        # 反例：git 侧核对命令被抽掉 → 用户点名"git 规范也要"落了空
+        self._write_valid()
+        git = self.GIT.replace("`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
+                               "`git diff --cached -M --summary` 应显示 `rename`；", "")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_not_pointing_to_general_reports(self):
+        # 反例：平台层不再指向通用层规则本体 → 规则本体又退回平台层（非 CNB/非 git 读不到）
+        self._write_valid()
+        cnb = self.CNB.replace("**规则本体（工具无关）在 `specs/general/version-control.adoc`「冲突处理」**",
+                               "本节定冲突处理")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("version-control.adoc", self.error_texts())
+
+    def test_section_scoped_text_reports(self):
+        # 反例：条文从「冲突处理」节被搬走、别处还提一句 → 全文匹配会假绿
+        self._write_valid()
+        vc = self.VC.replace("== 冲突处理", "== 其它节")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("冲突处理", self.error_texts())
+
+    def test_squash_only_trigger_removed_reports(self):
+        # 反例（用户本轮点名的形态）：通用层只写"同时/先后提出两件事"，把"**只被要求压缩、
+        # 没被要求解决冲突**"这一触发面抽掉 → 执行者照字面只做压缩、把冲突搁置
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **\"只被要求压缩、没被要求解决冲突\"也要先解冲突（L1）**：触发面不限于同时或先后"
+            "提出两件事——用户**只要求**\"压缩提交\"、**没提**解决冲突，而当前分支与目标分支"
+            "**实际存在冲突**时，同样须先解冲突、再压缩",
+            "* 另议：用户**只要求**\"压缩提交\"、**没提**解决冲突时，另议")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩", self.error_texts())
+
+    def test_squash_only_criteria_removed_reports(self):
+        # 反例：触发面在、判定标准被抽（只剩口号）→"报已压缩却对冲突只字未提"无从判定
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准**：① 报\"已压缩提交\"却**对冲突只字未提**；② **以\"用户没提解决冲突/没被要求\""
+            "为由只压不解决**；③ 把解决冲突做成**照抄目标分支的文件内容后另起一个单亲提交**"
+            "（目标分支**并非本分支的祖先**）；④ 拿\"要求里只写了压缩\"当挡箭牌。", "务必谨慎。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_platform_squash_only_clause_removed_reports(self):
+        # 反例：平台层的触发面被删 → 本平台上的派发形态（要求常只写一件事）恰好漏掉这条
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "* **\"只被要求压缩提交\"时冲突处置不豁免（L1，本题的用户点名形态）**：要求只写了压缩、"
+            "**没被要求不等于可以搁置**；③ 用照抄目标分支内容 + 单亲提交冒充已解决时，"
+            "目标分支**并非本分支的祖先**（判据 `git merge-base --is-ancestor <目标分支> <分支>`）。"
+            "解冲突是在**当前分支内**完成、**不是合并**（与「NPC 禁合并」各自独立、互不豁免）。\n",
+            "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩提交", self.error_texts())
+
+    def test_dispatcher_squash_only_feature_removed_reports(self):
+        # 反例：调度器缺"只被要求压缩提交"这一识别特征 → 该触发面永不被加载
+        self._write_valid()
+        self.write(
+            "AGENTS_COMMON.adoc",
+            "* **版本管理** → `specs/general/version-control.adoc`\n"
+            "* CNB 平台 → cnb（**冲突与压缩提交同时提出（先解冲突、再压缩、最终只有一个提交；"
+            "解冲突后须核查是否丢内容）**）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩提交", self.error_texts())
+
+    def test_readme_squash_only_clause_removed_reports(self):
+        # 反例：公开面只看得见"同时提出"那一种触发面
+        self._write_valid()
+        self.write(
+            "README.adoc",
+            "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；**先解冲突、再压缩、"
+            "最终只有一个提交**、**解冲突后须核查是否丢内容**）**\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("只被要求压缩", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例：调度器未登记通用层加载项 → 规则在、但没人会读到
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "* CNB 平台 → cnb（**冲突与压缩提交**）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：公开面看不到这条默认动作
+        self._write_valid()
+        self.write("README.adoc", "* `specs/platform/` — 平台层：cnb（压缩提交）\n")
+        cm.check_conflict_resolution_guard()
+        self.assertIn("README", self.error_texts())
 
 
 class TestCheckConfigClassGuard(CheckSpecsTestCase):
@@ -12775,6 +13431,18 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self._write_valid(src=src)
         cm.check_guard_manifest()
         self.assertIn("重号", self.error_texts())
+
+    def test_checklist_out_of_order_number_reports(self):
+        # 反例⑤b：编号**乱序**（既无断号也无重号，但文件里的出现次序不是递增的）——
+        # 新条目被插到了编号更小的条目之前。这是断号与重号两条判据都拦不住的形态：集合仍是
+        # 1..N 齐备，只是次序错了。本仓库实测（PR #156）：新增的第 63 条被插在第 60 条之前，
+        # 清单次序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`，当时全绿。
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 3. 丙\n 4. 丁\n 2. 乙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("乱序", self.error_texts())
 
     def test_ledger_without_declaration_reports(self):
         # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字

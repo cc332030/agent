@@ -160,15 +160,18 @@
      `check_install_codeblock` 钉住。
  27. 防线清单与删除记账：`CHECKS` 序列里的防线个数、反例用例个数、以及
      `script/check_effective.py` 台账里点名的防线函数名，四者都不得在无记账的情况下减少：
-     另加**清单编号须严格递增**（重排/插入/删除后不得出现重号）。此前"删了却全绿"有四条
-     实证路径：①一道防线被从执行序列摘掉（代码并进别的防线）、它的 8 条反例用例一并被删，
+     另加**清单编号须严格递增**（重排/插入/删除后不得出现重号、也不得乱序）。此前"删了却全绿"
+     有五条实证路径：①一道防线被从执行序列摘掉（代码并进别的防线）、它的 8 条反例用例一并被删，
      `check_specs.py` 报 OK、单测全通过、台账上的"抓手数"也没变；②台账备注里的防线名改成
      不存在的名字仍报"有抓手"（判据只看文件在不在）；③清单条目被整条删掉时编号断开、而清单
      描述不参与一致性核对；④**重排编号时把两条并成同一个号**（本项目实测：新增一条「防线清单
      与删除记账」时把原本那条「性能测试防线」也编成 27）——只核"有没有断号"时重号不报错，
-     于是清单里编号所指的那一项会随重排静默错位。故把四件事变成可核对的：**接线数不得减**、
+     于是清单里编号所指的那一项会随重排静默错位；⑤**编号乱序**（本项目实测：新增的第 63 条
+     被插在第 60 条之前，清单顺序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`）——集合仍是
+     1..N 齐备，故断号与重号两条判据全过，而清单已与 `CHECKS`/台账的次序脱节，读者按编号
+     定位时跳来跳去。故把五件事变成可核对的：**接线数不得减**、
      **反例用例数不得减**、**台账点名的防线名必须真实存在且真的会被调用**（"定义了但没人调"
-     的防线看起来还在、却永远不会执行）、**清单编号严格递增**。数字确实要改时改基线
+     的防线看起来还在、却永远不会执行）、**清单编号严格递增（不重、不漏、不乱序）**。数字确实要改时改基线
      （`GUARD_WIRING_BASELINE`/`GUARD_TEST_BASELINE`）——改基线这个动作本身让删除在 diff
      里可见。由 `check_guard_manifest` 钉住。
  28. 性能测试防线：`specs/general/testing.adoc` 的「性能测试」须仍在，且**测量与记录**的要点
@@ -466,7 +469,7 @@
      图书馆，却**只用它支撑变更日志的展示形态**——同一条链的"上游"（一次提交改了什么）空着，
      "下游"（按类型分组）只能靠人工归类。
 
- 61. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
+ 57. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
      强制生效""依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）：通用层
      `specs/general/review.adoc`「精炼性」须仍在且齐备**判据本体**——重复面是必查项（L1）
      且与"没查过"分得清、判定标准（任一命中即为重复描述）、收敛形态（一处完整定义 +
@@ -479,7 +482,7 @@
      不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
      钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
 
- 62. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+ 58. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
      模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
      在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
      实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
@@ -487,7 +490,7 @@
      `check_install_repeat_update_guard` 钉住（配"该条被删""只留『以用户为准』而无『不自动
      改回』""不一致时不说、用户不知道"三条反例）。
 
- 63. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
+ 59. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
      的「数据字典」一节须仍在且齐备八件——**只引名称不引定义**（名称是检索键、定义只有一处）、
      **作用域分档 + 每档只一处**（分档表须有「作用域 / 唯一落点 / 判据」三列，七档逐档在表里：
      全局 / 项目全局 / 模块功能 / 类接口 / **当前文档（定义写在该文档开头）** / 图书馆 / 提示词）、
@@ -505,7 +508,7 @@
      可选强调 + 档位名 + `[^|]*\|`）：档位名只出现在正文里不给过——用裸子串 `f"| 全局"`
      时，"档从表里被抽掉、正文另有一处提到档位名"会假绿（本轮实测）。
 
- 57. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
+ 60. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
      （文档头）」须仍在且九条齐备——**文档头先行**（动手第一步就写、不得只留待补占位、改动后
      同提交同步）、**脚本必须写文档头**、条目清单含**关键约定与设计决策**（不得省略）、
      **设计决策写成决策 + 理由 + 边界**（含判定标准）、**取值写抽象描述或常量名**
@@ -518,7 +521,7 @@
      须有对应依据主题段（如实标注要点转述与同义性差异）——防"写完顺手补一段文档"与
      "注释里抄实现取值（改代码不改注释即文档说谎）"重回默许形态（用户要求：脚本很多细节
      可能随着维护丢失，文档先行也适用于脚本）。
- 58. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
+ 61. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
      「HTTP 接口语义」须仍在且齐备三处——①条文与**级别**（安全方法不得产生状态变更 **L1**、
      幂等与状态码 **L2**、Problem Details **L3 可选**；级别不得被顺手改动，把可选格式升成 L1
      会高频误伤只做内网接口的项目）；②**适用范围**（无 HTTP 接口的项目不适用，准入面不引入
@@ -528,7 +531,7 @@
      方法与状态码语义未覆盖——`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用，把错误
      一律包成 `200` 会让重试、缓存、监控与网关策略全部失效。
 
- 59. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
+ 62. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
      `MECHANISMS` 每条目须在 `grip`（抓手路径）与 `note`（备注）之外，**显式声明钉住它的
      防线名**——本题由 `check_guard_manifest` 逐条核实：①声明的防线在 `script/check_specs.py`
      里**真实存在**；②**真的会被调用**（接线闭包内，不是"定义了但没人调"）；③无抓手条目
@@ -539,7 +542,7 @@
      本条把**逐条声明**变成必填：声明与实现不一致即报红——"读者以为有抓手、实际那一道
      早没了"正是台账要防的失效。
 
- 60. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
+ 63. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
      `specs-project-maintainer/priority.adoc` 的「强调的正确做法」下须有
      「机械防线的核对对象是**判据本体**，不是轴名（L1）」一节，且齐备**核对对象**
      （钉判定标准里能拿去核对的那句话，不是轴名/条目标题）、**防线空转**这一失效形态
@@ -550,6 +553,20 @@
      防线全绿，而可核对的判据被整段抽掉；教训当时只写在 `script/check_specs.py` 与配套
      测试的注释里、**没有进规范正文**——下一个维护者读规范时看不到，只能靠翻脚本注释
      （判据存在但不可见＝同构复发）。由 `check_criteria_not_axis_guard` 钉住。
+
+ 64. 冲突与压缩提交防线（**用户明确提出的要求，且要求分层落点**）：用户原话是"**版本管理**"
+     ——"git 规范也要吧？我说的版本管理，可没说 cnb、git，万一我用的 svn？"故本条**按三层**核对：
+     ① **通用层 `specs/general/version-control.adoc`「冲突处理」**须齐备两件（**冲突与压缩提交
+     同时提出时先解冲突、再压缩、最终只有一个提交**，含反向判据"拿还有冲突当不做压缩的理由"
+     "拿要压缩当不解冲突的理由"；**解决冲突后须核查是否丢失内容**，含失效形态"整体取一侧收尾、
+     不做逐处对照"与随对象定的三档核查判据），并须显式声明**工具无关**（点名 git 之外的版本管理
+     工具）；② **git 层 `specs/general/git.adoc`「冲突与压缩提交（git 侧落地）」**须给出 git 侧
+     核对命令（`--ours`/`--theirs`、`git diff --name-status`/`rename`、"最终只有一个提交"的判据）
+     ——用户点名"git 规范也要"；③ **平台层 `specs/platform/cnb.adoc`**只留追加口径且须**指向通用层
+     规则本体**。**规则本体写进平台层即报红**：那会让非 CNB/非 git 的引用方读不到（与「改动范围
+     边界」同一条归位口径）。另须在通用层「压缩提交」节写明接口（**压缩不等于解冲突**）；调度器与
+     `README.adoc` 同步。**按节取文本**：同文件别处也提到"冲突"，全文匹配会把"条文从本节里删了、
+     别处还提了一句"读成齐备。由 `check_conflict_resolution_guard` 钉住。
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
@@ -569,6 +586,71 @@
 `GUARD_CHECK_LIMITS` 给出机械核对覆盖不到的两类，凡越出这两类的结论一律不得由机械判定
 （逐条防线里不再各写一句"某次是否真的……交人复核"——同一句话写 90 遍既是信息密度判据③
 「同义反复」的形态，也把"边界是什么"绑在人的记性上）。
+
+ 65. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
+     强制生效""依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）：通用层
+     `specs/general/review.adoc`「精炼性」须仍在且齐备**判据本体**——重复面是必查项（L1）
+     且与"没查过"分得清、判定标准（任一命中即为重复描述）、收敛形态（一处完整定义 +
+     其余位置只留一行引用）、与 P3 的边界（删的只能是重复表述本身、被删处须留下可达的
+     引用、无法确定的一律保留）、两类不得被当成重复收敛（最高关注项与其引用、各自的承接）、
+     篇幅与重复是两件事、依据行；**两处动作落点**须同步——改完即审的固定动作里要真的核
+     重复面（`specs/general/review.adoc`「改动后的 review」），提示词公共片段
+     `prompts/_common.txt` 的 `delivery` 须带「重复面的处理」（review/refactor 两个提示词
+     都 include，故一处维护两处生效）。**本条防的是"精炼性只写成一段文字、在评审与重构里
+     不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
+     钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
+
+ 66. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+     模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
+     在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
+     实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
+     用户点名『我手动删的，你不要给我补上去』『以我的为准』）。由
+     `check_install_repeat_update_guard` 钉住（配"该条被删""只留『以用户为准』而无『不自动
+     改回』""不一致时不说、用户不知道"三条反例）。
+
+ 67. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
+     的「数据字典」一节须仍在且齐备八件——**只引名称不引定义**（名称是检索键、定义只有一处）、
+     **作用域分档 + 每档只一处**（分档表须有「作用域 / 唯一落点 / 判据」三列，七档逐档在表里：
+     全局 / 项目全局 / 模块功能 / 类接口 / **当前文档（定义写在该文档开头）** / 图书馆 / 提示词）、
+     **分档判据可核对**、条目形态照 ISO 1087 且**定义与使用说明分列**（SKOS 的
+     `skos:definition` 与 `skos:scopeNote` 是两个属性）、**反膨胀的判定标准**、
+     **新增与调整内容时都须判定**（用户原话「每次新增、调整内容时都应该生效」）、
+     **图书馆等「不在默认引用面内」的落点按其自身规则走**；**一行一个名称**（本文件的字典与任何
+     字典条目每个名称独占一段，用户点名）；且四处落点同口径——加载调度器
+     （`AGENTS_COMMON.adoc` 通用层）须带识别特征与文件路径、`specs/general/doc.adoc`
+     「文档组织与导航」与 `specs/general/encoding.adoc`「术语统一」各有一行互引（不复制条文）
+     ——防"规则写了、定义没归档"，以及"顺手把只在某文档成立的名称塞进上游落点"（字典越滚越大、
+     每次会话都为读不到它的项目付上下文）。由 `check_data_dictionary_guard` 钉住。
+     本条**钉的是判据本体、不是轴名**：只核"《数据字典》这一节在不在"属防线空转
+     （分档表被压成一句并列词、判据被抽走时仍会全绿）。**分档表按表格行判定**（`^\|` +
+     可选强调 + 档位名 + `[^|]*\|`）：档位名只出现在正文里不给过——用裸子串 `f"| 全局"`
+     时，"档从表里被抽掉、正文另有一处提到档位名"会假绿（本轮实测）。
+
+ 68. SQL 写法防线（**用户提出，Issue #154**）：SQL 写法的**真源是 `specs/general/sql.adoc`**
+     「SQL 写法」**一个节**（用户在本轮的追加：SQL 是跨语言写法、不该埋在某个技术栈文件的
+     跨语言脚本条下），须齐备 **SQL 写法三件套**——
+     ① **独立成文件**：SQL **单独建文件**（`.sql`，**不写在宿主语言字符串里**、不与其他代码共处一个文件；
+     MyBatis 项目写 mapper 的 `*.xml`）；② **写库名（DDL/DML 强制）**：表名须用限定名称、
+     **不依赖连接的默认库**；③ **同表同类操作合并**（DDL 强制、DML 优先）——
+     `ALTER TABLE` 的**同类操作**（同一个 ALTER 动作、作用在同一张表：新增/移动/删除等）在
+     **目标数据库支持**时**须合并进一条 SQL**、**不得每个字段写一条**（得确实合并不了才分开写、
+     并写明原因）；DML（`INSERT`/`UPDATE`）同理、但**用户主动写的除外**（**不改、也不告警**，
+     因为可能造成锁表），且**该例外只适用于 DML**（**DDL 一定会锁表**、故 DDL 侧无例外）。
+     齐备「同类操作」的定义、**可逐条核对的判定标准**（同一张表同类别的 ≥2 个动作写成 ≥2 条而目标库支持并列即违规／
+     按字段批量生成须按表合并输出／跨表或跨动作类型**不属同类**、属过度合并／
+     反向越界：改用户主动写的 DML 或对此告警）、合并不了时的例外与须写明原因、存量边界与依据行
+     （MySQL 官方文档的 `ALTER TABLE` 并列语法、Online DDL 的「每动作默认独立执行」、多值 `INSERT`；
+     ANSI SQL / ISO/IEC 9075 的限定名称）。
+     **还须钉这条真源真的被加载得到**（本轮实测的失效形态：文件建对了、判据也齐，但**登记与引用
+     两处都没接上**——执行者在改 SQL 时根本走不到这个文件，等于没写）：加载调度器 `AGENTS_COMMON.adoc`
+     的**通用层**须有该文件的登记（缺则永不触发加载）、`specs/stack/java.adoc` 的「跨语言执行脚本
+     （SQL / Lua 等）」须有指向它的一行引用（缺则 Java 项目读不到）、`specs/general/sql.adoc` 自身
+     **须能从加载入口按路径取回**（`AGENTS_COMMON.adoc` 里的路径须能被 `fetch-specs.py` 的
+     `specs/*.adoc` 清单解析命中——路径写错即取不到、引用方读到死引用）。
+     失效形态：批量加字段时按字段逐个生成 ALTER（每条各自按一次表）；
+     SQL 与宿主语言代码共处一个文件；裸表名落到默认库不同的连接上**改错库**；
+     判据齐备但**加载不到**（调度器未登记/引用未接/路径取不回）。
+     由 `check_alter_merge_guard` 钉住；「某条迁移该不该合并、某次改的是不是用户主动写的 DML」属语义判断，交人/子 agent 复核。
 
 """
 
@@ -1635,6 +1717,85 @@ INFO_DENSITY_XREF = (
 )
 
 
+
+# ---- `ALTER` 同类操作合并防线（`specs/stack/java.adoc`「跨语言执行脚本」下的 DDL 条）----
+# 用户要求（Issue #154）：「调整规范 sql 下 alter 的同类操作（移动、新增等）可以合并为
+# 一条 sql（支持的情况下，mysql 就支持），优先合并，不要每个字段写一条」。
+#
+# 缺该判据时的失效：ALTER 的同类操作（同一张表、同一个动作）**每个字段写一条**是工具与
+# 生成脚本的默认形态（批量加字段时按字段逐个生成），而 MySQL 的 `ALTER TABLE` 支持
+# `alter_option [, alter_option] ...`——可合并的动作**默认仍作为一次独立操作执行**，
+# 于是每条都要各自按表一次、表越大按得越久（代价不对称：结果等价、代价差 N 倍）。
+#
+# 本条**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+# 「有没有这条」属防线空转——「同类操作」的定义、判定标准、合并不了的例外与存量边界
+# 任一被抽走时照样全绿。
+#
+# 本轮补充（用户在同一条评论里追加的三点）：
+#   ① DML（`INSERT`/`UPDATE`）同理、但**用户主动写的除外**（不改、不告警，因为可能造成锁表），
+#      且**该例外只适用于 DML**（用户原话："此条只使用于 dml，ddl 一定会锁表"）；
+#   ② SQL **须单独建文件**（用户原话："sql 应该要单独建个文件吧？"）；
+#   ③ 写 SQL **须带库名**，**DDL/DML 强制**（用户原话："写 sql 时，要带库名（ddl/dml强制）"）。
+# 缺②③两条的失效形态：SQL 与 Java 代码共处一个文件（没有高亮/校验），
+# 裸表名落到默认库不同的连接上**改错库**。
+ALTER_MERGE_SPEC = "specs/general/sql.adoc"
+ALTER_MERGE_SECTION = "SQL 写法"
+# Java 栈侧的**一跳引用**落点：SQL 写法的判据在 `sql.adoc`，Java 文件只给落点与执行方式。
+ALTER_MERGE_JAVA_SPEC = "specs/stack/java.adoc"
+ALTER_MERGE_JAVA_SECTION = "跨语言执行脚本（SQL / Lua 等）"
+ALTER_MERGE_ANCHORS = (
+    ("规则本体（合并 + 优先 + 不得每个字段一条）",
+     ("同表同类操作合并为一条", "同类操作", "新增", "移动",
+      "目标数据库支持", "不得每个字段写一条"),
+     "缺规则本体时本要求退化成口号：既没说清「什么算同类操作」，也没说清合并的前提"),
+    ("合并不了时的例外与须写原因",
+     ("确实合并不了才分开写", "数据库不支持", "必须串行", "中间步骤有数据依赖"),
+     "缺例外口径会把本条读成「任何情况都必须合并」——遇到真的必须串行的迁移时无路可走"),
+    ("判定标准（逐条可核对）",
+     # 钉的是**能拿去核对的那句话**（可合并条件 / 违规形态 / 生成脚本 / 反向禁令），
+     # 不钉那个具体的 SQL 示例字串——示例是可替换的表达形式，钉它会让"换一个等价示例"
+     # 误报（钉子过紧与钉轴名同样偏离"钉判据本体"）。
+     ("判定标准（任一命中即违规）", "写成 ≥2 条语句",
+      "目标数据库支持在一条语句里并列",
+      "生成脚本须按表合并输出", "属过度合并"),
+     "缺判定标准时「合没合并」交回执行者凭感觉；反向禁令（跨表/跨动作类型**不**属同类）"
+     "也须在，否则会被读成「能塞进一条就塞」（把不同表的 ALTER 合并）"),
+    ("依据行（标准名/编号）",
+     ("依据（标准名/编号）", "MySQL 官方文档", "Online DDL"),
+     "依据被删时「优先合并」的来源无从核对，读者会以为这是本集合的自定偏好"),
+    ("存量边界",
+     ("发现即改、不单独发动全库清理", "随动迁移"),
+     "缺存量边界会被读成「立刻发动全库改写历史迁移」，而改写已执行的迁移会与已落库结构对不上"),
+    # ---- 本轮用户追加的三点 ----
+    # **只钉"同表同类操作合并 + DML 例外 + 例外只适用于 DML"**：用户追加的另两点
+    # 「SQL 须独立成文件」（`SQL 须独立成文件` 那一条）与「写库名」**不在这里核**——
+    # 前者的判据本体由 `check_external_script_guard` 钉（通用层「跨语言执行脚本的落点」
+    # 的 L1（a）b）c）+ Java 落点的 `.sql`/`src/main/resources/` 关键词），后者的落点在
+    # 上面这条的规则名与判定标准里已可核对。此处再各钉一份即同一条规范的**第二处真源**
+    # （改一处要记得改两处，两处漂移时先报红的那道未必是权威），故只留本组一条。
+    # 口径已写进规范：`specs-project-maintainer/spec-lifecycle.adoc`「一条规范何时该拆分」
+    # 的「同一事项只有一个真源」、「新增规范的提案校验」的「同一事项不得留两处真源」
+    # （"判据形态不同"才另建；推荐程度与机械量级不构成理由）。
+    ("DML 合并 + 「用户主动写的除外」例外 + 例外只适用于 DML",
+     ("DML 优先合并", "用户主动写的 DML 一律不动、不告警",
+      "DDL 不适用这个例外", "只使用于 dml，ddl 一定会锁表"),
+     "缺本条时只约束了 DDL、DML 退回「每行一条」的默认形态；缺例外口径则执行者会去改"
+     "用户主动写的 DML（**越权**且可能把用户的锁行为改坏），缺「DML 专属」则把例外错读到 DDL 上"),
+)
+
+# 图书馆依据落点（依据不得只剩名称——正文里的 MySQL 官方文档须在馆内可逐字核对，
+# 且**如实标注它没规定"必须合并"**：官方材料给的是语法能力与代价说明，本条属本集合的
+# 判据化取舍。缺它则读者无法区分「MySQL 要求」与「本集合取舍」）。
+ALTER_MERGE_LIBRARY = "library/sources.adoc"
+# 「多值 `INSERT`」（DML 合并）与「ANSI SQL / ISO/IEC 9075 限定名称」（库名）两组依据
+# **不在这里核**——与那两条写法同理：判据本体已在别处，依据再各钉一份属第二处真源。
+# 只留 ALTER 合并的依据（本 PR 新增的那条）与全局的同义性标注。
+ALTER_MERGE_LIBRARY_ANCHORS = (
+    ("MySQL 官方文档条目（ALTER TABLE 与 Online DDL）", "MySQL 官方文档", "alter_option"),
+    ("语义差异与取舍归属（同义性）", "并未规定", "本集合"),
+)
+
+
 def _subsection_text(text: str, keyword: str):
     """按**节标题关键词**取某个三级节的正文（`=== ` 起、到下一个同级或更高级标题止）。
 
@@ -1970,6 +2131,123 @@ def check_info_density_guard():
         ):
             if token not in lib_text:
                 err(f"信息密度防线被破坏：{lib} 缺 `{token}`——{why}", lib)
+
+
+def check_alter_merge_guard():
+    """『ALTER 同类操作合并』防线：判据本体与判定标准不得被删或降级。
+
+    用户要求（Issue #154）："调整规范 sql 下 alter 的同类操作（移动、新增等）可以合并为
+    一条 sql（支持的情况下，mysql 就支持），优先合并，不要每个字段写一条"。
+
+    本轮补充（用户在同一评论里追加的三点）**只钉其中一条**：DML 合并 + **用户主动写的
+    除外、不告警**（例外**只适用于 DML**，DDL 一定会锁表故无例外）。另两点——SQL
+    **须单独建文件**、写 SQL **须带库名（DDL/DML 强制）**——的判据本体已由
+    `check_external_script_guard` 钉住（通用层「跨语言执行脚本的落点」的 L1 与 Java
+    落点关键词），此处再各钉一份即**同一条规范的第二处真源**（口径见
+    `specs-project-maintainer/spec-lifecycle.adoc`「新增规范的提案校验」的
+    「同一事项不得留两处真源」与「一条规范何时该拆分」的「同一事项只有一个真源」）。
+
+    落点（本轮调整，用户追加要求："应该要有个单独的 sql 规范文件"）取
+    **`specs/general/sql.adoc`「SQL 写法」一个节**——SQL 是**跨语言写法**，不是 Java 的
+    专属事实（判据对 Java 项目的 MySQL 与项目里的 `.sql` 迁移脚本同样成立），埋在某个
+    技术栈文件的跨语言脚本条下会让非 Java 的 SQL 落不到判据；节级拆分而非文件级，是
+    `specs-project-maintainer/spec-lifecycle.adoc`「一条规范何时该拆分」的取向——**判据
+    形态相同（同一组文本判据）、加载时机相同，故共处一个节**，只为承载与可发现性单建文件。
+
+    本函数还**核这条真源真的被加载得到**（本轮实测的失效形态：文件建对了、判据也齐，
+    但登记与引用两处都没接上——执行者改 SQL 时根本走不到这个文件，等于没写）。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这条 DDL 条"属防线空转——"同类操作"的定义、可核对的判定标准、合并不了的例外
+    与存量边界任一被抽走时照样全绿。故逐条核 `ALTER_MERGE_ANCHORS`（每项要求「规则 +
+    判定标准 + 边界」里的**可核对那句话**），并核调度器的识别特征（缺则改 DDL 时永远不会
+    被触发加载、判据实际失效）。「某条迁移到底该不该合并」属语义判断（见 GUARD_CHECK_LIMITS）。
+    """
+    phase("SQL 写法（ALTER/DML 合并、独立成文件、库名）防线检查")
+    path = os.path.join(REPO_ROOT, *ALTER_MERGE_SPEC.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {ALTER_MERGE_SPEC}——「SQL 写法（ALTER/DML 合并、独立成文件、库名）」"
+            "的判据无处承载", ALTER_MERGE_SPEC)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, ALTER_MERGE_SECTION)
+    if not section:
+        err(f"{ALTER_MERGE_SPEC} 缺少「{ALTER_MERGE_SECTION}」节——该条失去落点"
+            "（缺条目时生成脚本会按字段逐条生成 ALTER、每条各自按一次表；"
+            "SQL 也会被内联回 Java 字符串、表名不带库名）", ALTER_MERGE_SPEC)
+    else:
+        for name, tokens, why in ALTER_MERGE_ANCHORS:
+            for token in tokens:
+                if token not in section:
+                    err(f"「{ALTER_MERGE_SECTION}」缺少要点：{name}（应含 `{token}`）——{why}",
+                        ALTER_MERGE_SPEC)
+    # 加载调度器（通用层）须登记该文件 + 识别特征：缺则改 SQL 时**永不触发加载**
+    gate = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
+    disp = ""
+    if os.path.isfile(gate):
+        with open(gate, encoding="utf-8") as fh:
+            generic = fh.read()
+        # 判"有没有登记这一项"时**按文件名**认（登记行可能把路径写成别的形态：
+        # `sql.adoc`、加链接、或漏一层目录——正是下面那条判据要抓的），故这里不能
+        # 只按完整路径匹配，否则"路径写错了"会被报成"没登记"、真正的成因看不出来。
+        base_name = ALTER_MERGE_SPEC.rsplit("/", 1)[-1]
+        disp = next((ln for ln in generic.splitlines()
+                     if ALTER_MERGE_SPEC in ln or base_name in ln), "")
+        if not disp:
+            err(f"加载调度器未登记 `{ALTER_MERGE_SPEC}`——该文件不会被加载、其条目实际失效"
+                "（判据齐备但没有入口，执行者改 SQL 时走不到它）", "AGENTS_COMMON.adoc")
+        else:
+            # 四点识别特征缺任一即"该条永不触发加载"：`ALTER TABLE` 是改 DDL 的入口，
+            # `.sql` 是"SQL 须独立成文件"，库名是"须带库名"，`INSERT` 是 DML 合并那条。
+            for token in ("ALTER TABLE", ".sql", "库名", "INSERT"):
+                if token not in disp:
+                    err(f"加载调度器 `{ALTER_MERGE_SPEC}` 登记项缺少 `{token}` 识别特征——"
+                        "触发特征不全时该条永不触发加载（改 SQL 的执行者会"
+                        "「没想到这里还有可合并的一条」）", "AGENTS_COMMON.adoc")
+    # 真源**须能从加载入口按路径取回**（本轮实测的失效形态：文件与登记都在，但登记里的
+    # 路径取不回——`fetch-specs.py` 按 `specs/*.adoc` 解析入口里的路径来批量取副本，
+    # 路径漂一个字符（层级写错、少一层目录）时站点回落成首页、取到的"说明文件"其实是 HTML，
+    # 引用方读到的是死引用。判据即取回脚本用的那条正则，机械可核对）。
+    if disp and not re.search(r"specs/[A-Za-z0-9_./-]+\.adoc", disp):
+        err(f"加载调度器里的 `{ALTER_MERGE_SPEC}` 未写成可被取回脚本解析的仓库内路径"
+            "（取回脚本按 `specs/….adoc` 解析入口清单）——副本取不回，引用方读到死引用",
+            "AGENTS_COMMON.adoc")
+    # 技术栈侧一跳引用：Java 项目读「跨语言执行脚本（SQL / Lua 等）」时须被指向真源
+    java_path = os.path.join(REPO_ROOT, *ALTER_MERGE_JAVA_SPEC.split("/"))
+    if not os.path.isfile(java_path):
+        err(f"缺少 {ALTER_MERGE_JAVA_SPEC}——SQL 写法的 Java 落点丢失", ALTER_MERGE_JAVA_SPEC)
+    else:
+        with open(java_path, encoding="utf-8") as fh:
+            jtext = fh.read()
+        jsec = _section_text(jtext, ALTER_MERGE_JAVA_SECTION)
+        if not jsec:
+            err(f"{ALTER_MERGE_JAVA_SPEC} 缺少「{ALTER_MERGE_JAVA_SECTION}」节——"
+                "Java 项目执行 SQL 时没有落点可循", ALTER_MERGE_JAVA_SPEC)
+        elif ALTER_MERGE_SPEC not in jsec:
+            err(f"{ALTER_MERGE_JAVA_SPEC}「{ALTER_MERGE_JAVA_SECTION}」未指向 `{ALTER_MERGE_SPEC}`"
+                "——Java 项目读该节时不知道 SQL 写法另有真源（判据一处、其余一跳引用）",
+                ALTER_MERGE_JAVA_SPEC)
+        elif "src/main/resources/" not in jsec or ".sql" not in jsec:
+            err(f"{ALTER_MERGE_JAVA_SPEC}「{ALTER_MERGE_JAVA_SECTION}」缺少 Java 落点"
+                "（`.sql` 放 `src/main/resources/`）——引用到了真源，却没给 Java 怎么写",
+                ALTER_MERGE_JAVA_SPEC)
+    # 图书馆依据落点：依据须可逐字核对，且须如实标注"官方材料未规定必须合并"
+    # （否则读者会把本集合的取舍当成 MySQL 的要求）。
+    lib_path = os.path.join(REPO_ROOT, *ALTER_MERGE_LIBRARY.split("/"))
+    if not os.path.isfile(lib_path):
+        err(f"缺少 {ALTER_MERGE_LIBRARY}——正文里的 MySQL 官方文档依据无处逐字核对"
+            "（依据只剩名称）", ALTER_MERGE_LIBRARY)
+    else:
+        with open(lib_path, encoding="utf-8") as fh:
+            lib_text = fh.read()
+        for name, tokens, why in ALTER_MERGE_LIBRARY_ANCHORS:
+            for token in tokens:
+                if token not in lib_text:
+                    err(f"{ALTER_MERGE_LIBRARY} 缺少 `{name}` 的要点（应含 `{token}`）——{why}",
+                        ALTER_MERGE_LIBRARY)
+    phase_done()
 
 
 def check_java_serial_guard():
@@ -3398,6 +3676,9 @@ def check_install_repeat_update_guard():
 #   * 接线数：`CHECKS` 序列里编排的 `check_*` 个数。删除/摘出一道防线曾经"零痕迹"
 #     （本轮实测：一道防线被从执行序列摘掉、它的 8 条反例用例也被删，而
 #     `check_specs.py` 与全部单测仍然全绿、台账上的"抓手数"也不变）；
+#     注意：这里的"接线数"是**序列元素个数**，而 `check_guard_manifest` 实际比对的是
+#     **可达闭包**（序列 + 被别的防线收尾调用的，如公共内容自足两道）——两者当前是
+#     93 与 95。基线只作"不得无记账减少"的下限，故取序列元素个数即可（更保守）。
 #   * 用例数：全部 `*_test.py` 里的 `def test_` 个数（`check_specs_test.py` +
 #     `check_effective_test.py` 的实际总数）。反例用例是防线的实际效力来源，被整批删掉时
 #     数字会掉；基线须与这里**实取的总数**同源（它同时含 check_effective_test.py，
@@ -3440,8 +3721,8 @@ def check_install_repeat_update_guard():
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
-GUARD_WIRING_BASELINE = 94
-GUARD_TEST_BASELINE = 1057
+GUARD_WIRING_BASELINE = 96
+GUARD_TEST_BASELINE = 1111
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
 #   随防线一并删除，净变动按合并后实取数记全——不按两侧各自数目相加，避免基线虚高后
@@ -3458,8 +3739,48 @@ GUARD_TEST_BASELINE = 1057
 #   `guards.adoc` 的清单表两侧写法冲突也一并解决并逐行核实：main 侧的表格语法修复（行尾
 #   不再多一个空单元格、表头后保留空行）与「已删除的防线」记账表，与本分支新增的
 #   `check_entity_dto_guard` 一行**都保留**——合并后全文件 asciidoctor 编译 0 报错。
-
-
+#   **解冲突一轮（PR #156 冲突处置）**：与 main 再次冲突，两侧新增一并保留——
+#     * 接线数 **94 → 95**：本分支的 `check_alter_merge_guard` 与 main 侧的其余防线各占一个
+#       位置（序列里 `check_alter_merge_guard`、`check_toolchain_present_guard`、
+#       `check_asciidoctor_syntax` 同在序）；清单表同步为 95 行、编号 1..95 连续，与
+#       `CHECKS` 逐一同序（合并时出现过两侧各插新行导致的编号错位，已按同一序号重排）。
+#     * 用例数 **1057 → 合并后实取数**：两侧用例都保留后同源实测（
+#       `Ran <N> tests ... OK`）——基线只允许"不低于实测"，故按实测回填。
+#   `scripts/check_specs.py` 的防线条目清单把本分支的「脚本头部注释（文档头）」与 main 的
+#   三条（精炼性、安装幂等更新、数据字典）都保留，编号按同一序号重排为 1..67。
+#   **解决冲突一轮（与 main 合并，PR #163 侧含 AsciiDoc 工具链那笔）**：两侧都新增了内容，
+#   两笔都必须保留，故两个基线各按**合并后的实取数**回填：
+#     * 接线数 **93 → 95**：本分支的 `check_conflict_resolution_guard` 插在
+#       `check_merge_relationship_guard` 之后（第 51 位），main 的
+#       `check_toolchain_present_guard` 排在 `check_maven_parallel_guard` 之后（第 93 位）
+#       ——两道在 `CHECKS` 序列里各占一个位置，一道都不丢；清单表同步为 95 行、编号 1..95
+#       连续，与 `CHECKS` 逐一同序（本分支表里的 51..93 顺移一位）。
+#     * 用例数 **1047 → 1076**：合并 main 侧新增用例后同源实测（本分支 1044 条
+#       `check_specs_test.py` 用例 + 32 条 `check_effective_test.py` 用例）——基线只允许
+#       "不低于实测"，故按实测回填。
+#   两侧的冲突解法：`script/check_specs.py` 的基线块、`README.adoc` 的通用层目录说明、
+#   `specs-project-maintainer/guards.adoc` 的防线清单表——两笔内容都保留，不做任何一侧取舍。
+#   **本轮（用户点名：只要求压缩提交、没要求解决冲突时也要先解冲突再压缩）记账**：
+#   在既有 `check_conflict_resolution_guard` 上把触发面写全（通用层「冲突处理」新增
+#   『"只被要求压缩、没被要求解决冲突"也要先解冲突』一条；平台层「冲突处理」与
+#   「压缩提交」的接口同步写全；调度器识别特征与 README 使用要点同步），
+#   并补 5 条反例用例（触发面被抽 / 判定标准被抽 / 平台层触发面被删 /
+#   调度器识别特征被删 / README 使用要点被删）。
+#   **解冲突一轮（同步目标分支 main）**：两侧各自新增了防线与用例，两笔都保留——
+#   `CHECKS` 里 `check_alter_merge_guard`（两侧合并带入）与 `check_conflict_resolution_guard`
+#   （本分支）各占一位；清单表按 `CHECKS` 实际次序重排为 96 行、编号 1..96 连续；
+#   两个基线各按**合并后同源实取数**回填：接线数 96、用例数 1111（`Ran 1111 tests ... OK`）。
+# 用例基线的计入口径是**两处文件**的 `test_*` 方法数逐条相加（见 `check_guard_manifest`）：
+# `check_specs_test.py` + `check_effective_test.py`，CI 上以
+# `python3 -m unittest discover -s script -p '*_test.py'` 一次跑全（本轮实测 1081）。
+# **本轮（用户点名：只要求压缩提交、没要求解决冲突时也要先解冲突再压缩）记账**：
+# 在既有 `check_conflict_resolution_guard` 上把触发面写全（通用层「冲突处理」新增
+# 『"只被要求压缩、没被要求解决冲突"也要先解冲突』一条；平台层「冲突处理」与
+# 「压缩提交」的接口同步写全；调度器识别特征与 README 使用要点同步），
+# 并补 5 条反例用例（触发面被抽 / 判定标准被抽 / 平台层触发面被删 /
+# 调度器识别特征被删 / README 使用要点被删）——故 1076 → 1081。
+# **数值口径**：基线只约束"不得减少"，故它必须等于**实际计入数**——填小了会误报、
+# 填大了则静默通过（虚高的基线等于把下一次真删除一并放行）。
 def _read_ledger_no_grip_declared():
     """从台账 `script/check_effective.py` 读出「无机械抓手」的声明措辞（唯一真源）。
 
@@ -3737,6 +4058,19 @@ def check_guard_manifest():
                 "而清单里编号所指的那一项会随重排**静默错位**（新增一条时把原有的那条"
                 "也编成同一个号，两处指向同一编号、其后编号整体下移一位）。"
                 "编号须**严格递增、不重不漏**，改编号须连带核对相邻条目",
+                "script/check_specs.py")
+        # 乱序：既无断号也无重号，但编号在文件里的**出现次序**不是递增的。这正是一道新防线
+        # 插错位置（插在编号更小的条目之前）的形态——集合仍是 1..N 齐备，故前两条判据全过。
+        # 本仓库实测：PR 把新增的第 63 条插在第 60 条之前，清单顺序成了
+        # `…55, 60, 61, 62, 63, 56, 57, 58, 59`，断号与重号两条都报绿。
+        disorder = next((idx for idx in range(1, len(nums)) if nums[idx] < nums[idx - 1]), None)
+        if disorder is not None:
+            err(f"script/check_specs.py 头部检查项清单编号乱序：第 {nums[disorder - 1]} 条之后"
+                f"出现第 {nums[disorder]} 条——新条目被插到了编号更小的条目之前"
+                "（断号与重号两条判据都拦不住这种形态：集合仍是 1..N 齐备，只是次序错了）。"
+                "清单是给人按编号定位用的，须**按编号升序排列、与 `CHECKS`/台账的次序同源**；"
+                "新增条目要插到与它次序相符的位置（本仓库实测：PR 在 #154 那条之后追加新条目时，"
+                "它被插到了第 60 条之前，清单次序与防线次序脱节）",
                 "script/check_specs.py")
     phase_done()
 
@@ -4278,9 +4612,15 @@ def check_lifecycle_guard():
                 ("不拆就真的坏", "硬条件二：须能指出实害，'更整齐'不构成理由"),
                 ("拆后每一半都自足", "硬条件三：每半都有判据、落点、加载方式"),
                 ("默认不拆", "取向：按需才拆，不为对称、不为好看而拆"),
-                ("单独过准入九问", "拆分不豁免准入判定（有落点/成本可接受尤其）")):
+                ("单独过准入九问", "拆分不豁免准入判定（有落点/成本可接受尤其）"),
+                ("同一事项只有一个真源", "不拆后的落点口径：真源一处、其余一跳引用"),
+                ("推荐程度与机械量级不构成另建落点的理由", "第二处真源的成因之一（判据本体相同）"),
+                ("新增规范的提案校验", "另建防线这一高发入口的拦法落点"),
+                ("同一事项不得留两处真源", "提案校验里的拦法：已钉过不另建、判据形态不同才另建")):
             if key not in atext:
-                err(f"任务生命周期防线被破坏：{rel_adm} 缺失『{key}』（{desc}）", rel_adm)
+                err(f"任务生命周期防线被破坏：{rel_adm} 缺失『{key}』（{desc}）——"
+                    "同一条规则会被钉出第二处真源（两处各改一次、先报红的未必是权威）",
+                    rel_adm)
     # 三处口径同源：执行原则（节点清单）→ AGENTS.adoc（本仓库落点）→ verify.adoc（边界判据）
     if not os.path.isfile(PROJECT_FILE):
         err("缺少 AGENTS.adoc：任务生命周期的本仓库落点无处承载", "AGENTS.adoc")
@@ -7447,6 +7787,25 @@ def _section_text(text: str, keyword: str):
     return ""
 
 
+def _vc_squash_section(text: str):
+    """取 `specs/general/version-control.adoc` 的「压缩提交」一节正文（与上同一条口径）。
+
+「压缩不等于解冲突」这两句是本防线的接口判据，**必须写在该节自己的正文里**——
+全文匹配时把它们挪进「冲突处理」节即可让接口句消失而仍判齐备。
+    """
+    return _section_text(text, "压缩提交")
+
+
+def _vc_scope_section(text: str):
+    """取 `specs/general/version-control.adoc` 里"工具无关性"的定性节正文。
+
+该声明属"为什么把**版本管理**与**某个工具**分开写"的定性节。**按节取文本**：
+全文匹配时，文件里任何一处出现"工具无关"与 `SVN`（正文别处顺手提一句"换用 SVN 同样成立"）
+即可顶替该声明，声明本身被改成 git 专属也照样假绿。
+    """
+    return _section_text(text, "为什么")
+
+
 def _names_in_zone(zone_body: str, rel: str) -> bool:
     """某节区里是否**以表格行**点名了 `rel`（行锚 `|` + 该行内任一点名形式）。
 
@@ -9843,17 +10202,17 @@ def check_squash_commit_guard():
     else:
         text = open(path, encoding="utf-8").read()
         for keys, desc in (
-            (("== 压缩提交", "压缩提交＝提交历史整理", "不属禁止行为"),
-             "节与定性：平台层须有「压缩提交」一节，且写明它属提交历史整理、不是禁止行为"
-             "（否则执行者只能在『用户要求』与『像是禁止』之间临场发挥）"),
-            (("尚未合入目标分支的临时中间提交", "内容零变化", "逐字节相同"),
-             "判据：对象只限本次任务尚未合入目标分支的临时中间提交、压缩前后内容逐字节相同"
-             "（否则压缩会变成夹带改动的通道）"),
+            (("== 压缩提交",),
+             "节：平台层须有「压缩提交」一节（本平台上的追加口径）"),
             (("只作用于本次任务自己的 PR 源分支", "不动目标分支"),
              "作用域：只动本次任务自己的 PR 源分支，不动目标分支、不动他人分支"),
-            (("禁止的压缩形态", "他人（或其它任务）的提交", "已合入目标分支", "扩大范围"),
-             "禁止形态：他人提交/已合入目标分支的历史/内容出现差异/借『压缩提交』扩范围"
-             "（缺则最危险的几条形态无判据可依）"),
+            (("specs/general/version-control.adoc", "规则本体"),
+             "规则归属：压缩提交的**规则本体（工具无关）**须指向 `specs/general/version-control.adoc`——"
+             "用户口称的是「版本管理」、没说 git/CNB，规则本体写进平台层会让非 CNB/非 git 的引用方读不到"
+             "（与「改动范围边界」同一条归位口径）"),
+            (("禁止的压缩形态", "他人（或其它任务）的提交", "已合入目标分支"),
+             "禁止形态（平台侧追加）：同一分支上并行任务提出的提交、已合入目标分支的历史"
+             "（其余通用形态在 `specs/general/version-control.adoc`，缺则平台侧最危险的两条无判据可依）"),
             (("须先确认无人在用旧对象", "确认**无他人正基于该分支的旧 sha 工作**",
               "已派发、正等待结论", "标为过期"),
              "先确认：压缩会 force push，执行前须确认无他人正基于旧 sha 工作（已派发/等待结论），"
@@ -9894,9 +10253,11 @@ def check_squash_commit_guard():
     common_path = os.path.join(REPO_ROOT, rel_common)
     if not os.path.isfile(common_path):
         err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
-    elif "**压缩提交（" not in open(common_path, encoding="utf-8").read():
-        err(f"{rel_common} 的 CNB 平台加载项未同步『压缩提交』识别特征——"
-            "缺则该节永远不会被加载（规则在、但没人会读到）", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        if "version-control.adoc" not in common:
+            err(f"{rel_common} 未登记通用层「版本管理」加载项（`specs/general/version-control.adoc`）"
+                "——缺则该文件永远不会被加载（规则在、但没人会读到）", rel_common)
     rel_readme = "README.adoc"
     readme_path = os.path.join(REPO_ROOT, rel_readme)
     if not os.path.isfile(readme_path):
@@ -9904,7 +10265,9 @@ def check_squash_commit_guard():
     else:
         readme = open(readme_path, encoding="utf-8").read()
         for keys, desc in (
-            (("**压缩提交（提交历史整理",), "目录说明须同步『压缩提交』一节"),
+            (("version-control.adoc", "压缩提交"),
+             "目录说明须登记通用层「版本管理」并同步『压缩提交』（规则本体工具无关，"
+             "用户口称『版本管理』、未点名 git/CNB）"),
             (("压缩提交要照做、合并仍不做",),
              "使用要点须写明『压缩提交要照做、合并仍不做』（否则公开面只看得见‘禁止’、"
              "看不到用户可要求的这条）"),
@@ -9912,6 +10275,230 @@ def check_squash_commit_guard():
             missing = [k for k in keys if k not in readme]
             if missing:
                 err(f"压缩提交防线被破坏：{rel_readme} 缺失要点 {missing}——{desc}",
+                    rel_readme)
+    phase_done()
+
+
+def _vc_conflict_section(text: str):
+    """取 `specs/general/version-control.adoc` 的「冲突处理」一节正文。
+
+**按节取文本**（不按全文匹配）：同一文件别处也会提到"冲突"（「压缩提交」节的"压缩不等于解冲突"），
+全文匹配会把"条文从本节里删了、别处还提了一句"读成齐备。
+    """
+    return _section_text(text, "冲突处理")
+
+
+def check_conflict_resolution_guard():
+    """『冲突与压缩提交防线』：先解冲突、再压缩（最终只有一个提交）、且解冲突后核查是否丢内容。
+
+用户原话："当提出压缩提交时，有冲突要先解决冲突，解决冲突+压缩提交，最后应当只有一个提交；
+解决版本工具冲突后，需要核查是否丢失内容。" 两件事都是 L1，且都属"工作区看起来对、判据在别处"：
+  * **先解冲突再压缩**——把"还有冲突"或"要压缩"任一当作另一个的挡箭牌，交付形态就少一半；
+  * **最终只有一个提交**——压缩的验收形态（交付的那条线上就一个提交）；
+  * **解冲突后核查是否丢内容**——版本管理工具只会报"哪里对不上"、报不出"哪些行再也回不来"，
+    "整体取一侧"收尾会把丢内容藏进一个干净的提交里。
+
+**分层（用户明确要求，不得回退）**：用户说的是"**版本管理**"，**没点名 CNB、也没点名 git**，
+故**规则本体（工具无关）写在通用层** `specs/general/version-control.adoc`——引用方用 git、SVN
+或别的版本管理工具都读得到；**git 侧的落地命令**写 `specs/general/git.adoc`；平台层只留追加口径。
+本防线对三处**分别按节/按文件**核对，任何一处把条文删了、或把规则退回"只对 git/CNB 成立"即报红。
+    """
+    phase("冲突与压缩提交防线检查")
+    # (a) 通用层：规则本体（工具无关）
+    rel_vc = "specs/general/version-control.adoc"
+    path_vc = os.path.join(REPO_ROOT, *rel_vc.split("/"))
+    if not os.path.isfile(path_vc):
+        err(f"缺少文件 {rel_vc}——『版本管理』的规则本体无处承载"
+            "（用户口称『版本管理』、未点名 git/CNB，规则本体必须落在通用层）", rel_vc)
+    else:
+        text_vc = open(path_vc, encoding="utf-8").read()
+        section = _vc_conflict_section(text_vc)
+        if not section:
+            err(f"{rel_vc} 未找到「冲突处理」一节——先解冲突、再压缩与解冲突后的核查失去落点", rel_vc)
+        else:
+            for keys, desc in (
+                (("先解冲突", "再压缩", "最终只有一个提交"),
+                 "顺序与交付形态：须写明有冲突时先解冲突、再压缩、最终只有一个提交"
+                 "（缺则'还有冲突'或'要压缩'任一都能当另一个的挡箭牌，交付形态少一半）"),
+                (('拿"还有冲突"当不做压缩的理由', '拿"要压缩"当不解冲突的理由'),
+                 "反向判据：须写明'拿还有冲突当不做压缩的理由'与'拿要压缩当不解冲突的理由'"
+                 "**两句都在**（本项两个关键词按 AND 判，任一缺失即缺要点）——"
+                 "只写正面顺序、或只写其中一句时，执行者仍可二选一交差"),
+                (('"只被要求压缩、没被要求解决冲突"也要先解冲突',
+                  "实际存在冲突"),
+                 "触发面写全：须写明**用户只要求压缩、没提解决冲突而分支实际有冲突**时同样"
+                 "须先解冲突（用户本轮点名：『当只提出压缩提交一个任务，没有提解决冲突的要求，"
+                 "但是目前有冲突，需要先解决冲突，再压缩提交』）——只写『同时/先后提出两件事』"
+                 "时，执行者会把『没被要求』读成『不用做』（本条与它的同义句按 AND 判，"
+                 "两句都在才算齐备）"),
+                (("对冲突只字未提", '以"用户没提解决冲突/没被要求"为由只压不解决',
+                  "照抄目标分支的文件内容后另起一个单亲提交",
+                  "并非本分支的祖先"),
+                 "判定标准四态：须可逐条核对——①报『已压缩提交』却对冲突只字未提；"
+                 "②以『用户没提/没被要求』为由只压不解决、或把冲突留到压缩之后再议；"
+                 "③用『照抄目标分支内容 + 单亲提交』冒充已解决（工作副本一致但目标分支不是祖先）；"
+                 "④拿『要求里只写了压缩』当挡箭牌——缺则只剩一句口号、无从判定"),
+                (("解决冲突后须核查是否丢失内容",),
+                 "核查要求：须有『解决冲突后须核查是否丢失内容』这一条 L1"),
+                (("整体取一侧",),
+                 "失效形态：须点名'整体取一侧收尾、不做逐处对照'这一失效"
+                 "（版本管理工具只会报哪里对不上、报不出哪些行再也回不来）"),
+                (("核查判据", "改名", "逐条核对两侧条目的并集"),
+                 "核查判据随对象定：须给出文本类（两侧改动逐处对照）、改名/移动/删除与文件数"
+                 "（按版本管理工具对移动的识别口径强制核对）、版本文档类（依赖清单与锁文件逐条"
+                 "核对两侧条目并集）三档判据，否则'核查'退化成'没有冲突标记就算完'"),
+            ):
+                missing = [k for k in keys if k not in section]
+                if missing:
+                    err(f"冲突与压缩提交防线被破坏：{rel_vc} 的「冲突处理」节缺失要点 {missing}——"
+                        f"{desc}；本条是用户明确提出的要求，不得删除、不得降级为建议（L1）", rel_vc)
+        # 通用层须显式声明"工具无关、不得把某工具命令当规则前提"。
+        # **同样按节取文本**：该声明本属通用层的定性节（本文件为「为什么把"版本管理"与
+        # "某个工具"分开写」）。全文匹配时，只要文件里任何地方出现"工具无关"与"SVN"
+        # （例如正文别处顺手提一句"换用 SVN 同样成立"），声明本身被改成 git 专属也照样假绿。
+        vc_scope = _vc_scope_section(text_vc)
+        if not vc_scope:
+            err(f"{rel_vc} 未找到工具无关性的定性节——『不得把某工具的命令当成规则前提』"
+                "这一声明失去落点（用户口称『版本管理』、未点名 git/CNB）", rel_vc)
+        else:
+            for keys, desc in (
+                (("工具无关", "SVN"),
+                 "工具无关性：通用层须在定性节里显式写明本规则工具无关（点名 git 之外的"
+                 "版本管理工具），不得把某工具的命令当成规则前提——用户原话是『版本管理』、"
+                 "**没说 cnb、git**，写成 git 专属即与该要求相抵"),
+            ):
+                missing = [k for k in keys if k not in vc_scope]
+                if missing:
+                    err(f"冲突与压缩提交防线被破坏：{rel_vc} 的定性节缺失要点 {missing}——{desc}",
+                        rel_vc)
+        # 「压缩提交」节须写明压缩不等于解冲突。**按节取文本**：同前，全文匹配时把这两句
+        # 挪到「冲突处理」节（冲突处理里按定义就有"压缩"字样）即可让该节的接口句消失而不报红。
+        vc_squash = _vc_squash_section(text_vc)
+        if not vc_squash:
+            err(f"{rel_vc} 未找到「压缩提交」一节——压缩不等于解冲突这一接口句失去落点", rel_vc)
+        else:
+            # 判据写成「节里不得同时缺两句」＝**差集覆盖**：修好缺的一句即报红解除，
+            # 不会在改掉某一句后把同一条重复报两次（报错须能指回"该补哪句"）。
+            missing = [k for k in ("压缩不等于解冲突", "压缩不能替代解冲突")
+                       if k not in vc_squash]
+            if missing:
+                err(f"冲突与压缩提交防线被破坏：{rel_vc} 的「压缩提交」节缺失接口句 {missing}"
+                    "——把冲突处整体取一侧后压成一个提交，是把丢内容藏进一个干净的提交里", rel_vc)
+    # (b) git 层：git 侧落地命令（用户点名"git 规范也要"）
+    rel_git = "specs/general/git.adoc"
+    path_git = os.path.join(REPO_ROOT, *rel_git.split("/"))
+    if not os.path.isfile(path_git):
+        err(f"缺少文件 {rel_git}——git 侧的核对命令无处承载（用户点名『git 规范也要』）", rel_git)
+    else:
+        text_git = open(path_git, encoding="utf-8").read()
+        for keys, desc in (
+            (("== 冲突与压缩提交（git 侧落地）",),
+             "节：git 规范须有『冲突与压缩提交（git 侧落地）』一节"
+             "（用户点名『git 规范也要』——工具无关的规则本体之外，git 上怎么判要写在这里）"),
+            (("--ours", "--theirs"),
+             "git 侧失效形态：须点名 `--ours`/`--theirs` 整体取一侧收尾这一失效"),
+            (("git diff --name-status", "rename"),
+             "git 侧核对命令：须给出未识别为 rename / 强制核对的命令判据"),
+            (("`git log --oneline", "只有一条"),
+             "『最终只有一个提交』的 git 侧判据：须给出可核对命令（`git log --oneline <目标分支>..HEAD`"
+             "只有一条）——只留'应只有一条'这句口号不算判据（判据退化成断言，无从核对）"),
+        ):
+            missing = [k for k in keys if k not in text_git]
+            if missing:
+                err(f"冲突与压缩提交防线被破坏：{rel_git} 缺失要点 {missing}——{desc}", rel_git)
+    # (c) 平台层：只留追加口径，且须指向通用层规则本体
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——平台层追加口径无处承载", rel)
+    else:
+        text = open(path, encoding="utf-8").read()
+        # 按节取「冲突处理」正文：同文件「压缩提交」节也指向通用层，全文匹配会在
+        # "冲突处理节不再指向通用层、压缩提交节还指一句"时假绿。
+        plat_section = ""
+        for title, body in _split_adoc_sections(text):
+            if title.startswith("冲突处理"):
+                plat_section = body
+                break
+        if not plat_section:
+            err(f"{rel} 未找到「冲突处理」一节——平台侧追加口径失去落点", rel)
+        else:
+            for keys, desc in (
+                (("specs/general/version-control.adoc", "规则本体"),
+                 "平台层「冲突处理」须指向通用层规则本体（工具无关）——"
+                 "把规则本体留在平台层会让非 CNB 的引用方读不到"),
+                (("只有一条",),
+                 "平台侧交付形态：须把『最终只有一个提交』按本平台表达"
+                 "（该合并请求的源分支上只有一条提交）"),
+                (('"只被要求压缩提交"时冲突处置不豁免', "没被要求不等于可以搁置"),
+                 "触发面写全（平台侧）：须写明本平台上『要求只写了压缩、没提解决冲突』时不构成"
+                 "不做的理由——缺则执行者按本平台的派发形态（要求常只写一件事）恰好会漏掉这条"),
+                (("并非本分支的祖先", "git merge-base --is-ancestor"),
+                 "平台侧判据：须给出『照抄目标分支内容 + 单亲提交冒充已解决』的可核对判据"
+                 "（`git merge-base --is-ancestor`——本平台据合并关系判定，工作树一致仍报冲突）"),
+                (("不是合并", "NPC"),
+                 "与「NPC 禁合并」的边界：须写明解冲突不是合并、两条各自独立互不豁免"
+                 "（否则会被读成『NPC 不能合并所以也不能解冲突』或反过来当豁免口）"),
+            ):
+                missing = [k for k in keys if k not in plat_section]
+                if missing:
+                    err(f"冲突与压缩提交防线被破坏：{rel} 的「冲突处理」节缺失要点 {missing}——{desc}",
+                        rel)
+        # 平台层「压缩提交」节同样不得把规则本体收回平台层（与 (c) 开头同一条归位口径，
+        # 但**必须按它自己的节核对**——同文件「冲突处理」节也指向通用层，全文匹配会在
+        # "压缩提交节把规则本体抄回平台层、冲突处理节还指一句"时假绿）。
+        plat_squash = ""
+        for title, body in _split_adoc_sections(text):
+            if title.startswith("压缩提交"):
+                plat_squash = body
+                break
+        if not isinstance(plat_squash, str):
+            err(f"{rel} 未找到「压缩提交」一节——平台侧追加口径失去落点", rel)
+        elif not all(k in plat_squash
+                     for k in ("specs/general/version-control.adoc", "「压缩提交」")):
+            err(f"冲突与压缩提交防线被破坏：{rel} 的「压缩提交」节未指向通用层规则本体"
+                "（引用形态为 `specs/general/version-control.adoc`「压缩提交」，**须带节名锚点**）"
+                "——把规则本体留在平台层、或只给文件名不给节名，非 CNB/非 git 的引用方都定位不到", rel)
+    # (d) 调度器与 README：规则在、但没人会读到 / 公开面看不到
+    rel_common = "AGENTS_COMMON.adoc"
+    common_path = os.path.join(REPO_ROOT, rel_common)
+    if not os.path.isfile(common_path):
+        err(f"缺少 {rel_common}——调度器登记无从核对", rel_common)
+    else:
+        common = open(common_path, encoding="utf-8").read()
+        for keys, desc in (
+            (("version-control.adoc",),
+             "调度器须登记通用层「版本管理」加载项——缺则该文件永远不会被加载（规则在、但没人会读到）"),
+            (("冲突与压缩提交同时提出",),
+             "调度器 CNB 平台加载项须同步『冲突与压缩提交』识别特征"),
+            (("只被要求压缩提交",),
+             "调度器须登记『只被要求压缩提交、没被要求解决冲突』这一触发面——"
+             "缺则按本平台的派发形态（要求常只写一件事）时该条永不被加载"),
+        ):
+            missing = [k for k in keys if k not in common]
+            if missing:
+                err(f"冲突与压缩提交防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    rel_readme = "README.adoc"
+    readme_path = os.path.join(REPO_ROOT, rel_readme)
+    if not os.path.isfile(readme_path):
+        err(f"缺少 {rel_readme}——目录说明无从核对", rel_readme)
+    else:
+        readme = open(readme_path, encoding="utf-8").read()
+        for keys, desc in (
+            (("version-control.adoc",),
+             "目录说明须登记通用层「版本管理」（`version-control.adoc`）——公开面看不到即等于没写"),
+            (("先解冲突、再压缩、最终只有一个提交",),
+             "目录说明须同步『先解冲突、再压缩』这一口径"),
+            (("只被要求压缩",),
+             "使用要点须写明『只被要求压缩、没被要求解决冲突时冲突处置也不豁免』"
+             "（否则公开面只看得见『同时提出』那一种触发面）"),
+            (("解冲突后须核查是否丢内容",),
+             "使用要点须写明『解冲突后须核查是否丢内容』（否则公开面看不到这条默认动作）"),
+        ):
+            missing = [k for k in keys if k not in readme]
+            if missing:
+                err(f"冲突与压缩提交防线被破坏：{rel_readme} 缺失要点 {missing}——{desc}",
                     rel_readme)
     phase_done()
 
@@ -10326,6 +10913,7 @@ CHECKS = (
     check_npc_merge_guard,
     check_squash_commit_guard,
     check_merge_relationship_guard,
+    check_conflict_resolution_guard,
     check_scope_boundary_guard,
     check_config_class_guard,
     check_abstraction_adoption_guard,
@@ -10368,6 +10956,7 @@ CHECKS = (
     check_info_density_guard,
     check_java_serial_guard,
     check_maven_parallel_guard,
+    check_alter_merge_guard,
     check_toolchain_present_guard,
     check_asciidoctor_syntax,
 )
