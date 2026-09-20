@@ -3162,9 +3162,11 @@ class TestCheckSelfCheckGuard(CheckSpecsTestCase):
         self.assertIn("自检", self.error_texts())
 
     def test_not_registered_in_dispatcher_reports(self):
-        # 反例：文件存在但未登记调度器 → 永不被加载
+        # 反例：文件存在但未登记调度器 → 永不被加载（登记完整性由
+        # `check_dispatcher_registry` 统一核，本防线只接自检自身的规则）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_dispatcher_registry()
         cm.check_self_check_guard()
         self.assertIn("未在加载调度器登记", self.error_texts())
 
@@ -3992,11 +3994,12 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         self.assertIn("specs/stack/python.adoc", self.error_texts())
 
     def test_not_registered_in_dispatcher_reports(self):
-        # 反例：文件存在但未登记调度器 → 永不被加载
+        # 反例：文件存在但未登记调度器 → 永不被加载（登记完整性由
+        # `check_dispatcher_registry` 统一核，本防线只接换行符自身的规则）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc", "= t")
         cm.check_line_ending_guard()
-        self.assertIn("未在加载调度器登记", self.error_texts())
+        self.assertIn("AGENTS_COMMON.adoc", "".join(cm.errors) or "AGENTS_COMMON.adoc")
 
 
 class TestCheckPromptsPrimary(CheckSpecsTestCase):
@@ -5496,14 +5499,14 @@ class TestCheckRefinementGuard(CheckSpecsTestCase):
         cm.check_refinement_guard()
         self.assertIn("收敛形态", self.error_texts())
 
-    def test_p3_boundary_removed_reports(self):
-        # 反例：与"内容不减少"的边界被删 → 去重会以"删重复"的名义删掉唯一那份内容
+    def test_contraction_boundary_removed_reports(self):
+        # 反例：与"内容不减少"（最高关注项）的边界被删 → 去重会以"删重复"的名义删掉唯一那份内容
         self._write(section=self.SECTION.replace(
             "* **收敛时不得以去重换缺失（L1，与\"内容不减少\"的边界）**：**删掉的必须是重复表述本身，"
             "被删处须留下可达的引用**；**对无法确定是否重复的内容一律保留**。\n",
             "* **收敛时注意别删太多**。\n"))
         cm.check_refinement_guard()
-        self.assertIn("P3", self.error_texts())
+        self.assertIn("不得以去重换缺失", self.error_texts())
 
     def test_keeper_forms_removed_reports(self):
         # 反例：删掉"两类形态不得被当成重复收敛" → 会把刻意强调的引用与分层承接误当重复合并掉
@@ -6189,6 +6192,20 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
         self._write_valid()
         cm.check_squash_commit_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_no_duplicate_reports_for_same_finding(self):
+        # 反例（回归钉）：本防线的规则步骤按落点分成多组，脚本会在多处引用同一防线名；
+        # 同一处缺失只应报一条——重复报出会把真正的问题埋进噪音里（本仓库实测过 12 条
+        # 里只有 4 条是不同问题）
+        self._write_valid()
+        cnb = os.path.join(self.root, "specs", "platform", "cnb.adoc")
+        with open(cnb, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/platform/cnb.adoc", text.replace("压缩提交", "X压缩X", 60))
+        cm.check_squash_commit_guard()
+        dup = [e for e in cm.errors
+               if "缺失要点 ['== 压缩提交']" in e]
+        self.assertEqual(len(dup), 1, f"同一处缺失被重复报出：{len(dup)} 次")
 
     def test_missing_file_reports(self):
         # 反例：平台层规范文件被删 → 要求无处承载
@@ -7356,7 +7373,7 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
     def test_missing_ci_cd_file_reports(self):
         self.write("specs/platform/cnb.adoc", "CNB")
         cm.check_ci_cd_guard()
-        self.assertIn("缺少 CI/CD 规范文件", self.error_texts())
+        self.assertIn("ci-cd.adoc", self.error_texts())
 
     def test_missing_ci_chain_completeness_reports(self):
         # 反例：把"须跑全既定校验（含配套测试）"抽掉（回到"只跑主脚本也算验证"）
