@@ -10257,6 +10257,202 @@ class TestCheckEntityDtoGuard(CheckSpecsTestCase):
         cm.check_entity_dto_guard()
         self.assertIn("缺少文件", self.error_texts())
 
+class TestCheckJavaInterfaceAccessorGuard(CheckSpecsTestCase):
+    """钉住『Java 字段接口只加 get、不加 set』（用户先提「字段接口只允许 get」、再澄清「是接口不是类」）。
+
+    该条对应用户点名的真实编译问题：**下游实现类可能加 `@Accessors(chain = true)`**，
+    接口里一旦声明了 `void setXxx(...)` 形态的 setter，链式 setter 的返回类型与接口签名
+    不一致、**下游直接编译不过**。最易被四件事冲掉：
+      * **判定面被放大** —— 「只约束接口 / 类不适用」丢了，正常类的 lombok setter 被大面积判红
+        （用户明确「是接口不是类」）；
+      * **理由与后果被抽** —— `@Accessors(chain = true)` 与"编译不过"一丢，读者不知道要防什么，
+        于是「接口不加 set 怎么写入」会把 setter 补回去；
+      * **存量口径被删** —— 「已经有的不管，也不告警」丢字，L1 被扩到存量接口上；
+      * **豁免被删或泛化** —— "除非主动声明"丢了声明过的场景被判红，没了"不得泛化"
+        则一次声明被套到整个模块。
+    故本组用例除正例外逐条覆盖上述反例，以及「轴名齐全、判据被抽走」的反例本体。
+    """
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n\n== 编码\n\n"
+        "* **字段接口只加 get 方法、不加 set 方法（L1，只约束接口）**：**为字段设计的接口**"
+        "（承载字段读写契约的接口）**只允许声明 get 方法**（含 lombok `@Getter`），"
+        "**禁止声明 set 方法**——除非按本条下款**主动声明**。**本条只约束接口（`interface`）**："
+        "**类不适用本条**、不据本条改造。**理由**：下游常在自己的实现类上加 "
+        "`@Accessors(chain = true)`；接口里已声明 setter 时**链式方法无法满足该签名**、"
+        "下游直接**编译不过**；**get 不受影响**。\n"
+        "** **判定标准（任一命中即违规）**：① 接口里声明了 `set` 方法（手写或接口上的 lombok "
+        "`@Setter`/`@Data`）；② 以「没法写入」为由补 setter 而未走主动声明；③ 自我豁免。\n"
+        "** **例外（L2，主动声明才生效）**：**除非主动声明**否则一律适用；声明**仅对该处生效、"
+        "**不得泛化**。\n"
+        "** **存量边界（L1，用户点名「已经有的不管，也不告警」）**：**既有接口不视为违规、"
+        "**不告警**、不要求整改**，按「存量处理」**随动迁移**；**不得**发动全库改造。\n"
+        "** 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、**Project Lombok 官方文档**；"
+        "**「接口只加 get、不加 set」是本集合自己更严的判据化取舍**。\n"
+        # 相邻条目（真实文件里就在同节）：它也有『不适用本条』——按整文件核关键词时会把
+        # 本条被抽走的收窄句兜住（本仓库实测复现），故夹具必须带上它
+        "* **Feign 接口命名带所属域前缀（L1）**：**只约束 Feign 接口**，REST Controller、"
+        "RPC 服务契约等其他对外接口不适用本条、不据此改名。\n")
+
+    COMMON = (
+        "= 通用规范\n"
+        "** Java 项目（识别特征：**字段接口只加 get 不加 set**（写承载字段读写契约的 `interface`、"
+        "或给这类接口加访问器注解时——**下游实现类可能加 `@Accessors(chain = true)`**））\n")
+
+    README = "目录结构：java（含**字段接口只加 get、不加 set（只约束接口）**）。\n"
+
+    ADOPTION = (
+        "= 自身取舍\n\n"
+        "* **字段接口只加 get、不加 set 是本集合自己的判据化取舍**：外部材料**未**规定该条；"
+        "靶心是接口（**是接口不是类**）；**除非主动声明**才能豁免，**存量不管**。\n")
+
+    SOURCES = (
+        "= 依据图书馆\n\n== 字段接口的访问器与 lombok 链式风格（Project Lombok 官方文档）\n\n"
+        "* `@Accessors(chain = true)` 生成的 setter 返回 `this` ⇒ 与接口的 `void` 签名"
+        "**返回类型与接口签名不一致**、编译失败。\n"
+        "* **须注意的语义差异（同义性，L1）**：官方文档**未**规定该禁令。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_coding = cm.CODING_FILE
+        self._orig_common = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码复用\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        self.write("README.adoc", self.README)
+        self.write("library/adoption.adoc", self.ADOPTION)
+        self.write("library/sources.adoc", self.SOURCES)
+
+    def tearDown(self) -> None:
+        (cm.JAVA_STACK_FILE, cm.CODING_FILE, cm.GENERIC_FILE,
+         cm.README_FILE) = (self._orig_java, self._orig_coding, self._orig_common,
+                            self._orig_readme)
+        super().tearDown()
+
+    def test_valid_passes(self):
+        cm.check_java_interface_accessor_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_deleted_reports(self):
+        # 反例①：整条被删（最简单的冲掉方式）→ 下游加 @Accessors 的编译问题重新无人管
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== 编码\n\n* 别的要求。\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("字段接口只加 get 方法", self.error_texts())
+
+    def test_interface_only_scope_removed_reports(self):
+        # 反例②：判定面被放大——「只约束接口 / 类不适用」被抽掉，正常类的 lombok setter 被大面积判红
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**本条只约束接口（`interface`）**：**类不适用本条**、不据本条改造。", "一律适用。"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("不适用本条", self.error_texts())
+
+    def test_interface_only_scope_hollowed_by_neighbor_rule_reports(self):
+        # 反例②′（相邻条目兜底，本仓库实测复现）：把「类不适用本条」这半句抽掉、只留
+        # `interface`——按整文件核关键词时，相邻 Feign 条目里的「其他对外接口不适用本条」
+        # 会把已消失的要求兜住、防线全绿。故判定面收窄这一条须在**本条自己的正文**里核。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**本条只约束接口（`interface`）**：**类不适用本条**、不据本条改造。",
+            "**本条只约束接口（`interface`）**。"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("不适用本条", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例③：理由被抽——不知道要防什么，遇到「接口不加 set 怎么写入」会把 setter 补回去
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "`@Accessors(chain = true)`；接口里已声明 setter 时**链式方法无法满足该签名**、"
+            "下游直接**编译不过**；**get 不受影响**。", "会有些不方便。"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("@Accessors", self.error_texts())
+
+    def test_consequence_removed_reports(self):
+        # 反例④：后果被删（只剩「不方便」这类措辞时，本条的级别与处置会被降级）
+        self.write("specs/stack/java.adoc", self.JAVA.replace("编译不过", "有影响"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("编译不过", self.error_texts())
+
+    def test_stock_boundary_removed_reports(self):
+        # 反例⑤（用户点名要件）：存量口径被删 → L1 被扩到存量接口上，存量项目大面积命中
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "** **存量边界（L1，用户点名「已经有的不管，也不告警」）**：**既有接口不视为违规、"
+            "**不告警**、不要求整改**，按「存量处理」**随动迁移**；**不得**发动全库改造。\n", ""))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("不视为违规", self.error_texts())
+
+    def test_exemption_removed_reports(self):
+        # 反例⑥（用户原话要件）：豁免面被删 → 声明过的场景会被判红
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "** **例外（L2，主动声明才生效）**：**除非主动声明**否则一律适用；声明**仅对该处生效、"
+            "**不得泛化**。\n", ""))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("除非主动声明", self.error_texts())
+
+    def test_generalization_boundary_removed_reports(self):
+        # 反例⑦：豁免范围被删 → 一次声明被套到整个模块（例外成了新的默认）
+        self.write("specs/stack/java.adoc", self.JAVA.replace("**不得泛化**", "可参照"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("不得泛化", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑧（反例本体：轴名齐全、判据被抽走）：判定标准被抽成一句总述
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "** **判定标准（任一命中即违规）**", "** **注意**："))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例⑨：依据行被删 → 为什么是 L1、为什么默认禁 set 的来源无从核对
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "** 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、**Project Lombok 官方文档**；"
+            "**「接口只加 get、不加 set」是本集合自己更严的判据化取舍**。\n", ""))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_self_tradeoff_qualifier_removed_reports(self):
+        # 反例⑩：定性被删 → 会被读成 lombok 或某标准的明文要求
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**「接口只加 get、不加 set」是本集合自己更严的判据化取舍**。", "**这是通行做法**。"))
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("判据化取舍", self.error_texts())
+
+    def test_general_layer_second_source_reports(self):
+        # 反例⑪：通用层也写一份（框架专名进通用层）→ 第二真源，两处必各自漂移
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 代码复用\n* 接口不得加 set（下游可能加 "
+                   "`@Accessors(chain = true)`）。\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_dispatcher_trigger_removed_reports(self):
+        # 反例⑫：调度器没有识别特征 → 写字段接口时该条永不被触发加载（实际失效）
+        self.write("AGENTS_COMMON.adoc", "= 通用规范\n** Java 项目\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑬：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_library_sources_removed_reports(self):
+        # 反例⑭：图书馆无依据段 → 依据只存名称、日后无从核对「它今天还成立吗」
+        self.write("library/sources.adoc", "= 图书馆\n\n* 略。\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_library_adoption_tradeoff_removed_reports(self):
+        # 反例⑮：取舍记录被删 → 读者会以为这是 lombok 的明文要求
+        self.write("library/adoption.adoc", "= 取舍\n\n* 略。\n")
+        cm.check_java_interface_accessor_guard()
+        self.assertIn("adoption.adoc", self.error_texts())
+
+
 class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
     """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
 

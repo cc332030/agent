@@ -199,6 +199,25 @@ class TestEvaluate(unittest.TestCase):
                      "老用例不得为迁就改动而改判"],
             "has-grip")
 
+    def test_java_interface_accessor_has_mechanical_grip(self):
+        # 「Java 字段接口只加 get、不加 set（只约束接口；下游可能加 `@Accessors(chain = true)`）」
+        # 由 check_java_interface_accessor_guard 钉住（判据本体 + 只约束接口 + 存量与豁免边界 +
+        # 调度器识别特征 + README 同步 + 图书馆两处落点）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["Java 字段接口只加 get、不加 set（只约束接口；下游可能加 "
+                     "`@Accessors(chain = true)`，接口里的 setter 会让下游编译不过）"],
+            "has-grip")
+
+    def test_java_interface_accessor_missing_reports_not_faked(self):
+        # 反例：抓手文件不存在时须判 grip-missing（不得冒充"有抓手"）
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["Java 字段接口只加 get、不加 set（只约束接口；下游可能加 "
+                     "`@Accessors(chain = true)`，接口里的 setter 会让下游编译不过）"],
+            "grip-missing")
+
     def test_maven_mirror_guard_has_mechanical_grip(self):
         # Maven 仓库与镜像（含不可用时的换源边界）由 check_maven_mirror_guard 钉住
         self._mk("script/check_specs.py")
