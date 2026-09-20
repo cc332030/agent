@@ -2956,8 +2956,8 @@ def check_install_repeat_update_guard():
 #     须**真实存在**且**真的会被调用**（"定义了但没人调"的防线看起来还在、却永远不会执行）。
 #     台账是"哪条规范由谁钉住"的唯一视图；旧判据只核"备注里点名的名字存在"，**没点名就
 #     没核对**，于是"有抓手"这个数字可以靠把防线名删掉维持（删名字比删防线容易得多）。
-GUARD_WIRING_BASELINE = 90
-GUARD_TEST_BASELINE = 995
+GUARD_WIRING_BASELINE = 91
+GUARD_TEST_BASELINE = 1010
 
 
 def _read_ledger_no_grip_declared():
@@ -6767,6 +6767,148 @@ def check_maven_mirror_guard():
     phase_done()
 
 
+# 『Maven 构建并行度』防线（check_maven_parallel_guard）：
+# 用户报告（本项目实证）：同一仓库里"以 `mvn -T 1C` 构建"与"无参 `mvn` 构建"两条路径并存——
+# 并行度只写在人手的命令行里、没落到项目配置，自动化的无参 `mvn` 调用因此继承了默认单线程；
+# 用户口径是"**默认会自己启用可以不管**""**有的项目在 maven.config 中自己配了，以配置为准**"。
+# 故本条**不是**"必须自己开并行"的强制条（那样会与用户"可以不管"的口径相反），而是
+# **默认值口径 + 既有配置优先**：缺了后半句，执行者会为了统一口径去改引用方的构建配置
+# （正是用户点名要防的一面，也是本集合 L1「不得覆盖引用方既有配置」的同源失效）。
+MAVEN_SPEC = "specs/stack/maven.adoc"
+MAVEN_PARALLEL_SECTION = "构建并行度"
+MAVEN_PARALLEL_ANCHORS = (
+    ("默认启用多线程构建（L2）",
+     ("默认启用多线程构建（L2）", "默认开 `-T`", "`--threads 1C`", "不写 `-T` 即默认单线程"),
+     "缺则『不写 -T 用单线程跑』重新成为默认（多核机器上的构建时长白付）"),
+    ("配置过即以配置为准（L2，防覆盖引用方既有配置）",
+     ("配置过即以配置为准（L2）", "`.mvn/maven.config`", "不得覆盖、不得重复追加", "优先探测的落点"),
+     "缺则执行者会为了统一口径去改引用方的构建配置（用户点名要防的一面）"),
+    ("并行度只到模块粒度（L1）",
+     ("并行度只到模块粒度（L1）", "模块间", "同一模块禁止并行构建"),
+     "缺则『并行只作用于模块之间』被读成『模块内也并发』，与同一模块禁止并行构建冲突"),
+    ("测试并行与并行构建默认为两件事（L2）",
+     ("测试并行与并行构建默认为两件事（L2）", "forkCount", "reuseForks",
+      "默认只启用构建并行，不因本条去开测试并行"),
+     "缺则要么把 -T 当成测试也并行了、要么顺手把测试并行一起开（改变既有行为、高频误伤）"),
+    ("构建产物不得因并行而退化（L2）",
+     ("构建产物不得因并行而退化（L2）", "收窄并行度", "不得整体退回单线程"),
+     "缺则并行下的偶发失败会被用『整体退回单线程』或『重试撞过』处置（放弃收益且掩盖根因）"),
+)
+# 依据名（标准名/编号）须在节内可核对——「引用不替代规则本身」的前提是依据名还在
+MAVEN_PARALLEL_BASIS = ("Maven 官方命令行参考", "Apache Maven Surefire", "ISO/IEC/IEEE 25010")
+# 图书馆两处依据落点：① 官方原文与逐字摘（sources.adoc）② 本站取舍与同义性差异（adoption.adoc）
+MAVEN_PARALLEL_SOURCE_ANCHORS = (
+    "-T,--threads Thread count",
+    "defining `.mvn/maven.config` file",
+    "Default : 1",
+    "By default, Surefire does not execute tests in parallel",
+)
+MAVEN_PARALLEL_ADOPTION_ANCHOR = "「Maven 默认启用多线程构建、以项目配置为准」是本站的判据化取舍"
+# 提示词公共片段（执行侧的开并行动作落点）与两个提示词的引入：
+MAVEN_PARALLEL_PROMPT_TAG = "build-parallel"
+MAVEN_PARALLEL_PROMPT_ANCHORS = (
+    "配过就一律沿用、不覆盖、不重复追加",
+    "项目已经配过并行度时以项目配置为准",
+    "没配过",
+    "`-T 1C`",
+    "并行到模块粒度为止",
+    "只对 Maven 多模块构建生效",
+)
+
+
+def check_maven_parallel_guard():
+    """Maven「构建并行度」防线：默认值口径、既有配置优先与三处落点不得被删改。
+
+    本条只核**文本形态**：条款与其级别、判定标准、依据名仍在，且三处落点（调度器识别特征、
+    图书馆的官方原文与本站取舍、提示词公共片段与两个提示词的引入）一处不少——
+    缺任一处即等于"规则写了却不会被加载/不会被触发/依据无处核对"。
+    **『某次构建到底有没有真的并行、并行度取了几核』属运行时事实**（见 GUARD_CHECK_LIMITS）。
+    """
+    phase("Maven 构建并行度防线检查")
+    rel = MAVEN_SPEC
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, MAVEN_PARALLEL_SECTION)
+    if not section:
+        err(f"maven.adoc 缺少「{MAVEN_PARALLEL_SECTION}」节——"
+            "『没配过就默认开并行、配过即以配置为准』失去落点，"
+            "执行者会重新用单线程构建、或反过来覆盖引用方既有配置", rel)
+        phase_done()
+        return
+    for name, tokens, why in MAVEN_PARALLEL_ANCHORS:
+        for token in tokens:
+            if token not in section:
+                err(f"「{MAVEN_PARALLEL_SECTION}」节缺少要点：{name}（应含 `{token}`）——{why}", rel)
+    for token in MAVEN_PARALLEL_BASIS:
+        if token not in section:
+            err(f"「{MAVEN_PARALLEL_SECTION}」节缺少依据名 `{token}`——"
+                "依据被删到只剩名称（或整段消失）时，读者无法核对『默认开并行』是官方要求还是本站取舍", rel)
+
+    # 落点①：调度器识别特征（缺则"要跑构建"时不会被触发加载）
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        generic = fh.read()
+    disp = next((ln for ln in generic.splitlines()
+                 if "specs/stack/maven.adoc" in ln), "")
+    if not disp:
+        err("加载调度器缺少 Maven 栈的加载项——构建并行度与仓库镜像都失去触发特征",
+            "AGENTS_COMMON.adoc")
+    else:
+        for token in ("构建并行度", "构建/测试时", "`.mvn/maven.config`"):
+            if token not in disp:
+                err(f"加载调度器 Maven 条目缺少识别特征 `{token}`——"
+                    "触发特征不全时，执行者不会在『要跑构建』时想到这条", "AGENTS_COMMON.adoc")
+
+    # 落点②：图书馆（官方原文 + 本站取舍，两处都要有——只有名称无法核对"官方要没要求"）
+    src_path = os.path.join(REPO_ROOT, "library", "sources.adoc")
+    with open(src_path, encoding="utf-8") as fh:
+        src_text = fh.read()
+    for token in MAVEN_PARALLEL_SOURCE_ANCHORS:
+        if token not in src_text:
+            err(f"library/sources.adoc 缺少 Maven 官方原文锚点 `{token}`——"
+                "依据被压成名称后，无法核对 `-T`/`.mvn/maven.config`/Surefire 默认值的原文",
+                "library/sources.adoc")
+    ad_path = os.path.join(REPO_ROOT, "library", "adoption.adoc")
+    with open(ad_path, encoding="utf-8") as fh:
+        ad_text = fh.read()
+    if MAVEN_PARALLEL_ADOPTION_ANCHOR not in ad_text:
+        err(f"library/adoption.adoc 缺少 `{MAVEN_PARALLEL_ADOPTION_ANCHOR}`——"
+            "『默认开并行』会被读成 Maven 官方要求（依据不实，见 specs/general/source.adoc「外部引用」）",
+            "library/adoption.adoc")
+
+    # 落点③：提示词（执行侧的动作落点；缺则引用方照旧用单线程构建）
+    common_path = os.path.join(REPO_ROOT, "prompts", "_common.txt")
+    with open(common_path, encoding="utf-8") as fh:
+        common_text = fh.read()
+    tag_block = re.search(r"// tag::" + MAVEN_PARALLEL_PROMPT_TAG + r"\[\](.*?)// end::"
+                          + MAVEN_PARALLEL_PROMPT_TAG + r"\[\]", common_text, re.S)
+    if not tag_block:
+        err(f"prompts/_common.txt 缺少 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
+            "执行侧没有『没配过就默认开并行、配过就用既有配置』的动作落点", "prompts/_common.txt")
+    else:
+        for token in MAVEN_PARALLEL_PROMPT_ANCHORS:
+            if token not in tag_block.group(1):
+                err(f"`{MAVEN_PARALLEL_PROMPT_TAG}` 片段缺少要点 `{token}`——"
+                    "缺『配过就沿用、不覆盖』这一半时，执行者会去改引用方既有配置（用户点名要防）",
+                    "prompts/_common.txt")
+    for rel_p in ("prompts/review.adoc", "prompts/refactor.adoc"):
+        with open(os.path.join(REPO_ROOT, *rel_p.split("/")), encoding="utf-8") as fh:
+            body = fh.read()
+        if f"include::_common.txt[tag={MAVEN_PARALLEL_PROMPT_TAG}]" not in body:
+            err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
+                "该提示词的任务里构建并行度不会被启用（公共片段不等于被引用）", rel_p)
+        guide = next((ln for ln in body.splitlines()
+                      if "给 AI 的读取说明" in ln and "公共片段" in ln), "")
+        if not guide or MAVEN_PARALLEL_PROMPT_TAG not in guide:
+            err(f"{rel_p} 的「给 AI 的读取说明」未列出 `{MAVEN_PARALLEL_PROMPT_TAG}` 片段——"
+                "原始文件形态下读者按该清单补齐片段，漏列即漏读", rel_p)
+    phase_done()
+
+
 def _split_adoc_sections(text: str):
     """把一份 .adoc 文本按**二级节**切成 `[(节标题, 节正文含标题行), …]`。
 
@@ -9549,6 +9691,7 @@ CHECKS = (
     check_after_change_review_guard,
     check_refinement_guard,
     check_info_density_guard,
+    check_maven_parallel_guard,
     check_asciidoctor_syntax,
 )
 
