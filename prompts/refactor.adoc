@@ -8,12 +8,12 @@
 
 将下方代码块内的文字**完整原样**复制给 AI 作为任务指令。
 
-**给 AI 的读取说明（保证内容完整，先做）**：正文由 `prompts/_common.txt` 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `scope-boundary` / `baseline` / `baseline-and-compat` / `compat` / `final-verify` / `delivery` / `no-self-dispatch`）组装。**判据是"内容有没有被 AsciiDoc 处理器装配过"，不是"看起来像不像渲染过的页面"**：取到**原始文件**（远程原始文件地址、本地/工作区直接读文件）时 `include::_common.txt[tag=…]` 指令**不会被展开**，看到该指令即说明**尚未装配**——请**先读取同目录的 `prompts/_common.txt`（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**，不得因指令未展开就跳步或漏掉公共步骤；**不得**以"这是站点的渲染视图、片段已展开"为由跳过补齐。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
+**给 AI 的读取说明（保证内容完整，先做）**：正文由 `prompts/_common.txt` 的公共片段（`intro-rules` / `primary` / `priority-rules` / `isolation` / `env-guard` / `scope-boundary` / `baseline` / `baseline-and-compat` / `build-parallel` / `compat` / `final-verify` / `delivery` / `no-self-dispatch`）组装。**判据是"内容有没有被 AsciiDoc 处理器装配过"，不是"看起来像不像渲染过的页面"**：取到**原始文件**（远程原始文件地址、本地/工作区直接读文件）时 `include::_common.txt[tag=…]` 指令**不会被展开**，看到该指令即说明**尚未装配**——请**先读取同目录的 `prompts/_common.txt`（远程：https://agent.c332030.com/prompts/_common.txt）取出全部 tag 的内容补齐，再按补齐后的全文执行**，不得因指令未展开就跳步或漏掉公共步骤；**不得**以"这是站点的渲染视图、片段已展开"为由跳过补齐。正文按以下顺序组成，`primary` / `priority-rules` / `isolation` 三段是**方向与观念的前提**，须先于其他步骤读入：
 
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『重构』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
 3. `isolation`：隔离要求（不混用其他提示词、不做跨任务顺手改动）；
-4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤；**`baseline-and-compat`**（动手前）在「规范与基线」（第 1 步）之后读入，**`compat`**（改动后）在「最终验证」之前读入；
+4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与第 2-6 步：其余公共步骤与任务步骤；**`baseline-and-compat`**（动手前）在「规范与基线」（第 1 步）之后读入，**`build-parallel`**（要跑构建/测试时）在第 7 步「回归自检」之后读入，**`compat`**（改动后）在「最终验证」之前读入；
 5. `scope-boundary`：**变更范围只限当前项目**（未声明即拒绝越界改动，引用不等于授权）；
 6. `env-guard`：**按环境标志选执行口径**——只在命中标志（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`）的环境里生效，未命中按其末尾中性口径执行。
 
@@ -34,6 +34,7 @@ include::_common.txt[tag=baseline-and-compat]
 4. 完善补齐：同步补注释、更新设计/测试文档、补齐缺失功能用例（行为变更处必须补）；**老用例不得为迁就重构而改判**——除相关功能被显式移除（先经确认）外，既有用例须原样通过，**新老用例同时成立**；仅对第 2 步判定需性能测试的敏感点补性能用例（对比测试、独立于单元测试），其余不加。
 5. 性能迭代优化（**有结论的工程实验，L1**）：仅对第 2 步判定需性能测试的敏感点执行——对每处输出对比结果：重构前（基线）vs 重构后、并与其他可行方案（含当前实现作为基准、含常见最佳实践）对比；**每组至少 3 次有效采样并报离散度**，**组间差异小于离散度即视为无显著差异**、不得据此宣称胜出；不理想则分析瓶颈（卡在 CPU/内存/IO/锁/序列化/复杂度/调用次数哪一处、依据哪次实测）、继续优化并复测，反复直至接近最佳实践或**收益收敛（边际收益小于离散度）并写明取舍**，不得一次重构就收尾；**成绩与迭代记录落进性能测试文档或测试类的文档注释（长期产物）**，同时把过程明细写入 tmp/ 供本次核对；记录内容**只记结论 + 取值 + 来源**（方案组合与成绩、未选方案与原因、瓶颈归因与下一步方向），**不记原始日志与调试过程、不为对称预建空行**。
 6. 回归自检：逐一复查全部重构点，确认未引入新问题（无新增编译/静态警告、**不破坏既有行为与用例**、不影响调用方；重构须保持可观测行为不变，行为变更须单独说明并征得确认）。
+include::_common.txt[tag=build-parallel]
 include::_common.txt[tag=compat]
 include::_common.txt[tag=final-verify]
 include::_common.txt[tag=delivery]
