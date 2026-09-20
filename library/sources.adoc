@@ -245,6 +245,13 @@
 * 材料：Google Java Style Guide（Google 官方）、Oracle 的 Java 命名约定（Oracle 官方教程）。
 * 用途：`specs/stack/java.adoc`"命名与代码风格另参考"两处。
 
+== 类成员与注解排序（Google Java Style 3.4.2 原文 + 本集合取舍）
+
+* 材料：**Google Java Style Guide 3.4.2「Ordering of class contents」**（Google 官方，官方文本已取回：`curl -s https://raw.githubusercontent.com/google/styleguide/gh-pages/javaguide.html`，可复取）；《阿里巴巴 Java 开发手册》（作为"下限"，据其现有引用面）。
+* **逐字摘录（3.4.2 节，官方文本已取回）**："The order you choose for the members and initializers of your class can have a great effect on learnability. However, **there's no single correct recipe for how to do it**; different classes may order their contents in different ways. What is important is that each class uses **some logical order**, which its maintainer could explain if asked. For example, new methods are not just habitually added to the end of the class, as that would yield 'chronological by date added' ordering, which is not a logical ordering."
+* **须注意的语义差异（同义性）**：该节**只要求"存在某种逻辑次序、且维护者能解释"**，**明确否认存在唯一正确配方**；它**未**规定"静态字段在最前"、**未**规定"实体类按表列序"、**未**规定"注解按名长排"。《阿里巴巴 Java 开发手册》中亦**未**见此三项明文。
+* **本集合的取舍（如实标注）**：`specs/general/coding.adoc`「命名与代码质量」的「静态字段排在类最前」「实体类字段按数据库顺序」「注解/装饰器排序（名长升序、等长时更重要的在下）」三条是**本集合在 Google 上述"须为逻辑次序"下限之上自定的更严取值**，**不是**某标准的明文规定，理由是"整类共享状态集中可见""与表结构逐列对照""高频关注点靠下便于收尾扫读"；按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。Java 落点见 `specs/stack/java.adoc`「编码」。
+
 == Google Shell Style Guide 与 ShellCheck
 
 * 材料：Google Shell Style Guide（Google 官方）；ShellCheck（shell 静态分析工具）的诊断码。
