@@ -101,6 +101,36 @@ class CheckSpecsTestCase(unittest.TestCase):
     def error_texts(self) -> str:
         return "\n".join(cm.errors)
 
+    def capture_phase_log(self) -> list:
+        """捕获 `cm.log` 的阶段级输出，返回一个**实时增长**的列表（用例读它判收尾）。
+
+        `log()` 直接 `print`，故只有把 `print` 换成"追加进列表"才拿得到；用完须
+        `restore_phase_log()` 换回（否则后续用例的进度会被吞掉）。
+        """
+        self._phase_log = []
+        self._orig_log = cm.log
+        cm.log = self._phase_log.append
+        return self._phase_log
+
+    def restore_phase_log(self) -> None:
+        """还原 `cm.log`。"""
+        cm.log = self._orig_log
+        self._phase_log = []
+
+    def phase_closed(self, start: int, end: int | None = None) -> bool:
+        """`self._phase_log[start:end]` 这段输出里，每个 `▶ 阶段` 之后都有「✓ 完成」。
+
+        判据取"阶段之间有没有收尾"，不取"整段末尾是不是完成行"——后者在子进程式
+        收尾（`check_asciidoctor_syntax`）或末阶段时判不出来。**收尾行不按文案钉**：
+        文案由 `phase_done()` 决定，这里只判"这个阶段后面还有下一行输出"，
+        故改文案不会误报（钉文案属过度收紧，与 `check_criteria_not_axis_guard` 同口径）。
+        """
+        lines = (self._phase_log if end is None else self._phase_log[:end])[start:]
+        for idx, line in enumerate(lines):
+            if line.startswith("▶") and idx == len(lines) - 1:
+                return False
+        return True
+
 
 
 class TestCheckBudgetGuard(CheckSpecsTestCase):
@@ -3630,9 +3660,15 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("specs-project-maintainer/verify.adoc",
                    "= 验证的维护方落点\n\n维护方的验证义务与落点。\n")
         self.write("specs-project-maintainer/spec-lifecycle.adoc",
-                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分（防拆分成为新的失控源）\n\n"
                    "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
-                   "单独过准入九问。\n\n== 拆分后的自洽核对\n\n引用可达。\n")
+                   "单独过准入九问。\n\n"
+                   "**同一事项只有一个真源（L1，推荐程度与机械量级不构成另建落点的理由）**："
+                   "一条规则只在一处给真源、其余只做一跳引用（不构成第四条硬条件）。\n\n"
+                   "== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验（先校验、再登记、后写入）\n\n"
+                   "可机械校验的条目须同时补机械抓手；**同一事项不得留两处真源**——"
+                   "已钉过就不另建、只有判据形态不同才另建。\n")
         self.write("AGENTS.adoc", self._own_text())
 
     def test_valid_lifecycle_guard_passes(self):
@@ -3715,6 +3751,34 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc", self._own_text())
         cm.check_lifecycle_guard()
         self.assertIn("不拆就真的坏", self.error_texts())
+
+    def test_missing_single_source_rule_reports(self):
+        # 反例（本轮）：拆分判据里"同一事项只有一个真源"被删 -> 会出现另建一份判据本体
+        # （两处各改一次、两处漂移时先报红的那道未必是权威）
+        self._write_valid()
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
+                   "单独过准入九问。\n\n== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验\n\n可机械校验的条目须同时补机械抓手。\n")
+        self.write("AGENTS.adoc", self._own_text())
+        cm.check_lifecycle_guard()
+        self.assertIn("同一事项只有一个真源", self.error_texts())
+
+    def test_missing_duplicate_guard_trigger_reports(self):
+        # 反例（本轮）：提案校验里"不得留两处真源"的判据被删 -> 另建防线时不会先检索
+        self._write_valid()
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= 规范分类与准入\n\n== 一条规范何时该拆分\n\n"
+                   "判据与用处不同；不拆就真的坏；拆后每一半都自足；默认不拆；"
+                   "**同一事项只有一个真源**、推荐程度与机械量级不构成另建落点的理由；"
+                   "单独过准入九问。\n\n"
+                   "== 拆分后的自洽核对\n\n引用可达。\n\n"
+                   "== 新增规范的提案校验（先校验、再登记、后写入）\n\n"
+                   "可机械校验的条目须同时补机械抓手。\n")
+        self.write("AGENTS.adoc", self._own_text())
+        cm.check_lifecycle_guard()
+        self.assertIn("同一事项不得留两处真源", self.error_texts())
 
     def test_own_agents_missing_landing_reports(self):
         # 反例：本仓库落点未指向通用层边界节（本仓库口径与通用层脱钩）
@@ -5604,6 +5668,297 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         self._write(library=self.LIBRARY.replace("**已废止**", "旧版本"))
         cm.check_info_density_guard()
         self.assertIn("废止", self.error_texts())
+
+
+class TestCheckAlterMergeGuard(CheckSpecsTestCase):
+    """钉住『SQL 写法（同表同类操作合并、独立成文件、写库名）』防线：判据本体 + 加载门。
+
+    用户要求（Issue #154）："调整规范 sql 下 alter 的同类操作（移动、新增等）可以合并为
+    一条 sql（支持的情况下，mysql 就支持），优先合并，不要每个字段写一条"；追加：
+    "insert update 等 dml 操作同理，但是用户主动写的除外（不改用户的，也不告警……此条只
+    使用于 dml，ddl 一定会锁表）"、"sql 应该要单独建个文件吧？"、
+    "写 sql 时，要带库名（ddl/dml强制）"；本轮再追加："应该要有个单独的 sql 规范文件"。
+
+    **真源位置（本轮调整）**：判据落在 `specs/general/sql.adoc`「SQL 写法」**一个节**
+    （SQL 是跨语言写法，不埋在某个技术栈文件的跨语言脚本条下）；故用例的夹具以该文件为准，
+    并覆盖**加载门**——本轮实测的失效形态是"文件建对了、判据也齐，但登记与引用两处都没接上"：
+    ① 调度器未登记（含**写成了别的技术栈文件**这一形态）、② Java 栈的「跨语言执行脚本」节
+    未指向真源、③ 登记里的路径取不回（引用方按公共输入加载时拿到死引用）。
+
+    另覆盖**"轴名齐全、判据被抽走"的反例本体**（「同类操作」定义、判定标准、例外、依据、
+    存量边界任一被抽掉必须报红），以及**第二处真源的反向核验**：「独立成文件」「写库名」
+    两条的判据本体由 `check_external_script_guard` 钉，本防线不得再钉一份。
+    """
+
+    SECTION = (
+        "== SQL 写法\n\n"
+        "* **独立成文件（L1）**：SQL 单独建文件（`.sql`）。\n"
+        "* **写库名（L1）**：表名用限定名称。\n"
+        "* **同表同类操作合并为一条（DDL 强制、DML 优先；L2）**：**同类操作**＝同一个动作、"
+        "作用在同一张表——**新增**（`ADD COLUMN`）、**移动**（`MODIFY COLUMN`）等——"
+        "在**目标数据库支持**在一条语句里并列时**须合并进一条**、**不得每个字段写一条**；"
+        "确实合并不了才分开写、并在该处写明原因（数据库不支持 / 必须串行 / "
+        "中间步骤有数据依赖）。\n"
+        "** **判定标准（任一命中即违规）**：① 同一张表同类别的 ≥2 个动作（≥2 个字段）"
+        "**写成 ≥2 条语句**，而目标数据库支持在一条语句里并列；② 按字段/按行**批量生成**时，"
+        "**生成脚本须按表合并输出**；③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+        "——那不是「同类操作」、**属过度合并**。\n"
+        "** **例外面（只适用于 DML）**：合并只约束**执行者本次新写的 DML**——"
+        "**用户主动写的 DML 一律不动、不告警**；**DDL 不适用这个例外**"
+        "（用户原话：「此条只使用于 dml，ddl 一定会锁表」）。**DML 优先合并**。\n"
+        "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n"
+        "* 依据（标准名/编号）：MySQL 官方文档（`ALTER TABLE` 语法、Online DDL）。\n\n"
+        "== 缓存与热点\n\n* 略。\n")
+
+    JAVA_SECTION = (
+        "= Java 规范\n\n"
+        "== 跨语言执行脚本（SQL / Lua 等）\n\n"
+        "* **SQL 写法（L1）**：SQL 独立成文件（`.sql` 放 `src/main/resources/`）、"
+        "语句带库名、同表同类操作合并为一条，判据见 `specs/general/sql.adoc`「SQL 写法」。\n")
+
+    JAVA_SECTION_NO_REF = (
+        "= Java 规范\n\n"
+        "== 跨语言执行脚本（SQL / Lua 等）\n\n"
+        "* **SQL（L1）**：SQL 单独建文件、按资源加载（`src/main/resources/`）。\n")
+
+    ENTRY = (
+        "* **写/改 SQL**（新建或改动 `.sql`、迁移脚本，或要写/改 `ALTER TABLE`/`INSERT`；"
+        "识别特征：SQL 写法——独立成文件、语句带库名、同表同类操作合并为一条）"
+        "→ `specs/general/sql.adoc`\n")
+
+    LIBRARY = (
+        "== 跨语言执行脚本（SQL / Lua 写资源文件，不写字符串拼接）\n\n"
+        "* **材料与用途**：\n"
+        "** **MySQL 官方文档**（`ALTER TABLE` 语法与 Online DDL 章节）："
+        "`ALTER TABLE tbl_name [alter_option [, alter_option] ...]`——"
+        "**一条语句可并列多个 alter_option**。\n"
+        "* **须注意的语义差异（同义性）**：**MySQL 官方文档给的是语法能力与代价说明，"
+        "并未规定「同表同类操作必须合并」**——「须合并、不得每个字段一条」是**本集合**"
+        "据此推出的判据化取舍（依据 ISO/IEC 25010 性能效率）。\n")
+
+    def _write(self, section=None, entry=None, java_section=None, library=None) -> None:
+        self.write("specs/general/sql.adoc",
+                   section if section is not None else self.SECTION)
+        self.write("specs/stack/java.adoc",
+                   java_section if java_section is not None else self.JAVA_SECTION)
+        self.write("AGENTS_COMMON.adoc",
+                   entry if entry is not None else self.ENTRY)
+        self.write("library/sources.adoc",
+                   library if library is not None else self.LIBRARY)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_file_removed_reports(self):
+        # 反例：真源文件被删 -> 判据无处承载
+        self.write("specs/stack/java.adoc", self.JAVA_SECTION)
+        self.write("AGENTS_COMMON.adoc", self.ENTRY)
+        self.write("library/sources.adoc", self.LIBRARY)
+        cm.check_alter_merge_guard()
+        self.assertIn("sql.adoc", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例：真源里的「SQL 写法」节被删 -> 该条失去落点
+        self._write(section="== 缓存与热点\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("SQL 写法", self.error_texts())
+
+    def test_rule_body_removed_reports(self):
+        # 反例（反例本体：轴名齐全、判据被抽走）：规则本体被压成一句口号
+        self._write(section=self.SECTION.replace(
+            "* **同表同类操作合并为一条（DDL 强制、DML 优先；L2）**：**同类操作**＝同一个动作、"
+            "作用在同一张表——**新增**（`ADD COLUMN`）、**移动**（`MODIFY COLUMN`）等——"
+            "在**目标数据库支持**在一条语句里并列时**须合并进一条**、**不得每个字段写一条**；",
+            "* **合并（L2）**：ALTER 要注意别写太多条；"))
+        cm.check_alter_merge_guard()
+        self.assertIn("规则本体", self.error_texts())
+
+    def test_exception_removed_reports(self):
+        # 反例：合并不了的例外被删 -> 本条被读成"任何情况都必须合并"
+        self._write(section=self.SECTION.replace(
+            "确实合并不了才分开写、并在该处写明原因（数据库不支持 / 必须串行 / "
+            "中间步骤有数据依赖）。", "不合并不合规。"))
+        cm.check_alter_merge_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准被抽走 -> "合没合并"交回执行者凭感觉
+        self._write(section=self.SECTION.replace(
+            "** **判定标准（任一命中即违规）**：① 同一张表同类别的 ≥2 个动作（≥2 个字段）"
+            "**写成 ≥2 条语句**，而目标数据库支持在一条语句里并列；② 按字段/按行**批量生成**时，"
+            "**生成脚本须按表合并输出**；③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+            "——那不是「同类操作」、**属过度合并**。\n", "** **注意**：尽量合并。\n"))
+        cm.check_alter_merge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_over_merge_ban_removed_reports(self):
+        # 反例：反向禁令（跨表/跨动作类型不属同类）被删 -> 会被读成"能塞进一条就塞"
+        self._write(section=self.SECTION.replace(
+            "③ **反向越界**——合并后跨越**不同表**或**不同动作类型**"
+            "——那不是「同类操作」、**属过度合并**。", "。"))
+        cm.check_alter_merge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例：依据行被删 -> "优先合并"的来源无从核对（会被当成自定偏好）
+        self._write(section=self.SECTION.replace(
+            "* 依据（标准名/编号）：MySQL 官方文档（`ALTER TABLE` 语法、Online DDL）。\n", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_legacy_boundary_removed_reports(self):
+        # 反例：存量边界被删 -> 会被读成"立刻发动全库改写历史迁移"
+        self._write(section=self.SECTION.replace(
+            "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("存量边界", self.error_texts())
+
+    def test_dml_user_written_exemption_removed_reports(self):
+        # 反例（反例本体）：DML 条在、但"用户主动写的除外"例外被抽走
+        # -> 执行者会去改用户主动写的 DML（越权且可能把用户的锁行为改坏）
+        self._write(section=self.SECTION.replace(
+            "**用户主动写的 DML 一律不动、不告警**；", "DML 也要尽量合并；"))
+        cm.check_alter_merge_guard()
+        self.assertIn("除外", self.error_texts())
+
+    def test_dml_exception_scope_removed_reports(self):
+        # 反例：缺「DDL 不适用这个例外」-> 例外被错读到 DDL 上，退回"每条 ALTER 写一行"
+        self._write(section=self.SECTION.replace(
+            "**DDL 不适用这个例外**（用户原话：「此条只使用于 dml，ddl 一定会锁表」）。", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("DDL 不适用这个例外", self.error_texts())
+
+    # ---- 加载门（本轮新增：真源换了文件，登记/引用/可取回三处都要接上）----
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例：调度器根本没登记真源文件 -> 该文件不会被加载、判据齐备也无入口
+        self._write(entry="* **别的技术栈** → `specs/stack/other.adoc`\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_still_points_at_java_stack_reports(self):
+        # 反例（本轮实测的失效形态）：登记还停在旧落点（指向技术栈文件）——
+        # 真源文件永不被取回、也永不被加载
+        self._write(entry="* **Java 项目**（存在 `.java`）→ `specs/stack/java.adoc`。"
+                          "识别特征：**SQL 写法**（独立 `.sql` 文件、语句带库名、"
+                          "同表同类操作合并为一条 `ALTER TABLE`/`INSERT`/`UPDATE`）\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例：调度器识别特征缺 `ALTER TABLE` -> 改 SQL 时永不触发加载、判据实际失效
+        self._write(entry="* **写/改 SQL** → `specs/general/sql.adoc`\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("识别特征", self.error_texts())
+
+    def test_dispatcher_path_not_fetchable_reports(self):
+        # 反例（本轮实测的失效形态）：登记里的路径取不回——取回脚本按 `specs/*.adoc`
+        # 解析入口清单，路径层级写错（漏掉 `specs/`）时站点回落成首页、取到的其实是 HTML，
+        # 引用方读到的是死引用。判据即取回脚本用的那条正则。
+        self._write(entry=self.ENTRY.replace("`specs/general/sql.adoc`",
+                                             "`general/sql.adoc`"))
+        cm.check_alter_merge_guard()
+        self.assertIn("取回", self.error_texts())
+
+    def test_dispatcher_entry_without_path_reports(self):
+        # 反例：登记项整行没有仓库内路径（真源文件根本取不回来）
+        self._write(entry="* **写/改 SQL** → 见 SQL 规范一节\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_java_stack_reference_removed_reports(self):
+        # 反例：Java 栈的「跨语言执行脚本」节不再指向真源 -> Java 项目读该节时
+        # 不知道 SQL 写法另有真源（判据一处、其余一跳引用）
+        self._write(java_section=self.JAVA_SECTION_NO_REF)
+        cm.check_alter_merge_guard()
+        self.assertIn("specs/general/sql.adoc", self.error_texts())
+
+    def test_java_stack_section_removed_reports(self):
+        # 反例：Java 栈的该节被删 -> Java 项目执行 SQL 时没有落点可循
+        self._write(java_section="= Java 规范\n\n== 命名\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("跨语言执行脚本", self.error_texts())
+
+    def test_java_stack_landing_removed_reports(self):
+        # 反例：引用到了真源、但 Java 落点被抽走（`.sql` 放哪、怎么执行）——
+        # 引用成一个没有落地方式的指针
+        self._write(java_section=self.JAVA_SECTION.replace(
+            "（`.sql` 放 `src/main/resources/`）", ""))
+        cm.check_alter_merge_guard()
+        self.assertIn("落点", self.error_texts())
+
+    # ---- 图书馆依据落点 ----
+
+    def test_library_basis_removed_reports(self):
+        # 反例：图书馆没有该依据条目 -> 正文里的 MySQL 官方文档无处逐字核对（依据只剩名称）
+        self._write(library="== 别的标准\n\n* 略。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_library_synonymity_note_removed_reports(self):
+        # 反例：图书馆不标注"官方材料未规定必须合并" -> 读者会把本集合的取舍当成 MySQL 的要求
+        self._write(library="== 跨语言执行脚本\n\n* **MySQL 官方文档**：有 `alter_option`。\n")
+        cm.check_alter_merge_guard()
+        self.assertIn("同义性", self.error_texts())
+
+    # ---- 第二处真源的反向核验 ----
+
+    def test_sql_file_body_not_pinned_here(self):
+        # 反向核验：「SQL 须独立成文件」的判据本体由 `check_external_script_guard` 钉，
+        # 把本处那条抽光时本防线**不**报红（否则就是同一条规范的第二处真源）。
+        self._write(section=self.SECTION.replace(
+            "* **独立成文件（L1）**：SQL 单独建文件（`.sql`）。", "* **SQL（L1）**：略。"))
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_database_name_body_not_pinned_here(self):
+        # 反向核验：同上——「写库名」的判据本体不在本防线。
+        self._write(section=self.SECTION.replace(
+            "* **写库名（L1）**：表名用限定名称。", "* **SQL（L1）**：略。"))
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_dml_library_basis_not_pinned_here(self):
+        # 反向核验：多值 `INSERT` 与 ISO/IEC 9075 两组依据被抽走时本防线也不报红
+        # （它们的判据本体在别处，依据再各钉一份同属重复）。
+        self._write(library="== 跨语言执行脚本\n\n"
+                           "* **MySQL 官方文档**：`ALTER TABLE` 可并列 `alter_option`，"
+                           "Online DDL 说明每动作默认各自执行。\n"
+                           "* **须注意的语义差异（同义性）**：**并未规定**必须合并，"
+                           "是**本集合**的取舍。\n")
+        cm.check_alter_merge_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_merge_reason_criterion_not_pinned_here(self):
+        # 反向核验（第二处真源、此前评审发现的那处）：本防线的锚点里不得再出现
+        # "真源"之类的重复钉法（锚点已收成一处）。
+        self.assertTrue(all("真源" not in why for _, _, why in cm.ALTER_MERGE_ANCHORS))
+
+    def test_phase_closed(self):
+        # 反例（本轮实测）：函数末尾缺 phase_done() -> 本阶段在进度日志里以「▶」起头、
+        # 接着就被下一阶段的「▶」直接覆盖，既不报错也不显示完成。故补用例钉住。
+        self._write()
+        log = self.capture_phase_log()
+        try:
+            start = len(log)
+            cm.check_alter_merge_guard()
+            self.assertEqual([], cm.errors)
+            self.assertTrue(self.phase_closed(start))
+        finally:
+            self.restore_phase_log()
+
+    def test_phase_closed_detects_missing_done(self):
+        # 反向核验上面那条用例真的在判「本阶段被收尾」：直接 phase() 而不 phase_done()，
+        # 须判为未收尾（防判据写成恒真）。
+        log = self.capture_phase_log()
+        try:
+            start = len(log)
+            cm.phase("模拟阶段")
+            self.assertFalse(self.phase_closed(start))
+        finally:
+            self.restore_phase_log()
 
 
 class TestCheckJavaSerialGuard(CheckSpecsTestCase):
@@ -12775,6 +13130,18 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self._write_valid(src=src)
         cm.check_guard_manifest()
         self.assertIn("重号", self.error_texts())
+
+    def test_checklist_out_of_order_number_reports(self):
+        # 反例⑤b：编号**乱序**（既无断号也无重号，但文件里的出现次序不是递增的）——
+        # 新条目被插到了编号更小的条目之前。这是断号与重号两条判据都拦不住的形态：集合仍是
+        # 1..N 齐备，只是次序错了。本仓库实测（PR #156）：新增的第 63 条被插在第 60 条之前，
+        # 清单次序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`，当时全绿。
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 3. 丙\n 4. 丁\n 2. 乙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("乱序", self.error_texts())
 
     def test_ledger_without_declaration_reports(self):
         # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字

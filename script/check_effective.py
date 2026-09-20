@@ -249,6 +249,24 @@ MECHANISMS = [
      "check_info_density_guard",
      "check_info_density_guard 钉住**判据本体**七组要点（与「精炼性」的分工『同一描述有几处』对照『单处里有多少句是废话』且明写『仍可能通篇是废话』／每一句都要有承载 L2 含四条判定标准『复述·空话·同义反复·可有可无的铺垫』／限定语不得降格为表意不明／与 P3 的边界『内容不减少优先』『只有这一句没有承载才是』『压成口号属违反 P3』／适用面『不适用于代码与测试断言』／存量随动迁移／依据行 GB/T 7713.2-2022、GB/T 7713.1-2025、ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148），并钉住**两处入口互引**（`doc.adoc`「简洁」条正文里那半句、`review.adoc`「精炼性」的『与「信息密度」的分工』一行——只核节名不核这半句属防线空转）与**图书馆依据落点**（`library/sources.adoc` 的 GB/T 7713 系列主题段须含标准号、『已废止』换版关系与『同义性』取舍面）；"
      "**本条只钉要点文本仍在**——『某次产出里到底有没有废话』语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("SQL 写法（同表同类操作合并、独立成文件、带库名）",
+     "specs/general/sql.adoc「SQL 写法」（SQL 写法的唯一真源；SQL 是跨语言写法，不埋在技术栈文件里）",
+     "script/check_specs.py",
+     "check_alter_merge_guard",
+     "check_alter_merge_guard 钉住**判据本体**六组要点"
+     "（规则本体「同类操作」的定义与「目标数据库支持」前提、合并不了时的例外与须写明原因、"
+     "可逐条核对的判定标准、依据行 MySQL 官方文档、存量边界；"
+     "**本轮追加一组**：**DML 合并 + 「用户主动写的除外」例外（不改、不告警）+ 例外只适用于 DML**"
+     "（DDL 一定会锁表、故 DDL 侧无例外））"
+     "与**加载门**（调度器**通用层**登记 `specs/general/sql.adoc` + 识别特征 `ALTER TABLE`/`.sql`/库名/`INSERT`、`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」的**一跳引用**、登记路径须能被取回脚本的 `specs/*.adoc` 清单解析命中——本轮实测的失效形态是「文件建对了、判据也齐，但登记与引用两处都没接上」，判据存在而执行者走不到它）、**图书馆依据落点**"
+     "（`library/sources.adoc` 的 MySQL 官方文档条目（ALTER TABLE 与 Online DDL）"
+     "与「官方材料并未规定必须合并」的同义性标注）"
+     "——**同一事项只有一个真源**：用户追加的另两条写法（SQL 须独立成文件、写库名）"
+     "及其依据**不在这里再钉一份**（判据本体由 `check_external_script_guard` 钉，见"
+     "`specs-project-maintainer/spec-lifecycle.adoc`「新增规范的提案校验」的"
+     "「同一事项不得留两处真源」）；只核「有没有这条」属防线空转；"
+     "**本条只钉要点文本仍在**——「某条迁移到底该不该合并、有没有真的按表合并输出、"
+     "某次改的是不是用户主动写的 DML」语义判断（见 GUARD_CHECK_LIMITS）"),
     ("改完规范必做五件事：机械手段必跑全、干净子 agent 三视角复核不可漏（有了就忽略、没有就加）、三态台账、复核者不可用时的降级留证",
      "specs/general/verify.adoc「改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）」",
      "script/check_specs.py",
