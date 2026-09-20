@@ -1418,11 +1418,11 @@ class TestCheckPriorityGuard(CheckSpecsTestCase):
                    "* **要求（L1，最高）**：不可逆操作先确认；不得编造事实与来源。\n"
                    "* **依据**：ISO 10007。\n\n"
                    + self.P6)
+        # 维护方自查层的登记名单以 `cm.MAINTAINER_LAYER_FILES` 为唯一来源——
+        # 夹具里再写死一遍名单，会让"新增一个维护方文件"时夹具与实现各自漂移
+        # （本仓库实测：新增 `guards.adoc` 后此用例报红，而红的是夹具不是实现）。
         self.write("AGENTS.adoc",
-                   "登记 `specs-project-maintainer/priority.adoc`\n"
-                   "登记 `specs-project-maintainer/spec-lifecycle.adoc`\n"
-                   "登记 `specs-project-maintainer/verify.adoc`\n"
-                   "登记 `specs-project-maintainer/context.adoc`\n")
+                   "".join(f"登记 `{rel}`\n" for rel in cm.MAINTAINER_LAYER_FILES))
         # 分级/最高关注项本身也被 P2 等防线读取：给出最小可识别的公共文件
         self.write("AGENTS_COMMON.adoc", "= t\n")
 
@@ -5083,6 +5083,10 @@ class TestCheckCriteriaNotAxisGuard(CheckSpecsTestCase):
         "防线**仍不报红**；③ 靠**相邻条目的字样**兜住已消失的要求。\n"
         "* **必配反例用例（L1）**：须有**一条" + LQ + "轴名齐全、判据被抽走" + RQ + "的反例用例**"
         "——改造后防线**必须报红**。\n"
+        # 同节还承载「机械核对边界」两条（本轮新增判据本体）：夹具须含这两类取值，
+        # 否则正例会被新增要点判成缺失——红的是夹具，不是实现。
+        "**机械核对边界（覆盖不到的两类，一次声明）**：机械核对覆盖不到**运行时事实**与"
+        "**语义判断**两类。\n"
     )
 
     def _write(self, section: str = None, registered: bool = True) -> None:
@@ -5096,6 +5100,13 @@ class TestCheckCriteriaNotAxisGuard(CheckSpecsTestCase):
         self._write()
         cm.check_criteria_not_axis_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_mechanical_limit_removed_reports(self):
+        # 反例：把「机械核对边界」的两类取值抽掉——缺它则每道防线各写一句口径，
+        # 边界随措辞漂移（本轮实测：该句式在 check_specs.py 出现 91 处）
+        self._write(section=self.SECTION.replace("语义判断", "别的东西"))
+        cm.check_criteria_not_axis_guard()
+        self.assertIn("语义判断", self.error_texts())
 
     def test_missing_priority_file_reports(self):
         # 反例：维护方清单缺失 -> 通则失去落点
@@ -5243,6 +5254,151 @@ class TestCheckRefinementGuard(CheckSpecsTestCase):
         self._write(delivery="// tag::delivery[]\n**交付**：有改动就提交。\n// end::delivery[]\n")
         cm.check_refinement_guard()
         self.assertIn("_common.txt", self.error_texts())
+
+
+class TestCheckInfoDensityGuard(CheckSpecsTestCase):
+    """钉住『信息密度（每句须承载）』防线：判据本体、两处互引与图书馆依据。
+
+    用户本轮的要求是"把学位论文/期刊论文的要求里**有用的**引入规范"，查证后取的唯一
+    一条是**学术文体用信息密度衡量冗余**（依据 GB/T 7713.2-2022 / GB/T 7713.1-2025）。
+    它在补的正是"单处里的废话"这个真空：`review.adoc`「精炼性」只判跨处重复。
+
+    故用例除正例外，专门覆盖**"轴名齐全、判据被抽走"的反例本体**——判定标准、与 P3 的
+    边界、适用面、依据行任一被抽掉时，防线**必须报红**（只核"这一节在不在"属防线空转）。
+    """
+
+    SECTION = (
+        "== 注释与文档\n\n"
+        "=== 信息密度（每句须承载）\n\n"
+        "**它与 `specs/general/review.adoc`「精炼性」是两件事、两把尺子**："
+        "精炼性判**\"同一描述有几处\"**；本条判**\"单处里有多少句是废话\"**——"
+        "**只有一处、完全不重复的一段文字，仍可能通篇是废话**。\n"
+        "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
+        "② **空话**；③ **同义反复**；④ **可有可无的铺垫**。\n"
+        "* **陈述句不得降格为表意不明（L2）**：删掉**不承载信息的限定语**；"
+        "确属有边界的判断**须写出边界**。\n"
+        "* **边界（防反用，L1）**：**内容不减少（最高关注项 P3）优先于本条**；"
+        "**只有\"这一句没有承载\"才是**；把多条判据合并成一句口号属**违反 P3**。\n"
+        "* **适用面（L2）**：适用于会被他人读的产物；**不适用**于代码与测试断言。\n"
+        "* **发现即改、不单独发动全库清理（L2）**：按**随动迁移**执行。\n"
+        "* 依据（标准名/编号）：**GB/T 7713.2-2022** 与 **GB/T 7713.1-2025**；"
+        "**ISO/IEC Directives Part 2**；**ISO/IEC/IEEE 29148**。\n\n"
+        "== 文档组织与导航\n\n* 略。\n")
+
+    DOC_QUALITY = (
+        "⑤ **简洁**——说清核心即可（\"信息密度\"是它的可判定形式，"
+        "判据见本文「信息密度（每句须承载）」）；\n")
+
+    REFINEMENT = (
+        "== 精炼性（同一描述只写一处）\n\n"
+        "* **与「信息密度」的分工（两把尺子，都要过）**：该判据在 "
+        "`specs/general/doc.adoc`「信息密度（每句须承载）」。\n")
+
+    LIBRARY = (
+        "== GB/T 7713 系列（学位论文 / 学术论文编写规则）\n\n"
+        "* **GB/T 7713.1-2025**《信息与文献 编写规则 第1部分：学位论文》——现行。\n"
+        "* **GB/T 7713.1-2006**——**已废止**。\n"
+        "* **GB/T 7713.2-2022**《学术论文编写规则》——现行。\n"
+        "* **须注意的语义差异（同义性，L1）**：只取判据、不搬其文档构件。\n")
+
+    def _write(self, section=None, doc_quality=None, refinement=None, library=None) -> None:
+        # 两句都进同一份 `doc.adoc`（"⑤ 简洁"那一行属「文档质量」条、与本条同文件），
+        # 故**一次写完**——分两次 write 会以后一次覆盖前一次，夹具里就少了那半句。
+        self.write("specs/general/doc.adoc",
+                   (doc_quality if doc_quality is not None else self.DOC_QUALITY)
+                   + (section if section is not None else self.SECTION))
+        self.write("specs/general/review.adoc",
+                   refinement if refinement is not None else self.REFINEMENT)
+        self.write("library/sources.adoc",
+                   library if library is not None else self.LIBRARY)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_info_density_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例：整节被删 -> "单处里的废话"重新变成判不了的区域
+        self._write(section="== 文档组织与导航\n\n* 略。\n")
+        cm.check_info_density_guard()
+        self.assertIn("信息密度", self.error_texts())
+
+    def test_division_of_labor_removed_reports(self):
+        # 反例（反例本体：轴名齐全、判据被抽走）：与「精炼性」的分工被压成一句口号
+        self._write(section=self.SECTION.replace(
+            "**它与 `specs/general/review.adoc`「精炼性」是两件事、两把尺子**："
+            "精炼性判**\"同一描述有几处\"**；本条判**\"单处里有多少句是废话\"**——"
+            "**只有一处、完全不重复的一段文字，仍可能通篇是废话**。\n",
+            "**本条与精炼性相关。**\n"))
+        cm.check_info_density_guard()
+        self.assertIn("分工", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准被抽成一句"要注意" -> 本条自身不可判定
+        self._write(section=self.SECTION.replace(
+            "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
+            "② **空话**；③ **同义反复**；④ **可有可无的铺垫**。\n",
+            "* **每一句都要有承载（L2）**：注意别写废话。\n"))
+        cm.check_info_density_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_p3_boundary_removed_reports(self):
+        # 反例：与 P3 的边界被删 -> 本条会被反用成"这一段很长就删短"
+        self._write(section=self.SECTION.replace(
+            "* **边界（防反用，L1）**：**内容不减少（最高关注项 P3）优先于本条**；"
+            "**只有\"这一句没有承载\"才是**；把多条判据合并成一句口号属**违反 P3**。\n",
+            "* **边界（防反用，L1）**：长文可以删短。\n"))
+        cm.check_info_density_guard()
+        self.assertIn("边界", self.error_texts())
+
+    def test_scope_removed_reports(self):
+        # 反例：适用面被删 -> 会被套到代码与测试断言上（高频误伤）
+        self._write(section=self.SECTION.replace(
+            "* **适用面（L2）**：适用于会被他人读的产物；**不适用**于代码与测试断言。\n", ""))
+        cm.check_info_density_guard()
+        self.assertIn("适用面", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例：依据行被删 -> "学术文体以信息密度衡量冗余"这一来源无从核对
+        self._write(section=self.SECTION.replace(
+            "* 依据（标准名/编号）：**GB/T 7713.2-2022** 与 **GB/T 7713.1-2025**；"
+            "**ISO/IEC Directives Part 2**；**ISO/IEC/IEEE 29148**。\n", ""))
+        cm.check_info_density_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_doc_quality_xref_removed_reports(self):
+        # 反例：从「简洁」这个入口进不去 -> 本条只能靠整份读 doc.adoc 才被发现
+        self._write(doc_quality="⑤ **简洁**——禁止长篇大论，说清核心即可；\n")
+        cm.check_info_density_guard()
+        self.assertIn("doc.adoc", self.error_texts())
+
+    def test_review_xref_removed_reports(self):
+        # 反例：从「精炼性」这个入口进不去 -> 两条被读成同一件事（或本条被当重复删掉）
+        self._write(refinement="== 精炼性（同一描述只写一处）\n\n* 别写重复内容。\n")
+        cm.check_info_density_guard()
+        self.assertIn("review.adoc", self.error_texts())
+
+    def test_library_topic_removed_reports(self):
+        # 反例：图书馆没有该主题段 -> 正文里的标准号无处逐字核对（依据只存名称）
+        self._write(library="== 别的标准\n\n* 略。\n")
+        cm.check_info_density_guard()
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_doc_basis_names_present_but_broken_reports(self):
+        # 反例（本轮实测形态）：依据行里标准名在、却写成**不成对的加粗标记**
+        # （`**GB/T 7713.2-2022（学术论文编写规则**`）——按"关键字在不在"核会全绿，
+        # 而读者读到的标准名与标准编号错位。故依据行另按**逐条标准名**核。
+        self._write(section=self.SECTION.replace(
+            "**GB/T 7713.2-2022** 与 **GB/T 7713.1-2025**；",
+            "**GB/T 7713.2-2022（学术论文编写规则** 与 **GB/T 7713.1-2025**；"))
+        cm.check_info_density_guard()
+        self.assertIn("依据行的标准名", self.error_texts())
+
+    def test_superseded_version_not_exposed_reports(self):
+        # 反例：换版关系不写明 -> 会把已废止的 GB/T 7713.1-2006 当现行引用
+        self._write(library=self.LIBRARY.replace("**已废止**", "旧版本"))
+        cm.check_info_density_guard()
+        self.assertIn("废止", self.error_texts())
 
 
 class TestCheckSquashCommitGuard(CheckSpecsTestCase):
@@ -8472,16 +8628,22 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
 
 
 class TestCheckWiringGuard(CheckSpecsTestCase):
-    """钉住『防线接线完整性』：每个 `check_*` 都必须被 main() 真正调用。
+    """钉住『防线接线完整性』：定义了的防线必须会被执行（`CHECKS` 序列 + 闭包可达）。
 
-    本仓库的实测失效（2026-09 复核 PR #89 时用探针复现）：把任一道防线从 main() 的调用
-    序列里摘掉，或新增防线却忘记接线，**check_specs.py 与全部配套测试仍全绿**——
-    既有用例都是逐个函数直接调用被测防线，从不经过 main() 的接线路径。本防线把该失效
-    变成机械可拦项，此处钉住它自己的正例与两类反例（防它本身失效）。
+    本仓库的实测失效（2026-09 复核 PR #89 时用探针复现）：把任一道防线从执行序列里摘掉、
+    或新增防线却忘记接线，**check_specs.py 与全部配套测试仍全绿**——既有用例都是逐个
+    函数直接调用被测防线，从不经过接线路径。本防线把该失效变成机械可拦项。
+
+    **2026-09 重构**：执行次序从"`main()` 正文里的行序"改为显式的 `CHECKS` 序列——
+    次序因此成为**数据**（可复述、可对账）。承接该改动的是三组用例：①接线（本节，按
+    序列判可达）；②次序与 `specs-project-maintainer/guards.adoc` 的清单表一致
+    （`TestCheckGuardOrderGuard`）；③接线数、用例数、台账点名（`TestCheckGuardManifest`，
+    夹具同步改为序列形态）。**夹具改写不是放宽判据**：反例仍逐个钉住"定义了却没人执行"、
+    "按注释里写一句不算接线"、"序列点名了不存在的防线"三类。
     """
 
-    def _write_valid(self):
-        """造一份"定义了且被 main() 调用"的最小脚本 + 一个合法仓库根。"""
+    def _write_valid(self, body=None):
+        """造一份"定义了且被 `CHECKS` 序列编排"的最小脚本 + 一个合法仓库根。"""
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
@@ -8489,20 +8651,23 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
                    "def check_beta():\n"
                    "    \"\"\"B.\"\"\"\n"
                    "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   "    check_beta,\n"
+                   ")\n\n\n"
                    "def main(argv=None):\n"
-                   "    check_alpha()\n"
-                   "    check_beta()\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
                    "    return 0\n")
 
     def test_all_wired_passes(self):
-        # 正例：定义的防线全部被 main() 调用 → 不报错
+        # 正例：定义的防线全部在序列里 → 不报错
         self._write_valid()
         cm.check_wiring_guard()
         self.assertEqual(self.error_texts(), "")
 
     def test_defined_but_not_wired_reports(self):
-        # 反例①：定义了却没在 main() 里调用（"定义了却不执行"）→ 必须报错
-        self._write_valid()
+        # 反例①：定义了却没进序列（"定义了却不执行"）→ 必须报错
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
@@ -8510,29 +8675,35 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
                    "def check_beta():\n"
                    "    \"\"\"B.\"\"\"\n"
                    "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   ")\n\n\n"
                    "def main(argv=None):\n"
-                   "    check_alpha()\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
                    "    return 0\n")
         cm.check_wiring_guard()
         self.assertIn("check_beta", self.error_texts())
 
     def test_wired_but_undefined_reports(self):
-        # 反例②：main() 调用了不存在的防线（接线与实现不一致）→ 必须报错
-        self._write_valid()
+        # 反例②：序列点名了不存在的防线（接线与实现不一致）→ 必须报错
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
                    "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   "    check_gamma,\n"
+                   ")\n\n\n"
                    "def main(argv=None):\n"
-                   "    check_alpha()\n"
-                   "    check_gamma()\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
                    "    return 0\n")
         cm.check_wiring_guard()
         self.assertIn("check_gamma", self.error_texts())
 
     def test_comment_mention_is_not_wiring(self):
-        # 反例③：只有在注释里提到防线名，不构成接线（防"注释里写一句就算接上了"）
-        self._write_valid()
+        # 反例③：只在注释里提到防线名，不构成接线（防"注释里写一句就算接上了"）
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
@@ -8540,15 +8711,19 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
                    "def check_beta():\n"
                    "    \"\"\"B.\"\"\"\n"
                    "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   "    # check_beta,\n"
+                   ")\n\n\n"
                    "def main(argv=None):\n"
-                   "    check_alpha()\n"
-                   "    # check_beta()\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
                    "    return 0\n")
         cm.check_wiring_guard()
         self.assertIn("check_beta", self.error_texts())
 
     def test_nested_wiring_counts(self):
-        # 正例：被 main() 直接调用的防线，其体内再调用别的防线也算"被执行到"
+        # 正例：被序列中的防线调用到的也算"被执行到"
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
@@ -8556,26 +8731,52 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
                    "def check_beta():\n"
                    "    \"\"\"B.\"\"\"\n"
                    "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   ")\n\n\n"
                    "def main(argv=None):\n"
-                   "    check_alpha()\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
                    "    return 0\n")
         cm.check_wiring_guard()
         self.assertEqual(self.error_texts(), "")
 
+    def test_closure_does_not_depend_on_first_definition(self):
+        # 反例④：闭包不得依赖"某个函数恰好定义在其他防线之前"。形态：被序列编排的
+        # `check_alpha` 体内调 `check_beta`，而 `check_beta` **定义在 `check_alpha` 之前**——
+        # `_fn_body` 按"本次匹配起点到下一个 `def` 行"取函数体，落在文件最后一个定义上时
+        # 会扫到文件尾，把后面的防线全算成"可达"。于是"模块里最后一个 `def`"这道防线
+        # 只要不接进序列，就能被**另一道防线前移**这种无关改动静默放过。
+        self.write("script/check_specs.py",
+                   "def check_beta():\n"
+                   "    \"\"\"B.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "def check_alpha():\n"
+                   "    \"\"\"A.\"\"\"\n"
+                   "    pass\n\n\n"
+                   "CHECKS = (\n"
+                   "    check_alpha,\n"
+                   ")\n\n\n"
+                   "def main(argv=None):\n"
+                   "    for check in CHECKS:\n"
+                   "        check()\n"
+                   "    return 0\n")
+        cm.check_wiring_guard()
+        self.assertIn("check_beta", self.error_texts())
+
     def test_missing_script_reports(self):
-        # 反例④：连脚本都找不到 → 必须报错，不得静默通过
+        # 反例⑤：连脚本都找不到 → 必须报错，不得静默通过
         cm.check_wiring_guard()
         self.assertIn("check_specs.py", self.error_texts())
 
-    def test_missing_main_reports(self):
-        # 反例⑤：脚本没有 main() → 无统一入口，接线无从核对，必须报错
+    def test_missing_checks_sequence_reports(self):
+        # 反例⑥：脚本没有 `CHECKS` 序列（次序失去唯一来源）→ 必须报错
         self.write("script/check_specs.py",
                    "def check_alpha():\n"
                    "    \"\"\"A.\"\"\"\n"
                    "    pass\n")
         cm.check_wiring_guard()
-        self.assertIn("main()", self.error_texts())
-
+        self.assertIn("CHECKS", self.error_texts())
 
 
 class TestCheckPromptsIndexGuard(CheckSpecsTestCase):
@@ -9168,7 +9369,7 @@ class TestCheckThroughputGuard(CheckSpecsTestCase):
         "= 上下文与读取范围规范\n\n== 执行吞吐（逐条判据）\n"
         "* 独立调用必须合并，禁止试探式往返（L1）：不得为了先看一步再决定下一步拆成多轮。\n"
         "* 构建与校验的输出须一次取到（L1）：执行 + 取统计 + 取失败明细一次完成。\n"
-        "* 读到的内容一次沉淀、不重复读（L2）。\n"
+        "* 读到的内容一次沉淀、不重复读（L1）：同一路径在一次任务里被读第二次即违规。\n"
         "* 往返成本也要算（L2）：规划时估出预计要几轮往返。\n"
         "* 执行环境凭据须固化为可复用形态（L2）：开始时固化一次。\n"
         "* 本地缓存与镜像就近取用（L2）：已配置过即沿用、不覆盖、不重配。\n"
@@ -9216,7 +9417,7 @@ class TestCheckThroughputGuard(CheckSpecsTestCase):
         self.assertIn("构建与校验的输出须一次取到", self.error_texts())
 
     def test_no_repeat_read_removed_reports(self):
-        self._write_all(context=self.SECTION.replace("不重复读", "可再确认"))
+        self._write_all(context=self.SECTION.replace("同一路径在一次任务里被读第二次", "可按需再确认"))
         cm.check_throughput_guard()
         self.assertIn("不重复读", self.error_texts())
 
@@ -9263,6 +9464,15 @@ class TestCheckThroughputGuard(CheckSpecsTestCase):
     def _write_platform(self, content=None):
         self.write("specs/platform/cnb.adoc",
                    content if content is not None else self.PLATFORM_SECTION)
+
+    def test_dedup_criterion_removed_reports(self):
+        # 反例：只留"不重复读"这句方向、把**判定标准**整句抽掉（本轮新增的判据本体）——
+        # 缺判定标准时该条退化成自觉要求，机械无从核对（用户要件「相同内容不得重复读取」
+        # 在留证侧就只剩一句口号）
+        self._write_all(context=self.SECTION.replace(
+            "：同一路径在一次任务里被读第二次即违规", "。"))
+        cm.check_throughput_guard()
+        self.assertIn("不重复读的判定标准", self.error_texts())
 
     def test_platform_section_positive(self):
         self._write_all()
@@ -11609,6 +11819,76 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("把本地副本删掉", self.error_texts())
 
 
+class TestCheckGuardOrderGuard(CheckSpecsTestCase):
+    """钉住『防线次序与清单表一致』（本轮新增，承接「次序提成数据」这次重构）。
+
+    背景（本仓库实测）：次序此前只存在于 `main()` 正文的行序里——把某道防线从编排中段
+    移到末尾，`check_specs.py` 报 OK、985 条单测全绿，**没有任何判据**。本轮把次序提成
+    显式的 `CHECKS` 序列，并由本防线与 `specs-project-maintainer/guards.adoc` 的清单表
+    逐行对账。用例覆盖：正例（两处同序）、反例①（集合相同但次序对调——最难发现的一种）、
+    反例②（只在序列里）、反例③（只在清单表里）、反例④（清单表序号断开）、
+    反例⑤（序列缺失）、反例⑥（清单表缺失）。
+    """
+
+    def _guard(self, name: str) -> str:
+        return (f"def {name}():\n"
+                f"    \"\"\"{name}。\"\"\"\n"
+                f"    pass\n\n\n")
+
+    def _write_valid(self, seq=("alpha", "beta"), rows=("alpha", "beta"), nums=None):
+        src = "".join(self._guard("check_" + n) for n in seq) + \
+            "CHECKS = (\n" + "".join(f"    check_{n},\n" for n in seq) + ")\n"
+        if nums is None:
+            nums = list(range(1, len(rows) + 1))
+        table = "== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n" + "".join(
+            f"| {i} | `check_{n}` | 用途 |\n" for i, n in zip(nums, rows))
+        self.write("script/check_specs.py", src)
+        self.write("specs-project-maintainer/guards.adoc", table)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_guard_order_guard()
+        self.assertEqual(self.error_texts(), "")
+
+    def test_reordered_sequence_reports(self):
+        # 反例①：集合相同、次序对调（实测形态：移动一道防线的位置无人发现）
+        self._write_valid(seq=("beta", "alpha"), rows=("alpha", "beta"))
+        cm.check_guard_order_guard()
+        self.assertIn("次序不一致", self.error_texts())
+
+    def test_extra_in_sequence_reports(self):
+        # 反例②：序列里多一道（清单表没登记）→ 读者按表核对会漏掉它
+        self._write_valid(seq=("alpha", "beta", "gamma"))
+        cm.check_guard_order_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_extra_in_manifest_reports(self):
+        # 反例③：清单表多一行（序列里没有）→ 表在描述一道不存在的防线
+        self._write_valid(rows=("alpha", "beta", "gamma"))
+        cm.check_guard_order_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_broken_numbering_reports(self):
+        # 反例④：清单表序号断开（有条目被整条删掉）
+        self._write_valid(rows=("alpha", "beta"), nums=(1, 3))
+        cm.check_guard_order_guard()
+        self.assertIn("序号不连续", self.error_texts())
+
+    def test_missing_checks_reports(self):
+        # 反例⑤：序列缺失 → 次序失去唯一来源
+        self.write("script/check_specs.py", self._guard("check_alpha"))
+        self.write("specs-project-maintainer/guards.adoc", "== x\n")
+        cm.check_guard_order_guard()
+        self.assertIn("CHECKS", self.error_texts())
+
+    def test_missing_manifest_reports(self):
+        # 反例⑥：清单表缺失 → 次序没有任何可读处
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
+        cm.check_guard_order_guard()
+        self.assertIn("guards.adoc", self.error_texts())
+
+
 class TestCheckGuardManifest(CheckSpecsTestCase):
     """钉住『防线清单与删除记账』（防"删了却全绿"）。
 
@@ -11628,6 +11908,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
         super().tearDown()
 
+    # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
+    # 判据本身没有被放宽——接线数、用例数、台账点名三件事一条不少，只是喂给它的脚本
+    # 换成当前的编排形态（旧夹具写的是 `main()` 里逐行调用，重构后自然不再命中）。
     _SRC = (
         'def check_alpha_guard():\n'
         '    """甲。"""\n'
@@ -11637,10 +11920,16 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         '    """乙。"""\n'
         '\n'
         '\n'
+        'CHECKS = (\n'
+        '    check_alpha_guard,\n'
+        '    check_beta_guard,\n'
+        ')\n'
+        '\n'
+        '\n'
         'def main(argv=None):\n'
         '    """入口。"""\n'
-        '    check_alpha_guard()\n'
-        '    check_beta_guard()\n'
+        '    for check in CHECKS:\n'
+        '        check()\n'
         '    return 0\n'
         '\n'
         '\n'
@@ -11676,14 +11965,14 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
     def test_guard_unwired_reports(self):
         # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
         # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
-        self._write_valid(src=self._SRC.replace("    check_beta_guard()\n", ""))
+        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
         cm.check_guard_manifest()
         self.assertIn("防线接线数", self.error_texts())
 
     def test_guard_defined_but_never_called_reports(self):
         # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
         # → 看起来还在、却永远不会执行
-        self._write_valid(src=self._SRC.replace("    check_beta_guard()\n", ""))
+        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
         cm.check_guard_manifest()
         self.assertIn("check_beta_guard", self.error_texts())
 
@@ -11742,9 +12031,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
 
     def test_ledger_declares_guard_but_unwired_reports(self):
         # 反例⑧：台账声明的防线**定义了却没人调用** → 它看起来还在、却永远不会执行；
-        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出 main()"形态）
+        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出执行序列"形态）
         self._write_valid(
-            src=self._SRC.replace("    check_beta_guard()\n", ""),
+            src=self._SRC.replace("    check_beta_guard,\n", ""),
             ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
                                         '"check_beta_guard", "备注乙"'))
         cm.check_guard_manifest()

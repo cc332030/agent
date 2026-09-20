@@ -401,6 +401,28 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 
 **须注意的语义差异（同义性）**：ADR 面向**架构决策**；本集合把它**类推**到"规范条目与其依据"这一同类场合，**属借用其做法**，**未**声称这些材料规定了"规范集合必须配依据库"。
 
+== GB/T 7713 系列（学位论文 / 学术论文编写规则）
+
+**取样来源：国家标准全文公开系统**（`openstd.samr.gov.cn`，「国家标准全文阅读」的标准检索页；**官方网页已取回**——取回的是**检索结果的元信息行**：标准号、标准名称、类别、状态、发布日期、实施日期）。**逐字范围**：下列"标准号 + 标准名称 + 状态 + 发布/实施日期"为**取自该官方检索页的逐字元信息**；**标准正文条款未逐字取回**（该系统的公开发布范围与页面可达性所限），故本集合**不引用其条款字句**，条文只写**标准名/编号、不附链接**（`specs/general/source.adoc`「只写标准名/编号、不附链接」）。如需逐字条款比对，请以标准正文（第 1 章范围与相应章节）为对照面。
+
+**本项目实测取值（可在该官方检索页按标准号复取）**：
+
+* **GB/T 7713.1-2025**《信息与文献 编写规则 第1部分：学位论文》——现行（发布日期 2025-08-01、实施日期 2026-02-01；**采标**）。
+* **GB/T 7713.1-2006**《学位论文编写规则》——**已废止**（发布 2006-12-05、实施 2007-05-01；已被上一项代替）。
+* **GB/T 7713.2-2022**《学术论文编写规则》——现行（发布 2022-12-30、实施 2023-07-01）。
+* **GB/T 7713.3-2014**《科技报告编写规则》——现行（发布 2014-05-06、实施 2014-11-01；同系列另有 GB/T 7713.3-2009，已废止）。
+* **GB/T 7713.4-2025**《信息与文献 编写规则 第4部分：数据论文》——现行（发布 2025-08-29、实施 2026-03-01）。
+* **GB/T 41210-2021**《学位论文内容索引编制规则》——现行（发布 2021-12-31、实施 2022-07-01）。
+* **GB/T 7713-1987**《科学技术报告、学位论文和学术论文的编写格式》——**已废止**（发布 1987-05-05、实施 1988-01-01）。
+
+**它支撑什么**：`specs/general/doc.adoc`「信息密度（每句须承载）」——该条引用 **GB/T 7713.2-2022** 与 **GB/T 7713.1-2025**，取的是学术文体对**摘要须自足、正文不与摘要重复、术语全文一致**这类通用要求，其判据面即**信息密度（每句话是否都承载读者需要的信息）**。
+
+**须注意的语义差异（同义性，L1）：**
+
+* **对象不同**：GB/T 7713 系列的规范对象是**学位论文、学术论文、科技报告、数据论文本身**（封面、摘要、关键词、章节结构、参考文献著录等**文档构件与编排要求**）；本集合的对象是**agent 的执行规范**。故本条**只取"每句须承载"这一跨文体成立的判据**，**不搬其任何文档构件**（不引入摘要、关键词、章节结构等要求）——这是本集合的取舍，**不是**标准规定。
+* **不是"引用其条款"**：本集合对 GB/T 7713 系列的引用是**方向性依据**（"学术文体用信息密度衡量冗余"这一事实），**未**声称本集合的判据由该标准条款推出，也**未**做任何符合性评估。
+* **版本关系须暴露**（图书馆的职责）：GB/T 7713.1 的现行版本是 **2025 版**、2006 版**已废止**；故引用**不得**写 GB/T 7713.1-2006，**也不得**把 GB/T 7713-1987 当现行（已废止，由 7713.1/7713.2/7713.3/7713.4 四个部分分别承载）。
+
 == ISO 30401（知识管理体系——要求）
 
 * 标准名与版本：ISO 30401:2018 *Knowledge management systems — Requirements*（现行版本另有 **Amendment 1:2022** 与 **Amendment 2:2024**）。
@@ -441,4 +463,4 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；GB/T 7713.1-2025（现行，代替 GB/T 7713.1-2006）/ GB/T 7713.2-2022 / GB/T 7713.3-2014 / GB/T 7713.4-2025 / GB/T 41210-2021（GB/T 7713-1987 已废止）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
