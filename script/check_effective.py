@@ -423,6 +423,16 @@ MECHANISMS = [
      "用户点名『我手动删的，你不要给我补上去』『以我的为准』——只在脚本注释里写『模板形态以用户"
      "手工编辑为准』挡不住下一次，实施者读的是安装流程本身。『某次安装是否真的没改回用户的手写』"
      "运行时事实（见 GUARD_CHECK_LIMITS）"),
+    ("模板类内容须单独归类：要么不读、要么读全部的内容（代码模板）不与规则混放、各自独立（例外：有关联性或内容不多暂不拆）",
+     "specs-project-maintainer/spec-lifecycle.adoc + AGENTS.adoc + specs/general/context.adoc", "script/check_specs.py",
+     "check_template_separation_guard",
+     "check_template_separation_guard 分栏核三处落点的**判据本体**：①真源在维护方自查层"
+     "『要么不读、要么读全部的规范』（归类判据与三条判定标准、不得混放与其逐条判定标准、"
+     "『各自独立』与例外、依据行）；②`AGENTS.adoc` 登记该落点（缺则执行者读不到这套判据）；"
+     "③`specs/general/context.adoc`「生成效率」的公共侧一跳引用（公共侧只给方向、不写判据本体，"
+     "避免同一条规则两处真源）。判据本体落在**维护方层**是归属判定：它描述的是『规范集合自己"
+     "怎么组织』，对引用方项目不成立，写进公共内容即放错受众。"
+     "『某份内容到底算不算模板类内容』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("取规范入口的解释器兜底：不把「机器上有 python3」当前提，且入口不得代为安装运行时",
      "specs/general/script.adoc + INSTALL.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
