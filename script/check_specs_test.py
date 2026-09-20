@@ -13750,3 +13750,118 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "script", "check_specs.py"))
         cm.check_guard_manifest()
         self.assertIn("check_specs.py", self.error_texts())
+
+
+class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
+    """钉住『模板类内容的单独归类』防线：判据本体 + 两处登记/引用不得被删或降级。
+
+    用户要求（Issue #169）："有一些规范，属于要么不读、要么读全部的，比如代码模板……
+    不要和其他内容放一起，放一起浪费上下文……大部分情况下需要的时候读一下就行，甚至可以不读，
+    直接 copy 就行；这些代码模板最好各自也独立（除非有关联性或者内容不多拆开反而麻烦）"。
+
+    **落点分三层**（判据本体在**维护方自查层**——它描述"规范集合自己怎么组织"，对引用方
+    项目不成立）：① `specs-project-maintainer/spec-lifecycle.adoc` 承载归类判据、不得混放、
+    「各自独立 + 例外」与判定标准；② `AGENTS.adoc` 登记该落点（维护方入口是加载点，缺则
+    执行者读不到这套判据）；③ `specs/general/context.adoc`「生成效率」留公共侧一跳引用。
+
+    **重点拦两种形态**：① 只核"这一节在不在"（轴名齐全、判据被抽走——「什么算模板类内容」
+    的判定标准、不得混放的判定标准、「各自独立」的例外任一被抽掉必须报红）；② **把判据本体
+    抄进公共内容**（那是维护方的组织口径，写进 `specs/` 即同一条规则两处真源）。
+    """
+
+    MAINT = (
+        "= 规范集合的维护（维护方自查）\n\n"
+        "== 要么不读、要么读全部的规范（模板类内容的单独归类）\n\n"
+        "**归类判据（L1，先判再动手）**：一条内容若「要用就得整份取用、平时不必常备」，"
+        "它属本节所指的**模板类内容**——典型是**代码模板**。"
+        "**判定标准（任一命中即属模板类内容）**：① 取用形态是**复制**；"
+        "② 判据**要么不读、要么读全部**；③ 取值**独立于上下文**。"
+        "三条都不命中即普通规范条目。\n\n"
+        "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
+        "同一个落点、也不与**常驻层**放在一起。\n"
+        "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；② 落在**常驻层**；"
+        "③ 加载触发方式与规则条目共用。\n"
+        "* **模板最好各自独立（L2）**：例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。\n"
+        "* **依据（标准名/编号）**：Agent Skills 开放规范（渐进披露）、"
+        "ISO/IEC Directives Part 2（文件须便于按现行版本取用）。\n")
+
+    ENTRY = (
+        "* **分类、分层与准入**：……用户提新增规范时的提案校验，以及**模板类内容的归类与单独落点**"
+        "（「要么不读、要么读全部」的内容不与规则混放）见 "
+        "`specs-project-maintainer/spec-lifecycle.adoc`。\n")
+
+    COMMON = (
+        "== 生成效率（同等质量下最少往返）\n\n"
+        "* **按需加载按文件切分、单文件别太大（L2）**：……**模板类内容（要用就得整份取用、"
+        "平时不必常备）另按「要么不读、要么读全部」单独归类**：不与「每次会话要遵守的规则」混放、"
+        "各自独立成篇（判据与例外属维护方自查层，本处不重复）。\n")
+
+    def _write(self, maint=None, entry=None, common=None) -> None:
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   maint if maint is not None else self.MAINT)
+        self.write("AGENTS.adoc", entry if entry is not None else self.ENTRY)
+        self.write("specs/general/context.adoc",
+                   common if common is not None else self.COMMON)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_template_separation_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_spec_file_removed_reports(self):
+        # 反例①：判据真源文件被删 -> 该条无处承载
+        self.write("AGENTS.adoc", self.ENTRY)
+        self.write("specs/general/context.adoc", self.COMMON)
+        cm.check_template_separation_guard()
+        self.assertIn("spec-lifecycle.adoc", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例②：该节被整节删掉 -> 判据失去落点
+        self._write(maint="= 规范集合的维护（维护方自查）\n\n== 准入判定\n\n* 略。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("要么不读、要么读全部", self.error_texts())
+
+    def test_criteria_stripped_but_axis_present_reports(self):
+        # 反例③（**轴名齐全、判据被抽走**的反例本体）：小节名与"归类判据"字样都在，
+        # 但"什么算模板类内容"的**三条判定标准**被抽走 —— 只核轴名会全绿，
+        # 执行者于是把任意内容按自己方便归类。
+        self._write(maint=self.MAINT.replace(
+            "**判定标准（任一命中即属模板类内容）**", "**说明**"))
+        cm.check_template_separation_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_mixing_rule_removed_reports(self):
+        # 反例④：把"不得与其他规则混放"删掉（用户口径的正题）-> 模板会继续被塞进主题文件
+        self._write(maint=self.MAINT.replace(
+            "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
+            "同一个落点、也不与**常驻层**放在一起。\n", ""))
+        cm.check_template_separation_guard()
+        self.assertIn("混放", self.error_texts())
+
+    def test_mixing_criteria_removed_reports(self):
+        # 反例⑤：混放的三条判定标准被抽走 -> "混没混放"回到评判者手里
+        self._write(maint=self.MAINT.replace(
+            "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；"
+            "② 落在**常驻层**；③ 加载触发方式与规则条目共用。\n", ""))
+        cm.check_template_separation_guard()
+        self.assertIn("混放", self.error_texts())
+
+    def test_independence_exception_removed_reports(self):
+        # 反例⑥：把「各自独立」的**例外**删掉（用户原话即带这个例外）-> 会把"独立"读成
+        # 硬性要求、逼出为达标而拆的空壳（与"默认不拆"取向相反）
+        self._write(maint=self.MAINT.replace(
+            "例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。", "。"))
+        cm.check_template_separation_guard()
+        self.assertIn("关联性", self.error_texts())
+
+    def test_entry_registration_removed_reports(self):
+        # 反例⑦：维护方入口没登记该落点 -> 判据齐备但没有入口（执行者读不到）
+        self._write(entry="* **分类、分层与准入**：见 spec-lifecycle.adoc。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_common_xref_removed_reports(self):
+        # 反例⑧：公共侧一跳引用被删 -> 引用方项目只看到"按文件切分"、无从知道模板另有归类
+        self._write(common="== 生成效率（同等质量下最少往返）\n\n* 略。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("context.adoc", self.error_texts())

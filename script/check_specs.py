@@ -1570,6 +1570,26 @@ INFO_DENSITY_XREF = (
 #   ③ 写 SQL **须带库名**，**DDL/DML 强制**（用户原话："写 sql 时，要带库名（ddl/dml强制）"）。
 # 缺②③两条的失效形态：SQL 与 Java 代码共处一个文件（没有高亮/校验），
 # 裸表名落到默认库不同的连接上**改错库**。
+# 模板类内容的单独归类（Issue #169）：用户口径——"有一些规范，属于要么不读、要么读全部的，
+# 比如代码模板……不要和其他内容放一起，放一起浪费上下文，又不属于 ai 一直要遵守的；
+# 大部分情况下需要的时候读一下就行，甚至可以不读，直接 copy 就行；这些代码模板最好各自也独立
+# （除非有关联性或者内容不多拆开反而麻烦）"。
+#
+# 落点分三层（判据本体在**维护方自查层**——它描述的是"规范集合自己怎么组织"、对引用方项目
+# 不成立，不得写进公共内容）：① `specs-project-maintainer/spec-lifecycle.adoc` 承载归类判据
+# （什么算模板类内容、不得混放、各自独立与例外、判定标准）；② `AGENTS.adoc` 登记该落点
+# （维护方入口是"维护这类集合的项目"的加载点，缺则执行者读不到这套判据）；
+# ③ `specs/general/context.adoc`「生成效率」留**一行引用**——"模板类内容另按'要么不读、
+# 要么读全部'单独归类"（公共侧只给方向、不给判据本体，避免同一条规则两处真源）。
+#
+# 本条**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核"有没有
+# 这一节"属防线空转——归类判据、不得混放、"各自独立 + 例外"与判定标准任一被抽走时照样全绿。
+TEMPLATE_SEPARATION_SPEC = "specs-project-maintainer/spec-lifecycle.adoc"
+TEMPLATE_SEPARATION_SECTION = "要么不读、要么读全部的规范"
+TEMPLATE_SEPARATION_ENTRY = "AGENTS.adoc"
+TEMPLATE_SEPARATION_COMMON = "specs/general/context.adoc"
+TEMPLATE_SEPARATION_COMMON_SECTION = "生成效率"
+
 ALTER_MERGE_SPEC = "specs/general/sql.adoc"
 ALTER_MERGE_SECTION = "SQL 写法"
 # Java 栈侧的**一跳引用**落点：SQL 写法的判据在 `sql.adoc`，Java 文件只给落点与执行方式。
@@ -1896,6 +1916,30 @@ def check_info_density_guard():
         ):
             if token not in lib_text:
                 err(f"信息密度防线被破坏：{lib} 缺 `{token}`——{why}", lib)
+
+
+def check_template_separation_guard():
+    """『模板类内容的单独归类』防线：归类判据、不得混放、"各自独立 + 例外"与判定标准不得被删。
+
+    用户要求（Issue #169）："有一些规范，属于要么不读、要么读全部的，比如代码模板……
+    不要和其他内容放一起，放一起浪费上下文……大部分情况下需要的时候读一下就行，甚至可以不读，
+    直接 copy 就行；这些代码模板最好各自也独立（除非有关联性或者内容不多拆开反而麻烦）"。
+
+    判据本体在**维护方自查层**（`specs-project-maintainer/spec-lifecycle.adoc`），公共侧
+    （`specs/general/context.adoc`）只留一行引用——两处写法不同不是重复：公共侧给"按需加载
+    时模板另算"，维护方侧给"该不该单列、怎么单列、什么算模板类内容"（口径见
+    `specs-project-maintainer/spec-lifecycle.adoc`「一条规范何时该拆分」的「同一事项只有
+    一个真源」）。故本条**分栏核三处**：归类判据与四条要点在维护方侧、登记在维护方入口、
+    一跳引用在公共层。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一节"属防线空转——"什么算模板类内容"的判定标准、"不得混放的判定标准"、
+    "各自独立"与其**例外**（有关联性或内容不多时不拆）任一被抽走时照样全绿；
+    "某份内容到底算不算模板类内容"属语义判断（见 GUARD_CHECK_LIMITS）。
+    """
+    phase("模板类内容单独归类防线检查")
+    run_rule_guard("check_template_separation_guard")
+    phase_done()
 
 
 def check_alter_merge_guard():
@@ -3494,8 +3538,8 @@ def check_install_repeat_update_guard():
 #   「报错文案里写了引擎不认识的占位符即报错」1 条（实测形态：`{rel_exec}` 未被替换、
 #   原样留在报错正文里），`check_specs_test.py` 新增「同一处缺失不得被重复报出」1 条
 #   （同一防线名被多处落点重复接线时，实测 12 条报错里只有 4 条是不同问题）。
-GUARD_WIRING_BASELINE = 98
-GUARD_TEST_BASELINE = 1182
+GUARD_WIRING_BASELINE = 99
+GUARD_TEST_BASELINE = 1191
 
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
@@ -3597,6 +3641,20 @@ GUARD_TEST_BASELINE = 1182
 # （97）；用例数 1150 → 1151（`rules_engine_test.py` 净增 1 条：TOML 同名表头由语法直接拒绝
 # 的反例；另有 3 条随格式改名/改写：纯 TOML 校验、非法 TOML 报错、合法 TOML 读入）。
 # 判据侧新增一处确定项：`script/specs-rules/` 下须存在 `*.toml`（换回别的格式即报红）。
+
+#   **本轮（Issue #169 模板类内容单独归类）**：新增 `check_template_separation_guard`（用户口径：
+#   "要么不读、要么读全部的规范（如代码模板）不要和其他内容放一起、各自独立（除非有关联性或
+#   内容不多拆开反而麻烦）"）——判据本体落**维护方自查层**
+#   `specs-project-maintainer/spec-lifecycle.adoc`「要么不读、要么读全部的规范」（它描述的是
+#   "规范集合自己怎么组织"，对引用方项目不成立），`AGENTS.adoc` 登记该落点、
+#   `specs/general/context.adoc`「生成效率」留公共侧一跳引用。两个基线与 `guards.adoc` 清单表
+#   均按**同源实测**回填（`check_template_separation_guard` 排在 `check_toolchain_present_guard`
+#   与 `check_asciidoctor_syntax` 之间）：清单表同步追加一行、编号连续且与 `CHECKS` 逐一同序。
+#   **数值不在本注释复述**——接线数与用例数分别以 `GUARD_WIRING_BASELINE`、
+#   `GUARD_TEST_BASELINE` 为唯一真源（复述一份即第二处会各自漂移）。
+#   规则数据一类一个文件：新增 `script/specs-rules/template.toml`（引擎按目录自动扫描，
+#   脚本不登记文件名）。
+
 
 def _read_ledger_no_grip_declared():
     """从台账 `script/check_effective.py` 读出「无机械抓手」的声明措辞（唯一真源）。
@@ -9467,6 +9525,7 @@ CHECKS = (
     check_maven_parallel_guard,
     check_alter_merge_guard,
     check_toolchain_present_guard,
+    check_template_separation_guard,
     check_asciidoctor_syntax,
 )
 
