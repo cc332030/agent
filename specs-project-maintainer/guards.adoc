@@ -103,9 +103,8 @@
 | 88 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级 |
 | 89 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级 |
 | 90 | `check_java_serial_guard` | Java 序列化防线——已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、JDK 14+ 补 `@Serial`、不得为未实现者补字段或顺手加 `implements Serializable`、不得以抑制代替显式声明；另钉「优先 `val`、可变才 `var`」与「链式调用一律换行」两处判据本体 |
-| 91 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
-| — | 次序即注意力次序 | 本表次序与 `script/check_specs.py` 的 `CHECKS` 序列逐一相同、同序（由 `check_guard_order_guard` 机械核对） |
-| — | 条数记账 | 新增/删除防线须同步本表、`CHECKS` 与两份基线（`GUARD_WIRING_BASELINE`/`GUARD_TEST_BASELINE`） |
+| 91 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改 |
+| 92 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
 |===
 
 **由别的防线收尾调用、不直接进序列的两道**（可达性由 `check_wiring_guard` 的闭包口径裁定）：
@@ -116,6 +115,13 @@
 | `check_public_content_is_self_contained` | 公共内容自足性：不得引用私有落点（维护方自查层、图书馆路径） |
 
 == 维护约定
+
+**已删除的防线（删除记账，按次序留档）**
+
+|===
+| 原编号 | 防线 | 删除原因 | 由谁承接
+| 原 69 | `check_orm_boundary_guard` | 与 `check_persistence_access_guard`（持久化访问防线）重复：同一组 API 条文的落点被两处各钉一份，属第二真源；且它把「谁可以调用 `IService` 成员方法」等**形态判据**钉成机械抓手，而该判据是语义判断（某个调用点算不算跨类调，见 `GUARD_CHECK_LIMITS`），钉它等于用文本核对代替语义核对 | `check_persistence_access_guard`（条文与四种成员方法、禁止面、例外与栈层落点）+ 人/子 agent 复核（跨类调用的语义判断）；`specs/stack/java.adoc` 与 `specs/stack/spring.adoc` 的对应条文随该防线一并收回（见 `library/sources.adoc` 与本轮交付说明）
+|===
 
 * **新增一道防线时**：在本表末尾追加一行、在 `script/check_specs.py` 的 `CHECKS` 序列相应位置追加一个元素，并同步 `GUARD_WIRING_BASELINE`（接线数）与 `GUARD_TEST_BASELINE`（反例用例数）——两个基线值的变动就是"防线增删"在 diff 里的记账。
 * **删除一道防线时**：说明删的是哪一道、为什么删、由谁承接，并同步两个基线（不记账就减数＝防线静默消失）。

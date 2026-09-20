@@ -303,7 +303,35 @@
      同类 Feign 接口碰名、按名看不出归属）。
 
 
- 45. 持久化访问防线（**用户明确提出的硬性要求**，**按通用层/技术栈层分层设防**）：
+ 45. 数据访问边界防线（**用户在本轮要求里点名的三件事**）：
+     **判据须落回各自的节**：`specs/stack/java.adoc`、`specs/stack/spring.adoc`、
+     `specs/general/coding.adoc` 里都另有一个**同名节**（三份的「持久化访问」节标题逐字相同），
+     全文匹配会跨文件跨节、把"题名从本文档里删了、另一处还提了一句"读成齐备（实测：把
+     ① 组整段搬进同一文件的「跨语言执行脚本」节后仍全绿）；`AGENTS_COMMON.adoc` 的技术栈条
+     更特殊——同一行里同时含 `lambdaQuery`/`QueryWrapper`（旧条的识别特征）与
+     `IService`/`ServiceImpl`（本条的识别特征），只靠裸子串等于没钉。故本条的要点一律
+     **按节取文本、按行取识别特征**。`specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」
+     须写明 **`IService` 的成员
+     方法（`lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`）只许在其所属
+     `IService` 与 `ServiceImpl` 的**本子类内调用、且**其他子类也不行**（兄弟子类、无关
+     Service 拿接口引用来调、工具类/静态方法/Helper/Controller 里调同属禁止面）、给出去路
+     （把逻辑放进该实体自己的 Service 或另建业务服务）、**违反本条不构成可以退回
+     `new LambdaQueryWrapper` 的许可**（与既有"强制走 `IService` 成员方法"条不互相拆台）与
+     可逐条核对的判定标准；`specs/stack/spring.adoc`「分层与职责」须写明 **实体 Mapper 只由其
+     对应实体的 Service 调用**（业务代码不建议直接注入非本类对应实体的 Mapper）、**跨多表业务
+     优先另建业务服务（`XxxBizService`）**、实体 Service 的职责边界（不做太多业务编排、不操作
+     其他表），且**须同时写明"不禁用/不建议"与豁免面**（补充性单表查询不构成违规——只写禁令会
+     把它读成 L1、把存量直接注入 Mapper 的项目大面积判红）；`specs/general/coding.adoc`
+     「持久化访问（数据库/缓存等）」须有**跨语言**的「访问前先判空、不发起无效查询（L1）」与
+     「返回集合的接口一律返回空集合、不返回 `null`（L1）」两条，含可核对判定标准（主键未判空
+     即调 `getById`/`findById`、空集合仍发起查询、无结果路径 `return null`）与**防反用边界**
+     （不得为"合法但可能查不到"的取值加前置判断）且不得出现框架专名；三处共有的**存量口径是
+     用户点名要件**——**已有的不管、也不告警**、只随动迁移、不发动全库改造；加载调度器的 Java
+     栈条目须带"谁可以调用"这一可判读的识别特征（缺则写跨类调用代码时不会触发加载）。
+     防"工具类里拿着别人的 service `lambdaQuery()`、实体 Service 里跨多表编排、主键为 null
+     仍去查库"重回默认做法（用户点名要求：成员方法只许在本子类内用，实体 Mapper 只由本实体的
+     service 调用，调库前自动判空、集合返回空集合而不是 null）。
+ 46. 持久化访问防线（**用户明确提出的硬性要求**，**按通用层/技术栈层分层设防**）：
      `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」须仍在，且三条 L1（**统一
      入口**：走该技术给定的统一入口、不自建构造器；**优先用类型安全/声明式查询构造 API**：
      方法引用/属性名引用、`findByXxx` 一类；**替代优先**：技术自带的类型安全/声明式形态强制
@@ -322,7 +350,7 @@
      框架专名污染（用户报告的真实失效：`ServiceImpl` 在手却仍 `new QueryWrapper`/
      `new LambdaQueryWrapper` 拼条件，同一项目并存两套写法；非 Lambda 形态还用字符串写列名，
      改名即静默失效）。
- 46. 运行环境须与项目声明一致防线（**用户提出的硬性要求**）：`specs/general/ci-cd.adoc`
+ 47. 运行环境须与项目声明一致防线（**用户提出的硬性要求**）：`specs/general/ci-cd.adoc`
      的「运行环境须与项目声明一致」须仍在且齐备 L1 标注、判据两句（"即使换一个版本也能跑通流程，
      也不得换" + "所用版本与项目声明不一致即违规"）、**声明落点**（取项目已有声明、不得另立
      第二真源）、**降级路径**（未声明先确认 / 声明环境不可得时如实说明并标未确证、不得记为通过 /
@@ -334,7 +362,7 @@
      重回默认做法（用户提出的要求：开发与验证须严格使用项目声明的那一个运行环境，严禁用
      别的版本，即使能正常跑通流程）。
 
- 47. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
+ 48. 重命名与内容修改须分两个提交防线（**用户提出的补充要求，最高关注项 P7**）：
      同一文件在一次改动里既重命名、又改内容时，`specs/general/git.adoc` 的
      「重命名与内容修改须分两个提交（默认固定动作）」须整节齐备（一句话规则、适用对象与判定标准、
      分量不是理由、提交顺序、无损拆分、两个提交都进本次交付、例外、引用方自检命令），
@@ -343,7 +371,7 @@
      的 P7 条目在且级别与依据齐备——防"用对了 `git mv`、却把重命名与内容修改塞进同一个提交"
      从 P1 与 P7 两条防线之间漏过去（用户原话："这是对丢失历史、重命名被识别为新增+删除的补充"）。
 
- 48. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
+ 49. 开发流程防线（**用户提出的开发流程要求**）：必加载层 `specs/core/execution.adoc` 须含四条底线
      （动手前先摸清现状与最佳方案（含**调整内容一类需求须先找现成可参照的既有标准与更优设计**）/
      不得绕开既有体系另写一套（三个允许条件、不留两套并存）/
      大范围改动先确认（不得替用户判定既有流程已废弃）/ 改动前先定基线（扫描既有校验手段、完整可用
@@ -364,7 +392,7 @@
      公开面同步——防"不摸现状直接动手""绕开既有实现另写一套""重构后把老用例改掉让它通过"
      重回默认做法（本项目实测失效）。
 
- 49. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
+ 50. 请求/响应类优先移动复用 + HTTP 接口路径优先中划线防线：`specs/general/coding.adoc`「代码复用」的
      「跨服务/对外调用的请求响应类优先移动复用」须仍在且为 L1，且**两种例外与一条边界齐备**——
      ①数据库实体类（除用户声明外不移动）；②类里引用了第三方类型；**本项目自身的依赖不算三方依赖**
      （该字句缺位等于给出一个随时可套用的豁免口）；并含「移动而非复制、同步更新原引用」的动作、
@@ -378,13 +406,13 @@
      `library/adoption.adoc` 的「本集合自己承认的更严取舍」须登记两条——防「另建一套更省事」与
      「下划线与驼峰混用」重回默认做法（用户提出的真实失效：同一数据契约出现两个定义、路径风格混用）。
 
- 50. 对象转换防线（**用户提出的建议层要求**）：多层嵌套对象之间的转换**优先**用**声明式映射**
+ 51. 对象转换防线（**用户提出的建议层要求**）：多层嵌套对象之间的转换**优先**用**声明式映射**
      完成、**建议不手写转换代码**，JVM 下优先 MapStruct——**不是强制、但是建议**（用户明确要求
      不做强制性限制：深拷贝/结构复制工具、序列化中转等等价路径同样合规；判据按目标判——同一转换
      只有一处来源、结构变化不静默漏字段；无嵌套单层不在范围内）。`specs/general/coding.adoc`
      「对象转换（多层嵌套对象的转换）」只留跨语言抽象、**不得出现框架专名**；框架专名与写法落在
      `specs/stack/java.adoc`「对象转换（MapStruct）」。
- 51. 构造方法不手写（优先 lombok）防线（**用户提出的规范调整**）：**无参、必参、全参构造
+ 52. 构造方法不手写（优先 lombok）防线（**用户提出的规范调整**）：**无参、必参、全参构造
      （所有参）一律优先用 lombok 而不是手写**——三种构造分别对应 `@NoArgsConstructor`、
      `@RequiredArgsConstructor`、`@AllArgsConstructor`，同时需要多个即**同时标多个注解**；
      判据是"类中出现手写的构造方法、而该构造可由注解表达"即违规。落点在
@@ -394,7 +422,7 @@
      缺则该条永不被触发加载。失效形态是"类上已标 `@Data`、仍另写无参/全参构造"：同一构造
      出现两个来源、字段增删时改一处而另一处静默过期。只钉"条文、三种注解、判据、例外与
      措辞是否仍在"——"某个具体类该不该手写构造"属语义判断，交人/子 agent 复核。
- 52. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
+ 53. 文档类型指代（类名 + import）防线（**用户提出的规范要求**）：文档（含代码内文档注释）
      提到某个类型时**优先写类名 + `import`、不写类全名**（用户举例：
      `com.c332030.ctool4j.core.exception.CUnauthorizedException`）。通用层落点为
      `specs/general/doc.adoc`「注释与文档」下的同名条目（**L2**：先短类名、需要解析时在就近
@@ -406,7 +434,7 @@
      边界）；调度器（`AGENTS_COMMON.adoc` 的文档条目与 Java 技术栈条目）须带识别特征——
      缺则该条永不被触发加载。**为 L2 且判据是语义的（`java.util.UUID` 一类外部类型全限定
      属合规），故不扫存量文档**："某处到底该不该写全限定"交人/子 agent 复核。
- 53. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
+ 54. 不得自行发评论唤起自己防线：**执行者不得在本次执行中自行发一条评论点名唤起自己**
      （也不得转由他人/其他执行者代发）——`specs/platform/cnb.adoc`「评论唤起新实例
      （平台侧的派发入口）」须有该 L1 条（含判定标准四态：新增评论指向本次唤起名 /
      自我豁免 / 实际发出 / 转交他人代发）与正当形态（先停 + 一次"停下确认"，由人另发评论）；
@@ -417,7 +445,7 @@
      执行、重新按入口加载规范并付一次调用与等待）。判据是**这条评论发出去没有**，机械只
      钉"要求文本仍在"——"某次是否真的发了"属运行时行为（评论列表），交人/子 agent 复核。
 
- 54. 提交信息防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/git.adoc`
+ 55. 提交信息防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/git.adoc`
      「提交信息」须仍在且齐备——首行形态 `<type>[(scope)]: <subject>`（`type` 取与变更日志同源的
      **固定闭集**）、**可逐条核对的判定标准**（首行不以 `<type>:` / `<type>(scope):` 起头即不合规）、
      破坏性变更的两处标注（`!` 与 `BREAKING CHANGE:` 页脚）与反向禁令（**不得把某个类型默认为
@@ -427,7 +455,7 @@
      图书馆，却**只用它支撑变更日志的展示形态**——同一条链的"上游"（一次提交改了什么）空着，
      "下游"（按类型分组）只能靠人工归类。
 
- 59. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
+ 60. 精炼性（同一描述只写一处）防线（**用户本轮点名**："精炼性规范应该在 review 及重构时
      强制生效""依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）：通用层
      `specs/general/review.adoc`「精炼性」须仍在且齐备**判据本体**——重复面是必查项（L1）
      且与"没查过"分得清、判定标准（任一命中即为重复描述）、收敛形态（一处完整定义 +
@@ -440,7 +468,7 @@
      不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
      钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
 
- 60. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+ 61. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
      模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
      在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
      实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
@@ -448,7 +476,7 @@
      `check_install_repeat_update_guard` 钉住（配"该条被删""只留『以用户为准』而无『不自动
      改回』""不一致时不说、用户不知道"三条反例）。
 
- 61. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
+ 62. 数据字典防线（按作用域归档、只引名称、新增与调整即生效）：`specs/general/terminology.adoc`
      的「数据字典」一节须仍在且齐备八件——**只引名称不引定义**（名称是检索键、定义只有一处）、
      **作用域分档 + 每档只一处**（分档表须有「作用域 / 唯一落点 / 判据」三列，七档逐档在表里：
      全局 / 项目全局 / 模块功能 / 类接口 / **当前文档（定义写在该文档开头）** / 图书馆 / 提示词）、
@@ -466,7 +494,7 @@
      可选强调 + 档位名 + `[^|]*\|`）：档位名只出现在正文里不给过——用裸子串 `f"| 全局"`
      时，"档从表里被抽掉、正文另有一处提到档位名"会假绿（本轮实测）。
 
- 55. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
+ 56. 脚本头部注释（文档头）防线（**用户要求**）：`specs/general/script.adoc`「脚本头部注释
      （文档头）」须仍在且九条齐备——**文档头先行**（动手第一步就写、不得只留待补占位、改动后
      同提交同步）、**脚本必须写文档头**、条目清单含**关键约定与设计决策**（不得省略）、
      **设计决策写成决策 + 理由 + 边界**（含判定标准）、**取值写抽象描述或常量名**
@@ -479,7 +507,7 @@
      须有对应依据主题段（如实标注要点转述与同义性差异）——防"写完顺手补一段文档"与
      "注释里抄实现取值（改代码不改注释即文档说谎）"重回默许形态（用户要求：脚本很多细节
      可能随着维护丢失，文档先行也适用于脚本）。
- 56. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
+ 57. HTTP 接口语义防线（**用户要求「取长补短」后补入的缺口**）：`specs/general/coding.adoc`
      「HTTP 接口语义」须仍在且齐备三处——①条文与**级别**（安全方法不得产生状态变更 **L1**、
      幂等与状态码 **L2**、Problem Details **L3 可选**；级别不得被顺手改动，把可选格式升成 L1
      会高频误伤只做内网接口的项目）；②**适用范围**（无 HTTP 接口的项目不适用，准入面不引入
@@ -489,7 +517,7 @@
      方法与状态码语义未覆盖——`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用，把错误
      一律包成 `200` 会让重试、缓存、监控与网关策略全部失效。
 
- 57. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
+ 58. 台账条目须自带可判定抓手（**上一轮点名的悬置**）：`script/check_effective.py` 的
      `MECHANISMS` 每条目须在 `grip`（抓手路径）与 `note`（备注）之外，**显式声明钉住它的
      防线名**——本题由 `check_guard_manifest` 逐条核实：①声明的防线在 `script/check_specs.py`
      里**真实存在**；②**真的会被调用**（接线闭包内，不是"定义了但没人调"）；③无抓手条目
@@ -500,7 +528,7 @@
      本条把**逐条声明**变成必填：声明与实现不一致即报红——"读者以为有抓手、实际那一道
      早没了"正是台账要防的失效。
 
- 58. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
+ 59. 防线的核对对象是**判据本体**、不是轴名防线（**本轮实测教训进规范正文**）：
      `specs-project-maintainer/priority.adoc` 的「强调的正确做法」下须有
      「机械防线的核对对象是**判据本体**，不是轴名（L1）」一节，且齐备**核对对象**
      （钉判定标准里能拿去核对的那句话，不是轴名/条目标题）、**防线空转**这一失效形态
@@ -796,6 +824,15 @@ EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本的落点（资源文件夹，�
 JAVA_EXTERNAL_SCRIPT_SECTION = "跨语言执行脚本（SQL / Lua 等）"
 CONVERSION_SECTION = "对象转换（多层嵌套对象的转换）"
 JAVA_CONVERSION_SECTION = "对象转换（MapStruct）"
+# 数据访问边界防线的四处落点（**判据须落回各自的节**）：`java.adoc` 与 `coding.adoc`
+# 都各有一个「持久化访问」节、`spring.adoc` 是「分层与职责」、Java 的判空落点在「健壮性」。
+# 三份的「持久化访问」**节标题逐字相同**，故要点一律按节取文本——全文匹配会把
+# "① 组从 java.adoc 的「持久化访问」节整段搬走（同文件里另有同名工具、别的节还提了一句）"
+# 读成齐备（本轮实测）。节名走常量：改节名即改这里，不会留下"节名对不上、检查永久红或永久绿"。
+ORM_SECTION = "持久化访问"
+LAYERING_SECTION = "分层与职责"
+ROBUSTNESS_SECTION = "健壮性"
+PERSISTENCE_SECTION = "持久化访问"
 JAVA_STACK_FILE = os.path.join(SPECS_DIR, "stack", "java.adoc")
 JAVA_SYNTAX_FILE = os.path.join(SPECS_DIR, "stack", "java-syntax.adoc")
 SPRING_STACK_FILE = os.path.join(SPECS_DIR, "stack", "spring.adoc")
@@ -3133,13 +3170,22 @@ def check_install_repeat_update_guard():
 #   * 用例数口径＝**两处相加**（`check_specs_test.py` + `check_effective_test.py` 的 `test_*`
 #     方法数，见 `check_guard_manifest`）。旧值 995 只对得上"加了 3 条的那一时点"，此后
 #     `check_effective_test.py` 被并入计数而未回填，故**长期低于实际数**——本仓库实测：
-#     基线 995、实际 998，删掉 3 条用例仍不报红。本次新增 16 条用例时一并回填为
-#     **1013 = 966 + 32 + 15**（966 为改动前单文件实际能数到的方法数、32 为配套测试、
-#     15 为本次净增量）。同一次里另处理了**两处同名覆盖**（同一测试类里重名的后一个会静默
-#     覆盖前一个、那条反例从未执行）：`TestCheckPerformanceGuard` 一处逐字重复删掉一条、
-#     `TestCheckRenameSplitGuard` 一处改名（两条并成一条且补足反例构造），故净增是 15。
+#     基线 995、实际 998，删掉 3 条用例仍不报红。本次一次性把**口径回填**与**本轮增删**记全：
+#     接线数 92→91、反例用例数 1029→1012（该防线的 19 条反例一并删除），此后**净增 15 条**，
+#     故终值为 **1013 = 1029 - 19 + 3**（口径统一后逐条相减：删除账 19 条，本 PR 新增 3 条）
+#     ——两种口径的记账都留在此处，读者的每一条都能对得上（原先"1013 = 966 + 32 + 15"的
+#     算式用的是改动前单文件口径 966，与 1029 的差别在于是否把 `check_effective_test.py` 的
+#     32 条计入；两种算法指向同一集合，故终值同为一千零一十三）。
+#     同一次里另处理了**两处同名覆盖**（同一测试类里重名的后一个会静默覆盖前一个、那条
+#     反例从未执行）：`TestCheckPerformanceGuard` 一处逐字重复删掉一条、
+#     `TestCheckRenameSplitGuard` 一处改名（两条并成一条且补足反例构造），故净增是按处理
+#     同名覆盖**之后**的数算的。
 #   * 接线数口径＝`CHECKS` 序列（`_guard_wiring_count`）。基线 90 是 2026-09 把编排从
-#     `main()` 改成序列**之前**定的（旧口径 86），本次按同源口径回填为 91。
+#     `main()` 改成序列**之前**定的（旧口径 86），本次按同源口径回填为 91；本轮删除
+#     `check_orm_boundary_guard`（原第 69 道）、新增 `check_java_serial_guard` 与
+#     `check_maven_parallel_guard`，三笔在同一序列里一进一出，终值同为 `91`。
+#     删除原因与承接方见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，
+#     按次序留档）」；新增两条见同表第 90、91 行。
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
@@ -6957,6 +7003,148 @@ def check_maven_mirror_guard():
     phase_done()
 
 
+# 『Maven 构建并行度』防线（check_maven_parallel_guard）：
+# 用户报告（本项目实证）：同一仓库里"以 `mvn -T 1C` 构建"与"无参 `mvn` 构建"两条路径并存——
+# 并行度只写在人手的命令行里、没落到项目配置，自动化的无参 `mvn` 调用因此继承了默认单线程；
+# 用户口径是"**默认会自己启用可以不管**""**有的项目在 maven.config 中自己配了，以配置为准**"。
+# 故本条**不是**"必须自己开并行"的强制条（那样会与用户"可以不管"的口径相反），而是
+# **默认值口径 + 既有配置优先**：缺了后半句，执行者会为了统一口径去改引用方的构建配置
+# （正是用户点名要防的一面，也是本集合 L1「不得覆盖引用方既有配置」的同源失效）。
+MAVEN_SPEC = "specs/stack/maven.adoc"
+MAVEN_PARALLEL_SECTION = "构建并行度"
+MAVEN_PARALLEL_ANCHORS = (
+    ("默认启用多线程构建（L2）",
+     ("默认启用多线程构建（L2）", "默认开 `-T`", "`--threads 1C`", "不写 `-T` 即默认单线程"),
+     "缺则『不写 -T 用单线程跑』重新成为默认（多核机器上的构建时长白付）"),
+    ("配置过即以配置为准（L2，防覆盖引用方既有配置）",
+     ("配置过即以配置为准（L2）", "`.mvn/maven.config`", "不得覆盖、不得重复追加", "优先探测的落点"),
+     "缺则执行者会为了统一口径去改引用方的构建配置（用户点名要防的一面）"),
+    ("并行度只到模块粒度（L1）",
+     ("并行度只到模块粒度（L1）", "模块间", "同一模块禁止并行构建"),
+     "缺则『并行只作用于模块之间』被读成『模块内也并发』，与同一模块禁止并行构建冲突"),
+    ("测试并行与并行构建默认为两件事（L2）",
+     ("测试并行与并行构建默认为两件事（L2）", "forkCount", "reuseForks",
+      "默认只启用构建并行，不因本条去开测试并行"),
+     "缺则要么把 -T 当成测试也并行了、要么顺手把测试并行一起开（改变既有行为、高频误伤）"),
+    ("构建产物不得因并行而退化（L2）",
+     ("构建产物不得因并行而退化（L2）", "收窄并行度", "不得整体退回单线程"),
+     "缺则并行下的偶发失败会被用『整体退回单线程』或『重试撞过』处置（放弃收益且掩盖根因）"),
+)
+# 依据名（标准名/编号）须在节内可核对——「引用不替代规则本身」的前提是依据名还在
+MAVEN_PARALLEL_BASIS = ("Maven 官方命令行参考", "Apache Maven Surefire", "ISO/IEC/IEEE 25010")
+# 图书馆两处依据落点：① 官方原文与逐字摘（sources.adoc）② 本站取舍与同义性差异（adoption.adoc）
+MAVEN_PARALLEL_SOURCE_ANCHORS = (
+    "-T,--threads Thread count",
+    "defining `.mvn/maven.config` file",
+    "Default : 1",
+    "By default, Surefire does not execute tests in parallel",
+)
+MAVEN_PARALLEL_ADOPTION_ANCHOR = "「Maven 默认启用多线程构建、以项目配置为准」是本站的判据化取舍"
+# 提示词公共片段（执行侧的开并行动作落点）与两个提示词的引入：
+MAVEN_PARALLEL_PROMPT_TAG = "build-parallel"
+MAVEN_PARALLEL_PROMPT_ANCHORS = (
+    "配过就一律沿用、不覆盖、不重复追加",
+    "项目已经配过并行度时以项目配置为准",
+    "没配过",
+    "`-T 1C`",
+    "并行到模块粒度为止",
+    "只对 Maven 多模块构建生效",
+)
+
+
+def check_maven_parallel_guard():
+    """Maven「构建并行度」防线：默认值口径、既有配置优先与三处落点不得被删改。
+
+    本条只核**文本形态**：条款与其级别、判定标准、依据名仍在，且三处落点（调度器识别特征、
+    图书馆的官方原文与本站取舍、提示词公共片段与两个提示词的引入）一处不少——
+    缺任一处即等于"规则写了却不会被加载/不会被触发/依据无处核对"。
+    **『某次构建到底有没有真的并行、并行度取了几核』属运行时事实**（见 GUARD_CHECK_LIMITS）。
+    """
+    phase("Maven 构建并行度防线检查")
+    rel = MAVEN_SPEC
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, MAVEN_PARALLEL_SECTION)
+    if not section:
+        err(f"maven.adoc 缺少「{MAVEN_PARALLEL_SECTION}」节——"
+            "『没配过就默认开并行、配过即以配置为准』失去落点，"
+            "执行者会重新用单线程构建、或反过来覆盖引用方既有配置", rel)
+        phase_done()
+        return
+    for name, tokens, why in MAVEN_PARALLEL_ANCHORS:
+        for token in tokens:
+            if token not in section:
+                err(f"「{MAVEN_PARALLEL_SECTION}」节缺少要点：{name}（应含 `{token}`）——{why}", rel)
+    for token in MAVEN_PARALLEL_BASIS:
+        if token not in section:
+            err(f"「{MAVEN_PARALLEL_SECTION}」节缺少依据名 `{token}`——"
+                "依据被删到只剩名称（或整段消失）时，读者无法核对『默认开并行』是官方要求还是本站取舍", rel)
+
+    # 落点①：调度器识别特征（缺则"要跑构建"时不会被触发加载）
+    with open(GENERIC_FILE, encoding="utf-8") as fh:
+        generic = fh.read()
+    disp = next((ln for ln in generic.splitlines()
+                 if "specs/stack/maven.adoc" in ln), "")
+    if not disp:
+        err("加载调度器缺少 Maven 栈的加载项——构建并行度与仓库镜像都失去触发特征",
+            "AGENTS_COMMON.adoc")
+    else:
+        for token in ("构建并行度", "构建/测试时", "`.mvn/maven.config`"):
+            if token not in disp:
+                err(f"加载调度器 Maven 条目缺少识别特征 `{token}`——"
+                    "触发特征不全时，执行者不会在『要跑构建』时想到这条", "AGENTS_COMMON.adoc")
+
+    # 落点②：图书馆（官方原文 + 本站取舍，两处都要有——只有名称无法核对"官方要没要求"）
+    src_path = os.path.join(REPO_ROOT, "library", "sources.adoc")
+    with open(src_path, encoding="utf-8") as fh:
+        src_text = fh.read()
+    for token in MAVEN_PARALLEL_SOURCE_ANCHORS:
+        if token not in src_text:
+            err(f"library/sources.adoc 缺少 Maven 官方原文锚点 `{token}`——"
+                "依据被压成名称后，无法核对 `-T`/`.mvn/maven.config`/Surefire 默认值的原文",
+                "library/sources.adoc")
+    ad_path = os.path.join(REPO_ROOT, "library", "adoption.adoc")
+    with open(ad_path, encoding="utf-8") as fh:
+        ad_text = fh.read()
+    if MAVEN_PARALLEL_ADOPTION_ANCHOR not in ad_text:
+        err(f"library/adoption.adoc 缺少 `{MAVEN_PARALLEL_ADOPTION_ANCHOR}`——"
+            "『默认开并行』会被读成 Maven 官方要求（依据不实，见 specs/general/source.adoc「外部引用」）",
+            "library/adoption.adoc")
+
+    # 落点③：提示词（执行侧的动作落点；缺则引用方照旧用单线程构建）
+    common_path = os.path.join(REPO_ROOT, "prompts", "_common.txt")
+    with open(common_path, encoding="utf-8") as fh:
+        common_text = fh.read()
+    tag_block = re.search(r"// tag::" + MAVEN_PARALLEL_PROMPT_TAG + r"\[\](.*?)// end::"
+                          + MAVEN_PARALLEL_PROMPT_TAG + r"\[\]", common_text, re.S)
+    if not tag_block:
+        err(f"prompts/_common.txt 缺少 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
+            "执行侧没有『没配过就默认开并行、配过就用既有配置』的动作落点", "prompts/_common.txt")
+    else:
+        for token in MAVEN_PARALLEL_PROMPT_ANCHORS:
+            if token not in tag_block.group(1):
+                err(f"`{MAVEN_PARALLEL_PROMPT_TAG}` 片段缺少要点 `{token}`——"
+                    "缺『配过就沿用、不覆盖』这一半时，执行者会去改引用方既有配置（用户点名要防）",
+                    "prompts/_common.txt")
+    for rel_p in ("prompts/review.adoc", "prompts/refactor.adoc"):
+        with open(os.path.join(REPO_ROOT, *rel_p.split("/")), encoding="utf-8") as fh:
+            body = fh.read()
+        if f"include::_common.txt[tag={MAVEN_PARALLEL_PROMPT_TAG}]" not in body:
+            err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
+                "该提示词的任务里构建并行度不会被启用（公共片段不等于被引用）", rel_p)
+        guide = next((ln for ln in body.splitlines()
+                      if "给 AI 的读取说明" in ln and "公共片段" in ln), "")
+        if not guide or MAVEN_PARALLEL_PROMPT_TAG not in guide:
+            err(f"{rel_p} 的「给 AI 的读取说明」未列出 `{MAVEN_PARALLEL_PROMPT_TAG}` 片段——"
+                "原始文件形态下读者按该清单补齐片段，漏列即漏读", rel_p)
+    phase_done()
+
+
 def _split_adoc_sections(text: str):
     """把一份 .adoc 文本按**二级节**切成 `[(节标题, 节正文含标题行), …]`。
 
@@ -9740,6 +9928,7 @@ CHECKS = (
     check_refinement_guard,
     check_info_density_guard,
     check_java_serial_guard,
+    check_maven_parallel_guard,
     check_asciidoctor_syntax,
 )
 

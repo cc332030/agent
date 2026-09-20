@@ -171,6 +171,23 @@
 * **须注意的语义差异（同义性）**：上述材料只说明"运行时怎么取、解释器怎么定位"，**未**规定"入口应当按次序探测解释器""连一个都没有时应报错退出而非静默继续"，更**未**规定"入口不得代为安装运行时"——**这三条都是本集合的判据化取舍**（规则本体见 `specs/general/script.adoc`「跨环境脚本」与 `INSTALL.adoc`「取规范时连 python 都没有」）；**不得**把它读成"某平台要求安装流程必须由脚本完成"。
 * 用途：`INSTALL.adoc`「取规范时连 python 都没有」、`script/fetch-specs.sh` / `script/fetch-specs.bat`（按次序探测、都没有时报错退出非 0）、`specs/general/script.adoc`「跨环境脚本」的边界条。
 
+== Maven 命令行与并行构建（`-T` / `--threads`、`.mvn/maven.config`）
+
+* 材料：Apache Maven 官方文档——命令行参考（`mvn` 选项表）与《Configuring Apache Maven》（用户/项目级配置）。
+* **`-T` / `--threads` 逐字摘**（官方网页已取回，选项表原文）："`-T,--threads Thread count, for instance 4 (int) or 2C/2.5C (int/float) where C is core multiplied`"——**未**规定"默认应为多少"（不给默认值的做法即"默认单线程、不写 `-T` 就没有并行"），也**不区分**"模块间 / 模块内"两层并行（该语义由选项名 Thread count 与其它官方材料的用法界定，本文件按"不替它加结论"处理）。
+* **`.mvn/maven.config` 逐字摘**（官方网页已取回）："It's really hard to define a general set of options for calling the maven command line."、"defining `.mvn/maven.config` file which contains the configuration options for the mvn command line."、"The `.mvn/maven.config` is located in the project's top level `.mvn` directory and also works in the root of a multi module build."；官方给出的例子逐字为 "`-T3 -U --fail-at-end`"。另（同为官方原文）："Starting with Maven 3.9.0, each single argument must be put on a new line, and lines beginning with `#` are treated as comments."。
+* 用途：`specs/stack/maven.adoc`「构建并行度」——"配置过即以配置为准、`.mvn/maven.config` 优先探测"、"取值按核心数（`1C`）表达"；也支撑该项目实证：官方把 `-T3` 作为**项目级配置文件**的典型内容，故并行度本就该落在项目配置里而不是每次命令行手打。
+* **须注意的语义差异（同义性）**：官方文档**只给机制与取值写法**，**未**规定"默认要不要开、没配过时该不该由执行者补一个默认"；也**未**说明"并行会不会让单个模块内的插件/测试并发执行"（官方在 Surefire 侧另有一节讲 fork，见下段）。故"默认启用 + 以配置为准 + 只到模块粒度"是**本集合的判据化取舍**，出处只能标到"本项目实证"，**不得**标成 Maven 官方要求。
+* **本项目实证（当初要解决的失效）**：同一仓库里，"以 `mvn -T 1C` 构建"与"以无参 `mvn` 构建"**两条路径并存**——并行度只写在人手的命令行里，没有落到项目配置，于是自动化的无参 `mvn` 调用**继承了默认单线程**、多核机器上跑成单线程（用户报告）。结论落在用户口径：**默认就该启用**（"默认会自己启用可以不管"）。
+
+== Maven Surefire 插件的默认值（`forkCount` / `reuseForks` / `parallel`）
+
+* 材料：Apache Maven Surefire 插件官方文档（`surefire:test` 目标参数表）。
+* 官方页标注：`surefire:test` **Full name `org.apache.maven.plugins:maven-surefire-plugin:3.6.0:test`**（官方网页已取回，题名与版本号可逐字核对）。
+* **逐字摘（官方文档已取回，参数表原文）**：`<forkCount>`——"Option to specify the number of VMs to fork in parallel in order to execute the tests."、"When terminated with `C`, the number part is multiplied with the number of CPU cores."、"Example values: `1.5C`, `4`"、"Default : 1"、"Since : 2.14"；`<reuseForks>`——"Indicates if forked VMs can be reused. If set to `false`, a new VM is forked for each test class to be executed."、"Since : 2.13"、"Default : true"；`<parallel>`——"**By default, Surefire does not execute tests in parallel**"、"You can set the parameter `parallel` to `none` to explicitly disable parallel execution"；`<threadCount>`——"Only makes sense to use in conjunction with the `parallel` parameter"。
+* 用途：`specs/stack/maven.adoc`「构建并行度」的「测试并行与并行构建默认为两件事」条——① Surefire **默认不并行执行测试**（`parallel` 默认关闭），故"开了 `-T`"不等于"测试也并行了"；② `forkCount` 默认 `1`、且**自 2.14 起**才是 `1`（更早版本不是），故依赖"默认值"而不显式写，跨插件版本会漂移。
+* **须注意的差异（如实标注，不替官方下结论）**：官方文档对 **`reuseForks` 与 Surefire 大版本的关系**有两种口径并存——参数表里该参数标 "Since 2.13 / Default : true"，而 3.x 的**迁移说明**（本仓库**未逐字取回**该页，故不引其字句）宣称 3.0.0 起默认改为 `false`。两者**以插件实际版本的文档为准**；本集合据此不下"默认是哪个"的结论，而是要求**该取值显式写进配置**（无论默认如何都不受影响）。**同理**，`reuseForks=false`（每个测试类 fork 一个新 VM）在被**并行执行**时会成倍放大进程与 JVM 启动开销（JVM 启动成本是微基准方法学里公认的大头，见本文件 JMH 段），而**顺序执行**时它等同于"更慢、更隔离"——**"慢"是开销问题、"隔离"是正确性问题，两者不能互相折算**：本集合不据此断言"`reuseForks=true` 更优"，只要求"要依赖哪个取值就显式写出来"。
+
 == Microsoft Learn（Windows 命令参考）
 
 * 材料：Microsoft Learn 上 Windows 命令（`cmd.exe`）的官方参考。
@@ -227,6 +244,13 @@
 
 * 材料：Google Java Style Guide（Google 官方）、Oracle 的 Java 命名约定（Oracle 官方教程）。
 * 用途：`specs/stack/java.adoc`"命名与代码风格另参考"两处。
+
+== 类成员与注解排序（Google Java Style 3.4.2 原文 + 本集合取舍）
+
+* 材料：**Google Java Style Guide 3.4.2「Ordering of class contents」**（Google 官方，官方文本已取回：`curl -s https://raw.githubusercontent.com/google/styleguide/gh-pages/javaguide.html`，可复取）；《阿里巴巴 Java 开发手册》（作为"下限"，据其现有引用面）。
+* **逐字摘录（3.4.2 节，官方文本已取回）**："The order you choose for the members and initializers of your class can have a great effect on learnability. However, **there's no single correct recipe for how to do it**; different classes may order their contents in different ways. What is important is that each class uses **some logical order**, which its maintainer could explain if asked. For example, new methods are not just habitually added to the end of the class, as that would yield 'chronological by date added' ordering, which is not a logical ordering."
+* **须注意的语义差异（同义性）**：该节**只要求"存在某种逻辑次序、且维护者能解释"**，**明确否认存在唯一正确配方**；它**未**规定"静态字段在最前"、**未**规定"实体类按表列序"、**未**规定"注解按名长排"。《阿里巴巴 Java 开发手册》中亦**未**见此三项明文。
+* **本集合的取舍（如实标注）**：`specs/general/coding.adoc`「命名与代码质量」的「静态字段排在类最前」「实体类字段按数据库顺序」「注解/装饰器排序（名长升序、等长时更重要的在下）」三条是**本集合在 Google 上述"须为逻辑次序"下限之上自定的更严取值**，**不是**某标准的明文规定，理由是"整类共享状态集中可见""与表结构逐列对照""高频关注点靠下便于收尾扫读"；按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。Java 落点见 `specs/stack/java.adoc`「编码」。
 
 == Google Shell Style Guide 与 ShellCheck
 

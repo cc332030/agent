@@ -184,6 +184,16 @@ MECHANISMS = [
      "优先用该仓库、换源边界（**仅当它不可用**才可改用**在境内**的其他镜像站——该限定缺位即等于放行境外源）"
      "与『已配置过即不做』；配置方式不在本规范约定（按 Maven 官方机制自行完成），"
      "**实际是否真的用上了该仓库**属引用方运行时事实（构建日志与环境配置，本仓库不可见）"),
+    ("Maven 既有的构建并行度配置以配置为准，没配过时默认按核心数启用多线程构建",
+     "specs/stack/maven.adoc「构建并行度」",
+     "script/check_specs.py",
+     "check_maven_parallel_guard",
+     "check_maven_parallel_guard 钉住该节仍在、默认值口径（没配过就默认开 `-T`、取值 `--threads 1C`）、"
+     "既有配置优先（`.mvn/maven.config` 优先探测、不得覆盖不得重复追加）、并行只到模块粒度、"
+     "构建并行与测试并行是两件事（`forkCount`/`reuseForks` 显式写）与依据名，"
+     "以及三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段 `build-parallel` 与两个提示词的引入）"
+     "——缺『以配置为准』这一半时执行者会去改引用方的构建配置（用户点名要防的一面）；"
+     "**『某次构建到底有没有真的并行、取了几核』属引用方运行时事实（构建日志与命令，本仓库不可见）**"),
     ("性能测试：测量须可核对（离散度与样本量、公平比较、计时区间与消费结果）、记录须有落点（方案组合与成绩、优化日志、瓶颈归因与方向、迭代至收敛）",
      "specs/general/testing.adoc「性能测试」",
      "script/check_specs.py",
@@ -266,6 +276,9 @@ MECHANISMS = [
      "check_lombok_constructor_guard", "check_lombok_constructor_guard 钉住 Java 栈「编码」的条文与 L1、三种构造注解（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、并存写法、可逐条核对的判定标准、例外（注解表达不了的动作才可手写并写明原因）与存量边界，以及调度器识别特征与 README 同步；措辞回退成建议（尽量用/可手写）亦被拦下。『某个具体类该不该手写构造』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("多层嵌套对象转换优先声明式映射、JVM 下优先 MapStruct（建议、非强制）", "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_conversion_guard", "check_conversion_guard 按**建议层口径**钉住通用层「对象转换（多层嵌套对象的转换）」——首选声明式映射、判据是**目标式**的（同一转换只有一处来源、结构变化不静默漏字段）、等价路径（深拷贝/序列化中转/手工构建器）同样合规、除主动声明外优选声明式映射且手写须备注原因、**无嵌套（单层）不在本条范围内**（且不得被抄窄成按字段数判）、例外与边界、存量随动迁移与依据行；**反向钉住条文与栈层不得被写成强制面**（「不允许手写转换代码」「一律用」），并反向钉住通用层不得出现框架专名（`MapStruct`/`@Mapper`/`@Mapping`——替换主语测试）；Java 栈「对象转换（MapStruct）」的优先 MapStruct/建议不手写、`@Mapper` 声明形态、嵌套/集合由映射方法表达、不并存两套写法、非强制与例外；调度器两处识别特征与 README 同步、图书馆取向与如实取样状态登记。'某个具体转换该不该用映射库、该结构能否由映射声明表达'语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("数据访问边界：IService 成员方法只许在本子类内用、实体 Mapper 只由其对应实体的 Service 调用、跨表业务另建 BizService、调库前先判空（集合返回空集合）", "specs/stack/java.adoc + specs/stack/spring.adoc", None,
+     "无机械抓手",
+     "无机械抓手：判据是语义判断（某个调用点算不算跨类调 `IService` 成员方法、某次查询算不算补充性单表查询——见 GUARD_CHECK_LIMITS），机械只核文本会空转、且与 `check_persistence_access_guard` 成第二真源，故不设机械抓手，靠遵守 + 人/子 agent 复核。原 `check_orm_boundary_guard` 已删（删除记账见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，按次序留档）」）"),
     ("持久化访问强制走统一入口与类型安全查询构造 API（不 new 构造器、不用字符串写列名）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_persistence_access_guard", "check_persistence_access_guard 钉住通用层「持久化访问（数据库/缓存等）」的三条 L1（统一入口／优先类型安全·声明式查询构造 API／替代优先）、可逐条核对的判定标准（构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止 mapper `*.xml` 承载）、存量随动迁移与依据行；Java 栈「持久化访问（MyBatis-Plus / JPA 等）」的四个 `IService` 成员方法（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate`）、禁止面（`new QueryWrapper` 及其子类含 `new LambdaQueryWrapper`）、`IService` 之外落点与例外口径；调度器两处识别特征与 README 同步。『某个具体类该不该 new 构造器、该条件能否由 lambda 形态表达』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）", "specs/general/coding.adoc", "script/check_specs.py",

@@ -8540,6 +8540,7 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self.assertIn("持久化访问", self.error_texts())
 
 
+
 class TestCheckConversionGuard(CheckSpecsTestCase):
     """钉住『对象转换防线』（通用层抽象 / 技术栈层框架专名 / **建议层口径**）。
 
@@ -9407,6 +9408,172 @@ class TestCheckMavenMirrorGuard(CheckSpecsTestCase):
         cm.check_maven_mirror_guard()
         self.assertIn("在境内的镜像站", self.error_texts())
 
+
+
+class TestCheckMavenParallelGuard(CheckSpecsTestCase):
+    """钉住 Maven「构建并行度」节：默认值口径、既有配置优先、模块粒度与三处落点。
+
+    本条的关键是**两半都不能少**：只留"默认开并行"会变成"自己去开/去配"（覆盖引用方既有
+    配置），只留"以配置为准"会退化成"没配过也不管"（用户口径是"默认会自己启用"）。
+    故反例逐条对应最易被精简掉的字句，并逐处覆盖三处落点。
+    """
+
+    SECTION = (
+        "= Maven 规范\n\n== 构建并行度\n"
+        "* 默认启用多线程构建（L2）：未配置过并行度时默认开 `-T`，取值 `--threads 1C`；"
+        "不写 `-T` 即默认单线程。\n"
+        "* 配置过即以配置为准（L2）：`.mvn/maven.config` 是项目级配置里优先探测的落点，不得覆盖、不得重复追加。\n"
+        "* 并行度只到模块粒度（L1）：`-T` 作用于模块间，同一模块禁止并行构建。\n"
+        "* 测试并行与并行构建默认为两件事（L2）：`forkCount` 默认 `1`，`reuseForks` 须显式写，"
+        "默认只启用构建并行，不因本条去开测试并行。\n"
+        "* 构建产物不得因并行而退化（L2）：在该模块收窄并行度，不得整体退回单线程。\n"
+        "* 依据（标准名/编号）：Maven 官方命令行参考、Apache Maven Surefire 插件文档、"
+        "ISO/IEC/IEEE 25010。\n")
+
+    COMMON = (
+        "// tag::build-parallel[]\n"
+        "**构建并行度（仅限 Maven 多模块构建）**：只对 Maven 多模块构建生效；先探测——项目已经配过并行度时"
+        "以项目配置为准，配过就一律沿用、不覆盖、不重复追加；没配过才在本次构建命令上补默认"
+        "并行参数（用 `-T 1C`）；并行到模块粒度为止。\n"
+        "// end::build-parallel[]\n")
+
+    def _fixture(self):
+        self.write("specs/stack/maven.adoc", self.SECTION)
+        self.write("AGENTS_COMMON.adoc",
+                   "* **Maven 构建**（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`。"
+                   "识别特征：**要跑 Maven 构建/测试时**——**构建并行度**"
+                   "（`.mvn/maven.config` 优先）与**仓库与镜像**\n")
+        self.write("library/sources.adoc",
+                   "== Maven 命令行与并行构建\n`-T,--threads Thread count`\n"
+                   "defining `.mvn/maven.config` file\n"
+                   "== Maven Surefire\nDefault : 1\n"
+                   "By default, Surefire does not execute tests in parallel\n")
+        self.write("library/adoption.adoc",
+                   "* **「Maven 默认启用多线程构建、以项目配置为准」是本站的判据化取舍**："
+                   "官方只给机制与取值写法。\n")
+        self.write("prompts/_common.txt", self.COMMON)
+        self.write("prompts/review.adoc",
+                   "**给 AI 的读取说明**：正文由 `prompts/_common.txt` 的公共片段（"
+                   "`build-parallel` / `compat`）组装。\n"
+                   "include::_common.txt[tag=build-parallel]\n")
+        self.write("prompts/refactor.adoc",
+                   "**给 AI 的读取说明**：正文由 `prompts/_common.txt` 的公共片段（"
+                   "`build-parallel` / `compat`）组装。\n"
+                   "include::_common.txt[tag=build-parallel]\n")
+
+    def test_positive_passes(self):
+        self._fixture()
+        cm.check_maven_parallel_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_spec_reports(self):
+        self._fixture()
+        os.remove(os.path.join(self.root, "specs", "stack", "maven.adoc"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("specs/stack/maven.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        self._fixture()
+        self.write("specs/stack/maven.adoc", "= Maven 规范\n\n== 依赖\n* 别的\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("构建并行度", self.error_texts())
+
+    def test_default_switch_removed_reports(self):
+        # 反例①：默认值口径被抽掉（只剩"以配置为准"）→ 没配过的项目照旧单线程
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("不写 `-T` 即默认单线程", "按需自行决定"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("不写 `-T` 即默认单线程", self.error_texts())
+
+    def test_config_priority_removed_reports(self):
+        # 反例②：最易被精简掉的一半——"配过即沿用、不得覆盖"（缺则去改引用方配置）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("不得覆盖、不得重复追加", "统一改成推荐取值"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("不得覆盖", self.error_texts())
+
+    def test_module_granularity_removed_reports(self):
+        # 反例③：模块粒度被抽走 → "并行"被读成"模块内也并发"（与同一模块禁止并行构建冲突）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("`-T` 作用于模块间，同一模块禁止并行构建",
+                                        "所有构建步骤都可以并行"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("模块间", self.error_texts())
+
+    def test_test_parallel_boundary_removed_reports(self):
+        # 反例④：把构建并行与测试并行混为一谈（顺手开测试并行＝改变引用方既有行为）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("默认只启用构建并行，不因本条去开测试并行", "测试一并并行"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("默认只启用构建并行", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑤：依据被压成"本站规定"（读者无法核对官方到底有没有要求）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("Apache Maven Surefire 插件文档", "相关最佳实践"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("Apache Maven Surefire", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例⑥：调度器识别特征被删 → "要跑构建"时永远不会加载到该节
+        self._fixture()
+        self.write("AGENTS_COMMON.adoc",
+                   "* **Maven 构建**（存在 `pom.xml`）→ `specs/stack/maven.adoc`\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("构建并行度", self.error_texts())
+
+    def test_library_source_anchor_removed_reports(self):
+        # 反例⑦：图书馆官方原文锚点被删（依据只剩名称）
+        self._fixture()
+        self.write("library/sources.adoc", "== Maven\n什么都记不清了\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("-T,--threads Thread count", self.error_texts())
+
+    def test_library_adoption_anchor_removed_reports(self):
+        # 反例⑧：图书馆未登记"本站取舍" → 读者把本站口径当成 Maven 官方要求
+        self._fixture()
+        self.write("library/adoption.adoc", "== 同义性差异与覆盖点\n* 别的\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("判据化取舍", self.error_texts())
+
+    def test_prompt_tag_removed_reports(self):
+        # 反例⑨：提示词公共片段缺失 → 执行侧没有任何开并行的动作落点
+        self._fixture()
+        self.write("prompts/_common.txt", "（没有该片段）\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("build-parallel", self.error_texts())
+
+    def test_prompt_tag_half_removed_reports(self):
+        # 反例⑩：片段只留"默认开并行"、抽掉"配过就沿用不覆盖" → 执行者会去改引用方配置
+        self._fixture()
+        self.write("prompts/_common.txt",
+                   "// tag::build-parallel[]\n没配过就补 `-T 1C`。\n// end::build-parallel[]\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("一律沿用", self.error_texts())
+
+    def test_prompt_not_including_tag_reports(self):
+        # 反例⑪：公共片段写了但提示词没引入（定义了却不生效）
+        self._fixture()
+        self.write("prompts/review.adoc",
+                   "**给 AI 的读取说明**：正文由 `prompts/_common.txt` 的公共片段（"
+                   "`build-parallel` / `compat`）组装。\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("prompts/review.adoc", self.error_texts())
+
+    def test_prompt_read_guide_missing_tag_reports(self):
+        # 反例⑫：片段被引入了、但读取说明的清单漏列（原始文件形态下读者按清单补齐，漏列即漏读）
+        self._fixture()
+        self.write("prompts/refactor.adoc",
+                   "**给 AI 的读取说明**：正文由 `prompts/_common.txt` 的公共片段（"
+                   "`compat`）组装。\n"
+                   "include::_common.txt[tag=build-parallel]\n")
+        cm.check_maven_parallel_guard()
+        self.assertIn("prompts/refactor.adoc", self.error_texts())
 
 
 class TestCheckRegistryMirrorGuard(CheckSpecsTestCase):
