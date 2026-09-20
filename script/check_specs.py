@@ -3707,8 +3707,8 @@ def check_install_repeat_update_guard():
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
-GUARD_WIRING_BASELINE = 95
-GUARD_TEST_BASELINE = 1087
+GUARD_WIRING_BASELINE = 96
+GUARD_TEST_BASELINE = 1106
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
 #   随防线一并删除，净变动按合并后实取数记全——不按两侧各自数目相加，避免基线虚高后
@@ -3725,6 +3725,17 @@ GUARD_TEST_BASELINE = 1087
 #   `guards.adoc` 的清单表两侧写法冲突也一并解决并逐行核实：main 侧的表格语法修复（行尾
 #   不再多一个空单元格、表头后保留空行）与「已删除的防线」记账表，与本分支新增的
 #   `check_entity_dto_guard` 一行**都保留**——合并后全文件 asciidoctor 编译 0 报错。
+#   **本轮（Issue #165）记账**：新增 `check_java_interface_accessor_guard`（Java 字段接口
+#   只加 get、不加 set——用户先提「字段接口只允许 get」、再澄清「是接口不是类」）；接线数
+#   **94 → 95**，`guards.adoc` 清单表同步为 95 行、编号 1..95 连续且与 `CHECKS` 逐一同序；
+#   用例数 **1057 → 1076**（本分支新增该防线的 16 条反例用例，含"轴名齐全、判据被抽走"
+#   的反例本体；另在台账测试里新增 2 条抓手判定用例）——按同源口径实测
+#   （`Ran 1076 tests ... OK`），不按两侧各自数目相加。
+#   **复核一轮（review 复核）**：`check_java_interface_accessor_guard` 的「只约束接口」
+#   一条改为**在本条自己的正文里核**——`不适用本条` 在 `specs/stack/java.adoc` 里不止一处
+#   （Feign 接口命名那条也有「其他对外接口不适用本条」），按整文件核关键词时本条的收窄句
+#   被整段抽走、靠相邻条目的字样照样全绿（本仓库实测复现）；夹具补上该相邻条目，并新增
+#   反例②′（相邻条目兜底）1 条。用例数 **1075 → 1076**，同源实测 `Ran 1076 tests ... OK`。
 #   **解冲突一轮（PR #156 冲突处置）**：与 main 再次冲突，两侧新增一并保留——
 #     * 接线数 **94 → 95**：本分支的 `check_alter_merge_guard` 与 main 侧的其余防线各占一个
 #       位置（序列里 `check_alter_merge_guard`、`check_toolchain_present_guard`、
@@ -3734,7 +3745,16 @@ GUARD_TEST_BASELINE = 1087
 #       `Ran <N> tests ... OK`）——基线只允许"不低于实测"，故按实测回填。
 #   `scripts/check_specs.py` 的防线条目清单把本分支的「脚本头部注释（文档头）」与 main 的
 #   三条（精炼性、安装幂等更新、数据字典）都保留，编号按同一序号重排为 1..67。
-
+#   **解冲突一轮（PR #166 冲突处置）**：与 main 再次冲突，两侧新增一并保留——
+#     * 接线数 **95 → 96**：本分支的 `check_java_interface_accessor_guard` 与 main 的
+#       `check_alter_merge_guard` 在 `CHECKS` 序列里各占一个位置，一道都不丢
+#       （序列里 `check_java_interface_accessor_guard`、`check_alter_merge_guard`、
+#        `check_toolchain_present_guard`、`check_asciidoctor_syntax` 同在序）；
+#        `guards.adoc` 清单表同步为 96 行、编号 1..96 连续，与 `CHECKS` 逐一同序。
+#     * 用例数 **1076 / 1087 → 1106**：两侧用例都保留后同源实测（
+#       `Ran 1106 tests ... OK`）——基线只允许"不低于实测"，故按实测回填。
+#     非脚本侧冲突同样两侧并留：`AGENTS_COMMON.adoc` / `README.adoc` 的技术栈与通用层
+#     说明同时保留「Java 字段接口只加 get 不加 set」与 main 的「SQL 写法 / `sql.adoc`」。
 
 def _read_ledger_no_grip_declared():
     """从台账 `script/check_effective.py` 读出「无机械抓手」的声明措辞（唯一真源）。
@@ -8785,6 +8805,161 @@ def check_lombok_constructor_guard():
 DOC_TYPE_NOTATION_SECTION = "文档中提及类型优先写类名 + import，不写类全名"
 
 
+
+# 字段接口只加 get、不加 set（`specs/stack/java.adoc`「编码」L1）：**用户点名**的规范条目——
+# "设计字段接口时，只允许添加 get 方法，禁止添加 set 方法（除非主动声明，已经有的不管，
+# 也不告警），因为下游可能添加 `@Accessors(chain = true)`，避免产生编译问题"。
+# **本条只约束接口**（用户下一轮澄清"**是接口不是类**"）：类不受本条约束，类上的 setter
+# 按既有规则（优先 lombok 生成）处理——这一层是本条最容易被执行者放大/缩小的地方。
+#
+# 本条**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+# "「编码」这一节在不在"属防线空转——"只约束接口""下游可能加 `@Accessors(chain = true)`"
+# "存量不管、也不告警""主动声明才豁免、不得泛化"这些**能拿去核对的那句话**被抽走时照样全绿。
+JAVA_INTERFACE_ACCESSOR_SECTION = "字段接口只加 get 方法、不加 set 方法"
+
+
+def _java_interface_accessor_rule_text(text: str) -> str:
+    """取出『字段接口只加 get、不加 set』**这一条自己的正文**。
+
+    防的是「相邻条目的字样兜住已消失的要求」：本条的判定面收窄句与 `interface`/「类不适用
+    本条」同现，而 `不适用本条` 在 `specs/stack/java.adoc` 里**不止一处**（Feign 接口命名
+    那条也有「其他对外接口不适用本条」）——按整文件核关键词时，本条里的收窄句被整段抽走、
+    靠 Feign 那条的字样照样全绿（本仓库实测复现）。故先按条目标题切出本条正文，再在本条
+    正文里核。切不出（条目被整条删）时返回空串——由标题那条要求报红。
+    """
+    m = re.search(r"(?m)^\* \*\*" + re.escape(JAVA_INTERFACE_ACCESSOR_SECTION) + ".*?(?=^\* \*\*)",
+                  text, re.S | re.M)
+    return m.group(0) if m else ""
+
+
+JAVA_INTERFACE_ACCESSOR_RULES = (
+    (("字段接口只加 get 方法、不加 set 方法（L1，只约束接口）",),
+     "条文：须有该条并**在标题上写明只约束接口**（防被读成「类也不得加 setter」——"
+     "用户明确「是接口不是类」；标题里不写，执行者按「编码」节上下文会读成类）"),
+    (("只允许声明 get 方法", "禁止声明 set 方法"),
+     "靶心：须点名**允许 get、禁止 set**两侧——只写「禁止 set」会被读成"
+     "「干脆不要访问器」，而 get 是必须保留的那一半"),
+    (("下游", "@Accessors(chain = true)"),
+     "**理由（用户原话要件）**：须写明下游可能加 `@Accessors(chain = true)`——"
+     "缺则读者不知道这条要防什么，遇到「接口不加 set 怎么写入」时会把 setter 补回去"),
+    (("编译不过",),
+     "**后果**：须写明后果是**编译失败**（不是风格问题）——缺则本条的级别与处置会被降级"),
+    (("`interface`", "不适用本条"),
+     "**只约束接口**：须写明本条只约束 `interface`、**类不适用**——"
+     "用户明确「是接口不是类」；缺则判定面被放大到类上（把正常的 lombok setter 判红）。"
+     "**须在本条自己的正文里核**：`不适用本条` 在 java.adoc 里不止一处（Feign 那条也有），"
+     "按整文件核时本条被整段抽走、靠相邻条目的字样照样全绿（本仓库实测复现）"),
+    (("判定标准（任一命中即违规）", "接口里声明了 `set` 方法", "自我豁免"),
+     "判定标准：须给出可逐条核对的四条（接口里声明了 set，含接口上的 lombok 访问器注解 / "
+     "以「没法写入」为由补 setter 而未走主动声明 / 自我豁免）——"
+     "缺则本条自身不可判定，只剩一句口号"),
+    (("存量", "已经有的不管", "不视为违规", "不告警"),
+     "**存量口径（用户点名要件）**：须写明既有接口不视违规、不告警、不要求整改、随动迁移"
+     "——缺则 L1 被扩到存量接口上，存量项目大面积命中"),
+    (("除非主动声明",),
+     "**豁免面（用户原话要件）**：须写明除非主动声明否则一律适用——"
+     "少了这句即把用户点名的那一层豁免删掉，声明过的场景会被判红"),
+    (("不得泛化",),
+     "**豁免的范围**：须写明声明仅对该处生效、不得泛化"
+     "（与「改动范围边界」的已知例外同口径）"),
+    (("依据", "ISO/IEC 25010", "Project Lombok 官方文档"),
+     "依据行：须标标准名/编号（防依据被整段删后无从追溯）"),
+    (("是本集合自己更严的判据化取舍",),
+     "**定性**：须写明这是本集合自己的判据化取舍（外部材料只给方向与下限）——"
+     "缺则会被读成 lombok 或某标准的明文要求"),
+)
+
+
+def check_java_interface_accessor_guard():
+    """『Java 字段接口只加 get、不加 set 防线』：判据本体不得被删或降级到类上。
+
+    用户点名：设计字段接口时**只允许添加 get 方法、禁止添加 set 方法**（除非主动声明，
+    已经有的不管也不告警）——**因为下游可能添加 `@Accessors(chain = true)`，会产生编译
+    问题**；下一轮澄清「**是接口不是类**」（本条只约束接口，类不受约束）。
+
+    本条**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "「编码」这一节在不在"属防线空转——最易被四件事冲掉：
+      * **判定面被放大** —— "只约束接口"这半句丢了，正常类的 lombok setter 被大面积判红；
+      * **理由被抽** —— `@Accessors(chain = true)` 与"编译不过"一丢，读者不知道要防什么，
+        于是"接口不加 set 怎么写入"会把 setter 补回去；
+      * **存量口径被删** —— "已经有的不管、也不告警"丢字，L1 被扩到存量接口上；
+      * **豁免被删或泛化** —— "除非主动声明"丢了声明过的场景被判红，没了"不得泛化"
+        则一次声明被套到整个模块。
+    故逐条核 `JAVA_INTERFACE_ACCESSOR_RULES`（每项要求"规则 + 判定标准 + 边界"里的
+    **可核对那句话**），并核调度器识别特征、README 同步与图书馆两处落点。
+    "某个接口算不算字段接口、某次是否真的只动了新增接口"属语义判断与运行时事实
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("Java 字段接口只加 get、不加 set 防线检查")
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——『字段接口只加 get、不加 set』的落点丢失"
+            "（该条是 Java 栈专属——`interface` 与 lombok 的 `@Accessors` 都是 Java 侧概念，"
+            "须收在技术栈层而非通用层）", rel_java)
+    else:
+        text = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        # 逐条核**本条自己的正文**（不是整文件）：`不适用本条` 一类字样在 java.adoc 里
+        # 不止一处，按整文件核时相邻条目的字会兜住已消失的要求（本仓库实测复现）。
+        rule_text = _java_interface_accessor_rule_text(text) or text
+        for keys, desc in JAVA_INTERFACE_ACCESSOR_RULES:
+            missing = [k for k in keys if k not in rule_text]
+            if missing:
+                err(f"字段接口访问器防线被破坏：{rel_java}「编码」缺失要点 {missing}——{desc}；"
+                    "该条对应用户提出的真实要求（下游加 `@Accessors(chain = true)` 时"
+                    "接口里的 setter 会让下游编译不过），不得删除、不得降级为建议、"
+                    "不得把判定面放大到类上", rel_java)
+    # 通用层不得另立第二真源：该条的判据只在技术栈层说得清（`interface`/lombok 都是 Java 专名），
+    # 通用层若也写一份，两处必各自漂移（读者按通用层学到的与栈层不一致）。
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(CODING_FILE):
+        ctext = open(CODING_FILE, encoding="utf-8").read()
+        if "@Accessors" in ctext:
+            err(f"字段接口访问器防线被破坏：{rel_coding} 出现框架专名 `@Accessors`——"
+                "该条是 Java 栈专属，通用层再写一份即第二真源（替换主语测试）", rel_coding)
+    # 调度器识别特征（缺则写字段接口时该条永不被触发加载、规则实际失效）
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(GENERIC_FILE):
+        ct = open(GENERIC_FILE, encoding="utf-8").read()
+        for keys, desc in (
+            (("字段接口只加 get 不加 set", "@Accessors(chain = true)"),
+             "Java 技术栈条目的识别特征：须含本条的识别特征与**下游可能加 "
+             "`@Accessors(chain = true)`** 这一触发条件，否则写字段接口时不会加载本条"),
+        ):
+            missing = [k for k in keys if k not in ct]
+            if missing:
+                err(f"字段接口访问器防线被破坏：{rel_common} 缺失要点 {missing}——{desc}",
+                    rel_common)
+    # 公开说明同步（README 目录说明；缺则读者按 README 学习时无从知道有这条规则）
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
+    if os.path.isfile(README_FILE) and "字段接口只加 get" not in open(
+            README_FILE, encoding="utf-8").read():
+        err(f"{rel_readme} 的目录说明未同步『字段接口只加 get、不加 set』——"
+            "本条新增了 Java 栈条文，读者按 README 学习时无从知道有这条规则", rel_readme)
+    # 图书馆两处落点：① 取向登记（防读成标准规定）；② 依据段（防依据只存名称）
+    for rel, keys, desc in (
+        ("library/adoption.adoc",
+         ("字段接口只加 get、不加 set", "本集合自己的判据化取舍", "是接口不是类",
+          "主动声明", "存量不管"),
+         "图书馆取向登记：须写明这是本集合更严的取舍、如实标注外部材料**未**规定，"
+         "并记清『只约束接口』与用户原话口径——缺则读者会把它读成 lombok 或某标准的明文"),
+        ("library/sources.adoc",
+         ("字段接口的访问器与 lombok 链式风格", "@Accessors(chain = true)",
+          "返回类型与接口签名不一致", "同义性"),
+         "图书馆依据段：须有该主题段与机制要点（`@Accessors(chain = true)` 的返回类型与"
+         "接口的 `void` 签名不一致 ⇒ 编译失败）及同义性标注——缺则依据只存名称、"
+         "日后无从核对『它今天还成立吗』"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少 {rel}——本条取舍的依据无处核对", rel)
+            continue
+        ltext = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in ltext]
+        if missing:
+            err(f"字段接口访问器防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    phase_done()
+
+
 def check_doc_type_notation_guard():
     """『文档类型指代（类名 + import）防线』：文档里写类名、不写类全名。
 
@@ -10652,6 +10827,7 @@ CHECKS = (
     check_guard_order_guard,
     check_dispatcher_no_details_guard,
     check_ledger_source_paths_guard,
+    check_java_interface_accessor_guard,
     check_maven_mirror_guard,
     check_registry_mirror_guard,
     check_throughput_guard,
@@ -10681,7 +10857,7 @@ def main(argv=None) -> int:
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
                     "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作/"
                     "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + "
-                    "运行环境须与项目声明一致 + AsciiDoc 语法）")
+                    "运行环境须与项目声明一致 + Java 字段接口访问器 + AsciiDoc 语法）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
