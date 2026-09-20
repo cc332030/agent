@@ -43,6 +43,7 @@
 
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -911,8 +912,6 @@ class TestCheckInstallCodeblock(CheckSpecsTestCase):
 
 [source,asciidoc]
 ----
-= Agent 规范入口
-
 本项目的 agent 执行规范入口为：
 
 https://agent.c332030.com/AGENTS_COMMON.adoc
@@ -948,15 +947,22 @@ https://agent.c332030.com/script/fetch-specs.py
         cm.check_install_codeblock()
         self.assertEqual(cm.errors, [])
 
+    def test_no_entry_title_passes(self):
+        # 正例（用户口径）：模板不带 `= Agent 规范入口` 标题也应判绿——标题是用户手工
+        # 删掉的可精炼项，不再作必备行（曾经必核，结果是把用户删的标题又"补"了回去）
+        self.write("INSTALL.adoc", self.TEMPLATE + self.FILENAME_RULES)
+        cm.check_install_codeblock()
+        self.assertEqual(cm.errors, [])
+
     def test_collapsed_blank_lines_reports(self):
         # 反例：AI 折叠了代码块内的空行，导致段落粘连、样式改变
         collapsed = self.TEMPLATE.replace(
-            "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+            "本项目的 agent 执行规范入口为：\n\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
             "https://agent.c332030.com/INSTALL.adoc\n\n"
             "https://agent.c332030.com/script/fetch-specs.py\n\n"
             "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
-            "= Agent 规范入口\n本项目的 agent 执行规范入口为：\n"
+            "本项目的 agent 执行规范入口为：\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
             "https://agent.c332030.com/INSTALL.adoc\n"
             "https://agent.c332030.com/script/fetch-specs.py\n"
@@ -969,8 +975,9 @@ https://agent.c332030.com/script/fetch-specs.py
     def test_merged_line_reports(self):
         # 反例：两段内容被合并到同一行，找不到独立成行的必备行
         merged = self.TEMPLATE.replace(
-            "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：",
-            "= Agent 规范入口 本项目的 agent 执行规范入口为：")
+            "本项目的 agent 执行规范入口为：\n\n"
+            "https://agent.c332030.com/AGENTS_COMMON.adoc",
+            "本项目的 agent 执行规范入口为：https://agent.c332030.com/AGENTS_COMMON.adoc")
         self.write("INSTALL.adoc", merged)
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
@@ -4864,6 +4871,103 @@ class TestCheckCriteriaNotAxisGuard(CheckSpecsTestCase):
         self._write(registered=False)
         cm.check_criteria_not_axis_guard()
         self.assertIn("AGENTS.adoc", self.error_texts())
+
+
+class TestCheckRefinementGuard(CheckSpecsTestCase):
+    """钉住『精炼性（同一描述只写一处）』防线：判据本体与两处动作落点。
+
+    用户本轮点名的两条要求：①「精炼性规范应该在 review 及重构时强制生效」；
+    ②「依旧有很多相同的描述在不同的地方，不满足精炼性的要求」。故用例覆盖
+    **两种降级形态**：判据被压成一句口号（轴名齐、判据被抽走）、以及
+    "只在通用层写了、在评审与重构里不生效"（固定动作与 `delivery` 片段缺该条）。
+    """
+
+    SECTION = (
+        "== 精炼性（同一描述只写一处）\n\n"
+        "* **重复面是必查项（L1）**：须判\"这条描述在本仓库还有没有第二处\"——"
+        "**这是\"没发现重复\"与\"没查过重复\"的分界**。\n"
+        "* **判定标准（任一命中即为重复描述）**：① 同一事实在两处以上**以完整表述出现**；"
+        "③ 一处改了而另一处必须跟着改——**\"改一处要记得改 N 处\"本身即重复的证据**。\n"
+        "* **收敛形态（L1）**：**一处完整定义，其余位置只留\"这是什么 + 在哪\"的一行引用**。\n"
+        "* **收敛时不得以去重换缺失（L1，与\"内容不减少\"的边界）**：**删掉的必须是重复表述本身，"
+        "被删处须留下可达的引用**；**对无法确定是否重复的内容一律保留**。\n"
+        "* **两类形态不得被当成重复收敛**：① **最高关注项与其引用**；② **各自的承接**。\n"
+        "* **\"篇幅大\"与\"重复\"是两件事**：**判据是\"同一描述有几处\"，不是字多字少**。\n"
+        "* 依据（标准名/编号）：ISO/IEC Directives Part 2 与 ISO/IEC/IEEE 29148；"
+        "ISO 10007；DRY。\n\n")
+
+    CHANGE_REVIEW = (
+        "== 改动后的 review（每次改完都得复核一次）\n\n"
+        "* **\"改完即审\"的固定动作（L1）**：① **跑**机械手段；② **比**基线；"
+        "③ **核**改动清单与用户原话是否一一对应，**并按「精炼性」核对一遍重复面**；④ **留**证。\n")
+
+    DELIVERY = (
+        "// tag::delivery[]\n"
+        "**交付**：\n"
+        "   - **重复面的处理（L1，评审与重构的固定动作）**：重复面记入清单并"
+        "**按「一处完整定义 + 其余一行引用」收敛**；**不得以去重换缺失**；"
+        "汇报里须**显式给出重复面的处理结果**——\"查了几处、收敛了哪些\"。\n"
+        "// end::delivery[]\n")
+
+    def _write(self, section=None, change_review=None, delivery=None) -> None:
+        self.write("specs/general/review.adoc",
+                   (section or self.SECTION) + (change_review or self.CHANGE_REVIEW))
+        self.write("prompts/_common.txt", delivery if delivery is not None else self.DELIVERY)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_refinement_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例：整节被删 → 精炼性退化成"写得短一点"的个人偏好，无处可查
+        self._write(section="== 问题记录\n\n* 记一笔。\n\n")
+        cm.check_refinement_guard()
+        self.assertIn("精炼性", self.error_texts())
+
+    def test_checklist_wording_removed_reports(self):
+        # 反例（反例本体：轴名齐全、判据被抽走）：把"必查项 + 与没查过的分界"压成一句口号
+        self._write(section=self.SECTION.replace(
+            "* **重复面是必查项（L1）**：须判\"这条描述在本仓库还有没有第二处\"——"
+            "**这是\"没发现重复\"与\"没查过重复\"的分界**。\n",
+            "* **重复面是必查项（L1）**：注意别写重复内容。\n"))
+        cm.check_refinement_guard()
+        self.assertIn("必查项", self.error_texts())
+
+    def test_convergence_form_removed_reports(self):
+        # 反例：收敛形态被删 → "发现重复"没有规定的处置方式（容易滑向"删掉了事"）
+        self._write(section=self.SECTION.replace(
+            "* **收敛形态（L1）**：**一处完整定义，其余位置只留\"这是什么 + 在哪\"的一行引用**。\n", ""))
+        cm.check_refinement_guard()
+        self.assertIn("收敛形态", self.error_texts())
+
+    def test_p3_boundary_removed_reports(self):
+        # 反例：与"内容不减少"的边界被删 → 去重会以"删重复"的名义删掉唯一那份内容
+        self._write(section=self.SECTION.replace(
+            "* **收敛时不得以去重换缺失（L1，与\"内容不减少\"的边界）**：**删掉的必须是重复表述本身，"
+            "被删处须留下可达的引用**；**对无法确定是否重复的内容一律保留**。\n",
+            "* **收敛时注意别删太多**。\n"))
+        cm.check_refinement_guard()
+        self.assertIn("P3", self.error_texts())
+
+    def test_keeper_forms_removed_reports(self):
+        # 反例：删掉"两类形态不得被当成重复收敛" → 会把刻意强调的引用与分层承接误当重复合并掉
+        self._write(section=self.SECTION.replace(
+            "* **两类形态不得被当成重复收敛**：① **最高关注项与其引用**；② **各自的承接**。\n", ""))
+        cm.check_refinement_guard()
+        self.assertIn("重复收敛", self.error_texts())
+
+    def test_review_action_removed_reports(self):
+        # 反例（用户点名的"应该在 review 时强制生效"）：固定动作里不再核重复面
+        self._write(change_review=self.CHANGE_REVIEW.replace("，**并按「精炼性」核对一遍重复面**", ""))
+        cm.check_refinement_guard()
+        self.assertIn("固定动作", self.error_texts())
+
+    def test_delivery_clause_removed_reports(self):
+        # 反例（"应该在重构时也强制生效"）：提示词片段里该条被删 → 两个提示词都不再带这个动作
+        self._write(delivery="// tag::delivery[]\n**交付**：有改动就提交。\n// end::delivery[]\n")
+        cm.check_refinement_guard()
+        self.assertIn("_common.txt", self.error_texts())
 
 
 class TestCheckSquashCommitGuard(CheckSpecsTestCase):
@@ -10239,27 +10343,26 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
 
     对应用户实测点名的形态：安装把入口文档落到目标项目，它是**唯一持久化到项目里的产物**，
     而原模板只写"入口地址 + 遵守要求"——"规范副本落在哪、怎么再取一次"只存在于本人的会话里，
-    **新开实例即丢失**。故反例逐项覆盖：两节被删、副本三件事缺一项、缓存落点不说明由平台
-    决定、承载判据的通用层文件被删。
+    **新开实例即丢失**。故反例逐项覆盖：承载判据的通用层文件被删、三条路径链缺项、
+    副本落点被写成笼统说法、取回方式缺项。
+
+    **模板形态以用户手工编辑为准**（用户点名：不要 `= Agent 规范入口` 标题与那三节），
+    故本类**不核模板小节结构**——核的是路径链与副本两要点**在模板正文里出现**；
+    曾被核过的"三节标题"是本类上一版的判据，它会把用户删掉的三节又"补"回去，已撤。
     """
 
     TEMPLATE = (
         "= 安装\n\n判据见 `specs/general/entry-doc.adoc`（那是判据的唯一真源，本文件不重复其条文）。\n\n"
         "[source,asciidoc]\n----\n"
-        "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+        "本项目的 agent 执行规范入口为：\n\n"
         "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
-        "== 规范与安装文档的位置（这条链要能一站直达）\n\n"
-        "* **规范路径**：https://agent.c332030.com/AGENTS_COMMON.adoc\n"
-        "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n"
-        "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n\n"
-        "== 规范副本的位置（可用脚本名 `fetch-specs` 直接再取一次）\n\n"
-        "* 默认落点：本机**用户级缓存**（位置由平台缓存目录决定），其下 `agent-specs/<来源槽>/` "
-        "即本规范集合；同一台机器上的所有项目共用这一份。\n"
-        "* 本项目内落点：`tmp/agent-specs/`（缓存不可得时退回，也可用 `--local` 指定）\n"
-        "* 取回与更新：在项目根目录**再运行一次** `fetch-specs` 即可。\n\n"
-        "== 本项目持久化到入口文档的信息\n\n"
-        "凡要跨会话保留的本项目信息追加在本节。\n"
-        "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n"
+        "安装与更新的文档入口为：\n\n"
+        "https://agent.c332030.com/INSTALL.adoc\n\n"
+        "取规范脚本：\n\n"
+        "https://agent.c332030.com/script/fetch-specs.py\n\n"
+        "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
+        "在项目根目录运行一次取文件抓手即可；取不到时就直接读上面的远程入口；"
+        "**需要最新规范时再运行一次取规范脚本即是更新**。\n"
         "----\n"
     )
     SPEC = ("入口文档是**唯一持久化到项目里的产物**；一次会话结束后，下一个会话"
@@ -10273,60 +10376,43 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
         self.write("specs/general/entry-doc.adoc", self.SPEC)
 
     def test_entry_doc_manifest_passes(self):
-        # 正例：两节齐备 + 副本三件事 + 缓存落点说明由平台缓存目录决定 + 承载文件在
+        # 正例：路径链齐 + 落点写清（`~/.cache/agent-specs`）+ 取回方式 + 承载文件在
         self._write_manifest_valid()
         cm.check_entry_doc_manifest()
         self.assertEqual([], cm.errors)
 
-    def test_template_sections_removed_reports(self):
-        # 反例（用户点名的形态）：模板只剩"入口地址 + 遵守要求"→ 新开实例不知道副本在哪
-        self._write_manifest_valid("= 安装\n\n[source,asciidoc]\n----\n"
-                                  "= Agent 规范入口\n\n"
-                                  "https://agent.c332030.com/AGENTS_COMMON.adoc\n----\n")
-        cm.check_entry_doc_manifest()
-        self.assertIn("规范副本的位置", self.error_texts())
-        self.assertIn("本项目持久化到入口文档的信息", self.error_texts())
-
-    def test_copy_points_removed_reports(self):
-        # 反例：副本那节只剩默认落点 → 缓存不可用的机器上无处落副本、也不知道怎么再取一次
+    def test_template_without_sections_passes(self):
+        # 正例（用户口径）：模板**不带** `= Agent 规范入口` 标题与那三节，只要路径链与
+        # 副本两要点在正文里，就应判绿——上一版判据在这里报红，等于拿机械判据盖掉用户的编辑
         self._write_manifest_valid(
-            self.TEMPLATE.replace(
-                "* 本项目内落点：`tmp/agent-specs/`（缓存不可得时退回，也可用 `--local` 指定）\n",
-                "").replace(
-                "* 取回与更新：在项目根目录**再运行一次** `fetch-specs` 即可。\n", ""))
+            self.TEMPLATE.replace("本项目的 agent 执行规范入口为：\n\n", "", 1))
         cm.check_entry_doc_manifest()
-        self.assertIn("tmp/agent-specs", self.error_texts())
-        self.assertIn("再运行一次", self.error_texts())
-
-    def test_platform_cache_dir_note_removed_reports(self):
-        # 反例：写死本机绝对路径、不说明落点由平台缓存目录决定 → 项目里抄进只对本机成立的路径
-        self._write_manifest_valid(
-            self.TEMPLATE.replace(
-                "本机**用户级缓存**（位置由平台缓存目录决定），",
-                "`/root/.cache/agent-specs/`，"))
-        cm.check_entry_doc_manifest()
-        self.assertIn("缓存目录", self.error_texts())
+        self.assertEqual([], cm.errors)
 
     def test_path_chain_removed_reports(self):
         # 反例（用户点名形态）：模板不给安装文档路径与取规范脚本路径 → 新实例不知道如何下载规范
         self._write_manifest_valid(
             self.TEMPLATE.replace(
-                "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n", "").replace(
-                "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n", ""))
+                "https://agent.c332030.com/INSTALL.adoc\n", "").replace(
+                "https://agent.c332030.com/script/fetch-specs.py\n", ""))
         cm.check_entry_doc_manifest()
         self.assertIn("INSTALL.adoc", self.error_texts())
         self.assertIn("fetch-specs.py", self.error_texts())
 
-    def test_path_section_removed_reports(self):
-        # 反例：整节被删 → 三条路径无处承载
+    def test_spec_entry_removed_reports(self):
+        # 反例：连规范入口路径都没了 → 新实例不知道规范在哪
+        self._write_manifest_valid(
+            self.TEMPLATE.replace("https://agent.c332030.com/AGENTS_COMMON.adoc\n", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_copy_points_removed_reports(self):
+        # 反例：模板里不留落点 → 新实例不知道副本落在哪、只能自己猜路径
         self._write_manifest_valid(
             self.TEMPLATE.replace(
-                "== 规范与安装文档的位置（这条链要能一站直达）\n\n"
-                "* **规范路径**：https://agent.c332030.com/AGENTS_COMMON.adoc\n"
-                "* **安装文档路径**：https://agent.c332030.com/INSTALL.adoc\n"
-                "* **取规范脚本路径**：https://agent.c332030.com/script/fetch-specs.py\n\n", ""))
+                "规范文件统一下载到 `~/.cache/agent-specs`，", ""))
         cm.check_entry_doc_manifest()
-        self.assertIn("规范与安装文档的位置", self.error_texts())
+        self.assertIn("用户家目录", self.error_texts())
 
     def test_spec_file_removed_reports(self):
         # 反例：承载判据的通用层文件被删 → 最小集与临时产物的分界无处可查
@@ -10334,20 +10420,6 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs", "general", "entry-doc.adoc"))
         cm.check_entry_doc_manifest()
         self.assertIn("entry-doc.adoc", self.error_texts())
-
-    def test_info_section_prefilled_reports(self):
-        # 反例（本轮实测缺口）：把「本项目持久化到入口文档的信息」这一节**预填成待填清单**
-        # → 每个照着模板装出来的项目都带着一份与它无关的空白清单，且与项目已填内容打架。
-        # 旧实现只核"这一节的标题在不在"，预填后仍报绿。
-        self._write_manifest_valid(
-            self.TEMPLATE.replace(
-                "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n", "")
-            .replace(
-                "凡要跨会话保留的本项目信息追加在本节。\n",
-                "凡要跨会话保留的本项目信息追加在本节。\n"
-                "* [ ] 构建与测试命令\n* [ ] 部署方式\n* [ ] 负责人\n"))
-        cm.check_entry_doc_manifest()
-        self.assertIn("待填清单", self.error_texts())
 
     def test_single_source_declaration_removed_reports(self):
         # 反例：判据侧不再声明"本文件是唯一真源"→ 同一件事可被别处再复述一遍，
@@ -10365,27 +10437,86 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
         cm.check_entry_doc_manifest()
         self.assertIn("判据的真源", self.error_texts())
 
-    def test_platform_wording_swapped_reports(self):
-        # 反例（本轮实测缺口）：把"由平台缓存目录决定"换成"由系统缓存目录决定"——
-        # 旧判据只核"缓存目录"这一个词，换掉"平台"照样全绿，而要求恰恰是"外置落点**由平台
-        # 决定**"（新实例按平台自行定位，不是抄一个本机绝对路径进项目）。故本条钉住
-        # "『平台』与『缓存目录』须同现"，防该要求被换成别的说法而判据空转。
-        self._write_manifest_valid(
-            self.TEMPLATE.replace("位置由平台缓存目录决定", "位置由系统缓存目录决定"))
-        cm.check_entry_doc_manifest()
-        self.assertIn("缓存目录", self.error_texts())
-
-    def test_info_section_without_hint_reports(self):
-        # 反例：该节的提示行被删（既不提示、也不预填）→ 读者不知道该往这一节写什么
+    def test_platform_cache_wording_revived_reports(self):
+        # 反例（本轮实测缺口）：把落点写回"由平台缓存目录决定"（不再写用户家目录下的那一处）
+        # ——落点一变成环境相关的事实，新实例就没法按入口文档写下的路径直接定位副本，
+        # 只能按平台自己推。故本条把"落点须写到具体那一处（家目录 + 落点名同现）"钉住，
+        # 防该要求被换成一句笼统说法而判据空转。
         self._write_manifest_valid(
             self.TEMPLATE.replace(
-                "* 尚无（有则逐条追加，并写明为什么要跨会话保留）。\n", ""))
+                "规范文件统一下载到 `~/.cache/agent-specs`，",
+                "规范文件统一下载到本机**用户级缓存**（位置由平台缓存目录决定），"))
         cm.check_entry_doc_manifest()
-        self.assertIn("尚无", self.error_texts())
+        self.assertIn("用户家目录", self.error_texts())
+
+    def test_update_point_removed_reports(self):
+        # 反例：取回/更新方式被删 → 新实例不知道副本怎么再取一次
+        self._write_manifest_valid(
+            self.TEMPLATE.replace(
+                "**需要最新规范时再运行一次取规范脚本即是更新**。", ""))
+        cm.check_entry_doc_manifest()
+        self.assertIn("再运行一次", self.error_texts())
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+class TestCheckInstallRepeatUpdateGuard(CheckSpecsTestCase):
+    """钉住『安装幂等更新防线』：用户手工编辑过的模板内容不得被模板自动改回。
+
+    对应本仓库实测的返工：上一轮实施按"与最新模板不一致即就地更新为最新模板"，
+    把用户手工删掉的标题与三节**按判据恢复**了回去——用户点名『我手动删的，你不要给我补上去』
+    『不要给我补，以我的为准』。故反例逐项覆盖：该条被删、只剩『以用户为准』而无『不自动改回』、
+    不一致时不说（用户不知道入口文档与模板已不一致）、整节被删（该条无处承载）。
+    """
+
+    SECTION = (
+        "== 重复执行（更新）时的行为\n\n"
+        "* **入口文档（幂等）**：先按上面的规则判命中哪个文件名，再核对其内容：\n"
+        "** 已含入口占位且**与最新模板逐字一致**：不动。\n"
+        "** 已含入口占位但**与最新模板不一致**：**就地更新为最新模板的那几行**。\n"
+        "** **用户改过的行以用户改过的为准**：**用户手工编辑过的模板内容一律照原文保留**"
+        "——不符合本模板时**不自动改回**，只在汇报里指出不一致、等用户定。\n"
+    )
+
+    def _write_valid(self, section=None):
+        self.write("INSTALL.adoc",
+                   "= 安装\n\n" + (section if section is not None else self.SECTION))
+
+    def test_repeat_update_passes(self):
+        # 正例：三项要点齐（以用户改过的为准 / 不自动改回 / 等用户定）
+        self._write_valid()
+        cm.check_install_repeat_update_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_clause_removed_reports(self):
+        # 反例：用户口径这条被整条删掉 → 「与模板不一致即就地更新」孤立生效，
+        # 用户的手工编辑必被改回（本仓库实测过的返工形态）
+        self._write_valid(self.SECTION.replace(
+            "** **用户改过的行以用户改过的为准**：**用户手工编辑过的模板内容一律照原文保留**"
+            "——不符合本模板时**不自动改回**，只在汇报里指出不一致、等用户定。\n", ""))
+        cm.check_install_repeat_update_guard()
+        self.assertIn("以用户改过的为准", self.error_texts())
+
+    def test_downgraded_to_no_rewrite_only_reports(self):
+        # 反例：只留"不自动改回"被抹掉 → 实施者仍可把『按模板修正』读成对用户有利而照做
+        self._write_valid(self.SECTION.replace("**不自动改回**", "自行判断"))
+        cm.check_install_repeat_update_guard()
+        self.assertIn("不自动改回", self.error_texts())
+
+    def test_silent_disagreement_reports(self):
+        # 反例：不一致时什么都不说 → 用户不知道入口文档与模板已不一致
+        self._write_valid(self.SECTION.replace("只在汇报里指出不一致、等用户定", "自行处置"))
+        cm.check_install_repeat_update_guard()
+        self.assertIn("等用户定", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例：整节被删 → 该条无处承载，"不一致即就地更新"反而成了唯一口径
+        self.write("INSTALL.adoc", "= 安装\n\n== 约束\n\n* 只创建入口占位。\n")
+        cm.check_install_repeat_update_guard()
+        self.assertIn("重复执行（更新）时的行为", self.error_texts())
+
+    def test_missing_install_reports(self):
+        # 反例：安装文档不在 → 幂等更新的一条无从核对
+        cm.check_install_repeat_update_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())
 
 
 class TestCheckSpecFetchGuard(CheckSpecsTestCase):
@@ -10409,19 +10540,18 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '    """本地副本的字节；读不到按没有本地副本处理"""\n'
         'def keep_local(dest):\n'
         '    """--keep：不动本地那份；判定标准：不得把本地副本删掉"""\n'
-        'DEFAULT_OUT = "tmp/agent-specs"\n'
-        'def check_out_dir(p):\n'
-        '    """项目内落点必须位于当前工作目录之下（仅 --local 时用）"""\n'
+        'CACHE_HOME_DIR = ".cache"\n'
+        'DOC = "只写落点目录：不写项目里其他位置；不删除既有文件"\n'
+        'CACHE_APP_DIR = "agent-specs"\n'
         'def resolve_out_dir(args):\n'
-        '    """if not root: return check_out_dir(args.out)；默认落用户级缓存，--local 才取项目内"""\n'
+        '    """落点＝cache_slot_dir(shared_cache_dir(), args.base)（只有这一个落点）"""\n'
         'def shared_cache_dir():\n'
-        '    """默认落点：XDG_CACHE_HOME / LOCALAPPDATA 下的 .cache（本机所有项目共用一份）"""\n'
+        '    """落点所在的那一层：用户家目录（os.path.expanduser）——本机所有项目共用一份"""\n'
+        '    if not os.path.isdir(home):\n'
+        '        raise ValueError("本机取不到用户家目录")\n'
         'def cache_slot_dir(d, b):\n'
-        '    """按来源地址分槽（urllib.parse.urlsplit）"""\n'
-        'def is_local_base(b):\n'
-        '    """本机来源不缓存: localhost / 127."""\n'
-        'AGENT_SPECS_CACHE = "--cache-dir"\n'
-        'LOCAL_FLAG = "--local"\n'
+        '    """按来源地址分槽（urllib.parse.urlsplit）；只进不出：不删除落点里的任何文件"""\n'
+        '    return os.path.join(d, CACHE_HOME_DIR, CACHE_APP_DIR, b)\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -10471,14 +10601,12 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         # INSTALL.adoc：既有各节要点 + 入口模板代码块（后者承载"怎么取/取不到怎么办/怎么更新"三要点）
         self.write("INSTALL.adoc", self.INSTALL_BODY)
 
-        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本默认落用户级缓存（本机所有"
-                                        "项目共用一份），缓存不可用时退回项目内临时目录 "
-                                        "tmp/agent-specs/、要项目内副本加 --local；"
-                                        "默认以远程为准、以 --keep 保留本地那份。\n")
-        self.write("README.adoc", "工具 fetch-specs：默认落用户级缓存（本机所有项目共用一份）；"
-                                 "缓存不可用时退回项目内临时目录 tmp/agent-specs/。\n")
-        self.write("PUBLIC.adoc", "抓取工具：默认取到用户级缓存；退回项目内临时目录 "
-                                  "tmp/agent-specs/。\n")
+        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本落点与取回方式以 "
+                                        "INSTALL.adoc「取规范到本地副本」为唯一真源。\n")
+        self.write("README.adoc", "工具 fetch-specs：落点、取回与更新方式见 INSTALL.adoc"
+                                 "「取规范到本地副本」（唯一真源）。\n")
+        self.write("PUBLIC.adoc", "抓取工具：落点与取回方式见 INSTALL.adoc"
+                                 "「取规范到本地副本」（唯一真源）。\n")
 
     # 安装文档夹具：模板代码块里放"入口占位那一行"（三要点齐备；个别用例替换它跑反例）
     INSTALL_BODY = (
@@ -10486,14 +10614,14 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         "[source,asciidoc]\n----\n"
         "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
         "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
-        "优先取到本地副本（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
-        "它会把本入口与其引用的 specs/ 规范一并取全（只给脚本名即可，"
-        "无需逐条下载）。**需要最新规范时再运行一次即可更新**；取不到时直接读远程入口。\n\n"
+        "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
+        "在项目根目录运行一次取文件抓手即可；取不到时就直接读上面的远程入口；"
+        "**需要最新规范时再运行一次取规范脚本即是更新**。\n\n"
         "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。\n\n"
         "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。\n"
         "----\n\n"
-        "== 取规范到本地副本\n\n见 fetch-specs：副本默认落到用户级缓存（本机所有项目共用一份）、"
-        "缓存不可用时退回项目内临时目录 tmp/agent-specs/（要项目内副本加 --local）；取不到时直接读远程入口。"
+        "== 取规范到本地副本\n\n见 fetch-specs：副本取到用户家目录下的 `~/.cache/agent-specs`"
+        "这一处（本机所有项目共用一份）；落点与取回方式以本节为唯一真源；取不到时直接读远程入口。"
         "默认入口文件名 AGENTS.adoc；已存在 AGENTS.md 时就地融合、不重命名、不另建。"
         "默认取到平台用户级缓存目录；"
         "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
@@ -10507,9 +10635,9 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         "* 不建议改用 `curl … | python3 -`：它同样要 python。\n")
 
     ENTRY_LINE = (
-        "优先取到本地副本（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
-        "它会把本入口与其引用的 specs/ 规范一并取全（只给脚本名即可，"
-        "无需逐条下载）。**需要最新规范时再运行一次即可更新**；取不到时直接读远程入口。")
+        "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
+        "在项目根目录运行一次取文件抓手即可；取不到时就直接读上面的远程入口；"
+        "**需要最新规范时再运行一次取规范脚本即是更新**。")
 
     def _write_install_with_entry_line(self, entry_line: str) -> None:
         """把给定的"入口占位那一行"替进模板代码块（其余要点照旧）——用于跑反例。"""
@@ -10734,48 +10862,78 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     # ---- 共享缓存落点（用户实测诉求：别每个项目都下载一遍同几份文件）----
 
     def test_shared_cache_guard_passes(self):
-        # 正例：默认落用户级缓存 + --local 才取项目内（--cache-dir/按来源分槽/本机来源不缓存）+ 四处文档同步
+        # 正例：落点只有用户家目录下的一处（由两个常量拼出）+ 按来源分槽 + 不删除落点文件 + 四处文档同步
         self._write_valid()
         cm.check_shared_cache_guard()
         self.assertEqual([], cm.errors)
 
-    def test_install_without_shared_cache_note_reports(self):
-        # 反例：安装文档不提默认落点 → 引用方仍按"每个项目各下载一份"执行（重复流量）
+    def test_landing_copied_again_without_reference_reports(self):
+        # 反例（用户本轮点名的形态：「依旧有很多相同的描述在不同的地方」）：公共入口**又把落点
+        # 抄了一遍**、且没指向真源 → 同一描述出现两处，两处会各自漂移，读者也不知道以哪处为准；
+        # 收敛形态是"一处完整定义 + 其余一行引用"
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "取文件见 fetch-specs；副本只取到用户家目录下的 .cache/agent-specs 这一处"
+                   "（本机所有项目共用一份）；默认以远程为准、以 --keep 保留本地那份。\n")
+        cm.check_shared_cache_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        self.assertIn("唯一真源", self.error_texts())
+
+    def test_landing_owner_must_write_it_out_reports(self):
+        # 反例：**真源自己**把落点改成"见别处"→ 谁都不写落点，等于没人写（收敛不能把唯一落点也省掉）
         self._write_valid()
         self.write("INSTALL.adoc",
-                   "见 fetch-specs 与 tmp/agent-specs 落点（默认取到用户级缓存目录）。\n")
+                   self.INSTALL_BODY.replace(".cache/agent-specs", "the-cache-dir")
+                   .replace("~/.the-cache-dir", "the-cache-dir")
+                   .replace("~/.cache/agent-specs", "the-cache-dir")
+                   + "\n见 fetch-specs：副本落点以脚本头部注释为准（本节不再自己写一遍）。\n")
+        cm.check_shared_cache_guard()
+        self.assertIn("INSTALL.adoc", self.error_texts())
+
+    def test_vague_cache_wording_still_reports(self):
+        # 反例：把落点换成『用户级缓存』这类笼统说法又不给引用 → 读者仍要自己猜路径
+        self._write_valid()
+        self.write("README.adoc", "工具 fetch-specs：副本取到用户级缓存（所有项目共用一份）。\n")
+        cm.check_shared_cache_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_install_without_shared_cache_note_reports(self):
+        # 反例：安装文档不提落点 → 引用方不知道副本落在哪、以为会往项目里写一份
+        self._write_valid()
+        self.write("INSTALL.adoc", "见 fetch-specs 与它的落点。\n")
         cm.check_shared_cache_guard()
         self.assertIn("INSTALL.adoc", self.error_texts())
 
     def test_common_entry_without_shared_cache_note_reports(self):
-        # 反例：公共入口不提落点 → 按入口加载的引用方不知道副本不必逐项目各存一份
+        # 反例：公共入口不提落点 → 按入口加载的引用方不知道副本落在哪
         self._write_valid()
         self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs。\n")
         cm.check_shared_cache_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
-    def test_project_copy_path_removed_reports(self):
-        # 反例：项目内临时目录这条路径被去掉（只剩缓存）→ 缓存不可用的机器上无处落副本
+    def test_platform_cache_dir_revived_reports(self):
+        # 反例：随平台另取一套缓存目录又长回来（XDG_CACHE_HOME/LOCALAPPDATA）→ 落点变成
+        # 环境相关的事实，"只有这一个路径"无处可依（用户口径：不用管什么系统什么环境）
         self._write_valid()
         self.write("script/fetch-specs.py",
-                   self.SCRIPT_PY.replace('--local', ''))
+                   self.SCRIPT_PY + 'POSIX = "XDG_CACHE_HOME"\nWIN = "LOCALAPPDATA"\n')
         cm.check_shared_cache_guard()
-        self.assertIn("--local", self.error_texts())
+        self.assertIn("XDG_CACHE_HOME", self.error_texts())
 
-    def test_shared_cache_fallback_removed_reports(self):
-        # 反例：去掉"缓存不可用时退回项目内落点"→ 缓存取不到的机器上直接失败（静默改语义）
+    def test_project_tmp_path_revived_reports(self):
+        # 反例：项目内临时目录这类**第二落点**又长回来 → 同一份规范可能落在项目里，
+        # 入口文档写下的那一个用户路径就找不到副本了
         self._write_valid()
         self.write("script/fetch-specs.py",
-                   self.SCRIPT_PY.replace("if not root: return check_out_dir(args.out)",
-                                          ""))
+                   self.SCRIPT_PY + 'SECOND = "--local"\nEXTRA = "tmp/agent-specs"\n')
         cm.check_shared_cache_guard()
-        self.assertIn("退回项目内落点", self.error_texts())
+        self.assertIn("tmp/agent-specs", self.error_texts())
 
-    def test_cache_dir_override_removed_reports(self):
-        # 反例：去掉 --cache-dir/AGENT_SPECS_CACHE → 缓存落点不可显式指定（磁盘布局不同就没法用）
+    def test_relocation_entry_revived_reports(self):
+        # 反例：换落点的入口又长回来（--out/--cache-dir 一类）→ 同一份规范可能落在多处
         self._write_valid()
         self.write("script/fetch-specs.py",
-                   self.SCRIPT_PY.replace('AGENT_SPECS_CACHE = "--cache-dir"\n', ""))
+                   self.SCRIPT_PY + 'AGENT_SPECS_CACHE = "--cache-dir"\nOUT = "--out"\n')
         cm.check_shared_cache_guard()
         self.assertIn("AGENT_SPECS_CACHE", self.error_texts())
 
@@ -10786,72 +10944,100 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         cm.check_shared_cache_guard()
         self.assertIn("urlsplit", self.error_texts())
 
-    def test_local_base_caching_removed_reports(self):
-        # 反例：去掉"本机来源不缓存" → 本地服务端改完再取仍拿缓存里的旧副本（内容每次在变）
+    def test_user_home_dir_removed_reports(self):
+        # 反例：落点不再从用户家目录取 → "用户家目录下的那一处"无从谈起
         self._write_valid()
-        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace('127.', ""))
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("expanduser", ""))
         cm.check_shared_cache_guard()
-        self.assertIn("127.", self.error_texts())
+        self.assertIn("expanduser", self.error_texts())
+
+    def test_slot_constants_unused_reports(self):
+        # 反例：两个落点常量还在、却不参与落点拼装（落点改由别处/按平台算）→
+        # "只有用户家目录下这一处"不再成立，而正向判据只核常量名时会放过
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace(
+                       "return os.path.join(d, CACHE_HOME_DIR, CACHE_APP_DIR, b)",
+                       "return os.path.join(d, b)"))
+        cm.check_shared_cache_guard()
+        self.assertIn("CACHE_HOME_DIR", self.error_texts())
+
+    def test_home_failure_not_reported_reports(self):
+        # 反例：家目录取不到时不再报错退出（判据被去掉）→ 副本会静默落到别的路径，
+        # 入口文档写下的那一个路径就与实际落点对不上（正是本防线要防的"静默换落点"）
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("not os.path.isdir", ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("静默换地方", self.error_texts())
+
+    def test_no_delete_note_removed_reports(self):
+        # 反例：脚本不再声明"不删除落点里的既有文件" → 清理被当成脚本的一次运行
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("不删除", ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("不删除", self.error_texts())
 
     # ---- 入口占位三要点（用户两次点名"还是没改"：模板那行被改写/合并后既有抓手全都不报错）----
 
     def test_install_entry_placeholder_passes(self):
-        # 正例：三要点齐备（取到项目内临时目录 / 取不到读远程 / 再运行一次即是更新）
+        # 正例：三要点齐备（优先取到本地副本 / 取不到读远程 / 再运行一次即是更新）
         self._write_valid()
         cm.check_shared_cache_guard()
         self.assertEqual([], cm.errors)
 
     def test_install_entry_placeholder_line_reverted_reports(self):
-        # 反例（用户两次点名的那个形态）：把"需要最新规范再更新"并进"一并取到 tmp/agent-specs/"
+        # 反例（用户两次点名的那个形态）：把"需要最新规范再更新"并进"一并取到本地副本"
         # → 脚本更新了用户也不知道，且已按旧模板装过的项目重跑安装会被判成"逐字一致"而不更新
         # （正是"还是没改"：既有抓手只核"每行独立成行 + 空行完好"，这句删掉也不报错）
         self._write_valid()
         self._write_install_with_entry_line(
-            "优先取到临时目录 tmp（避免网络原因无法访问）：在项目根目录运行一次该抓取脚本，"
-            "它会把本入口与其引用的 specs/ 规范一并取到 `tmp/agent-specs/`（只给脚本名即可，"
-            "无需逐条下载）。")
+            "优先取到本地副本（避免网络原因无法访问）：在项目根目录运行一次取文件抓手，"
+            "它会把本入口与其引用的 specs/ 规范一并取到用户家目录下的 `.cache/agent-specs`"
+            "（只给脚本名即可，无需逐条下载）。")
         cm.check_shared_cache_guard()
         self.assertIn("需要最新规范", self.error_texts())
 
-    def test_install_entry_placeholder_tmp_removed_reports(self):
+    def test_install_entry_placeholder_copy_removed_reports(self):
         # 反例：把那行换成"直接下载即可" → 网络不可达时本地那一份（用户点名的那条收益）没了
         self._write_valid()
         self._write_install_with_entry_line(
             "需要最新规范时再运行一次即可更新：直接下载规范到本地即可。")
         cm.check_shared_cache_guard()
-        self.assertIn("优先取到临时目录", self.error_texts())
+        self.assertIn("优先取到本地副本", self.error_texts())
 
     def test_install_entry_placeholder_fallback_removed_reports(self):
-        # 反例：只写"优先取到临时目录"、不写"取不到就读远程" → 把可选的一步读成前置条件
+        # 反例：只写"优先取到本地副本"、不写"取不到就读远程" → 把可选的一步读成前置条件
         self._write_valid()
         self._write_install_with_entry_line(
-            "优先取到临时目录 tmp（避免网络原因无法访问）；需要最新规范时再运行一次即可更新。")
+            "优先取到本地副本（避免网络原因无法访问）；需要最新规范时再运行一次即可更新。")
         cm.check_shared_cache_guard()
         self.assertIn("取不到", self.error_texts())
 
     # ---- 以远程为准（用户实测诉求：安装脚本经常更新，重跑安装要能更新现有的那份）----
 
-    def _run_fetch(self, base, out_dir=None, extra=(), cwd=None):
+    def _run_fetch(self, base, extra=(), cwd=None, home=None):
         """按仓库真实的抓取脚本跑一次（spawn 子进程、按 stdout/stderr 断言）。
 
-        `out_dir` 为 None 时**不给 `--out`**，跑的就是"只给脚本名"的默认路径——用来验证
-        默认落点确实落在项目内临时目录（`DEFAULT_OUT`），而不是项目外的共享缓存。
+        落点由脚本自己按**用户家目录**算出来（没有 `--out` 这类换落点的入口），故用例只能
+        通过 `home` 换家目录把落点收进本次用例专属的位置（`HOME` 与 `USERPROFILE` 都指过去，
+        覆盖两个平台的写法）。
         """
         # 脚本与工作目录都用**真实仓库**（`cm.REPO_ROOT` 在用例里被指向临时夹具，脚本不在那儿）
         real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         script = os.path.join(real_root, "script", "fetch-specs.py")
-        # 不带 `--cache`：默认落点即项目内临时目录（`--out` 指到本次用例专属子目录）
-        cmd = [sys.executable, script, "--base", base, *(["--out", out_dir] if out_dir else []),
-               *extra]
+        cmd = [sys.executable, script, "--base", base, *extra]
+        env = None
+        if home:
+            env = dict(os.environ, HOME=home, USERPROFILE=home)
         proc = subprocess.run(cmd, cwd=cwd or real_root, capture_output=True, text=True,
-                              timeout=120)
+                              timeout=120, env=env)
         return proc.returncode, proc.stdout, proc.stderr
 
     def _serve(self, served):
         """起一个本机 HTTP 服务当"远端"（返回 base 与其容器，退出时关掉）。
 
-        用本机来源是为了**不缓存**（脚本对 `localhost` 自动退回项目内落点）——这正是本条
-        要测的默认路径。用户实测的原始形态也是本地服务端（"避免网络原因无法访问"）。
+        用本机来源是为了不起外网依赖（用户实测的原始形态也是本地服务端："避免网络原因无法访问"）；
+        落点与来源无关（只有一处），故来源是本机不影响落点断言。
         """
         import http.server
         import socketserver
@@ -10875,30 +11061,84 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
         return socketserver.TCPServer(("127.0.0.1", 0), Handler)
 
-    def test_default_out_is_project_tmp(self):
-        """端到端（默认落点）：**只给脚本名**时（不带 `--out`/`--cache`）副本必须落在项目内的
-        临时目录 `<cwd>/<DEFAULT_OUT>`——这是安装文档入口模板的第一条要求（"优先取到临时目录
-        tmp（避免网络原因无法访问）"）。落在项目外（共享缓存）即与模板矛盾：按模板去找
-        `tmp/agent-specs/` 会找不到，网络不可达时也就没有那一份。
+    def test_default_out_is_user_home(self):
+        """端到端（唯一落点）：**只给脚本名**时副本必须落在用户家目录下的
+        `<家目录>/.cache/agent-specs/<来源槽>/`——这是安装文档入口模板写明的那一个路径
+        （"用户家目录下的 `.cache/agent-specs`"，即用户路径下的 `~/.cache/agent-specs`）。
+        落在项目里或别处即与模板矛盾：新实例按入口文档给出的路径会找不到副本。
         """
         import threading
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": b"e1\n"}
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        proj = tempfile.mkdtemp(prefix="fetch-default-out-")
+        home = tempfile.mkdtemp(prefix="fetch-home-")
+        proj = tempfile.mkdtemp(prefix="fetch-proj-")
         with self._serve(served) as httpd:
             threading.Thread(target=httpd.serve_forever, daemon=True).start()
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
-            rc, so, se = self._run_fetch(base, cwd=proj)          # 不给 --out：走默认落点
+            rc, so, se = self._run_fetch(base, cwd=proj, home=home)   # 只给脚本名
             self.assertEqual(0, rc, se + so)
-            default_rel = "tmp/agent-specs"
-            landed = os.path.join(proj, default_rel, "AGENTS_COMMON.adoc")
-            self.assertTrue(os.path.isfile(landed), f"默认落点未见副本: {landed}\n{so}{se}")
-            with open(landed, "rb") as fh:
+            cache_root = os.path.join(home, ".cache", "agent-specs")
+            hits = []
+            for dirpath, _dirs, files in os.walk(cache_root):
+                if "AGENTS_COMMON.adoc" in files:
+                    hits.append(dirpath)
+            self.assertTrue(hits, f"用户家目录下的落点未见副本: {cache_root}\n{so}{se}")
+            with open(os.path.join(hits[0], "AGENTS_COMMON.adoc"), "rb") as fh:
                 self.assertEqual(entry, fh.read())
-            self.assertIn(default_rel, so)
+            self.assertIn(os.path.join(home, ".cache"), so)
+            # 项目里不得落任何副本（落点只有用户家目录下那一处）
+            self.assertFalse(os.path.exists(os.path.join(proj, "tmp")))
+        shutil.rmtree(home, ignore_errors=True)
         shutil.rmtree(proj, ignore_errors=True)
+
+    def test_unusable_home_reports_instead_of_relocating(self):
+        """端到端（家目录取不到时**报错、不静默换落点**）：`HOME` 被设成空串 / 根目录 / 未展开的
+        `~` 时，脚本必须按"取不到家目录"报错并退出 2——**不得**把副本静默落到别的路径去。
+
+        **本仓库实证的失效形态**：`HOME=`（空串）时 `os.path.expanduser("~")` 不抛错、而是返回
+        文件系统根，故只判"空串或未展开的原样 `~`"的写法会把副本写到根目录下的落点
+        ——正是"静默换落点"（入口文档写下的那一个用户路径与实际落点对不上）。
+        用例对三种取不到家目录的取值各跑一次，判据是**退出码 2 + 报错文案 + 没有写出任何副本**。
+        """
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        proj = tempfile.mkdtemp(prefix="fetch-nohome-proj-")
+        try:
+            for bad_home in ("", "/", "~"):
+                env = dict(os.environ, HOME=bad_home, USERPROFILE=bad_home)
+                proc = subprocess.run(
+                    [sys.executable, script, "--list"], cwd=proj,
+                    capture_output=True, text=True, timeout=120, env=env)
+                self.assertEqual(2, proc.returncode,
+                                 f"HOME={bad_home!r} 应报错退出 2，实际 {proc.returncode}\n"
+                                 f"{proc.stdout}{proc.stderr}")
+                self.assertIn("家目录", proc.stderr,
+                              f"HOME={bad_home!r} 的报错须说明卡在家目录上\n{proc.stderr}")
+                # 不得在工作目录里落下任何东西（换落点的另一个方向）
+                self.assertFalse(os.path.exists(os.path.join(proj, ".cache")))
+        finally:
+            shutil.rmtree(proj, ignore_errors=True)
+
+    def test_no_relocation_flags_in_script(self):
+        """静态判据（用户口径：落点只有这一个）：脚本里不得再有换落点的入口与第二落点。
+
+        `--local`/`--out`/`--cache-dir`（及对应的环境变量）都意味着"同一份规范可以落在多处"，
+        而这会让人按入口文档写下的那一个路径去找却找不到。故这里把"没有这些入口"本身钉住；
+        反向还须有正面判据——落点必须仍由**用户家目录 + 两个落点常量**拼出来（只钉"不得有
+        什么"时，把落点换成别的算法照样能避开那串禁用词）。
+        """
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(real_root, "script", "fetch-specs.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        for flag in ("--local", "--out", "--cache-dir", "AGENT_SPECS_CACHE", "XDG_CACHE_HOME",
+                     "LOCALAPPDATA", "tmp/agent-specs"):
+            self.assertNotIn(flag, src,
+                             f"落点只有用户家目录下的 .cache/agent-specs，不应再有 {flag}")
+        for key in ("expanduser", "CACHE_HOME_DIR", "CACHE_APP_DIR"):
+            self.assertIn(key, src, f"落点须由用户家目录 + {key} 算出，缺则落点不再是那一处")
+        self.assertRegex(src, r"CACHE_HOME_DIR,\s*CACHE_APP_DIR",
+                         "落点须由 CACHE_HOME_DIR/CACHE_APP_DIR 两级目录拼出（那一处用户路径）")
 
     def test_failure_keeps_local_copy_bytes(self):
         """端到端（失败不得把副本变小或变没）：远端不可达时，落点里已有的那一份必须**逐字节
@@ -10908,20 +11148,22 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         时，shell 会先把该文件截断成 `0 B`——这是调用方的用法问题，脚本侧能保证的是：`0 B`
         也算"以前取到过的那一份"占位、失败时不判"新取"、并如实写明"本地已有那一份原样保留"。
         """
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        out = os.path.join("tmp", "agent-specs-failtest")
-        dest = os.path.join(real_root, out, "AGENTS_COMMON.adoc")
+        home = tempfile.mkdtemp(prefix="fetch-home-fail-")
+        # 先在"本机来源"上取一份，再换一个不可达的来源：落点按来源分槽，故要让两次命中同一槽
+        # （`cache_slot_dir` 按来源地址分槽，换来源即换槽）——这里直接按来源槽路径预置那一份
+        slot = re.sub(r"[^A-Za-z0-9._-]+", "_", "127.0.0.1:1").strip("_")
+        dest = os.path.join(home, ".cache", "agent-specs", slot, "AGENTS_COMMON.adoc")
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, "wb") as fh:
             fh.write(b"= old\n")
         try:
-            rc, so, se = self._run_fetch("http://127.0.0.1:1", out)   # 不可达
+            rc, so, se = self._run_fetch("http://127.0.0.1:1", home=home)   # 不可达
             self.assertNotEqual(0, rc)
             with open(dest, "rb") as fh:
                 self.assertEqual(b"= old\n", fh.read())             # 逐字节原样
             self.assertIn("保留", se)
         finally:
-            shutil.rmtree(os.path.join(real_root, out), ignore_errors=True)
+            shutil.rmtree(home, ignore_errors=True)
 
     def test_reinstall_refreshes_when_remote_changed(self):
         """端到端行为（本防线的机制侧）：**以远程为准**——只改远端、本地只有旧副本时，
@@ -10937,9 +11179,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": b"e1\n"}
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        out = os.path.join("tmp", "agent-specs-refresh-test")
-        out_dir = out
+        home = tempfile.mkdtemp(prefix="fetch-home-refresh-")
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):                                # noqa: N802 - http.server 约定
@@ -10962,22 +11202,25 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             port = httpd.server_address[1]
             threading.Thread(target=httpd.serve_forever, daemon=True).start()
             base = f"http://127.0.0.1:{port}"
+            out_dir = os.path.join(home, ".cache", "agent-specs",
+                                   re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                          f"127.0.0.1:{port}").strip("_"))
 
-            rc, so, se = self._run_fetch(base, out_dir)
+            rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
             self.assertIn("新取", so)
-            local = os.path.join(real_root, out_dir, "AGENTS_COMMON.adoc")
+            local = os.path.join(out_dir, "AGENTS_COMMON.adoc")
             with open(local, "rb") as fh:
                 self.assertEqual(entry, fh.read())
 
             # 第二次：远端没改 → 全部命中"内容一致"、不落盘
-            rc, so, se = self._run_fetch(base, out_dir)
+            rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
             self.assertIn("内容一致", so)
 
             # 第三次：**只改远端** → 必须刷新本地（这正是"重新执行安装拿到最新"的判据）
             served["AGENTS_COMMON.adoc"] = entry.replace(b"= test", b"= v2")
-            rc, so, se = self._run_fetch(base, out_dir)
+            rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
             self.assertIn("刷新", so)
             with open(local, "rb") as fh:
@@ -10985,19 +11228,21 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
             # 第四次：远端改了、加 `--keep` → 不动本地那份（保留"别覆盖我的"这条路径）
             served["AGENTS_COMMON.adoc"] = entry.replace(b"= test", b"= v3")
-            rc, so, se = self._run_fetch(base, out_dir, ("--keep",))
+            rc, so, se = self._run_fetch(base, ("--keep",), home=home)
             self.assertEqual(0, rc, se + so)
             with open(local, "rb") as fh:
                 self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
 
-            # 第五次：远端不可达（换端口）→ 本地那一份必须还在（不得把副本删掉换成没有）
-            rc, so, se = self._run_fetch("http://127.0.0.1:1", out_dir)
+            # 第五次：远端不可达（本机服务已关、端口不可达）→ 本地那一份必须还在
+            # （不得把副本删掉换成没有；来源仍相同故命中同一来源槽）
+            httpd.shutdown()
+            rc, so, se = self._run_fetch(base, home=home)
             self.assertNotEqual(0, rc)
             with open(local, "rb") as fh:
                 self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
 
-        # 用例自清：落点是本次用例专属的子目录（临时产物，见 specs/core/execution.adoc「临时产物」）
-        shutil.rmtree(os.path.join(real_root, out_dir), ignore_errors=True)
+        # 用例自清：落点在本次用例专属的家目录下（临时产物，见 specs/core/execution.adoc「临时产物」）
+        shutil.rmtree(home, ignore_errors=True)
 
     def test_refresh_is_default_passes(self):
         # 正例：默认以远程为准（内容不同才落盘）+ --keep 保留本地那份 + 失败保留本地
