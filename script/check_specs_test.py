@@ -8357,6 +8357,315 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self.assertIn("持久化访问", self.error_texts())
 
 
+
+class TestCheckOrmBoundaryGuard(CheckSpecsTestCase):
+    """钉住『数据访问边界防线』（谁可以调 IService 成员方法 / Mapper 归属 / 调前判空）。
+
+    该条对应用户在本轮要求里点名的三件事：
+      * **成员方法只许在 `IService` 与 `ServiceImpl` 的本子类中使用，其他子类也不行**；
+      * **实体类的 Mapper 原则上只由本实体类的 service 调用**（不禁用、不建议），涉及多表
+        复杂业务时**优先创建新的业务服务**，实体 service 里不做太多复杂操作、也不操作其他表；
+      * **调数据库前自动判空**（如 `getById` 先检查 id 是否为 null，是则直接返回 null，
+        避免无效查询；返回集合时返回空集合而不是 null）。
+
+    最易被冲掉的六处（本组用例逐一覆盖）：
+      * **"本子类"限定被删** —— 只剩"Service 里"，跨类调用无从核对（正是用户要拦的失效）；
+      * **"其他子类也不行"被删** —— 兄弟子类/无关 Service 持接口引用来调被读成合法；
+      * **去路被删** —— 只写禁令不写"放进该实体自己的 Service 或另建业务服务"，
+        执行者只能绕开（例如退回 `new LambdaQueryWrapper`，两条规则互相拆台）；
+      * **豁免面被删** —— L2 只剩禁令，被读成 L1 并把存量直接注入 Mapper 的项目大面积判红；
+      * **判空条被降级成口号** —— "访问前先判空"与"就地返回"/"防反用"一起被抽走，
+        只剩"要注意性能"这类无抓手表态；
+      * **调度器识别特征被删** —— 写跨类调用代码时不会触发加载这条（等于没写）。
+    """
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n\n"
+        "== 持久化访问（MyBatis-Plus / JPA 等）\n"
+        "持久化访问按 link:../general/coding.adoc[]「持久化访问（数据库/缓存等）」执行。\n"
+        "* **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**："
+        "查询/更新一律走 `lambdaQuery()`、`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`；"
+        "禁止 `new QueryWrapper` 及其子类（含 `new LambdaQueryWrapper`）。\n"
+        "* **`IService` 的成员方法只许在 `IService` 与 `ServiceImpl` 的本子类中使用（L1）**："
+        "**其他子类也不行**——工具类/静态方法/Helper/Controller 里调同属禁止面。\n"
+        "* **正确做法**：把这段逻辑放进**该实体自己的 Service**（新写一个方法），或另建业务服务。\n"
+        "* **存量边界（L1）**：已有代码**不视为违规、不告警**，按「规范变更的存量处理」随动迁移。\n"
+        "* **与既有条目的关系**：违反本条**不构成**\"可以退回 `new LambdaQueryWrapper`\"的许可。\n"
+    )
+
+    # 判空落点在「健壮性」节——同一文件里另有「持久化访问」节，判据的落点必须落回各自的节
+    JAVA_ROBUSTNESS = (
+        "== 健壮性\n"
+        "* **持久化访问前先判空（本条是通用层的 Java 落点）**："
+        "用法见 link:../general/coding.adoc[]「持久化访问（数据库/缓存等）」；"
+        "`getById(null)`、`getByIds(空集合)` 一类**在调用前**用 `ObjectUtil.isEmpty`/`CollUtil.isEmpty` "
+        "判一次，**不手写裸 `null` 比较**，命中即就地返回（单条 `null`、批量 `CList.empty()`）。\n"
+    )
+
+    SPRING = (
+        "= Spring 规范（技术栈层）\n\n== 分层与职责\n"
+        "* **一个实体的数据访问归它自己的 Service，跨表的业务另建业务服务（L2，不禁用）**："
+        "涉及多张表的业务操作**优先新建业务服务**（`XxxBizService` 一类）；"
+        "**实体 Service 的职责边界**：只做**本实体**的持久化与**本实体自身**的业务规则——"
+        "**不在其中做太多业务编排、也不在其中操作其他表**。"
+        "**这一条不建议、不禁用**：简单的**补充性单表查询**可直接使用该 Mapper，不构成违规。"
+        "**豁免的可核对形态需同时满足三条**：①**单次**；②**只读补充**；③**不承载业务规则**；超出任一条即归跨多表编排。"
+        "**判定标准**：①业务类里直接注入并调用非本类对应实体的 Mapper；②实体 Service 里跨多表编排。"
+        "**落点说明**：MyBatis-Plus 侧的类形态以 link:java.adoc[]「持久化访问」为唯一落点。\n"
+    )
+
+    CODING = (
+        "= 通用编码规范\n\n== 持久化访问（数据库/缓存等）\n"
+        "访问数据库、缓存等持久化存储时，一律走所属技术已提供的统一入口。\n"
+        "* **访问前先判空、不发起无效查询（L1，跨语言）**：调用持久化接口前，凡参数取值使该次访问"
+        "必然查不到任何数据时，须**就地返回**，不得把这类参数交给数据库。\n"
+        "* **返回集合的接口一律返回空集合、不返回 `null`（L1，跨语言）**。\n"
+        "* **判定标准（任一命中即违规）**：①按主键查询（`getById`/`findById`）未先判主键为 null；"
+        "②空集合仍发起查询；③无结果路径 `return null`。\n"
+        "* **防反用**：不得为\"合法但可能查不到\"的取值加前置判断。\n"
+        "* **存量边界**：已有代码**不视为违规**，按「规范变更的存量处理」随动迁移。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**、"
+        "写**数据访问边界（谁可以调）**）\n"
+        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
+        "含**谁可以调用**——成员方法只许在本 `IService`/`ServiceImpl` 子类内用、**调库前先判空**）\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_stack = (cm.JAVA_STACK_FILE, cm.SPRING_STACK_FILE, cm.CODING_FILE,
+                            cm.GENERIC_FILE)
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+
+    def tearDown(self) -> None:
+        (cm.JAVA_STACK_FILE, cm.SPRING_STACK_FILE, cm.CODING_FILE,
+         cm.GENERIC_FILE) = self._orig_stack
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/stack/java.adoc", self.JAVA + self.JAVA_ROBUSTNESS)
+        self.write("specs/stack/spring.adoc", self.SPRING)
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+
+    def test_valid_orm_boundary_guard_passes(self):
+        self._write_valid()
+        cm.check_orm_boundary_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_scope_limited_to_subclass_removed_reports(self):
+        # 反例：'只许在本子类内' 的限定被删 → 跨类调用无从核对
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("`IService` 的成员方法只许在 `IService` 与 `ServiceImpl` 的"
+                                     "本子类中使用", "`IService` 的成员方法建议在 Service 中使用"))
+        cm.check_orm_boundary_guard()
+        self.assertIn("本子类", self.error_texts())
+
+    def test_other_subclasses_exclusion_removed_reports(self):
+        # 反例：'其他子类也不行' 被删 → 兄弟子类/无关 Service 持接口引用来调被读成合法
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("**其他子类也不行**——工具类/静态方法/Helper/Controller 里调同属禁止面。", ""))
+        cm.check_orm_boundary_guard()
+        self.assertIn("其他子类也不行", self.error_texts())
+
+    def test_destination_removed_reports(self):
+        # 反例：'正确做法'（去路）被删 → 执行者只能绕开，例如退回 new LambdaQueryWrapper
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **正确做法**：把这段逻辑放进**该实体自己的 Service**"
+                                     "（新写一个方法），或另建业务服务。\n", ""))
+        cm.check_orm_boundary_guard()
+        self.assertIn("正确做法", self.error_texts())
+
+    def test_mapper_ownership_removed_reports(self):
+        # 反例：跨表建业务服务被删 → '实体 Service 不操作其他表' 无处可去
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace("另建业务服务", "分层清晰"))
+        cm.check_orm_boundary_guard()
+        self.assertIn("另建业务服务", self.error_texts())
+
+    def test_exemption_surface_removed_reports(self):
+        # 反例：豁免面（不禁用/不建议 + 补充性单表查询）被删 → L2 被读成 L1、存量大面积判红
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace("**这一条不建议、不禁用**：", "**这一条禁止**：")
+                   .replace("补充性单表查询", "任何查询"))
+        cm.check_orm_boundary_guard()
+        self.assertIn("不禁用", self.error_texts())
+
+    def test_null_check_downgraded_to_slogan_reports(self):
+        # 反例（判据本体、不是轴名）：判空条的**判据被抽走**、只剩标题与口号
+        # ——"轴名齐全、判据被抽走"必须报红，否则该防线只是外观
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "* **访问前先判空、不发起无效查询（L1，跨语言）**：调用持久化接口前，凡参数取值使该次访问"
+                       "必然查不到任何数据时，须**就地返回**，不得把这类参数交给数据库。\n"
+                       "* **返回集合的接口一律返回空集合、不返回 `null`（L1，跨语言）**。\n"
+                       "* **判定标准（任一命中即违规）**：①按主键查询（`getById`/`findById`）未先判主键为 null；"
+                       "②空集合仍发起查询；③无结果路径 `return null`。\n"
+                       "* **防反用**：不得为\"合法但可能查不到\"的取值加前置判断。\n",
+                       "* **访问前先判空**：注意性能，避免无谓查询。\n"))
+        cm.check_orm_boundary_guard()
+        texts = self.error_texts()
+        self.assertTrue("不发起无效查询" in texts, f"判据被抽走后未报红，实际错误：{texts}")
+        self.assertTrue("就地返回" in texts, f"短路动作被抽走后未报红，实际错误：{texts}")
+
+    def test_exemption_form_extracted_reports(self):
+        # 反例（判据本体、不是轴名）：豁免只留"补充性单表查询"字样、**可核对形态被抽走**
+        # ——L2 判红时各判各的，无从指认
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace("**豁免的可核对形态需同时满足三条**：①**单次**；"
+                                       "②**只读补充**；③**不承载业务规则**；"
+                                       "超出任一条即归跨多表编排。", ""))
+        cm.check_orm_boundary_guard()
+        self.assertIn("只读补充", self.error_texts())
+
+    def test_general_layer_framework_name_reports(self):
+        # 反例：通用层点名框架专名 → 对非 Java 项目不成立（替换主语测试失败）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING + "* `IService` 的 `getById` 要判空。\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("IService", self.error_texts())
+
+    def test_dispatcher_marker_removed_reports(self):
+        # 反例：调度器识别特征被删 → 写跨类调用代码时不会触发加载这条（等于没写）
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]"
+                   "（**MyBatis-Plus 持久化访问**）\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("谁可以调用", self.error_texts())
+
+    def test_java_stack_null_check_landing_removed_reports(self):
+        # 反例：Java 栈的判空落点被删 → Java 执行者按栈文件学仍会漏判
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA + self.JAVA_ROBUSTNESS.replace(
+                       "* **持久化访问前先判空（本条是通用层的 Java 落点）**："
+                       "用法见 link:../general/coding.adoc[]「持久化访问（数据库/缓存等）」；"
+                       "`getById(null)`、`getByIds(空集合)` 一类**在调用前**用 "
+                       "`ObjectUtil.isEmpty`/`CollUtil.isEmpty` "
+                       "判一次，**不手写裸 `null` 比较**，命中即就地返回（单条 `null`、"
+                       "批量 `CList.empty()`）。\n", ""))
+        cm.check_orm_boundary_guard()
+        self.assertIn("持久化访问前先判空", self.error_texts())
+
+    def test_java_criteria_moved_out_of_section_reports(self):
+        # 反例（落点，不是"全文提到过"）：① 组整段搬进同一文件里的**别的节**
+        # ——同一份文件另有「跨语言执行脚本」节、整段还在文件里，全文匹配会读成齐备。
+        # 判据必须钉在「持久化访问」节内：判据不在该节 = 读者按节找规则找不到。
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **`IService` 的成员方法只许在 `IService` 与 `ServiceImpl` 的"
+                                     "本子类中使用（L1）**：**其他子类也不行**——"
+                                     "工具类/静态方法/Helper/Controller 里调同属禁止面。\n", "")
+                   + "\n== 跨语言执行脚本（SQL / Lua 等）\n"
+                   + "* **`IService` 的成员方法只许在 `IService` 与 `ServiceImpl` 的本子类中使用"
+                     "（L1）**：**其他子类也不行**——工具类/静态方法/Helper/Controller 里调同属禁止面。\n"
+                   + self.JAVA_ROBUSTNESS)
+        cm.check_orm_boundary_guard()
+        self.assertIn("本子类", self.error_texts())
+
+    def test_spring_criteria_moved_out_of_section_reports(self):
+        # 反例（落点）：Spring 的 L2 条被搬出「分层与职责」节——判据须落回分层职责处，
+        # 散到别的节里等于"跨表业务另建业务服务"这条不在分层规则中。
+        self._write_valid()
+        l2 = [l for l in self.SPRING.split("\n") if "另建业务服务" in l][0]
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace(l2 + "\n", "") + "\n== 其他\n" + l2 + "\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("另建业务服务", self.error_texts())
+
+    def test_coding_null_check_moved_out_of_section_reports(self):
+        # 反例（落点）：通用层的判空条被搬出「持久化访问」节（挪进「健壮性」节一类）——
+        # 判据本体是"持久化访问"的契约，挪走后读者按节找会漏。
+        self._write_valid()
+        moved = "* **访问前先判空、不发起无效查询（L1，跨语言）**：须**就地返回**。\n"
+        kept = self.CODING.replace(
+            "* **访问前先判空、不发起无效查询（L1，跨语言）**：调用持久化接口前，凡参数取值使该次访问"
+            "必然查不到任何数据时，须**就地返回**，不得把这类参数交给数据库。\n", "")
+        self.write("specs/general/coding.adoc",
+                   kept + "\n== 健壮性\n" + moved)
+        cm.check_orm_boundary_guard()
+        self.assertIn("不发起无效查询", self.error_texts())
+
+    def test_general_layer_dispatcher_marker_removed_reports(self):
+        # 反例（交付面）：本条只登记在 Java 技术栈条里、通用层「编写代码」条没有识别特征——
+        # 跨类调持久化 API 的活儿不带 Java 栈（栈层按文件类型加载）时本条不会触发加载。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
+                   "含**谁可以调用**——成员方法只许在本 `IService`/`ServiceImpl` 子类内用、**调库前先判空**）\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("谁可以调", self.error_texts())
+
+    def test_general_layer_dispatcher_slogan_only_reports(self):
+        # 反例（交付面）：通用层只写『数据访问边界』这类口号、不落判据——不可判读即漏加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「数据访问边界」**）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
+                   "含**谁可以调用**——成员方法只许在本 `IService`/`ServiceImpl` 子类内用、**调库前先判空**）\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("谁可以调", self.error_texts())
+
+    def test_dispatcher_marker_hidden_in_unrelated_line_reports(self):
+        # 反例（识别特征须在**技术栈条那一行**）：同一行里还带着旧条的 `lambdaQuery`/`QueryWrapper`，
+        # 只查裸子串时"识别特征挪到别的行/别的条目"会被读成齐备。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**调库前先判空**）\n"
+                   "  ** 数据访问 → link:specs/stack/java.adoc[]（**谁可以调用**——"
+                   "成员方法只许在本 `IService`/`ServiceImpl` 子类内用）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]"
+                   "（**MyBatis-Plus 持久化访问**：`lambdaQuery` 与**禁止 `new QueryWrapper`**）\n")
+        cm.check_orm_boundary_guard()
+        self.assertIn("谁可以调用", self.error_texts())
+
+    def test_destination_requires_entity_own_service(self):
+        # 反例：去路只剩"另建业务服务"、**"放进该实体自己的 Service"被抽走**——
+        # 少这一半时，最简单的一类（本实体自己的逻辑）无处可去，只能退回具名构造器。
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **正确做法**：把这段逻辑放进**该实体自己的 Service**"
+                                     "（新写一个方法），或另建业务服务。\n",
+                                     "* **正确做法**：另建业务服务。\n") + self.JAVA_ROBUSTNESS)
+        cm.check_orm_boundary_guard()
+        self.assertIn("该实体自己的 Service", self.error_texts())
+
+    def test_exemption_requires_all_three_forms(self):
+        # 反例（豁免的可核对形态只留一条）：三问只留"单次"、抽掉"只读补充/不承载业务规则"——
+        # L2 判红时各判各的（"按另一张表的结果决定写什么"会被读成豁免）。
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace(
+                       "**豁免的可核对形态需同时满足三条**：①**单次**；②**只读补充**；"
+                       "③**不承载业务规则**；超出任一条即归跨多表编排。",
+                       "**豁免**：单次查询即可。"))
+        cm.check_orm_boundary_guard()
+        texts = self.error_texts()
+        self.assertTrue("只读补充" in texts, f"豁免三问被抽走后未报红，实际错误：{texts}")
+        self.assertTrue("不承载业务规则" in texts,
+                        f"『不承载业务规则』被抽走后未报红，实际错误：{texts}")
+
 class TestCheckConversionGuard(CheckSpecsTestCase):
     """钉住『对象转换防线』（通用层抽象 / 技术栈层框架专名 / **建议层口径**）。
 

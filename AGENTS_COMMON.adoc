@@ -37,7 +37,7 @@
 
 **登记形态（本文件是唯一登记处）**：每条一行——**加载项 + 触发特征 + 一行指向该文件的引用**。**落点承担什么、有哪些条、依据是什么，一律写在该文件里**（本文件不写「含 …」这类小抄：它会让本处成为上游落点，与 `specs/general/terminology.adoc`「数据字典」的「反膨胀」相抵）。触发特征必须可判读（工作涉及该主题、或项目具备该技术特征），宁宽不漏。
 
-* **任何代码活动**（**写任何新代码、改任何既有代码**、代码评审、交付前的质量自检；要判「**代码质量（新产出即高质）**」十项下限；识别特征：写**持久化访问（数据库/缓存等）**——含要判定「走不走统一入口」；写**对象转换**——多层嵌套对象；要**新增一个内部调用接口**的请求/响应类（**请求响应类优先移动复用**，且**本项目自身的依赖不算三方依赖**））→ `specs/general/coding.adoc`
+* **任何代码活动**（**写任何新代码、改任何既有代码**、代码评审、交付前的质量自检；要判「**代码质量（新产出即高质）**」十项下限；识别特征：写**持久化访问（数据库/缓存等）**——含要判定「走不走统一入口」、写**数据访问边界（谁可以调）**（在哪个类里调持久化 API、实体 Mapper 归谁、跨表业务建业务服务）；写**对象转换**——多层嵌套对象；要**新增一个内部调用接口**的请求/响应类（**请求响应类优先移动复用**，且**本项目自身的依赖不算三方依赖**））→ `specs/general/coding.adoc`
 * **脚本编写**（bash、Python、Node、PowerShell、Windows 批处理；识别特征：要写**跨语言执行脚本的落点**（SQL/Lua 等内联在宿主语言里）、`.bat`/`.cmd` 与 `.sh` 成对、安排取舍（要不要多读一份资料 / 要不要再跑一遍）、要把逻辑在两个平台各写一份（**跨环境脚本**）、要**为脚本另建独立文档**（**脚本单打独斗**、承载按**多行块注释**取值）、**文档头先行**且取值写**常量名**）→ `specs/general/script.adoc`
 * **注释与文档、判定内容写在哪一层、"这段文字有没有废话"**（识别特征：文中出现**包名 + 类名**形态的指代——须优先写类名 + import、**不写类全名**；要判文档是否注水或是否简明）→ `specs/general/doc.adoc`
 * **新增/调整任何内容时判定名称的落点，或要引入/引用一个已定义的名称**（识别特征：要为一个概念定名、要给名称下定义、出现"这个代号指什么"、要把名称的定义归档到某处）→ `specs/general/terminology.adoc`
@@ -63,7 +63,7 @@
 
 === 技术栈层（检测到即加载，不得遗漏）
 
-* **Java 项目**（存在 `.java`、`pom.xml`/`build.gradle`、lombok 配置）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/java-testing.adoc`。识别特征：**类型指代**（写 javadoc 时用**全限定类名**还是类名 + `import`，含 `classpath` 判定）、**对象转换（MapStruct）**（多层嵌套对象）、**MyBatis-Plus 持久化访问**（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate` 与**禁止 `new QueryWrapper`**）、**Feign 接口命名**（**只此一类**接口适用）、**构造方法不手写**（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、**测试类命名与拆分**（`Tests`/`BootTests`/`PerfTests`/`IT` 四类后缀；一个被测类可按需求/分类拆多个测试类、同分类同属性须归一类、不得滥拆）、**跨语言脚本**（SQL/Lua 放 `src/main/resources/`）
+* **Java 项目**（存在 `.java`、`pom.xml`/`build.gradle`、lombok 配置）→ `specs/stack/java.adoc` + `specs/stack/java-syntax.adoc` + `specs/stack/java-testing.adoc`。识别特征：**类型指代**（写 javadoc 时用**全限定类名**还是类名 + `import`，含 `classpath` 判定）、**对象转换（MapStruct）**（多层嵌套对象）、**MyBatis-Plus 持久化访问**（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate` 与**禁止 `new QueryWrapper`**；含**谁可以调用**——成员方法只许在本 `IService`/`ServiceImpl` 子类内用、实体 Mapper 只由其对应实体的 Service 调用、跨表业务另建业务服务、**调库前先判空**）、**Feign 接口命名**（**只此一类**接口适用）、**构造方法不手写**（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、**测试类命名与拆分**（`Tests`/`BootTests`/`PerfTests`/`IT` 四类后缀；一个被测类可按需求/分类拆多个测试类、同分类同属性须归一类、不得滥拆）、**跨语言脚本**（SQL/Lua 放 `src/main/resources/`）
 * **Spring 项目**（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`（识别特征：写/改 `@RequestMapping`/`@GetMapping` 一类的**路由路径**时，按「**接口路径优先用中划线（kebab-case）**」判）
 * **Maven 构建**（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`。识别特征：**要跑 Maven 构建/测试时**（裸 `mvn`、命令行构建）——**构建并行度**（默认启用多线程构建、`.mvn/maven.config` 等既有配置优先、并行只到模块粒度）与**仓库与镜像**
 * **Bash/Shell 脚本**（存在 `.sh`，或 shebang 为 bash/sh）→ `specs/stack/bash.adoc`

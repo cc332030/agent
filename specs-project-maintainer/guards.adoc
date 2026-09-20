@@ -81,29 +81,30 @@
 | 66 | `check_api_contract_reuse_guard` | 请求/响应类优先移动复用 + HTTP 接口路径优先中划线——防线 |
 | 67 | `check_api_naming_guard` | Feign 接口命名带所属域/项目前缀防线——Feign 接口的命名前缀不得退回"随手取名" |
 | 68 | `check_persistence_access_guard` | 持久化访问防线——通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层 |
-| 69 | `check_conversion_guard` | 对象转换防线——多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径 |
-| 70 | `check_lombok_constructor_guard` | 构造方法不手写、优先 lombok 防线——无参/必参/全参构造一律由 lombok 注解生成 |
-| 71 | `check_doc_type_notation_guard` | 文档类型指代（类名 + import）防线——文档里写类名、不写类全名 |
-| 72 | `check_dev_flow_guard` | 开发流程防线——先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删 |
-| 73 | `check_checklist_guard` | 清单逐项与文档-脚本一致性防线——把"可机械核对却被漏掉"的判定点补成抓手 |
-| 74 | `check_rename_split_guard` | 重命名与内容修改须分两个提交防线——用户提出的 P7 要求不得被删或降级 |
-| 75 | `check_criteria_not_axis_guard` | 防线的核对对象是判据本体、不是轴名——防线：本轮实测教训不得只活在代码注释里 |
-| 76 | `check_runtime_env_guard` | 运行环境须与项目声明一致——防线：用户提出的硬性要求不得被删或降级 |
-| 77 | `check_wiring_guard` | 防线接线完整性——定义了的防线必须会被执行（`CHECKS` 序列 + 闭包可达），防"定义了却不执行" |
-| 78 | `check_guard_order_guard` | 防线次序与清单表一致——`CHECKS` 序列与本表逐一同序 |
-| 79 | `check_dispatcher_no_details_guard` | 调度器只登记不抄条目——加载项里不得出现条目级细节词 |
-| 80 | `check_ledger_source_paths_guard` | 台账来源列须指向真实存在的文件 |
-| 81 | `check_maven_mirror_guard` | Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改 |
-| 82 | `check_registry_mirror_guard` | 包源与镜像源防线——推荐的包源地址**已实测可用**、且**换源有次序与降级边界** |
-| 83 | `check_throughput_guard` | 执行吞吐——防线：轮次纪律的判据、常驻层引用与调度器登记不得被删 |
-| 84 | `check_performance_guard` | 性能测试防线——测量与记录两半的要点不得被删或降级 |
-| 85 | `check_quality_guard` | 代码质量（新产出即高质）——防线：十项下限、判定标准与依据不得被删或降级 |
-| 86 | `check_generation_efficiency_guard` | 生成效率 / token 纪律——防线：两条判据、边界条与调度器登记不得被删或降级 |
-| 87 | `check_after_change_review_guard` | 改动后复核——防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级 |
-| 88 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级 |
-| 89 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级 |
-| 90 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改 |
-| 91 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
+| 69 | `check_orm_boundary_guard` | 数据访问边界防线——谁可以调 `IService` 成员方法（本子类限定）、实体 Mapper 归属与跨表建业务服务、调库前判空与集合返回空集合，以及存量不告警的口径 |
+| 70 | `check_conversion_guard` | 对象转换防线——多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径 |
+| 71 | `check_lombok_constructor_guard` | 构造方法不手写、优先 lombok 防线——无参/必参/全参构造一律由 lombok 注解生成 |
+| 72 | `check_doc_type_notation_guard` | 文档类型指代（类名 + import）防线——文档里写类名、不写类全名 |
+| 73 | `check_dev_flow_guard` | 开发流程防线——先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删 |
+| 74 | `check_checklist_guard` | 清单逐项与文档-脚本一致性防线——把"可机械核对却被漏掉"的判定点补成抓手 |
+| 75 | `check_rename_split_guard` | 重命名与内容修改须分两个提交防线——用户提出的 P7 要求不得被删或降级 |
+| 76 | `check_criteria_not_axis_guard` | 防线的核对对象是判据本体、不是轴名——防线：本轮实测教训不得只活在代码注释里 |
+| 77 | `check_runtime_env_guard` | 运行环境须与项目声明一致——防线：用户提出的硬性要求不得被删或降级 |
+| 78 | `check_wiring_guard` | 防线接线完整性——定义了的防线必须会被执行（`CHECKS` 序列 + 闭包可达），防"定义了却不执行" |
+| 79 | `check_guard_order_guard` | 防线次序与清单表一致——`CHECKS` 序列与本表逐一同序 |
+| 80 | `check_dispatcher_no_details_guard` | 调度器只登记不抄条目——加载项里不得出现条目级细节词 |
+| 81 | `check_ledger_source_paths_guard` | 台账来源列须指向真实存在的文件 |
+| 82 | `check_maven_mirror_guard` | Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改 |
+| 83 | `check_registry_mirror_guard` | 包源与镜像源防线——推荐的包源地址**已实测可用**、且**换源有次序与降级边界** |
+| 84 | `check_throughput_guard` | 执行吞吐——防线：轮次纪律的判据、常驻层引用与调度器登记不得被删 |
+| 85 | `check_performance_guard` | 性能测试防线——测量与记录两半的要点不得被删或降级 |
+| 86 | `check_quality_guard` | 代码质量（新产出即高质）——防线：十项下限、判定标准与依据不得被删或降级 |
+| 87 | `check_generation_efficiency_guard` | 生成效率 / token 纪律——防线：两条判据、边界条与调度器登记不得被删或降级 |
+| 88 | `check_after_change_review_guard` | 改动后复核——防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级 |
+| 89 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级 |
+| 90 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级 |
+| 91 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改 |
+| 92 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
 |===
 
 **由别的防线收尾调用、不直接进序列的两道**（可达性由 `check_wiring_guard` 的闭包口径裁定）：
