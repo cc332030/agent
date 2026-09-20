@@ -107,6 +107,7 @@
 
 * OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据。
 * OWASP ASVS（Application Security Verification Standard）：应用安全验证要求清单；现行主线为 **ASVS 5.0**（2025）。用途：同上。
+* **OWASP API Security Top 10:2023**：API 安全风险分类（版本号**逐字取回官方目录页**）。被点名条目：**API3:2023 Broken Object Property Level Authorization**（条目名**逐字**，与官方目录页一致）——其失效形态即"对象属性级的授权/暴露面失守"（批量赋值与过度暴露：把内部数据面直接当成对外契约面）。用途：`specs/general/coding.adoc`「数据契约的载体（数据库实体类不进对外契约）」的依据行——把数据库实体类当接口请求/响应参数，正是"外部可观测到不应外露的属性"这一失效形态。**取样状态（如实标注）**：条目名与版本**已取回官方目录页核对**（`https://owasp.org/API-Security/editions/2023/en/0x11-t10/`，HTTP 200）；**该条目的正文未逐字取回**，故本条只引条目名、不引其正文措辞。**同义性差异**：该条目讲的是"属性级授权与暴露面"，**未**规定"数据库实体类不得作接口参数"——本条规则与例外清单是本集合据其方向做的判据化取舍。
 * CWE（Common Weakness Enumeration）：软件弱点编号体系。被点名编号：**CWE-502**（Deserialization of Untrusted Data）、**CWE-208**（Observable Timing Discrepancy）、**CWE-209**（Generation of Error Message Containing Sensitive Information）、**CWE-489**（Active Debug Code）。用途：`specs/general/security.adoc` 各条末尾的编号标注——编号即"这条要求针对哪一类已知弱点"的锚点。
 
 == Semantic Versioning 2.0.0

@@ -840,6 +840,13 @@ JAVA_CONVERSION_SECTION = "对象转换（MapStruct）"
 # 三份的「持久化访问」**节标题逐字相同**，故要点一律按节取文本——全文匹配会把
 # "① 组从 java.adoc 的「持久化访问」节整段搬走（同文件里另有同名工具、别的节还提了一句）"
 # 读成齐备（本轮实测）。节名走常量：改节名即改这里，不会留下"节名对不上、检查永久红或永久绿"。
+# 数据契约的载体防线（数据库实体类不进对外契约）：用户口径「除非用户主动声明，否则不将
+# 数据库实体类作为接口请求、响应参数（已经用了不管），适用任何语言」。该条**跨语言**，
+# 故唯一落点是通用层 `specs/general/coding.adoc`；判定对象是**类的来源**（表结构）而非类名，
+# 靶心是**对外契约**（请求参数/响应返回值）——三条边界（纯内部调用、持久化自身出口、
+# 存量不管）与"用户声明可豁免"这一层缺任一条，本条就会被读宽（把内部调用与 DTO 也判红）
+# 或读空（退化成"尽量用 DTO"）。
+ENTITY_CONTRACT_SECTION = "数据契约的载体（数据库实体类不进对外契约）"
 ORM_SECTION = "持久化访问"
 LAYERING_SECTION = "分层与职责"
 ROBUSTNESS_SECTION = "健壮性"
@@ -3433,8 +3440,24 @@ def check_install_repeat_update_guard():
 # 两处都只**补齐口径**、未放宽判据（仍是"不得低于基线"）——本仓库自身仍存在的两处欠账
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
-GUARD_WIRING_BASELINE = 93
-GUARD_TEST_BASELINE = 1041
+GUARD_WIRING_BASELINE = 94
+GUARD_TEST_BASELINE = 1057
+#   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
+#   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
+#   随防线一并删除，净变动按合并后实取数记全——不按两侧各自数目相加，避免基线虚高后
+#   "删用例不报红"）。
+#   **解决冲突一轮（PR #163 冲突处置）**：合并目标分支 main（含 #161 的 AsciiDoc 工具链
+#   那笔）时两侧都新增了内容，两笔都必须保留，故两个基线各按合并后的实取数回填：
+#     * 接线数 **93 → 94**：本分支的 `check_entity_dto_guard` 与 main 的
+#       `check_toolchain_present_guard` 在 `CHECKS` 序列里各占一个位置，一道都不丢
+#       （序列里 `check_java_serial_guard`、`check_maven_parallel_guard`、
+#        `check_entity_dto_guard`、`check_toolchain_present_guard`、`check_asciidoctor_syntax`
+#        同在序）；清单表同步为 94 行、编号 1..94 连续，与 `CHECKS` 逐一同序。
+#     * 用例数 **1044 → 1057**：合并 main 侧新增用例后同源实测（
+#       `Ran 1057 tests ... OK`）——基线只允许"不低于实测"，故按实测回填。
+#   `guards.adoc` 的清单表两侧写法冲突也一并解决并逐行核实：main 侧的表格语法修复（行尾
+#   不再多一个空单元格、表头后保留空行）与「已删除的防线」记账表，与本分支新增的
+#   `check_entity_dto_guard` 一行**都保留**——合并后全文件 asciidoctor 编译 0 报错。
 
 
 def _read_ledger_no_grip_declared():
@@ -8722,6 +8745,177 @@ def check_conversion_guard():
     phase_done()
 
 
+def check_entity_dto_guard():
+    """『数据契约的载体（数据库实体类不进对外契约）』防线。
+
+    钉住用户在本轮要求里点名的这件事：**除非用户主动声明，否则不将数据库实体类作为
+    接口请求、响应参数（已经用了不管），适用任何语言**。该条此前**不存在**——
+    「跨服务/对外调用的请求响应类优先移动复用」的例外① 只写"数据库实体类不移动"，
+    管的是"搬不搬类"，与"能不能当接口参数"是两件事；技术栈层的「对象转换」把
+    `Entity ↔ DTO ↔ VO` 并列，也没有任何禁止。
+
+    **本条钉的是判据本体、不是轴名**（见 `specs-project-maintainer/priority.adoc`
+    「机械防线的核对对象是判据本体，不是轴名」）：只核『这一节在不在』属防线空转
+    （判据被抽走、只剩标题与口号时仍会全绿）。故逐条核**能拿去核对的那句话**——
+    『不得作为对外契约的请求参数与响应值』『不得在入参/返回值里嵌套』
+    『识别判据（先判对象，再判规则）』『不看类名』『纯内部调用』『持久化自身的出口』
+    『已经用了不管』『不视为违规』『除非用户主动声明』『不得泛化』。
+
+    **四类易被静默破坏的形态**：
+      * **整节被删** —— 规则消失，实体类继续当契约（最直接的破坏）；
+      * **判据被压成口号** —— 只剩"尽尽量用 DTO"，判定标准与边界全丢；
+      * **边界被删** —— 纯内部调用/持久化出口两条一丢，本条就被读宽成"任何函数都不得
+        出现实体类"，把正常持久化层与内部调用大面积判红；
+      * **"存量不管"被删** —— 用户点名的"已经用了不管"丢字，L1 被扩到存量接口上。
+
+    归属：**通用层（跨语言）**——写进技术栈层会被替换主语测试判为放错层
+    （"对外契约不得以库表结构为载体"对非 Java 项目同样成立）。故同时**反向钉住**：
+    技术栈层不得出现该条的专条（防两处各写一份判据的第二真源）。
+
+    语义判断（某次实际接口参数是不是实体类、某接口算不算"对外"）见 `GUARD_CHECK_LIMITS`。
+    """
+    phase("数据契约的载体防线检查（数据库实体类不进对外契约）")
+    rel_coding = _rel_of(CODING_FILE)
+
+    def _sections_of(path, missing_msg):
+        if not os.path.isfile(path):
+            err(missing_msg, _rel_of(path))
+            return None
+        with open(path, encoding="utf-8") as fh:
+            return _split_adoc_sections(fh.read())
+
+    def _section_by(sections, keyword, rel, what):
+        for title, body in sections or ():
+            if keyword in title:
+                return body
+        err(f"数据契约的载体防线被破坏：{rel} 缺少「{what}」节——本条判据失去落点"
+            "（要点散在别处时，读者按节找规则找不到，等于规则不在）", rel)
+        return ""
+
+    coding_sections = _sections_of(
+        CODING_FILE,
+        f"缺少文件 {rel_coding}——「数据契约的载体（数据库实体类不进对外契约）」"
+        "的通用层落点丢失（该条跨语言，须收在通用编码规范而非某一技术栈）")
+    body = _section_by(coding_sections, ENTITY_CONTRACT_SECTION, rel_coding,
+                       ENTITY_CONTRACT_SECTION)
+    for keys, desc in (
+        (("不得作为对外契约的请求参数与响应值（L1）",),
+         "条文：须有该条并标 L1（防被降级成建议、退回「实体类最省事」）——"
+         "级别须标在**这一条**上（写在别处等于没标）"),
+        (("请求参数", "返回值"),
+         "靶心：须点名**请求参数与响应返回值**——只写「接口参数」会被读成只管入参、"
+         "不管响应，而响应侧才是字段外露的主要来源"),
+        (("入参/返回值里**嵌套**它", "集合元素", "分页包装体内"),
+         "**嵌套面**：须写明入参/返回值里**不得嵌套**实体类（集合元素、对象字段、"
+         "分页包装体内）——只写「不得作入参/返回类型」时，"
+         "`Result<List<UserEntity>>` 一类会被读成合法（正是本条要拦的常见形态）"),
+        (("识别判据", "表结构"),
+         "**识别判据**：须写明按「以表结构为来源」判对象、**不看类名**——"
+         "缺则执行者按类名判（`UserDTO` 里逐字段对应表结构就漏判、`UserEntity` 名但"
+         "与表无关的被误判）"),
+        (("不看类名",),
+         "**不看类名**这一句须在：它是「先判对象再判规则」的可核对形态"),
+        (("载体取该接口自己的请求/响应类",),
+         "**给出去路**：须写明对外接口用该接口自己的请求/响应类——只写禁令不给出路，"
+         "执行者只能绕开，本条会被读成「这也不能写」"),
+        (("纯内部调用", "不在本条范围内"),
+         "**边界一**：须写明纯内部调用（不经跨进程/跨网络边界）不在范围内——"
+         "缺则本条被读宽成「任何函数都不得出现实体类」，把正常内部编排大面积判红"),
+        (("持久化自身的出口",),
+         "**边界二**：须写明持久化自身的出口（仓库/DAO/Mapper 的返回）不受约束——"
+         "缺则数据访问层与「持久化访问」节直接冲突（那边要求返回实体、这边禁止出现）"),
+        (("项目自身规范", "为准"),
+         "**冲突次序**：须写明项目自身规范可加严/收窄、冲突时以项目自身规范为准"
+         "（公共内容被未知项目加载时不得静默推翻其既有约定）"),
+        (("存量边界", "已经用了不管", "不视为违规"),
+         "**存量口径（用户点名要件）**：须写明已有接口不视违规、不告警、不要求整改"
+         "（「已经用了不管」）——缺则 L1 被扩到存量接口上，存量项目大面积命中"),
+        (("随动迁移", "全库改造"),
+         "存量动作：须写明随动迁移、不得据此发动全库改造（批量换参数类型、批量补 DTO）"),
+        (("除非用户主动声明",),
+         "**豁免面（用户原话要件）**：须写明除非用户主动声明否则一律适用——"
+         "少了这句即把用户点名的那一层豁免删掉，声明过的场景会被判红"),
+        (("不得泛化",),
+         "**豁免的范围**：须写明声明仅对本次、该处生效、不得泛化"
+         "（与「改动范围边界」的已知例外同口径）"),
+        (("依据", "ISO/IEC 25010"),
+         "依据行：须标标准名/编号（防依据被整段删后无从追溯）"),
+    ):
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"数据契约的载体防线被破坏：{rel_coding} 的「{ENTITY_CONTRACT_SECTION}」"
+                f"节缺失要点 {missing}——{desc}；该条对应用户提出的真实要求"
+                "（实体类不得作为接口请求/响应参数），不得删除、不得降级、不得放开边界",
+                rel_coding)
+
+    # 归属层：该节必须在通用层（上面已按 CODING_FILE 取节）；技术栈层不得另立第二真源
+    # 见下文检查。**不核"与哪一节相邻"**——相邻关系随文档重排而变，用户口径里没有这一条，
+    # 拿它当判据只会让一次无关的节序调整把防线判红（实测：把「对象转换」与「持久化访问」
+    # 互换即报"防线被破坏"），属机械核到了语义没核到的东西。
+
+    # 通用层不得把该条写成框架专条/框架形态（本条跨语言：替换主语测试）
+    for token, desc in (
+        ("@Entity", "通用层不得点名 `@Entity` 一类映射注解——具体框架写法归技术栈层"),
+        ("MyBatis", "通用层不得点名 `MyBatis`——它是具体框架名，通用层只留跨语言抽象"),
+    ):
+        if token in body:
+            err(f"数据契约的载体防线被破坏：{rel_coding} 出现框架专名 `{token}`——{desc}",
+                rel_coding)
+
+    # 技术栈层不得另立第二真源（判据的唯一落点在通用层）
+    for path, key in ((JAVA_STACK_FILE, "java.adoc"), (SPRING_STACK_FILE, "spring.adoc")):
+        if not os.path.isfile(path):
+            continue
+        rel = _rel_of(path)
+        text = open(path, encoding="utf-8").read()
+        if "不进对外契约" in text or "不得作为对外契约" in text:
+            err(f"数据契约的载体防线被破坏：{rel} 出现该条的专条——判据的唯一落点在"
+                f"{rel_coding}（该条跨语言），技术栈层再写一份即第二真源"
+                "（两处各自漂移、读者按栈文件学到的与通用层不一致）", rel)
+
+    # 加载调度器：识别特征须落在"要判定对外接口的请求/响应参数用什么类承载"这一
+    # 可判读的触发条件上（只写"数据契约"这类口号不可判读即漏加载）
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {_rel_of(GENERIC_FILE)}", _rel_of(GENERIC_FILE))
+    else:
+        rel_common = _rel_of(GENERIC_FILE)
+        with open(GENERIC_FILE, encoding="utf-8") as fh:
+            gtext = fh.read()
+        hit = next((l for l in gtext.split("\n") if "数据库实体类不进对外契约" in l), "")
+        if not hit:
+            err(f"数据契约的载体防线被破坏：{rel_common} 的加载调度器里找不到带"
+                "「数据库实体类不进对外契约」的条目——缺则写对外接口参数时"
+                "不会触发加载这条（等于没写）", rel_common)
+        else:
+            for keys, desc in (
+                (("coding.adoc",),
+                 "登记须指向 `specs/general/coding.adoc`（该条跨语言，落点在通用层）"),
+                (("请求/响应参数", "返回值", "用什么类承载"),
+                 "识别特征须落在判据本身（要判定对外接口的请求/响应参数与返回值用什么类承载），"
+                 "不是「数据契约」这类口号（识别特征不可判读即漏加载）"),
+            ):
+                missing = [k for k in keys if k not in hit]
+                if missing:
+                    err(f"数据契约的载体防线被破坏：{rel_common} 的调度条目缺失要点 "
+                        f"{missing}——{desc}", rel_common)
+
+    # 图书馆侧：本集合更严取舍须登记（防读者把本站口径读成标准规定），并如实标注
+    rel_adoption = "library/adoption.adoc"
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_adoption)):
+        atext = open(os.path.join(REPO_ROOT, rel_adoption), encoding="utf-8").read()
+        for keys, desc in (
+            (("数据库实体类不得作为接口的请求/响应参数", "本集合自己的判据化取舍"),
+             "「本集合自己承认的更严取舍」一节须登记该条（防读者把它读成标准规定）"),
+            (("没有任何材料规定",),
+             "同义性：须写明外部材料**未**规定这一层（标准只给方向与下限）"
+             "——缺则该条会被读成某标准的规定"),
+        ):
+            missing = [k for k in keys if k not in atext]
+            if missing:
+                err(f"数据契约的载体防线被破坏：{rel_adoption} 缺失要点 {missing}——{desc}",
+                    rel_adoption)
+    phase_done()
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -10151,6 +10345,7 @@ CHECKS = (
     check_api_naming_guard,
     check_persistence_access_guard,
     check_conversion_guard,
+    check_entity_dto_guard,
     check_lombok_constructor_guard,
     check_doc_type_notation_guard,
     check_dev_flow_guard,
