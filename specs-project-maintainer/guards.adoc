@@ -102,7 +102,10 @@
 | 87 | `check_after_change_review_guard` | 改动后复核——防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级 |
 | 88 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级 |
 | 89 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级 |
-| 90 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
+| 90 | `check_java_serial_guard` | Java 序列化防线——已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、JDK 14+ 补 `@Serial`、不得为未实现者补字段或顺手加 `implements Serializable`、不得以抑制代替显式声明；另钉「优先 `val`、可变才 `var`」与「链式调用一律换行」两处判据本体 |
+| 91 | `check_asciidoctor_syntax` | 若环境有 asciidoctor，做一次语法编译验证 |
+| — | 次序即注意力次序 | 本表次序与 `script/check_specs.py` 的 `CHECKS` 序列逐一相同、同序（由 `check_guard_order_guard` 机械核对） |
+| — | 条数记账 | 新增/删除防线须同步本表、`CHECKS` 与两份基线（`GUARD_WIRING_BASELINE`/`GUARD_TEST_BASELINE`） |
 |===
 
 **由别的防线收尾调用、不直接进序列的两道**（可达性由 `check_wiring_guard` 的闭包口径裁定）：

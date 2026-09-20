@@ -4839,12 +4839,16 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         cm.check_rename_split_guard()
         self.assertIn("判定标准", self.error_texts())
 
-    def test_item_label_removed_reports(self):
-        # 反例（整条 bullet 被摘掉、正文并入相邻条目）：按内容关键词核对可能被相邻条款
-        # 的字样兜住，故须有"条目轴逐项"的结构核对对"整条被摘掉"发声
+    def test_order_bullet_removed_reports(self):
+        # 反例（整条 bullet 被摘掉）：只"轴名齐全、判据被抽走"的形态——按内容关键词的核对
+        # 会被相邻条款的字样兜住，故核对的必须是**该条自身**的条目轴与判据。
+        # 方法名与本类下方的 `test_item_label_removed_reports` **不得重名**——同一个测试类里
+        # 重名的后一个会静默覆盖前一个，这条用例曾因此从未执行（判据对应的轴也在别处出现过，
+        # 于是"整条被摘掉"这一最危险的形态无人发声）。
         self._write_valid()
-        self._drop("* **提交顺序（L1）**：**先重命名、后改内容**，不得颠倒；否则可能连 rename 识别"
-                   "一起丢掉（相似度阈值，见 git 官方文档 `git-diff` 的 `-M`）。\n")
+        # 整条摘掉 + 抹掉该条独有的判据措辞（判据被搬进相邻条目时同样须报红）
+        self._drop("* **提交顺序（L1）**")
+        self._drop("、后改内容")
         cm.check_rename_split_guard()
         self.assertIn("提交顺序", self.error_texts())
 
@@ -5399,6 +5403,185 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         self._write(library=self.LIBRARY.replace("**已废止**", "旧版本"))
         cm.check_info_density_guard()
         self.assertIn("废止", self.error_texts())
+
+
+class TestCheckJavaSerialGuard(CheckSpecsTestCase):
+    """钉住『Java 序列化 / 局部变量推断 / 链式调用换行』防线：判据本体不得被删。
+
+    用户本轮三句话对应三处判据（`specs/stack/java.adoc`「序列化（`Serializable`）」与「编码」、
+    `specs/general/coding.adoc`「表达式与调用写法」）。三处共用的性质是：**要治的都是「留了裁量点」**
+    （要不要加 UID / `val` 还是 `var` 都行 / 链短就不换行）。故用例专门覆盖**「轴名齐全、判据被抽走」
+    的反例本体**——把「不得为未实现者补字段」「用 `var` 却没重新赋值即违规」「长度不是判据」抽掉时
+    必须报红（只核"这几节在不在"属防线空转）。
+    """
+
+    JAVA = (
+        "= Java 规范\n\n"
+        "== 编码\n\n"
+        "* **强制优先使用 lombok（L1）**：能用 lombok 代替的绝不手写。\n"
+        "* **局部变量强制使用 `val`/`var`，且优先 `val`、可变才用 `var`（L1）**：局部变量声明**必须且一律**使用 `val`/`var`，**先取 `val`**；"
+        "仅当该变量**确实需要重新赋值**时才用 `var`——两者都优先于显式类型；字段不得使用。"
+        "**`var` 是例外档、不是并列选项**。**判定标准（任一命中即违规）**："
+        "① 写了显式类型且不属例外；② **用 `var` 声明的局部变量此后从未重新赋值**；"
+        "③ 同法里一半 `val` 一半显式类型。**例外（L2）**：**类型推断结果不清晰**、"
+        "**以 `null` 字面量初始化**等场景可写显式类型。**未引入 lombok 时**：JDK 只有 `var`、"
+        "**没有 `val`**，按 `var` 执行。**依据（标准名/编号）**：ISO/IEC 25010、"
+        "ISO/IEC/IEEE 29148、**Project Lombok 官方文档**、**Google Java Style Guide**；"
+        "**「优先 `val`、可变才 `var`」是本集合对 lombok 的判据化取值**。\n\n"
+        "== 序列化（`Serializable`）\n\n"
+        "仅适用于**声明实现 `java.io.Serializable` 的类**。\n\n"
+        "* **已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（L1）**："
+        "（含父类已实现）**必须显式声明**；取值按 `lombok.config` 的**实时取值**，"
+        "既无配置时取 `1L`。\n"
+        "* **`@Serial` 标注（L2，JDK 14+）**：使拼写错误在**编译期报出**。\n"
+        "* **不为未实现 `Serializable` 的类型补（L1）**：**不得**为「消警告」加该字段，"
+        "**也不得顺手给它加 `implements Serializable`**。\n"
+        "* **显式声明优先于抑制（L1）**：以 `@SuppressWarnings` 代替显式声明不算完成"
+        "（见 `specs/general/coding.adoc`「警告与弃用」）。\n"
+        "* **判定标准（任一命中即违规）**：①②③④。**存量**按「存量处理」随动迁移。\n"
+        "* 依据（标准名/编号）：**Java Object Serialization Specification**、"
+        "**Java 官方 API 文档**、ISO/IEC 25010、ISO/IEC/IEEE 29148；"
+        "**「默认取 `1L`」是本集合的取值**。\n\n"
+        "== 对象转换（MapStruct）\n\n* 略。\n")
+
+    CODING = (
+        "= 通用编码规范\n\n== 表达式与调用写法\n\n"
+        "* **链式调用一律换行（L1）**：调用链**每个环节各占一行**、`.` 起头；"
+        "**长度不是判据**——再短的链也换行，**不得**因为「这行放得下」而写成一行。"
+        "**判定标准（任一命中即违规）**：① 同一行里出现**两处及以上**的调用链环节；② 以「很短」为由保持单行。"
+        "**例外（L2）**：**单个不可再分的原子表达式**、注解、**测试断言**里单层断言。"
+        "**边界（防反用）**：本条**只规定换行形态、不改变求值语义与调用顺序**。"
+        "**依据（标准名/编号）**：ISO/IEC 25010、ISO/IEC/IEEE 29148、"
+        "**Google Java Style Guide**、**阿里巴巴 Java 开发手册**；"
+        "**「哪怕很短也要换行」是本集合的判据化取值**。\n")
+
+    COMMON = ("= 入口\n\n== 分类与懒加载（加载调度器）\n"
+              "* 任何代码活动（要判「**链式调用一律换行**」）\n"
+              "* Java 项目 → 识别特征：**serialVersionUID**、**局部变量强制用 `val`/`var`、且优先 `val`、可变才 `var`**\n")
+
+    SOURCES = ("= 依据图书馆\n\n== Java 序列化的版本化（Java Object Serialization Specification）\n\n"
+               "* 材料：**Java Object Serialization Specification**、`java.io.Serial`；"
+               "**本次未逐字取回**。\n"
+               "* **须注意的语义差异（同义性）**：未规定必须显式声明。\n")
+
+    ADOPTION = ("= 自身取舍\n\n"
+                "* **`serialVersionUID` 默认取 `1L`…三条均为本集合自己的判据化取舍**："
+                "用户原文口径为「没实现不自动加 Serializable 实现」。\n")
+
+    def _write(self, java=None, coding=None, common=None, sources=None, adoption=None):
+        self.write("specs/stack/java.adoc", java if java is not None else self.JAVA)
+        self.write("specs/general/coding.adoc", coding if coding is not None else self.CODING)
+        self.write("AGENTS_COMMON.adoc", common if common is not None else self.COMMON)
+        self.write("library/sources.adoc", sources if sources is not None else self.SOURCES)
+        self.write("library/adoption.adoc", adoption if adoption is not None else self.ADOPTION)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_java_serial_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_serial_section_removed_reports(self):
+        # 反例：整节被删 -> "结构一变即 InvalidClassException"重新变成无人管
+        self._write(java=self.JAVA.replace("== 序列化（`Serializable`）", "== 其他"))
+        cm.check_java_serial_guard()
+        self.assertIn("序列化", self.error_texts())
+
+    def test_must_be_explicit_removed_reports(self):
+        # 反例（反例本体：轴名齐全、判据被抽走）："必须显式声明"被压成"建议加上"
+        self._write(java=self.JAVA.replace(
+            "* **已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（L1）**："
+            "（含父类已实现）**必须显式声明**；", "* **UID 相关（L1）**：可以加上；"))
+        cm.check_java_serial_guard()
+        self.assertIn("必须显式声明", self.error_texts())
+
+    def test_not_for_non_serializable_removed_reports(self):
+        # 反例：用户点名的边界（未实现者不补、也不顺手加接口）被删 —— 判定面被自行放大
+        self._write(java=self.JAVA.replace(
+            "* **不为未实现 `Serializable` 的类型补（L1）**：**不得**为「消警告」加该字段，"
+            "**也不得顺手给它加 `implements Serializable`**。\n", ""))
+        cm.check_java_serial_guard()
+        self.assertIn("未实现", self.error_texts())
+
+    def test_suppress_substitute_removed_reports(self):
+        # 反例：允许用抑制代替显式声明 -> 与「警告与弃用」相抵、用户要治的警告照旧
+        self._write(java=self.JAVA.replace(
+            "* **显式声明优先于抑制（L1）**：以 `@SuppressWarnings` 代替显式声明不算完成"
+            "（见 `specs/general/coding.adoc`「警告与弃用」）。\n", ""))
+        cm.check_java_serial_guard()
+        self.assertIn("抑制", self.error_texts())
+
+    def test_default_value_removed_reports(self):
+        # 反例：缺省取值被删 -> "默认值是多少"回到执行者手里（本条的动因就是反复的警告）
+        self._write(java=self.JAVA.replace("既无配置时取 `1L`。", "按需自行取值。")
+                    .replace("**「默认取 `1L`」是本集合的取值**", "**缺省值属本集合取值**"))
+        cm.check_java_serial_guard()
+        self.assertIn("取 `1L`", self.error_texts())
+
+    def test_serial_basis_removed_reports(self):
+        # 反例：依据行被删 -> "为什么必须显式声明"的来源无从核对
+        self._write(java=self.JAVA.replace(
+            "* 依据（标准名/编号）：**Java Object Serialization Specification**、"
+            "**Java 官方 API 文档**、ISO/IEC 25010、ISO/IEC/IEEE 29148；"
+            "**「默认取 `1L`」是本集合的取值**。\n", ""))
+        cm.check_java_serial_guard()
+        self.assertIn("依据", self.error_texts())
+
+    def test_val_var_priority_removed_reports(self):
+        # 反例：与旧条重复的旧口径留着、新口径（优先 val、可变才 var）被删 —— 变成"两者等价"
+        self._write(java=self.JAVA.replace(
+            "* **局部变量强制使用 `val`/`var`，且优先 `val`、可变才用 `var`（L1）**", "* **局部变量类型（L1）**"))
+        cm.check_java_serial_guard()
+        self.assertIn("优先 val", self.error_texts())
+
+    def test_var_never_reassigned_removed_reports(self):
+        # 反例：唯一可机械核对的那句话（用 var 却没重新赋值即违规）被抽走 -> "优先 val"成了口号
+        self._write(java=self.JAVA.replace(
+            "② **用 `var` 声明的局部变量此后从未重新赋值**；", "② 略；"))
+        cm.check_java_serial_guard()
+        self.assertIn("从未重新赋值", self.error_texts())
+
+    def test_chain_length_not_criterion_removed_reports(self):
+        # 反例：把"长度不是判据"删掉 -> 退回通行风格的"按行宽决定"（用户点名的裁量点）
+        self._write(coding=self.CODING.replace("**长度不是判据**——再短的链也换行，", "行宽受限时，"))
+        cm.check_java_serial_guard()
+        self.assertIn("长度不是判据", self.error_texts())
+
+    def test_chain_semantics_boundary_removed_reports(self):
+        # 反例：只改形态、不改语义的边界被删 -> 本条被反用成"把链拆成多个中间变量"
+        self._write(coding=self.CODING.replace(
+            "**边界（防反用）**：本条**只规定换行形态、不改变求值语义与调用顺序**。", ""))
+        cm.check_java_serial_guard()
+        self.assertIn("求值语义", self.error_texts())
+
+    def test_chain_section_removed_reports(self):
+        # 反例：coding.adoc 整份缺失 -> 链式换行规则没了落点
+        self._write(coding="= 别的\n\n* 略。\n")
+        cm.check_java_serial_guard()
+        self.assertIn("链式调用一律换行", self.error_texts())
+
+    def test_dispatcher_missing_chain_feature_reports(self):
+        # 反例：通用层条目缺识别特征 -> 写非 Java 项目代码也不会加载（用户要求"所有语言"）
+        self._write(common=self.COMMON.replace("链式调用一律换行", "某风格"))
+        cm.check_java_serial_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_missing_serial_feature_reports(self):
+        # 反例：Java 栈条目缺识别特征 -> 该条永远不会被触发加载、规则实际失效
+        self._write(common=self.COMMON.replace("serialVersionUID", "某字段"))
+        cm.check_java_serial_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_library_sources_topic_removed_reports(self):
+        # 反例：图书馆无该主题 -> 标准依据只存名称、日后无从核对"它今天还成立吗"
+        self._write(sources="= 图书馆\n\n* 略。\n")
+        cm.check_java_serial_guard()
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_library_adoption_tradeoff_removed_reports(self):
+        # 反例：取舍记录被删 -> 读者会以为"默认 1L"是标准的明文要求
+        self._write(adoption="= 取舍\n\n* 略。\n")
+        cm.check_java_serial_guard()
+        self.assertIn("adoption.adoc", self.error_texts())
 
 
 class TestCheckSquashCommitGuard(CheckSpecsTestCase):
@@ -9622,13 +9805,6 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         self._write_all(section=self.SECTION.replace("、未选方案为什么不选", ""))
         cm.check_performance_guard()
         self.assertIn("未选方案为什么不选", self.error_texts())
-
-    def test_cause_analysis_removed_reports(self):
-        # 旧"结果分析"条（差异由哪些原因引起 + 给出解决方案）被整条抽掉即被拦下
-        self._write_all(section=self.SECTION.replace(
-            "* 结果分析须给出原因与对策（L1）：差异由哪些原因引起，并给出对应的解决方案。\n", ""))
-        cm.check_performance_guard()
-        self.assertIn("结果分析须给出原因与对策（L1）", self.error_texts())
 
     def test_cause_analysis_removed_reports(self):
         # 旧"结果分析"条（差异由哪些原因引起 + 给出解决方案）被整条抽掉即被拦下

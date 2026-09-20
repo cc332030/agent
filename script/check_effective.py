@@ -170,6 +170,11 @@ MECHANISMS = [
      "、未声明的越界形态（未提到该文件／只要求更新文档或 README／只说『改动了什么』／概括转述不算）"
      "与顺手补一条、以及与抓手登记；『某次是否真的自行新增或改写了条目、用户声明到底成不成立』"
      "属运行时行为与语义判断（提交内容与评论记录），机械无法判定"),
+    ("Java 序列化：已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、局部变量优先 `val`、链式调用一律换行",
+     "specs/stack/java.adoc「序列化（`Serializable`）」+ specs/general/coding.adoc「表达式与调用写法」",
+     "script/check_specs.py",
+     "check_java_serial_guard",
+     "check_java_serial_guard 钉住三处判据本体（不是轴名——只核『这几节在不在』属防线空转）：① 序列化——已声明实现 `Serializable` 的类型**必须显式声明** `serialVersionUID`（含父类已实现）、`lombok.config` 实时取值、缺省 `1L`、`@Serial`（JDK 14+）、**不得为未实现者补字段或顺手加 `implements Serializable`**、不得以抑制代替显式声明、判定标准与存量口径、依据行含『1L 属本集合取值』；② 局部变量——**优先 `val`、确实可变才 `var`**（`var` 是例外档不是并列选项）、用 `var` 却没重新赋值即违规、例外与未引入 lombok 时按 `var` 兜底、字段不得使用、依据与『属本集合取值』定性；③ 链式调用——**一律换行、长度不是判据**、同行两处及以上环节即违规、例外、只改形态不改语义的边界、依据与『严于通行风格（按行宽）』定性；并钉调度器三处识别特征（含通用层『所有语言』）与图书馆两处依据落点。**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——裁量点（要不要加 UID / `val` 还是 `var` / 多短算短）留给临场发挥时，同一项目里会并存两种形态；『某个类该不该算已实现 `Serializable`、某条链是否真的拆到了每一环节』属语义判断（见 GUARD_CHECK_LIMITS）"),
     ("Maven 未配置过仓库/镜像且外网出口 IP 在中国大陆时，须用指定中央仓库",
      "specs/stack/maven.adoc",
      "script/check_specs.py",
