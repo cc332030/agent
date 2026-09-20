@@ -9358,6 +9358,227 @@ class TestCheckLombokConstructorGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+
+class TestCheckEntityDtoGuard(CheckSpecsTestCase):
+    """钉住『数据契约的载体（数据库实体类不进对外契约）』（Issue #158 用户要求）。
+
+    用户原文口径：**除非用户主动声明，否则不将数据库实体类作为接口请求、响应参数
+    （已经用了不管），适用任何语言**。该条此前**不存在**——「请求响应类优先移动复用」的
+    例外① 只写"数据库实体类不移动"（管"搬不搬类"，不管"能不能当接口参数"），
+    技术栈层的「对象转换」把 `Entity ↔ DTO ↔ VO` 并列、也没有任何禁止。
+
+    最易被四件事冲掉：
+      * **整节被删** —— 退回"实体类最省事"；
+      * **判据被压成口号** —— 只剩"尽量用 DTO"，判定标准与识别判据全丢；
+      * **边界被删** —— 纯内部调用 / 持久化自身出口两条一丢，本条被读宽成
+        "任何函数都不得出现实体类"（把正常数据访问层与内部编排大面积判红）；
+      * **"存量不管"被删** —— 用户点名的"已经用了不管"丢字，L1 被扩到存量接口上。
+
+    故本组用例除正例外，逐条覆盖上述反例，外加"豁免面（用户声明）被删""识别判据
+    退回按类名判""调度器未同步""技术栈层另立第二真源"。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        "== 数据契约的载体（数据库实体类不进对外契约）\n"
+        "**任何语言**都适用：以数据库表/集合结构为载体的数据对象（下称**数据库实体类**"
+        "——各语言栈里由对象-关系映射框架或映射注解定义的模型类/结构体）**不得**充当"
+        "**对外数据契约的载体**——即外部可观测的请求参数、响应返回值。\n"
+        "* **识别判据（先判对象，再判规则）**：类/结构体**以表结构为来源**即属本条所指的"
+        "数据库实体类。**不看类名**。\n"
+        "* **不得作为对外契约的请求参数与响应值（L1）**：对外暴露的接口**不得**以数据库实体类"
+        "作为入参或返回类型，也**不得**在入参/返回值里**嵌套**它（集合元素、对象字段、"
+        "分页包装体内均不得出现）。\n"
+        "* **载体取该接口自己的请求/响应类（L1）**：对外接口须使用为该接口定义的请求类/响应类。\n"
+        "* **判定标准（任一命中即违规）**：① 对外接口的入参类型或返回类型是数据库实体类；"
+        "② 入参/返回值的字段或集合元素里嵌套数据库实体类；③ 让实体类实现/继承接口契约类型；"
+        "④ 以「类名不叫 Entity」「内部调用不算对外」为由自我豁免。\n"
+        "* **例外与边界（L2）**：① **纯内部调用**不在本条范围内；"
+        "② **持久化自身的出口**不受本条约束；③ 项目自身规范可加严或收窄本条、"
+        "冲突时以项目自身规范为准。\n"
+        "* **存量边界（L1，用户点名「已经用了不管」）**：已有接口一律不视为违规、不告警、"
+        "不要求整改；按「规范变更的存量处理」**随动迁移**，不得据此发动全库改造。\n"
+        "* **例外之例外**：**除非用户主动声明**允许某处以数据库实体类作为请求/响应参数，"
+        "否则一律适用本条。声明仅对该次任务、该处生效、**不得泛化**。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、OWASP API Security Top 10。\n"
+        "\n== 持久化访问（数据库/缓存等）\n* 略。\n"
+        "\n== 对象转换（多层嵌套对象的转换）\n* 略。\n"
+    )
+
+    GENERIC = (
+        "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+        "  ** 任何代码活动 → link:specs/general/coding.adoc[]（识别特征：要判定"
+        "**对外接口的请求/响应参数与返回值用什么类承载**（**数据库实体类不进对外契约**））\n"
+    )
+
+    ADOPTION = (
+        "= 规范准入与自身取舍\n\n== 同义性差异与覆盖点（本集合自己承认的）\n"
+        "* **数据库实体类不得作为接口的请求/响应参数（L1）是本集合自己的判据化取舍**："
+        "外部材料只给方向与下限，**没有任何材料规定**这一层；规则本体见 "
+        "`specs/general/coding.adoc`。\n"
+    )
+
+    JAVA = "= Java 规范\n\n== 编码\n* 普通规则。\n"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_generic = cm.GENERIC_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.GENERIC_FILE, cm.JAVA_STACK_FILE,
+         cm.SPRING_STACK_FILE) = (self._orig_coding, self._orig_generic,
+                                  self._orig_java, self._orig_spring)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("AGENTS_COMMON.adoc", self.GENERIC)
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("specs/stack/spring.adoc", self.JAVA)
+        self.write("library/adoption.adoc", self.ADOPTION)
+
+    def test_valid_entity_dto_guard_passes(self):
+        self._write_valid()
+        cm.check_entity_dto_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例①：整节被删 → 退回"实体类最省事"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 代码复用\n* 略。\n")
+        cm.check_entity_dto_guard()
+        self.assertIn("数据契约的载体", self.error_texts())
+
+    def test_clause_downgraded_reports(self):
+        # 反例②：L1 被降级成建议 → "尽量用 DTO"读起来无害
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不得作为对外契约的请求参数与响应值（L1）",
+                                       "不得作为对外契约的请求参数与响应值（L2，建议）"))
+        cm.check_entity_dto_guard()
+        self.assertIn("L1", self.error_texts())
+
+    def test_nesting_clause_removed_reports(self):
+        # 反例③：嵌套面被删 → `Result<List<UserEntity>>` 被读成合法
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("也**不得**在入参/返回值里**嵌套**它（集合元素、对象字段、"
+                                       "分页包装体内均不得出现）", ""))
+        cm.check_entity_dto_guard()
+        self.assertIn("嵌套", self.error_texts())
+
+    def test_identification_by_source_removed_reports(self):
+        # 反例④：识别判据被删 → 执行者改按类名判（UserDTO 里逐字段对应表结构就漏判）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **识别判据（先判对象，再判规则）**：类/结构体"
+                                       "**以表结构为来源**即属本条所指的"
+                                       "数据库实体类。**不看类名**。\n", ""))
+        cm.check_entity_dto_guard()
+        self.assertIn("识别判据", self.error_texts())
+
+    def test_internal_call_boundary_removed_reports(self):
+        # 反例⑤：纯内部调用边界被删 → 本条被读宽成"任何函数都不得出现实体类"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("① **纯内部调用**不在本条范围内；", ""))
+        cm.check_entity_dto_guard()
+        self.assertIn("纯内部调用", self.error_texts())
+
+    def test_persistence_exit_boundary_removed_reports(self):
+        # 反例⑥：持久化出口边界被删 → 与「持久化访问」节直接冲突
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("② **持久化自身的出口**不受本条约束；", ""))
+        cm.check_entity_dto_guard()
+        self.assertIn("持久化自身的出口", self.error_texts())
+
+    def test_legacy_scope_removed_reports(self):
+        # 反例⑦：用户点名的"已经用了不管"被删 → L1 被扩到存量接口上
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **存量边界（L1，用户点名「已经用了不管」）**：",
+                                       "* **存量边界**："))
+        cm.check_entity_dto_guard()
+        self.assertIn("已经用了不管", self.error_texts())
+
+    def test_user_declaration_exemption_removed_reports(self):
+        # 反例⑧：豁免面（用户声明）被删 → 用户声明过的场景被判红
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **例外之例外**：**除非用户主动声明**允许某处以数据库实体类"
+                                       "作为请求/响应参数，否则一律适用本条。"
+                                       "声明仅对该次任务、该处生效、**不得泛化**。\n", ""))
+        cm.check_entity_dto_guard()
+        self.assertIn("除非用户主动声明", self.error_texts())
+
+    def test_broader_exemption_removed_reports(self):
+        # 反例⑨：豁免范围（不得泛化）被删 → 一次声明被当成长期授权
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("声明仅对该次任务、该处生效、**不得泛化**。", "声明生效。"))
+        cm.check_entity_dto_guard()
+        self.assertIn("不得泛化", self.error_texts())
+
+    def test_framework_name_in_general_layer_reports(self):
+        # 反例⑩：通用层被框架专名污染 → 非 Java 项目也被带入该框架术语、与归属层冲突
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("（下称**数据库实体类**——各语言栈里由对象-关系映射框架或"
+                                       "映射注解定义的模型类/结构体）",
+                                       "（下称**数据库实体类**，如 `@Entity` 标注的类）"))
+        cm.check_entity_dto_guard()
+        self.assertIn("@Entity", self.error_texts())
+
+    def test_stack_layer_second_source_reports(self):
+        # 反例⑪：技术栈层另立第二真源 → 两处各自漂移
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范\n\n== 编码\n* 数据库实体类不进对外契约。\n")
+        cm.check_entity_dto_guard()
+        self.assertIn("java.adoc", self.error_texts())
+
+    def test_dispatcher_not_synced_reports(self):
+        # 反例⑫：调度器未同步识别特征 → 写对外接口参数时不会触发加载这条
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 任何代码活动 → link:specs/general/coding.adoc[]\n")
+        cm.check_entity_dto_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_dispatcher_slogan_only_reports(self):
+        # 反例⑬：调度条目只写口号（"数据契约"）→ 识别特征不可判读即漏加载
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
+                   "  ** 任何代码活动 → link:specs/general/coding.adoc[]"
+                   "（含**数据库实体类不进对外契约**：**数据契约**）\n")
+        cm.check_entity_dto_guard()
+        self.assertIn("识别特征", self.error_texts())
+
+    def test_adoption_not_registered_reports(self):
+        # 反例⑭：图书馆未登记该取舍 → 读者把本站口径读成标准规定
+        self._write_valid()
+        self.write("library/adoption.adoc", "= 规范准入与自身取舍\n\n== 同义性差异与覆盖点\n* 略。\n")
+        cm.check_entity_dto_guard()
+        self.assertIn("adoption.adoc", self.error_texts())
+
+    def test_coding_file_missing_reports(self):
+        # 反例⑮：通用层落点丢失 → 该条无处承载
+        self._write_valid()
+        os.remove(cm.CODING_FILE)
+        cm.check_entity_dto_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
 class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
     """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
 
