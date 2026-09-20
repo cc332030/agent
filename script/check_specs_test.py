@@ -6428,7 +6428,8 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         "== 压缩提交（提交历史的整理，平台侧追加口径）\n"
         "**规则本体（工具无关）在 `specs/general/version-control.adoc`「压缩提交」**；"
         "本节只写本平台的追加口径。\n"
-        "* **与「冲突处理」的接口（L1）**：有冲突时须先解冲突、再压缩。\n"
+        "* **与「冲突处理」的接口（L1）**：用户提出压缩提交而分支上**还有冲突**时"
+        "**不得把冲突留在原地只做压缩**——须按「冲突处理」节**先解冲突、再压缩**。\n"
     )
 
     def _write_valid(self) -> None:
@@ -6576,6 +6577,27 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         self._write_valid()
         git = self.GIT.replace("`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
                                "`git diff --cached -M --summary` 应显示 `rename`；", "")
+        self.write("specs/general/git.adoc", git)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("git.adoc", self.error_texts())
+
+    def test_platform_squash_section_interface_removed_reports(self):
+        # 反例：平台层**「压缩提交」节**的接口条被删（「冲突处理」节还写着同口径）
+        # → 全文匹配会假绿，必须按该节自己的正文核对
+        self._write_valid()
+        cnb = self.CNB.replace(
+            "* **与「冲突处理」的接口（L1）**：用户提出压缩提交而分支上**还有冲突**时"
+            "**不得把冲突留在原地只做压缩**——须按「冲突处理」节**先解冲突、再压缩**。\n", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("「压缩提交」节", self.error_texts())
+
+    def test_git_section_emptied_but_keywords_elsewhere_reports(self):
+        # 反例：git 层本节被掏空、命令搬到另一节 → 全文匹配会假绿，须按节取文本
+        self._write_valid()
+        git = ("= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n另议。\n\n"
+               "== 其它节\n\n* 顺手提一句：`--ours`/`--theirs` 不可取、`git diff --name-status`\n"
+               "  与 `rename`、`git log --oneline` **只有一条**。\n")
         self.write("specs/general/git.adoc", git)
         cm.check_conflict_resolution_guard()
         self.assertIn("git.adoc", self.error_texts())
@@ -13308,6 +13330,43 @@ class TestCheckGuardOrderGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
         cm.check_guard_order_guard()
         self.assertIn("guards.adoc", self.error_texts())
+
+
+class TestLedgerSourceEntries(CheckSpecsTestCase):
+    """钉住台账来源列的**解析口径**：含裸 `"` 的条目名不得让该条被整条跳过。
+
+    本仓库实测：旧判据按"行首 4 空格 + 两个双引号串"直接匹配，121 条台账只命中 118 条
+    ——`落点口径须写对：…写成"私有/不对外发布"` 这类**名字里带裸引号**的条目被静默漏掉，
+    把它的来源改成不存在的路径，`check_ledger_source_paths_guard` 照样全绿
+    （"看着核对过、其实漏了三条"）。故解析改为按字符串字面量逐字段取。
+    """
+
+    _LEDGER = (
+        'MECHANISMS = [\n'
+        '    ("名字里带\\"裸引号\\"的条目", "NOPE/missing.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        '    ("普通条目", "specs/general/doc.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        ']\n')
+
+    def test_entries_with_quote_are_parsed(self):
+        # 名字里带裸引号的条目**必须**被解析到（旧正则下它整条不见）
+        entries = cm._ledger_source_entries(self._LEDGER)
+        self.assertEqual(len(entries), 2)
+        self.assertIn("NOPE/missing.adoc", [s for _, s in entries])
+
+    def test_guard_checks_quote_entry_source(self):
+        # 该条目的来源不存在时必须报红——不报说明它又被跳过了
+        self.write("script/check_effective.py", self._LEDGER)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("不存在", self.error_texts())
+
+    def test_guard_checks_normal_entry_source(self):
+        # 普通条目的来源同样逐条核对（防"修了一处、漏了另一处"）
+        ledger = self._LEDGER.replace("specs/general/doc.adoc", "NOPE/also-missing.adoc")
+        self.write("script/check_effective.py", ledger)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("also-missing.adoc", self.error_texts())
 
 
 class TestCheckGuardManifest(CheckSpecsTestCase):

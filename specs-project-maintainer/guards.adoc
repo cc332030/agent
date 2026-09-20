@@ -63,7 +63,7 @@
 | 48 | `check_npc_merge_guard` | NPC 禁合并防线——NPC/CI 执行者不得合并、且不因人工授权豁免的要点不得被删 |
 | 49 | `check_squash_commit_guard` | 压缩提交防线——用户要求"压缩提交"时的判据、禁止形态与新旧 sha 对应关系不得被删 |
 | 50 | `check_merge_relationship_guard` | 合并关系防线——压缩/解决冲突后，**目标分支仍须是本分支的祖先** |
-| 51 | `check_conflict_resolution_guard` | 冲突与压缩提交防线（**分层**）——通用层 `specs/general/version-control.adoc` 承载**工具无关**的规则本体（先解冲突、再压缩、最终只有一个提交；解冲突后须核查是否丢内容，含三档判据）、git 层 `specs/general/git.adoc` 承载 git 侧核对命令、平台层只留追加口径并**指向通用层**（用户原话是"版本管理"、**没说 cnb、git**，规则本体必须落在通用层） |
+| 51 | `check_conflict_resolution_guard` | 冲突与压缩提交防线（**分层、按节取文本**）——通用层 `specs/general/version-control.adoc` 承载**工具无关**的规则本体（先解冲突、再压缩、最终只有一个提交；解冲突后须核查是否丢内容，含三档判据；含触发面『只被要求压缩、没被要求解决冲突』）、git 层 `specs/general/git.adoc` 承载 git 侧核对命令、平台层只留追加口径并**指向通用层**且**两节都须写全触发面**（用户原话是"版本管理"、**没说 cnb、git**，规则本体必须落在通用层） |
 | 52 | `check_scope_boundary_guard` | 改动范围边界防线——未声明即拒绝越界改动的边界不得被删或降级 |
 | 53 | `check_config_class_guard` | 配置类不写逻辑防线——配置类只保持 POJO 的基本功能，逻辑下沉到 utils/service |
 | 54 | `check_abstraction_adoption_guard` | 抽象与接入成本防线——对外能力的可替换点须有唯一装配点、须有可用默认 |

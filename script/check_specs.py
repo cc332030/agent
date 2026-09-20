@@ -3722,7 +3722,7 @@ def check_install_repeat_update_guard():
 # （防线摘除只看数量、同文件内改名可维持计数；用例可用空占位凑数）已记在
 # `specs-project-maintainer/priority.adoc`，不在本次范围内。
 GUARD_WIRING_BASELINE = 96
-GUARD_TEST_BASELINE = 1111
+GUARD_TEST_BASELINE = 1116
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
 #   随防线一并删除，净变动按合并后实取数记全——不按两侧各自数目相加，避免基线虚高后
@@ -3772,13 +3772,17 @@ GUARD_TEST_BASELINE = 1111
 #   两个基线各按**合并后同源实取数**回填：接线数 96、用例数 1111（`Ran 1111 tests ... OK`）。
 # 用例基线的计入口径是**两处文件**的 `test_*` 方法数逐条相加（见 `check_guard_manifest`）：
 # `check_specs_test.py` + `check_effective_test.py`，CI 上以
-# `python3 -m unittest discover -s script -p '*_test.py'` 一次跑全（本轮实测 1081）。
-# **本轮（用户点名：只要求压缩提交、没要求解决冲突时也要先解冲突再压缩）记账**：
-# 在既有 `check_conflict_resolution_guard` 上把触发面写全（通用层「冲突处理」新增
-# 『"只被要求压缩、没被要求解决冲突"也要先解冲突』一条；平台层「冲突处理」与
-# 「压缩提交」的接口同步写全；调度器识别特征与 README 使用要点同步），
-# 并补 5 条反例用例（触发面被抽 / 判定标准被抽 / 平台层触发面被删 /
-# 调度器识别特征被删 / README 使用要点被删）——故 1076 → 1081。
+# `python3 -m unittest discover -s script -p '*_test.py'` 一次跑全。
+# **本轮（复核 PR #162：审出四处问题并修复）记账**：
+#   ① `check_ledger_source_paths_guard` 的来源解析改为按字符串字面量逐字段取
+#      （旧写法漏掉名字里带裸引号的 3 条，其来源从未被核对），补 3 条用例；
+#   ② `check_conflict_resolution_guard` 的 git 层改为**按节取文本**（旧写法全文匹配，
+#      把本节掏空、命令搬到别处仍全绿）；并补上平台层「压缩提交」节的接口条核对
+#      （台账与 `guards.adoc` 都声明本节写全触发面，实现里却只核了"指向通用层"）；
+#      两处各补 1 条反例用例；
+#   ③ README 的两条使用要点折成一条（同一件事不在公开面写两处）、引号体例统一；
+#   ④ git 层的「推送口径」与平台层重复表述收敛（平台层承接口径，通用层只留工具无关部分）。
+#   用例数按同源实取数回填（`Ran 1116 tests ... OK`，1111 → 1116）。
 # **数值口径**：基线只约束"不得减少"，故它必须等于**实际计入数**——填小了会误报、
 # 填大了则静默通过（虚高的基线等于把下一次真删除一并放行）。
 def _read_ledger_no_grip_declared():
@@ -6571,6 +6575,58 @@ def check_dispatcher_no_details_guard():
     phase_done()
 
 
+# 台账来源列的解析口径：`(条款名, 来源列)`。`check_guard_manifest` 另有一条按
+# `_ledger_args` 取五段的解析（判"抓手声不声明"），两者用途不同、不合并。
+#
+# **不得按"行首 4 空格 + 两个双引号串"直接匹配**：条目名里可含裸 `"`（如 `落点口径须写对：
+# 不得把本仓库内容写成"私有/不对外发布"`），那条会在该形态下被整条跳过。本仓库实测：
+# 121 条台账只匹配到 118 条、3 条的来源列**从未被核对**——把其中一条的来源改成不存在的
+# 路径，防线照样全绿（"看着核对过、其实漏了三条"）。
+# 故改为**按字符串字面量逐字段解析**：转义（`\"`）按原样计入字段，不参与定界。
+def _ledger_source_entries(src: str):
+    """解析 `MECHANISMS` 台账，产出 `(条款名, 来源列)`；含裸引号的条目同样解析得到。"""
+    start = src.find("MECHANISMS = [")
+    if start < 0:
+        return []
+    # 只取该字面量本身：`main()` 等处的 `("` 与 `f"…"` 也会命中起始形态，
+    # 越出字面量即把那些当台账条目（本仓库实测多解析出 2 条假条目）。
+    end = src.find("\n]\n", start)
+    body = src[start:end if end > 0 else len(src)]
+    entries, parts = [], None
+    cur, esc, started = "", False, False
+    k = 0
+    while k < len(body):
+        ch = body[k]
+        if not started:
+            if body[k:k + 2] == '("':
+                started, parts, cur, esc = True, [], "", False
+                k += 2
+                continue
+            k += 1
+            continue
+        if esc:
+            cur += ch
+            esc = False
+        elif ch == "\\":
+            cur += ch
+            esc = True
+        elif ch == '"':
+            parts.append(cur)
+            cur = ""
+            k += 1
+            while k < len(body) and body[k] in " \n\t,":
+                k += 1
+            if k < len(body) and body[k] == ")":
+                entries.append(parts)
+                started = False
+                k += 1
+            continue
+        else:
+            cur += ch
+        k += 1
+    return [(p[0], p[2]) for p in entries if len(p) > 2]
+
+
 def check_ledger_source_paths_guard():
     """『台账来源列须指向真实文件』：`check_effective.py` 的每条来源都要能打开。
 
@@ -6591,8 +6647,7 @@ def check_ledger_source_paths_guard():
         return
     src = _read_script_src(rel) or ""
     bad = []
-    for entry in re.finditer(r'^\s{4}\(\s*"([^"]+)",\s*\n?\s*"([^"]+)"', src, re.M):
-        name, source = entry.group(1), entry.group(2)
+    for name, source in _ledger_source_entries(src):
         for path in re.findall(r"[A-Za-z0-9_./-]+\.adoc", source):
             if not os.path.isfile(os.path.join(REPO_ROOT, *path.split("/"))):
                 bad.append((name, path))
@@ -10391,21 +10446,27 @@ def check_conflict_resolution_guard():
         err(f"缺少文件 {rel_git}——git 侧的核对命令无处承载（用户点名『git 规范也要』）", rel_git)
     else:
         text_git = open(path_git, encoding="utf-8").read()
-        for keys, desc in (
-            (("== 冲突与压缩提交（git 侧落地）",),
-             "节：git 规范须有『冲突与压缩提交（git 侧落地）』一节"
-             "（用户点名『git 规范也要』——工具无关的规则本体之外，git 上怎么判要写在这里）"),
-            (("--ours", "--theirs"),
-             "git 侧失效形态：须点名 `--ours`/`--theirs` 整体取一侧收尾这一失效"),
-            (("git diff --name-status", "rename"),
-             "git 侧核对命令：须给出未识别为 rename / 强制核对的命令判据"),
-            (("`git log --oneline", "只有一条"),
-             "『最终只有一个提交』的 git 侧判据：须给出可核对命令（`git log --oneline <目标分支>..HEAD`"
-             "只有一条）——只留'应只有一条'这句口号不算判据（判据退化成断言，无从核对）"),
-        ):
-            missing = [k for k in keys if k not in text_git]
-            if missing:
-                err(f"冲突与压缩提交防线被破坏：{rel_git} 缺失要点 {missing}——{desc}", rel_git)
+        # **按节取文本**（与通用层同一口径）：git 规范别处也会提到 `rename`、`--ours`（「文件移动
+        # 与重命名」节的强制核对就是这么写的），全文匹配会把"本节被掏空、别处还提一句"读成齐备
+        # （本仓库实测：本节正文改成"另议"、把命令搬到另一节，旧写法全绿）。
+        git_section = _section_text(text_git, "冲突与压缩提交")
+        if not git_section:
+            err(f"{rel_git} 未找到「冲突与压缩提交（git 侧落地）」一节"
+                "——git 侧核对命令失去落点（用户点名『git 规范也要』）", rel_git)
+        else:
+            for keys, desc in (
+                (("--ours", "--theirs"),
+                 "git 侧失效形态：须点名 `--ours`/`--theirs` 整体取一侧收尾这一失效"),
+                (("git diff --name-status", "rename"),
+                 "git 侧核对命令：须给出未识别为 rename / 强制核对的命令判据"),
+                (("`git log --oneline", "只有一条"),
+                 "『最终只有一个提交』的 git 侧判据：须给出可核对命令（`git log --oneline <目标分支>..HEAD`"
+                 "只有一条）——只留'应只有一条'这句口号不算判据（判据退化成断言，无从核对）"),
+            ):
+                missing = [k for k in keys if k not in git_section]
+                if missing:
+                    err(f"冲突与压缩提交防线被破坏：{rel_git} 的「冲突与压缩提交（git 侧落地）」节"
+                        f"缺失要点 {missing}——{desc}", rel_git)
     # (c) 平台层：只留追加口径，且须指向通用层规则本体
     rel = "specs/platform/cnb.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -10459,6 +10520,14 @@ def check_conflict_resolution_guard():
             err(f"冲突与压缩提交防线被破坏：{rel} 的「压缩提交」节未指向通用层规则本体"
                 "（引用形态为 `specs/general/version-control.adoc`「压缩提交」，**须带节名锚点**）"
                 "——把规则本体留在平台层、或只给文件名不给节名，非 CNB/非 git 的引用方都定位不到", rel)
+        elif not all(k in plat_squash for k in ("先解冲突", "不得把冲突留在原地只做压缩")):
+            # 台账与 `guards.adoc` 都声明本节须写全触发面（"只被要求压缩提交"时冲突处置不豁免）
+            # ——旧写法只核了"指向通用层"，声明与实现不一致（本仓库实测：把本节的接口条
+            # 整条删掉仍全绿）。
+            err(f"冲突与压缩提交防线被破坏：{rel} 的「压缩提交」节未写全与「冲突处理」的接口"
+                "（须写明有冲突时先解冲突、不得留在原地只做压缩）——台账与 `guards.adoc` 都声明"
+                "本节写全触发面，缺则该声明与实现不一致；平台上的派发常只写一件事，"
+                "本节是执行者读到那条触发面的落点", rel)
     # (d) 调度器与 README：规则在、但没人会读到 / 公开面看不到
     rel_common = "AGENTS_COMMON.adoc"
     common_path = os.path.join(REPO_ROOT, rel_common)
