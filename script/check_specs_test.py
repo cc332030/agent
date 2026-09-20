@@ -1501,7 +1501,8 @@ class TestCheckAdmissionGuard(CheckSpecsTestCase):
                    "=== 归类举证（写入规范时同步登记）\n\n"
                    "=== 级别变更与复盘（防降级、防级别混乱）\n\n"
                    "== 新增规范的提案校验\n\n"
-                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n\n"
+                   "先找参照物、别自己造；检查是否已有标准；检查是否已有本项目条目；升级与举一反三；"
+                   "存在比用户口述更优的设计时，按更优的设计收。\n\n"
                    "== 同一条规则有两种读法（读的形态要跟着场景变）\n\n"
                    "执行场景只给规则与判定标准；依据与取舍归思考/决策场景。\n\n"
                    "== 规范集合的自身重构（瘦身与归位）\n\n"
@@ -1589,6 +1590,28 @@ class TestCheckAdmissionGuard(CheckSpecsTestCase):
         self.write("specs-project-maintainer/spec-lifecycle.adoc", text)
         cm.check_spec_admission_guard()
         self.assertIn("重构后须核对规范有效性", self.error_texts())
+
+    def test_dropped_reference_seeking_point_reports(self):
+        # 反例：提案校验里"先找参照物、别自己造"被删（退回照抄用户原话）
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= t\n\n== 公共规范还是项目规范\n\n== 准入判定\n\n== 提案校验\n\n"
+                   "检查是否已有标准；检查是否已有本项目条目；升级与举一反三；"
+                   "存在比用户口述更优的设计时，按更优的设计收。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs-project-maintainer/spec-lifecycle.adoc`")
+        self.write("AGENTS.adoc", "见 `specs-project-maintainer/spec-lifecycle.adoc`")
+        cm.check_spec_admission_guard()
+        self.assertIn("先找参照物、别自己造", self.error_texts())
+
+    def test_dropped_better_design_point_reports(self):
+        # 反例："存在比用户口述更优的设计时，按更优的设计收"被删
+        # （查到更优设计却不采用、也不说明理由时无人拦）
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   "= t\n\n== 公共规范还是项目规范\n\n== 准入判定\n\n== 提案校验\n\n"
+                   "先找参照物、别自己造；检查是否已有标准；检查是否已有本项目条目；升级与举一反三。\n")
+        self.write("AGENTS_COMMON.adoc", "登记 `specs-project-maintainer/spec-lifecycle.adoc`")
+        self.write("AGENTS.adoc", "见 `specs-project-maintainer/spec-lifecycle.adoc`")
+        cm.check_spec_admission_guard()
+        self.assertIn("更优的设计", self.error_texts())
 
     def test_not_registered_in_project_spec_reports(self):
         # 反例：文件存在但未在维护方入口 AGENTS.adoc 登记 → 永不被加载、规则实际失效
@@ -3671,7 +3694,8 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
     def _write_valid(self):
         self.write("specs/core/execution.adoc",
                    "= 执行原则\n\n== 先规划后执行\n\n"
-                   "* **动手前先摸清现状与最佳方案（L1）**：先搞清现状，再**先调研最佳实践、再定方案**。\n"
+                   "* **动手前先摸清现状与最佳方案（L1）**：先搞清现状，再**先调研最佳实践、再定方案**；"
+                   "**调整内容一类需求**（新增与调整同属一类）还须**先找现成可参照的既有标准与更优设计**。\n"
                    "* 不得绕开既有体系另写一套（L1）：默认改在既有实现上；"
                    "**允许另写一套的条件只有三个**：确实无法承载 / 已被用户确认废弃 / 已被证明优于，**不留两套并存**。\n"
                    "* 大范围改动先确认（L1）：**不得替用户判定某段既有流程\"已废弃\"**。\n"
@@ -3683,7 +3707,15 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("specs/general/planning.adoc",
                    "= 任务规划\n\n== 动手前：现状与最佳方案\n\n"
                    "* **先查现状（L1）**：**不得凭印象或标题推断**，并列出**核实方式**。\n"
-                   "* **先调研最佳方案（L1）**：列出**备选方案与取舍依据**，不得只给\"能交差\"的写法。\n\n"
+                   "* **先调研最佳方案（L1）**：列出**备选方案与取舍依据**，不得只给\"能交差\"的写法。\n"
+                   "* **需求先找参照物（L1）**：\"调整内容\"一类需求（**新增与调整同属一类**）先找现成可参照的"
+                   "既有标准与更优设计——① **业界标准/权威约定**；② **既有通行设计范式**；"
+                   "③ **本项目既有条目与先例**（见 `specs/general/coding.adoc`「既有实现与先例优先」）；"
+                   "**查不到**也要能说出查证方式、如实标\"未确证\"；**查到更优的设计就用更优的**。\n"
+                   "** **判定标准（任一命中即不合规）**：**说不出参照物与检索动作** / "
+                   "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收**；"
+                   "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
+                   "** **依据**：ISO 10007。\n\n"
                    "== 不得绕开既有体系另写一套\n\n* **默认改在既有实现上（L1）**："
                    "**确实无法承载** / **已被用户确认废弃** / **已被证明优于**；**不留两套并存**。\n\n"
                    "== 大范围改动先确认\n\n* **大动之前先确认（L1）**：**保持原状**；"
@@ -3713,6 +3745,7 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**动手前：先定基线 + 先查现状 + 先调研最佳方案（L1，方向性前提）**\n"
                    "  - **先查现状、再谈方案**\n  - **先定基线**\n  - **大动之前先确认**\n"
                    "  - **不得绕开既有实现另写一套**\n"
+                   "  - **调整内容一类需求还须先找现成可参照的既有标准与更优设计**\n"
                    "  - **基线清单还要核\"够不够用\"（L2）**：**review 既有用例**、"
                    "**无关的存量缺口**如实记录。\n"
                    "  - **没有校验手段、环境跑不起来，都不是不动手的理由**\n"
@@ -3725,11 +3758,13 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
             self.write(f"prompts/{name}",
                        "= 提示词\n\ninclude::_common.txt[tag=baseline]\n"
                        "include::_common.txt[tag=baseline-and-compat]\n"
-                       "include::_common.txt[tag=compat]\n")
+                       "include::_common.txt[tag=compat]\n"
+                       "3. 步骤：**调整内容一类改动动手前须先检索现成可参照的标准与更优的设计**。\n")
         self.write("AGENTS_COMMON.adoc",
                    "= 入口\n\n  ** 动手前的现状与方案、基线 → link:specs/general/planning.adoc[]\n")
         self.write("PROMPTS.adoc",
-                   "= 提示词入口\n\n公共约定：**先定基线**、`baseline-and-compat`、`compat`。\n")
+                   "= 提示词入口\n\n公共约定：**先定基线**、`baseline-and-compat`、`compat`，"
+                   "**调整内容一类需求须先检索可参照的标准与更优的设计**。\n")
         self.write("README.adoc",
                    "= 说明\n\n**先定基线**；**既有用例不得为迁就改动而改判**。\n")
 
@@ -3751,6 +3786,42 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs", "general", "planning.adoc"))
         cm.check_dev_flow_guard()
         self.assertIn("planning.adoc", self.error_texts())
+
+    def test_reference_seeking_clause_removed_reports(self):
+        # 反例：「需求先找参照物」被删（用户提需求/调整内容时不再先查现成标准与更优设计，
+        # 退回"用户怎么说就怎么收"）
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read()
+        head = text.split("* **需求先找参照物（L1）**")[0]
+        open(pl, "w", encoding="utf-8").write(head)
+        cm.check_dev_flow_guard()
+        self.assertIn("需求先找参照物", self.error_texts())
+
+    def test_reference_seeking_without_criteria_reports(self):
+        # 反例：条在、判定标准被抽走（只剩一句"先找参照物"＝口号，无抓手）
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read().replace(
+            "** **判定标准（任一命中即不合规）**：**说不出参照物与检索动作** / "
+            "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收**；"
+            "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
+            "** **依据**：ISO 10007。\n",
+            "")
+        open(pl, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("参照物", self.error_texts())
+
+    def test_reference_seeking_missing_in_prompt_body_reports(self):
+        # 反例：只有公共片段写了、两个提示词自己的动手前步骤没写
+        # （题面自行表述的那处漏掉，按题面执行时读不到）
+        self._write_valid()
+        f = os.path.join(self.root, "prompts", "review.adoc")
+        text = open(f, encoding="utf-8").read().replace(
+            "3. 步骤：**调整内容一类改动动手前须先检索现成可参照的标准与更优的设计**。\n", "")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("review.adoc", self.error_texts())
 
     def test_old_cases_may_be_rewritten_clause_removed_reports(self):
         # 反例：「既有用例不得为迁就重构而改判」被删（改老用例变绿重成默认做法）
