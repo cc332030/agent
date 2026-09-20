@@ -2993,8 +2993,12 @@ def check_install_repeat_update_guard():
 #     须**真实存在**且**真的会被调用**（"定义了但没人调"的防线看起来还在、却永远不会执行）。
 #     台账是"哪条规范由谁钉住"的唯一视图；旧判据只核"备注里点名的名字存在"，**没点名就
 #     没核对**，于是"有抓手"这个数字可以靠把防线名删掉维持（删名字比删防线容易得多）。
+# 本轮删除记账：`check_orm_boundary_guard`（原第 69 道）已删——它与
+# `check_persistence_access_guard` 重复、且把语义判断钉成机械抓手。接线数 92→91、
+# 反例用例数 1029→1012（该防线的 19 条反例一并删除），删除原因与承接方见
+# `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，按次序留档）」。
 GUARD_WIRING_BASELINE = 91
-GUARD_TEST_BASELINE = 1029
+GUARD_TEST_BASELINE = 1012
 
 
 def _read_ledger_no_grip_declared():
@@ -8279,210 +8283,6 @@ def check_conversion_guard():
     phase_done()
 
 
-def check_orm_boundary_guard():
-    """『数据访问边界防线（谁可以调、调前判空）』。
-
-    钉住用户在本轮要求里点名的三件事——它们此前都没有判据：
-
-    ① **`IService` 成员方法只许在本 `IService`/`ServiceImpl` 子类内用（L1）**：既有条文只管
-    『用哪个 API 构造查询』（禁 `new` Wrapper），**没有管『在哪个类里调这个 API』**——于是
-    『拿着别人的 service 在工具类里 `lambdaQuery()`』这种同项目第二条访问路径无人拦。
-    ② **实体 Mapper 只由其对应实体的 Service 调用、跨表业务另建业务服务（L2）**：用户原话
-    『虽不禁用，但是不建议』，故本条须**同时**在条文里留下『不禁用』与豁免面（补充性单表查询），
-    只写禁令会让它被读成 L1、把存量项目大面积判红。
-    ③ **调库前先判空、集合返回空集合（L1）**：判据本体在通用层（跨语言成立）、Java 落点在栈层。
-
-    **本条钉的是判据本体、不是轴名**（见 `specs-project-maintainer/priority.adoc`
-    「机械防线的核对对象是判据本体，不是轴名」）：只核『「持久化访问」这一节在不在』属防线空转
-    （判据被抽走、只剩标题与口号时仍会全绿）。故逐条核**能拿去核对的那句话**——
-    『本子类』『其他子类也不行』『只由其对应实体的 Service』『另建业务服务』『不建议』
-    『不发起无效查询』『不返回 `null`』『就地返回』。
-
-    **要点须落回各自的节**（实测教训：同一份文件里另有同名节时，全文匹配会把"整段搬走"
-    读成齐备——三个文件各有「持久化访问」节、`java.adoc` 里 `lambdaQuery` 与 `IService`
-    两套识别特征还在同一行）。故本条的要点一律按节取文本，识别特征一律按行取。
-
-    语义判断（某次实际调用点是不是跨类调、『补充性单表查询』是否成立）见 `GUARD_CHECK_LIMITS`。
-    """
-    phase("数据访问边界防线检查（谁可以调 IService 成员方法 / Mapper 归属 / 调前判空）")
-    rel_java = _rel_of(JAVA_STACK_FILE)
-    rel_spring = _rel_of(SPRING_STACK_FILE)
-    rel_coding = _rel_of(CODING_FILE)
-
-    # 三处判据各自的**节**（节名用常量，节挪走/改名即报红）
-    def _sections_of(path, missing_msg):
-        if not os.path.isfile(path):
-            err(missing_msg, _rel_of(path))
-            return None
-        with open(path, encoding="utf-8") as fh:
-            return _split_adoc_sections(fh.read())
-
-    def _section_by(sections, keyword, rel, what):
-        """按节标题关键词取节正文；没有该节即报红并返回空串（后续要点检查同轮报红）。"""
-        for title, body in sections or ():
-            if keyword in title:
-                return body
-        err(f"数据访问边界防线被破坏：{rel} 缺少「{what}」节——本条判据失去落点"
-            "（要点散在别处时，读者按节找规则找不到，等于规则不在）", rel)
-        return ""
-
-    def _loop(sections, section, rel, groups, what):
-        """在**指定节内**逐组核要点。"""
-        body = _section_by(sections, section, rel, what)
-        for keys, desc in groups:
-            missing = [k for k in keys if k not in body]
-            if missing:
-                err(f"数据访问边界防线被破坏：{rel} 的「{what}」节缺失要点 {missing}——{desc}",
-                    rel)
-
-    def _dispatcher_item(path, keys, label, desc):
-        """在调度器里，核『含这些字样的那一行』是否就是带识别特征的技术栈/代码活动条。
-
-        只查裸子串会把"识别特征挪到别的行、别的条目"读成齐备（同一行里还带着旧条的
-        `lambdaQuery`/`QueryWrapper` 字样），故按**行**核。
-        """
-        if not os.path.isfile(path):
-            return
-        with open(path, encoding="utf-8") as fh:
-            lines = fh.read().split("\n")
-        hit = next((l for l in lines if all(k in l for k in keys)), "")
-        if not hit:
-            err(f"数据访问边界防线被破坏：{_rel_of(path)} 的加载调度器里找不到带 "
-                f"「{'/'.join(keys)}」的条目——{desc}", _rel_of(path))
-            return
-        if label not in hit:
-            err(f"数据访问边界防线被破坏：{_rel_of(path)} 的调度项「{label}」不在同一条里——"
-                "识别特征须与技术栈/代码活动登记同处一行，只写『数据访问边界』这类口号"
-                "不可判读即漏加载", _rel_of(path))
-
-    # ① 成员方法的可调用范围（L1）——核心判据：本子类 / 其他子类也不行 / 正确做法
-    java_sections = _sections_of(
-        JAVA_STACK_FILE, f"缺少文件 {rel_java}——数据访问边界（谁可以调 IService 成员方法）的落点丢失")
-    _loop(java_sections, ORM_SECTION, rel_java, (
-        (("IService` 的成员方法只许在", "本子类"),
-         "可调用范围判据：须写明成员方法**只许在其所属 `IService` 与 `ServiceImpl` 的本子类内**"
-         "调用——用户原话是『只允许在 IService 和 ServiceImpl 的本子类中使用』，"
-         "少了『本子类』这一限定（只写『Service 里』）即无从核对"),
-        (("其他子类也不行",),
-         "**反向排除句**：须写明『其他子类也不行』——只写『在本子类内』时，"
-         "`ServiceImpl` 的兄弟子类、无关 Service 持一个接口引用来调会被读成合法（正是本条要拦的失效）"),
-        (("工具类", "Controller"),
-         "禁止面须落到具体位置（工具类/静态方法/Helper/Controller），"
-         "否则『跨类调用』只停留在抽象说法、核对时无从指认"),
-        (("正确做法", "该实体自己的 Service"),
-         "**给出去路**：须写明正确做法（把逻辑放进该实体自己的 Service，或另建业务服务）——"
-         "只写禁令不给出路，执行者只能绕开，本条会被读成『这也不能写』"),
-        (("存量边界", "不视为违规", "不告警"),
-         "**存量口径（用户点名要件）**：须写明已有代码不视违规、不告警、不要求整改——"
-         "缺则 L1 被扩到存量上，存量项目（含用户自己的）大面积命中"),
-        (("不构成", "new LambdaQueryWrapper"),
-         "**与既有条目的关系**：须写明违反本条不构成『可以退回 `new LambdaQueryWrapper`』的许可——"
-         "缺则出现『为了避开成员方法限定而改用具名构造器』的新失效（两条规则互相拆台）"),
-    ), ORM_SECTION)
-
-    # Java 栈「健壮性」节须给出该条的落点并一行回指（只写通用层判据，Java 执行者按栈文件学仍会漏判）
-    _loop(java_sections, ROBUSTNESS_SECTION, rel_java, (
-        (("持久化访问前先判空", "coding.adoc"),
-         "Java 栈须给出判空条的落点并回指通用层判据（栈层只写 Java 用法、不复制判据）"),
-        (("getById", "CList", "不手写裸"),
-         "Java 落点须给出可照办的用法（`getById(null)`/`CList.empty()` 一类、"
-         "判空工具的选择、不手写裸 null 比较），否则栈层只有引用、没有可执行形态"),
-    ), ROBUSTNESS_SECTION)
-
-
-    # ② Mapper 归属 + 跨表建业务服务（L2，须带豁免面）
-    spring_sections = _sections_of(
-        SPRING_STACK_FILE, f"缺少文件 {rel_spring}——实体 Mapper 归属/BizService 的落点丢失")
-    _loop(spring_sections, LAYERING_SECTION, rel_spring, (
-        (("另建业务服务", "BizService"),
-         "跨表建业务服务的判据：须写明多表业务优先新建业务服务（`XxxBizService`），"
-         "否则『实体 Service 不操作其他表』无处可去"),
-        (("实体 Service 的职责边界", "本实体"),
-         "实体 Service 的职责边界：须写明只做本实体的持久化与自身业务规则、"
-         "不做太多业务编排、不操作其他表"),
-        (("不禁用", "不建议"),
-         "**豁免面（用户原话『虽不禁用，但是不建议』）**：须同时写明『不禁用/不建议』——"
-         "只写禁令会让这条被读成 L1，把存量直接注入 Mapper 的项目大面积判红"),
-        (("补充性单表查询", "单次", "只读补充", "不承载业务规则"),
-         "豁免的判定：须写明『补充性单表查询』不构成违规，**并给出可核对形态**"
-         "（单次 / 只读补充 / 不承载业务规则三问，超出一条即归跨多表编排）——"
-         "缺则『不建议』没有边界：只写『补充性』时任何一次跨实体查询都会在 L2 上各判各的、"
-         "判红时无从指认"),
-        (("判定标准", "直接注入"),
-         "判定标准：须给可核对形态（业务类直接注入非本类对应实体的 Mapper、"
-         "实体 Service 里跨多表编排），否则只是倾向性表述"),
-        (("java.adoc", "唯一落点"),
-         "**落点分工**：须写明 MyBatis-Plus 侧的类形态以 `specs/stack/java.adoc` 为唯一落点、"
-         "本条不复制其条文——两处各写一份判据即第二真源"),
-    ), LAYERING_SECTION)
-
-    # ③ 调库前判空、集合返回空集合（L1）——判据本体在通用层（跨语言），Java 落点在栈层
-    coding_sections = _sections_of(
-        CODING_FILE, f"缺少文件 {rel_coding}——调库前判空的通用层落点丢失")
-    _loop(coding_sections, PERSISTENCE_SECTION, rel_coding, (
-        (("访问前先判空", "不发起无效查询", "L1"),
-         "调库前判空：须有该条并标 L1（跨语言判据，落在通用层）——"
-         "漏掉即退化成『注意性能』这类无抓手表态"),
-        (("getById", "null"),
-         "判定标准须给出可核对形态：按主键查询（`getById`/`findById`）未先判主键为 null "
-         "即违规——用户举例的就是 `getById`"),
-        (("空集合", "不返回 `null`"),
-         "**集合返回值契约**：须写明查集合类接口返回空集合、不返回 `null`——"
-         "用户原话『返回集合时返回空集合而不是null』"),
-        (("就地返回",),
-         "短路动作：须写明命中即就地返回（单条返回『没有』值、批量返回空集合）——"
-         "只写『要判空』不写短路动作，执行者可能判完继续查"),
-        (("防反用",),
-         "**防反用边界**：须写明不得为『合法但可能查不到』的取值加前置判断——"
-         "缺则出现『把正常查不到包成提前返回』的新失效（会掩盖数据缺失）"),
-        (("随动迁移", "不视为违规"),
-         "存量口径：须与栈层同口径（随动迁移、已有代码不视违规不告警）"),
-    ), PERSISTENCE_SECTION)
-    for token in ("IService", "ServiceImpl", "QueryWrapper", "Mapper"):
-        if token in _section_by(coding_sections, PERSISTENCE_SECTION, rel_coding,
-                               PERSISTENCE_SECTION):
-            err(f"数据访问边界防线被破坏：{rel_coding} 出现框架专名 `{token}`——"
-                "通用层只留跨语言抽象（`Mapper` 属 Java 生态专名），"
-                "框架专名与类形态下沉到 `specs/stack/` 对应文件", rel_coding)
-    # 交付面（通用层「编写代码」条）：本条的"谁可以调用"这一半还须在**通用层调度项**里有识别
-    # 特征——只写进 Java 技术栈条时，跨类调持久化 API 的活儿不一定带 Java 栈（栈层按文件类型
-    # 加载），本条仍可能不加载。识别特征须落到判据本身（"在哪个类里调"），不是"数据访问边界"
-    # 这类口号。
-    _dispatcher_item(GENERIC_FILE, ("数据访问边界", "谁可以调"), "谁可以调",
-                     "通用层「编写代码」条的识别特征还须带『谁可以调』（在哪个类里调持久化 API）"
-                     "——只登记在 Java 技术栈条时，跨类调的活儿不带 Java 栈就不会触发加载")
-
-    # 调度器登记：Java 栈条目须带『谁可以调用』的识别特征（缺则本条永远不会被触发加载）。
-    # **按行核**——同一行里还带着旧条的 `lambdaQuery`/`QueryWrapper`/`mybatis` 字样，
-    # 只查裸子串会把"识别特征没写"读成齐备。
-    rel_common = _rel_of(GENERIC_FILE)
-    if not os.path.isfile(GENERIC_FILE):
-        err(f"缺少加载调度器 {rel_common}", rel_common)
-    else:
-        with open(GENERIC_FILE, encoding="utf-8") as fh:
-            lines = fh.read().split("\n")
-        item = next((l for l in lines
-                     if "LambdaQuery" in l or "lambdaQuery" in l or "MyBatis" in l
-                     or "mybatis" in l), "")
-        if not item:
-            err(f"数据访问边界防线被破坏：{rel_common} 的加载调度器里找不到 MyBatis-Plus 技术栈条——"
-                "缺则写跨类调用代码时不会触发加载这条（等于没写）", rel_common)
-        else:
-            for keys, desc in (
-                (("谁可以调用",),
-                 "调度器 Java 栈登记须带『谁可以调用』的识别特征——缺则写跨类调用代码时"
-                 "不会触发加载这条（等于没写）"),
-                (("本 `IService`/`ServiceImpl` 子类",),
-                 "识别特征须落到『只许在本子类内用』这一判据本身，不得只写『MyBatis-Plus 使用边界』"
-                 "这类口号（识别特征不可判读即漏加载）"),
-            ):
-                missing = [k for k in keys if k not in item]
-                if missing:
-                    err(f"数据访问边界防线被破坏：{rel_common} 的 MyBatis-Plus 技术栈条缺失要点 "
-                        f"{missing}——{desc}", rel_common)
-    phase_done()
-
-
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -9911,7 +9711,6 @@ CHECKS = (
     check_api_contract_reuse_guard,
     check_api_naming_guard,
     check_persistence_access_guard,
-    check_orm_boundary_guard,
     check_conversion_guard,
     check_lombok_constructor_guard,
     check_doc_type_notation_guard,
