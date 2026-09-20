@@ -15,9 +15,9 @@
 
 == 作为跨环境入口（Windows 与 Linux 并存时）
 
-* **`.ps1` 与同名 `.bat` 只做薄壳（L1）**：脚本要在多个操作系统上跑时，逻辑**只写一份**放跨平台逻辑代码、`.bat` 只负责启动（见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）——不得在 `.ps1` 里另写一遍 Linux 侧逻辑，也不得把参数解析、路径拼装放进入口；参数用 `%*` 原样透传、退出码须原样返回给调用方。**入口的注释只写入口自己（L1）**：`.ps1` 的头部注释只写**入口用法与它调用的逻辑代码**，**不得复述**逻辑层的参数语义、默认值、行为与副作用。
-* **入口的位置与命名（L1）**：Windows 入口与逻辑代码**同处一目录、主名相同**（逻辑 `foo.py` → 入口 `foo.bat`，需要 PowerShell 能力时再加 `foo.ps1` + 同名 `.bat`），**不另建 `windows/`、`bin/` 目录**；调用方**只输 `foo.bat`（或双击）就能跑**——不得要求调用方加 `powershell -File`/`-ExecutionPolicy Bypass` 一类前后命令（该参数固定写在 `.bat` 内部）。
-* **入口语言选择（L1）**：Windows 入口**取 `.bat`/`.cmd`**（`cmd.exe` 是系统自带；需要 PowerShell 时按「启动脚本（同名 .bat）」用 `.ps1` + 同名 `.bat`），**不得**用需要另装的运行时当入口（用 `.py`/`python foo.py`、或用 `.sh` 当 Windows 入口）——入口要求用户先装运行时或先改执行策略，等于把平台差异与安装步骤推给调用方；Windows 侧入口的完整条文见 `specs/stack/batch.adoc`。
+* **`.ps1` 与同名 `.bat` 只做薄壳（L1）**：脚本要在多个操作系统上跑时，逻辑**只写一份**放跨平台逻辑代码、`.bat` 只负责启动（见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）——不得在 `.ps1` 里另写一遍 Linux 侧逻辑，也不得把参数解析、路径拼装放进入口；参数用 `%*` 原样透传、退出码须原样返回给调用方。**`.ps1` 的头部注释只写入口自己**：判据属通用层、唯一落点＝`specs/general/script.adoc`「脚本头部注释（文档头）」下的「入口的注释边界（L1）」，本文件不重复。
+* **入口的位置与命名**：本栈取值＝逻辑 `foo.py` → 入口 `foo.bat`（需要 PowerShell 能力时再加 `foo.ps1` + 同名 `.bat`），**不另建 `windows/`、`bin/` 目录**；判据属通用层（见 `specs/general/script.adoc`「入口层须与逻辑代码同处一目录、同名不同扩展名」）。本栈另有一条：调用方**只输 `foo.bat`（或双击）就能跑**——不得要求调用方加 `powershell -File`/`-ExecutionPolicy Bypass` 一类前后命令（该参数固定写在 `.bat` 内部）。
+* **入口语言选择（入口的语言取值）**：Windows 入口**取 `.bat`/`.cmd`**（需要 PowerShell 时按「启动脚本（同名 .bat）」用 `.ps1` + 同名 `.bat`）——判据与反例面属通用层（见 `specs/general/script.adoc`「入口语言取舍」）与批处理栈（见 `specs/stack/batch.adoc`），本文件不重复。
 
 == 编码与行尾
 
