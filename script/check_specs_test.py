@@ -10543,6 +10543,11 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'CACHE_HOME_DIR = ".cache"\n'
         'DOC = "只写落点目录：不写项目里其他位置；不删除既有文件"\n'
         'CACHE_APP_DIR = "agent-specs"\n'
+        'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/clean_tmp.py")\n'
+        'def fetch_install_scripts(base, out_dir, keep):\n'
+        '    """安装脚本一并取到落点根下：os.path.basename(rel)；落点里的入口须能直接跑"""\n'
+        'def _ensure_executable(dest, rel):\n'
+        '    """补可执行位：os.chmod"""\n'
         'def resolve_out_dir(args):\n'
         '    """落点＝cache_slot_dir(shared_cache_dir(), args.base)（只有这一个落点）"""\n'
         'def shared_cache_dir():\n'
@@ -10572,17 +10577,15 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     )
 
     def setUp(self) -> None:
-        super().setUp()
-        self._orig_root = cm.REPO_ROOT
-        cm.REPO_ROOT = self.root
+        super().setUp()                 # 父类已把 REPO_ROOT 指到本用例的临时根
         os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
         os.makedirs(os.path.join(self.root, "specs"), exist_ok=True)
 
-    def tearDown(self) -> None:
-        cm.REPO_ROOT = self._orig_root
-        super().tearDown()
-
     def _write_valid(self):
+        # 落点/解释器兜底等防线按"仓库根相对路径"读脚本，且**带缓存**——用例换了 REPO_ROOT
+        # 后缓存里可能还留着真实仓库的那一份（那时反例根本不生效、用例静默通过）。故写入前
+        # 先清缓存（本仓库实测：不清时"脚本被删/被退化"的反例读到的是真实脚本、防线不报红）。
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
         self.write("script/fetch-specs.py", self.SCRIPT_PY)
         self.write("script/fetch-specs.sh", self.SCRIPT_SH)
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
@@ -10623,7 +10626,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         "== 取规范到本地副本\n\n见 fetch-specs：副本取到用户家目录下的 `~/.cache/agent-specs`"
         "这一处（本机所有项目共用一份）；落点与取回方式以本节为唯一真源；取不到时直接读远程入口。"
         "默认入口文件名 AGENTS.adoc；已存在 AGENTS.md 时就地融合、不重命名、不另建。"
-        "默认取到平台用户级缓存目录；"
+        "下载的东西一律只落这一处：规范副本、取规范脚本（fetch-specs.py 及其同名入口）、"
+        "清理脚本 clean_tmp.py 都落这一个路径下，不在项目里另留副本；"
         "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
         "要不动本地那份加 --keep。\n\n"
         "== 取规范时连 python 都没有\n\n"
@@ -10698,6 +10702,47 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("；os.replace 原子落盘", ""))
         cm.check_spec_fetch_guard()
         self.assertIn("os.replace", self.error_texts())
+
+    def test_install_scripts_not_fetched_reports(self):
+        # 反例：只取规范副本、不把安装脚本一并取到落点 → 用户口径"下载的文件一律只落这一个
+        # 地方"只剩一半：落点里那份入口还得再手工下载一遍（取完规范仍要回来问"脚本在哪"）
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/clean_tmp.py")\n'
+            'def fetch_install_scripts(base, out_dir, keep):\n'
+            '    """安装脚本一并取到落点根下：os.path.basename(rel)；落点里的入口须能直接跑"""\n'
+            'def _ensure_executable(dest, rel):\n'
+            '    """补可执行位：os.chmod"""\n', ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("INSTALL_SCRIPTS", self.error_texts())
+
+    def test_install_scripts_nested_dir_reports(self):
+        # 反例：照搬来源侧的目录层级（落点里多出一层 script/）→ 下载来的入口按 `dirname "$0"`
+        # 找同目录的兄弟文件（逻辑代码、平台入口），多一层即整组取不到
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            "安装脚本一并取到落点根下：os.path.basename(rel)", "安装脚本按来源路径落盘"))
+        cm.check_shared_cache_guard()
+        self.assertIn("basename", self.error_texts())
+
+    def test_install_scripts_without_exec_bit_reports(self):
+        # 反例：取回后不补可执行位 → 落点里的入口默认 0644，"下次重装直接跑那里的入口"直接失败
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            'def _ensure_executable(dest, rel):\n'
+            '    """补可执行位：os.chmod"""\n', ""))
+        cm.check_shared_cache_guard()
+        self.assertIn("_ensure_executable", self.error_texts())
+
+    def test_install_doc_says_only_specs_land_there_reports(self):
+        # 反例：安装文档只写规范副本的落点、不提"下载来的安装脚本也落这" → 清理脚本等
+        # 下载物仍会被手工存到别处（用户口径是"所有下载的文件"）
+        self._write_valid()
+        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
+            "下载的东西一律只落这一处：规范副本、取规范脚本（fetch-specs.py 及其同名入口）、"
+            "清理脚本 clean_tmp.py 都落这一个路径下，不在项目里另留副本；", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("clean_tmp.py", self.error_texts())
 
     def test_docs_not_synced_reports(self):
         # 反例：INSTALL 未登记抓手 → 安装时读者又不知道有它
@@ -11015,6 +11060,18 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
     # ---- 以远程为准（用户实测诉求：安装脚本经常更新，重跑安装要能更新现有的那份）----
 
+    def _install_scripts_served(self):
+        """端到端服务端要供给的安装脚本（脚本会随规范一起取它们，缺则 404、退出码非 0）。
+
+        名单从**真实仓库**的 `fetch-specs.py` 里读，与脚本本身同源——手工再抄一份名单会在
+        加了第三份安装脚本时静默漏供（那时用例报的是 404、看起来像网络问题）。
+        """
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        src = open(os.path.join(real_root, "script", "fetch-specs.py"), encoding="utf-8").read()
+        return {rel: src.encode("utf-8")
+                for rel in re.findall(r'"script/([\w.-]+)"', src)
+                for rel in ("script/" + rel,)}
+
     def _run_fetch(self, base, extra=(), cwd=None, home=None):
         """按仓库真实的抓取脚本跑一次（spawn 子进程、按 stdout/stderr 断言）。
 
@@ -11070,7 +11127,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         import threading
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
-                  "specs/core/execution.adoc": b"e1\n"}
+                  "specs/core/execution.adoc": b"e1\n", **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="fetch-home-")
         proj = tempfile.mkdtemp(prefix="fetch-proj-")
         with self._serve(served) as httpd:
@@ -11179,6 +11236,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": b"e1\n"}
+        served.update(self._install_scripts_served())
         home = tempfile.mkdtemp(prefix="fetch-home-refresh-")
 
         class Handler(http.server.BaseHTTPRequestHandler):

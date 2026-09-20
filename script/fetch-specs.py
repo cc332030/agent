@@ -28,6 +28,9 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 落点下按来源地址分目录（见 `cache_slot_dir`）——换过 `--base` 取到的不同来源副本互不覆盖；
     且**只进不出**：本脚本不删除落点里的任何文件（含换源留下的旧副本），要清理由人来做
     （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）。
+  - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：规范副本进来源槽，取规范脚本与本脚本
+    配套的 `clean_tmp.py` 落**落点根下**——跨来源共用一份，下次重装直接跑落点里的入口，
+    不必再手工下载一遍（用户口径：下载的文件一律只落这一个地方）。
 
   安装侧对落点的说明与"取回/更新"口径（用户读到的落点描述）以安装文档 `INSTALL.adoc`
   「取规范到本地副本」为唯一真源，本节只讲**本脚本自己的取舍**，不复述那几句。
@@ -63,6 +66,7 @@ import concurrent.futures
 import http.client
 import os
 import re
+import stat
 import sys
 import urllib.parse
 import urllib.request
@@ -75,6 +79,11 @@ CACHE_APP_DIR = "agent-specs"
 # 入口 + 顶层说明文件；specs/ 下的文件从入口的调度器登记解析得到
 MANIFEST_FILE = "AGENTS_COMMON.adoc"
 OPTIONAL_FILES = ("README.adoc",)
+# 与本脚本同处的安装脚本：一并取到落点**根下**（不在来源槽里）——跨来源共用一份。
+# 用户口径是"下载的文件一律只落这一个地方"，故下载完就不必再来第二次；
+# 薄壳也一并取回：只取逻辑代码时，落点里那份没法直接跑（入口层三件事见 specs/general/script.adoc）。
+INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat",
+                   "script/clean_tmp.py")
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
 TIMEOUT_SECONDS = 30
 DEFAULT_WORKERS = 4
@@ -96,6 +105,8 @@ def parse_args(argv=None):
                         help="保留本地已有的非空副本（不动已取到的那一份、只补缺失项）")
     parser.add_argument("--force", action="store_true",
                         help="忽略本地副本、强制重取（与 --keep 相反，即默认行为）")
+    parser.add_argument("--no-scripts", action="store_true",
+                        help="只取规范副本，不把安装脚本（本脚本与其平台入口、清理脚本）取到落点")
     parser.add_argument("--list", action="store_true",
                         help="只打印将要取的文件清单，不下载")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
@@ -141,7 +152,13 @@ def manifest_targets(base):
 
 
 def target_path(out_dir, rel):
-    """落点内路径（相对清单里的仓库路径）。"""
+    """落点内路径（相对清单里的仓库路径）。
+
+    安装脚本那一组的 `rel` 带来源侧的目录（`script/fetch-specs.py`），而落点根下只放
+    文件名——见 `fetch_install_scripts`。
+    """
+    if rel in INSTALL_SCRIPTS:
+        return os.path.join(out_dir, os.path.basename(rel))
     return os.path.join(out_dir, *rel.split("/"))
 
 
@@ -214,6 +231,51 @@ def download_one(base, rel, out_dir, keep):
                 break
     return rel, "fail", (f"{last_err}（本地已有那一份原样保留）" if before is not None
                          else str(last_err))
+
+
+def fetch_install_scripts(base, out_dir, keep):
+    """把安装脚本一并取到落点**根下**。返回与 `download_one` 同形的结果列表。
+
+    清单由 `INSTALL_SCRIPTS` 给出（相对来源根，本仓库里就是 `script/` 下那几个），
+    落点里**只保留文件名**（`<落点根>/fetch-specs.py`）——目录层级是来源侧的排布，
+    照搬会在落点里多出一层 `script/`，且下载来的入口按逻辑代码的相对位置取同目录的
+    兄弟文件（见 `fetch-specs.sh` 的 `dirname "$0"`），多一层即整组取不到。
+    `--no-scripts` 时调用方不调本函数。语义与规范副本一致：**以远程为准**、失败保留
+    本地已有那一份（判据与理由见 `download_one`——同一套"内容不同才落盘 + 原子替换"）。
+    """
+    results = []
+    for rel in INSTALL_SCRIPTS:
+        results.append(download_one(base, rel, out_dir, keep))
+        _ensure_executable(target_path(out_dir, rel), rel)
+    return results
+
+
+def _ensure_executable(dest, rel):
+    """给落点里的入口脚本补上可执行位——**落点里的那份也要能直接跑**。
+
+    本仓库里 `fetch-specs.sh` 带可执行位（见 specs/general/script.adoc「入口脚本须能直接
+    执行」），但 HTTP 取回的是字节、不带文件模式，落点里那份默认是 `0644`：安装流程要
+    "下次重装直接跑落点里的入口"就会失败。故按扩展名判定（`.sh`/`.py` 补可执行位），
+    **只加不减**（已有可执行位不动，也不去"收紧"任何文件的权限）；`.bat` 不需要。
+    """
+    if not rel.endswith((".sh", ".py")):
+        return
+    try:
+        mode = os.stat(dest).st_mode
+        if not mode & stat.S_IXUSR:
+            os.chmod(dest, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    except OSError:
+        pass    # 权限补不上（只读挂载、Windows 等）不该把"取到了文件"报成失败
+
+
+def install_scripts_dir():
+    """安装脚本的落点：落点**根下**（不在来源槽里）。
+
+    规范副本按来源分槽（换过 `--base` 的副本互不覆盖），但安装脚本**跨来源共用一份**
+    ——"下载的东西一律只落这一个地方"这条要对得上：同一个人从哪个来源取，落点里都是
+    同一份入口，下次重装直接跑它即可（见脚本头部「落点」）。
+    """
+    return os.path.join(shared_cache_dir(), CACHE_HOME_DIR, CACHE_APP_DIR)
 
 
 def shared_cache_dir():
@@ -296,6 +358,11 @@ def main(argv=None):
             print(rel)
         print(f"# 共 {len(targets)} 份（必取）+ {len(optional)} 份（有则取），来源 {base}")
         print(f"# 落点: {out_dir}（用户家目录下的 {CACHE_HOME_DIR}/{CACHE_APP_DIR}）")
+        scripts_dir = install_scripts_dir()
+        for rel in INSTALL_SCRIPTS:
+            print(f"{rel}  ->  {target_path(scripts_dir, rel)}")
+        print(f"# 安装脚本 {len(INSTALL_SCRIPTS)} 份，落点根下: {scripts_dir}"
+              f"{'（--no-scripts 时不取）' if args.no_scripts else ''}")
         return EXIT_OK
 
     # `--force` 与默认同为"以远程为准"，此处只保留它的写法（与 `--keep` 相反）；
@@ -308,6 +375,11 @@ def main(argv=None):
             results.append(fut.result())
     for rel in optional:
         results.append(download_one(base, rel, out_dir, args.keep))
+    # 安装脚本落**落点根下**（不在来源槽里）：这是"下载的文件一律只落这一个地方"里
+    # 「安装脚本」那一半——取完规范就不必再手工下载一遍入口（见脚本头部「落点」）。
+    # 清单在 `INSTALL_SCRIPTS`，与本脚本同处 `script/`；`--no-scripts` 时整组跳过。
+    if not args.no_scripts:
+        results.extend(fetch_install_scripts(base, install_scripts_dir(), args.keep))
 
     fresh = [r for r in results if r[1] == "new"]
     updated = [r for r in results if r[1] == "updated"]
@@ -316,6 +388,8 @@ def main(argv=None):
     failed = [r for r in results if r[1] == "fail"]
 
     print(f"落点: {out_dir}")
+    if not args.no_scripts:
+        print(f"安装脚本: {install_scripts_dir()}（落点根下）")
     print(f"来源: {base}")
     if args.keep:
         # `--keep` 下"新取"是**没取回来**的那些（本地没有、只留了个空文件占位）：不并进

@@ -2340,6 +2340,10 @@ def check_spec_fetch_guard():
         ("INSTALL.adoc", ("fetch-specs", "用户家目录"),
          "安装文档须写明取文件抓手与它的落点（用户家目录下的那一处）——"
          "否则安装时又回到手拼下载命令"),
+        ("INSTALL.adoc", ("clean_tmp.py", "下载"),
+         "安装文档须写明：**下载来的文件（含安装脚本）都只落这一处**——"
+         "只写规范副本的落点时，清理脚本等下载物仍会被手工存到别处，"
+         "用户口径『下载的文件一律只落这一个地方』就对不上了"),
         ("AGENTS_COMMON.adoc", ("fetch-specs",),
          "公共入口的「加载方式」须写明随规范分发的取文件抓手——引用方按入口加载时才知道有它"),
         ("README.adoc", ("fetch-specs",),
@@ -2381,6 +2385,13 @@ def check_shared_cache_guard():
                  ("cache_slot_dir", "urlsplit")),
                 ("脚本不得删除落点里的既有文件（清理属破坏性操作）",
                  ("不删除",)),
+                ("安装脚本（本脚本与其平台入口、清理脚本）须一并取到落点（用户口径："
+                 "下载的文件一律只落这一个地方）",
+                 ("INSTALL_SCRIPTS", "fetch_install_scripts")),
+                ("安装脚本在落点里只保留文件名、跨来源共用（不落来源槽）",
+                 ("os.path.basename(rel)", "落点根下")),
+                ("落点里的入口须能直接跑（HTTP 取回不带文件模式，须补可执行位）",
+                 ("_ensure_executable", "os.chmod")),
         ):
             missing = [k for k in keys if k not in text]
             if missing:
