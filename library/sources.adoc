@@ -325,6 +325,20 @@
 * 材料：《阿里巴巴 Java 开发手册》（公开出版的手册文本）。
 * 用途：`specs/stack/java.adoc` 首段"遵守《阿里巴巴 Java 开发手册》；与本规范冲突时，以本规范定义为准"——即**引用其作为下限、本集合可以更严**。
 
+== Java 序列化的版本化（Java Object Serialization Specification）
+
+* 材料：**Java Object Serialization Specification**（Oracle/OpenJDK 官方规范，`docs.oracle.com/javase/8/docs/platform/serialization/spec/serialTOC.html` 一类官方页；**本次未逐字取回**，按句读其「Class Versioning」章与 `@serial` 一节）、**Java 官方 API 文档**（`java.io.Serial`，JDK 14 引入的注解；**本次未逐字取回**）。
+* 依据要点（**要点转述，非逐字摘录**）：① 可序列化类的 **UID** 在**未显式声明**时**由类结构推导**（字段、方法签名、修饰符、实现的接口等）；② 推导值随结构变化 ⇒ **同一逻辑版本的不同编译产物之间会互不兼容**（反序列化抛 `InvalidClassException`）；③ **显式声明** `serialVersionUID` 使该值由**作者掌握**；④ `@Serial` 让该成员的**拼写与放置错误在编译期报出**。
+* 用途：`specs/stack/java.adoc`「序列化（`Serializable`）」——「已实现 `Serializable` 的类型须显式声明 `serialVersionUID`」与「`@Serial` 标注」两条。
+* **须注意的语义差异（同义性）**：官方规范给的是**版本化机制**（不声明会怎样、声明后由谁掌握），**未**规定「必须显式声明」「未实现 `Serializable` 的类型不得加该字段」「不得用抑制代替声明」，**也**没有规定「默认值取 `1L`」——`1L` 是本集合定下的缺省起点，**不得**读成标准要求。「以显式声明代替 `@SuppressWarnings`」是本集合对 `specs/general/coding.adoc`「警告与弃用」的处置口径。
+
+== 局部变量类型推断与链式调用换行（Google Java Style Guide）
+
+* 材料：**Google Java Style Guide**（Google 官方；**本次未逐字取回**，按其公开章节定位）——4.8 节 “Local Variable Type Inference”（`var` 的使用边界：初始化表达式须能表达出类型、可读性优先于省字）与 4.5 节 “Line Wrapping” / 4.5.1 “Where to break”（**按行宽决定是否换行**、换行后在运算符处断开）；**Project Lombok 官方文档**（`val` / `var`：仅用于局部变量、类型由初始化表达式推断）；**《阿里巴巴 Java 开发手册》**（链式调用与换行的风格约定）。
+* 依据要点（**要点转述**）：① 语言与风格指南对**要不要写显式类型**给出的判据是「可读性」（推断结果不清时写显式类型）；② **换行与否的通用判据是行宽**，不是「链有多长」；③ lombok 的 `val`/`var` 是**局部变量作用域**的类型推断。
+* 用途：`specs/stack/java.adoc`「编码」的「局部变量优先 `val`、可变才用 `var`」、`specs/general/coding.adoc`「表达式与调用写法」的「链式调用一律换行」。
+* **须注意的语义差异（同义性，L1）**：**没有任何材料规定「局部变量必须用 `val`/`var`」或「链式调用哪怕很短也必须换行」**——风格指南给的是**可读性判据与行宽判据**，本集合取的是**更严的单一形态**（免去「多短算短」「哪种更可读」的临场裁量）；同理「优先 `val`、确实可变才 `var`」也是本集合对 lombok 的判据化取值，**不得**读成标准规定。
+
 == Feign 接口命名带所属域前缀（Spring Cloud 与《阿里巴巴 Java 开发手册》）
 
 * 材料：**阿里巴巴 Java 开发手册**【命名】章的「方法名/接口名命名规则」（要点转述：接口名与方法名用能望文生义的词、避免歧义与同义混用）；**Spring Cloud OpenFeign 官方文档**对声明式 HTTP 客户端接口的定位（接口定义就是调用契约，接口名直接出现在注入点）；以及**微服务同域多服务的命名实践**。
@@ -487,4 +501,4 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；GB/T 7713.1-2025（现行，代替 GB/T 7713.1-2006）/ GB/T 7713.2-2022 / GB/T 7713.3-2014 / GB/T 7713.4-2025 / GB/T 41210-2021（GB/T 7713-1987 已废止）；Google Java Style Guide；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；GB/T 7713.1-2025（现行，代替 GB/T 7713.1-2006）/ GB/T 7713.2-2022 / GB/T 7713.3-2014 / GB/T 7713.4-2025 / GB/T 41210-2021（GB/T 7713-1987 已废止）；Java Object Serialization Specification（未逐字取回）；`java.io.Serial`（JDK 14，未逐字取回）；Project Lombok 官方文档；Google Java Style Guide（含 4.8 局部变量类型推断 / 4.5 换行）；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。

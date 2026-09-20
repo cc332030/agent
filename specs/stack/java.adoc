@@ -18,7 +18,7 @@
 * **成员与注解排序（L1/L2，本文件是 Java 落点）**：类成员次序、实体类字段与注解次序按 `specs/general/coding.adoc`「命名与代码质量」执行（通用规则已在本层可直接套用，此处只给 Java 落点，不复述判据）——① **静态字段排在类最前**（例外：被某方法直接使用时允许放到该方法紧前面，放与不放都合规）；② **实体类字段跟随映射表列序**（MyBatis-Plus `@TableName`/JPA `@Table`/`@Entity` 标注的类），注解与方法的次序仍按通用规则；③ **注解按名长升序**（如 `@Data` 在 `@TableName` 之前），**名长相同按重要性升序**（如 `@Id` 之下、`@NotNull` 之上的次序按通用规则的重要性档次判定）；④ 注解次序不影响语义才适用——Java 注解本身无"后者覆盖前者"的通用语义，故本条在 Java 上无例外。
 * **注解次序与 lombok 共存**：lombok 的生成类注解（`@Data`/`@Builder`/`@Getter` 等）与持久化/契约/校验注解同处一个目标时，按上条的**名长优先、等长按重要性**排——名长示例：`@Id`（2）< `@Data`（4）< `@TableName`（9），故三者的次序为 `@Id`、`@Data`、`@TableName`；名长相同时再按重要性档次（lombok 生成类注解属最低档次，多排末尾）。
 * **强制优先使用 lombok（L1）**：能用 lombok 代替的绝不手写——getter/setter、构造器、builder、toString/equals/hashCode 等一律用 lombok 生成，禁止移除 lombok 的使用。
-* **局部变量强制使用 lombok `val`/`var`（L1）**：局部变量声明必须且一律使用 `val`/`var`（类型由初始化表达式推断，`val` 不可变、`var` 可变），不得为显式写出类型而放弃；`val`/`var` 仅适用于局部变量，字段不得使用。唯一例外：类型推断结果不清晰（复杂泛型、联合类型推断）等确需显式类型提示的场景可写显式类型，此类例外须克制使用。
+* **局部变量强制使用 `val`/`var`，且优先 `val`、可变才用 `var`（L1）**：局部变量声明**必须且一律**使用 `val`/`var`（类型由初始化表达式推断），**不得为显式写出类型而放弃**；其中**先取 `val`**（不可变），仅当该变量**确实需要重新赋值**时才用 `var`——两者都优先于显式类型，**不得为「写清类型」而放弃**；`val`/`var` 仅适用于局部变量，字段不得使用。**`var` 是例外档、不是并列选项**：能 `val` 就 `val`，用 `var` 时该变量在后续语句里必有二次赋值。**判定标准（任一命中即违规）**：① 局部变量写了显式类型，而该类型可由初始化表达式表示且不属下条例外；② **用 `var` 声明的局部变量此后从未重新赋值**（本条所指的「可变」落不了地）；③ 同一方法里等价的局部变量一半 `val` 一半显式类型。**例外（L2）**：类型推断结果不清晰（复杂泛型、联合类型、匿名类、以 `null` 字面量初始化）等确需显式类型提示的场景可写显式类型，此类例外须克制使用。**未引入 lombok 时**：JDK 自身只有 `var`（JDK 10 起，只覆盖「可变」这一半）、**没有 `val`**，此时按 `var` 执行、不为 `val` 另引依赖。**依据（标准名/编号）**：ISO/IEC 25010（可维护性：类型声明只有一处来源）、ISO/IEC/IEEE 29148（判定须可验证）、Project Lombok 官方文档、Google Java Style Guide（局部变量类型推断的取舍，以及「可读性优先于省字」的边界）。**「优先 `val`、可变才 `var`」是本集合对 lombok 的判据化取值**（标准只说明 `var` 的语义与推断规则）。
 * **`lombok.config` 实时读取**：`lombok.config` 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行。
 * **对象创建统一用 builder**：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 `@SuperBuilder` 而非 `@Builder`，支持继承场景）；实体类用 `@Data`、`@NoArgsConstructor`、`@AllArgsConstructor`；`@AllArgsConstructor` 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器。
 * **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：构造方法一律由 lombok 注解生成，**不得手写**任何构造方法体或参数列表——
@@ -36,6 +36,17 @@
 * **既有工具类/先例优先（补充通用编码规范「代码复用」）**：Java 项目写代码前先查项目自有工具类（如 ctool4j 的 `CList`/`CStrUtils`/`CIdUtils`）与已引入工具库（如 hutool 的 `IdUtil`/`CollUtil`/`StrUtil`）是否已覆盖该操作，并跟随项目内同类调用的先例；**已有等价能力时禁止手写 JDK 原生写法**（典型反例：已有 `IdUtil.fastUUID()`/`CIdUtils.UUID()` 仍写 `java.util.UUID.randomUUID().toString()`；已有 `CollUtil.isNotEmpty` 仍写 `null != coll and !coll.isEmpty`）。选择优先级与现成 API 清单见 `specs/stack/java-syntax.adoc`「工具类使用优先级」。
 * **反射操作优先使用 MethodHandle**：访问字段、调用方法、构造对象等反射操作优先使用项目提供的方法句柄工具，避免直接使用 `Field#get/set`、`Method#invoke`、`Constructor#newInstance` 等原生反射调用；没有现成的方法时可补充后再使用。
 * **日志打印**：禁止 `println`、统一 slf4j；静态文本（无参）不属占位符参数化约束范围；异常日志不得拼 `e.getMessage()`，须将 throwable 作为最后一个参数传入（`log.error("msg: {}", arg, e)`）。
+
+== 序列化（`Serializable`）
+
+仅适用于**声明实现 `java.io.Serializable` 的类**。
+
+* **已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（L1）**：**已声明实现 `Serializable` 的类型**（含父类已实现、自身因此成为可序列化类的场合）**必须显式声明** `serialVersionUID`。**取值**：按项目根 `lombok.config` 的**实时取值**（如 `lombok.serialVersionUID` 一类配置项）执行；**既无配置、又需补出默认值时取 `1L`**（`private static final long serialVersionUID = 1L;`）。**为什么取默认值而不是让它自动生成**：不显式声明时该值由 JVM 依类的结构推导——字段增删、方法签名变化、编译器实现差异都会让它变，于是**仅因结构变化就抛 `InvalidClassException`**；显式声明把该值交回作者。
+* **`@Serial` 标注（L2，JDK 14+）**：为 `serialVersionUID` 加 `@Serial`——它让**拼写与放置错误在编译期报出**（`-Xlint:serial`），比运行期才发现可靠；JDK 14 以下不适用。
+* **不为未实现 `Serializable` 的类型补（L1）**：**不得**为「消警告」给**未实现 `Serializable`** 的类型加 `serialVersionUID`（对不实现该接口的类，该字段不产生作用），**也不得顺手给它加 `implements Serializable`**——那会把该类型变成「可序列化契约」的一部分，是另一件事、须单独判定。
+* **显式声明优先于抑制（L1）**：本条给的是 `serialVersionUID` 这类警告的**正当处置**（显式声明），**以 `@SuppressWarnings` 一类抑制代替显式声明不算完成**——`specs/general/coding.adoc`「警告与弃用」要求「新代码不得引入警告、存量须修复或声明」；**显式声明即该条所说的「声明」**。
+* **判定标准（任一命中即违规）**：① 声明实现 `Serializable` 的类型没有 `serialVersionUID` 声明；② 为未实现 `Serializable` 的类型添加了该字段、或顺手为其加了 `implements Serializable`；③ 以抑制注解代替显式声明；④ JDK 14+ 下显式声明了却未加 `@Serial`。**存量**按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移（改到即补），不发动全库改造。
+* 依据（标准名/编号）：Java Object Serialization Specification（可序列化类的版本化：不显式声明时 UID 由类结构推导，结构一变即不兼容；显式声明使 UID 由作者掌握）、Java 官方 API 文档（`java.io.Serial`：使拼写与放置错误在编译期报出）、ISO/IEC 25010（兼容性、可维护性）、ISO/IEC/IEEE 29148（判定须可验证）。**「默认取 `1L`」是本集合的取值**——标准给的是「显式声明由作者掌握」，「取 1L」只是本集合定下的缺省起点。
 
 == 对象转换（MapStruct）
 
