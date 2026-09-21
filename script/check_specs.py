@@ -2514,6 +2514,84 @@ def check_toolchain_present_guard():
     phase_done()
 
 
+def check_asciidoctor_stub_guard():
+    """『AsciiDoc 语法段不得只剩壳』：脚本里那个编译段必须真的编译，且 CI 必须真的跑它。
+
+    为什么单靠 `check_toolchain_present_guard` 不够（**本轮 main 上实测的绕过路径**）：
+    那道防线钉的是"探测不到处理器即报错"这段**代码**（`_asciidoc_processor` 探测 + 缺
+    即 `err()`）与 CI 的安装步骤**文本**；但**"真的编译过每一份 .adoc"这件事本身**
+    没有任何 CI 级断言——实测：把 `check_asciidoctor_syntax` 的函数体换成
+    `phase(...); phase_done(); return 0`（既不探测、也不编译），
+    `check_specs.py` **仍然报 OK**（那一节写着"✓ 完成"），`check_toolchain_present_guard`
+    照样全绿（探测代码不在这个函数里），CI 里也没有任何步骤去核对"这次到底编了几份、
+    有没有一份报错"。于是**声明的校验手段变成了壳**，而台账上仍写着"有抓手"。
+
+    故本条把两件事变成可核对的（都在 CI 里、纯本地、幂等）：
+      ① 脚本里 `check_asciidoctor_syntax` 的**函数体**须真的（a）探测处理器、
+         （b）缺处理器即 `err(`、（c）对 `ADOC_ROOTS` 收集到的文件逐个真的调用处理器；
+         三者缺一即报红（"只剩壳"的三种形态：不探测 / 探测了但缺工具只告警 / 探测后不编译）。
+      ② CI 里须有一条**真的执行了** `python3 script/check_specs.py` 的命令——语法段挂在
+         这个脚本里，脚本不被 CI 调用时，上面三条再全也只是"写在文件里"。
+         判据按**每步实际执行的命令**取值（见 `_workflow_runs`），不看步骤名与注释。
+
+    力所不及（如实记下、交人/子 agent）：**"某次 CI 里那 N 份 .adoc 真的都被编译了"
+    属运行时事实**，本仓库不可见（脚本输出被 `phase()` 折叠成一行"✓ 完成"）——
+    这里只能证明"编译这件事的代码还在、且 CI 会跑到它"。要更强的留证须让 `check_specs.py`
+    把编译份数打出来并断言，属另一件事（本轮未做）。
+    """
+    phase("AsciiDoc 语法段不得只剩壳检查")
+    src = _read_script_src("script/check_specs.py")
+    if src is None:
+        err("缺失 script/check_specs.py——AsciiDoc 语法段本体不在，无从核对",
+            "script/check_specs.py")
+        phase_done()
+        return
+    body = _module_level_fn_body(src, "check_asciidoctor_syntax")
+    if not body:
+        err("script/check_specs.py 里找不到模块级函数 `check_asciidoctor_syntax`——"
+            "AsciiDoc 语法编译验证这一道手段整个不见了（`CHECKS` 序列里仍点名它时，"
+            "脚本会在运行到它时直接抛 `NameError`；若连序列也一起删了，则没有任何判据"
+            "会报『语法验证没了』）", "script/check_specs.py")
+    else:
+        if "_detect_asciidoc_processor(" not in body:
+            err("`check_asciidoctor_syntax` 的函数体里**没有探测处理器**——"
+                "不探测就没有『缺工具即报错』这条路径，语法段会静默变成空转"
+                "（本仓库实测：整段换成 `phase(...); phase_done(); return 0` 后 "
+                "`check_specs.py` 仍报 OK）", "script/check_specs.py")
+        if "err(" not in body:
+            err("`check_asciidoctor_syntax` 的函数体里**没有 `err(`**——缺工具或编译失败时"
+                "不再报红，这一节无论编没编成功都会显示『✓ 完成』",
+                "script/check_specs.py")
+        if "_collect_adoc_files(" not in body or "_adoc_compile_cmd(" not in body:
+            err("`check_asciidoctor_syntax` 的函数体里**没有真的逐个编译**"
+                "（须同时出现 `_collect_adoc_files(` 与 `_adoc_compile_cmd(`）——"
+                "收集规则与编译命令两处都不可省：少了前者就不知道编哪些文件、"
+                "少了后者就没真的调处理器（本仓库实测的『只剩壳』形态）",
+                "script/check_specs.py")
+        if "ADOC_ROOTS" not in body:
+            err("`check_asciidoctor_syntax` 的函数体里**没有按 `ADOC_ROOTS` 覆盖全部维护根**"
+                "——只编仓库根时，被点名的子树一份都不会被真的编译，而检查照样显示完成",
+                "script/check_specs.py")
+
+    rel_wf = ".github/workflows/check-specs.yml"
+    wf_path = os.path.join(REPO_ROOT, *rel_wf.split("/"))
+    if not os.path.isfile(wf_path):
+        err(f"缺少 {rel_wf}——AsciiDoc 语法段在 CI 侧的落点丢失（脚本再对也没人跑它）", rel_wf)
+    else:
+        with open(wf_path, encoding="utf-8") as fh:
+            wf = fh.read()
+        steps = _workflow_runs(wf)
+        runs_check = any(
+            any("check_specs.py" in line for line in cmd) for cmd in steps)
+        if not runs_check:
+            err(f"校验手段变成摆设：{rel_wf} 里**没有任何一步真的执行 **`script/check_specs.py`**"
+                "——AsciiDoc 语法编译段挂在这个脚本里，脚本不被 CI 跑到时，"
+                "『探测处理器 + 缺即报错 + 逐个编译』三条再全也只是写在文件里"
+                "（本仓库实测的绕过形态：CI 步骤名仍写着 AsciiDoc，命令却换成了 `echo`）",
+                rel_wf)
+    phase_done()
+
+
 def check_asciidoctor_syntax():
     """AsciiDoc 语法编译验证：**环境缺工具即报错，不得跳过**。
 
@@ -3791,8 +3869,8 @@ def check_install_repeat_update_guard():
 #     台账是"哪条规范由谁钉住"的唯一视图；旧判据只核"备注里点名的名字存在"，**没点名就
 #     没核对**，于是"有抓手"这个数字可以靠把防线名删掉维持（删名字比删防线容易得多）。
 # 两份基线的**口径**与取值（上面那条注释已点出"与实取总数同源"的要求，此处给本次的记账）：
-#   * 用例数口径＝**两处相加**（`check_specs_test.py` + `check_effective_test.py` 的 `test_*`
-#     方法数，见 `check_guard_manifest`）。旧值 995 只对得上"加了 3 条的那一时点"，此后
+#   * 用例数口径＝`script/` 下全部 `*_test.py` 的**真实收集**用例数相加（`类名.用例名`
+#     限定名去重，见 `check_guard_manifest`）。旧值 995 只对得上"加了 3 条的那一时点"，此后
 #     `check_effective_test.py` 被并入计数而未回填，故**长期低于实际数**——本仓库实测：
 #     基线 995、实际 998，删掉 3 条用例仍不报红。本次一次性把**口径回填**与**本轮增删**记全：
 #     接线数 92→91、反例用例数 1029→1012（该防线的 19 条反例一并删除），此后**净增 15 条**，
@@ -3891,7 +3969,12 @@ def check_install_repeat_update_guard():
 #       由“取值”改述为“识别特征”）；`check_java_serial_guard` 相应地不再要求调度器逐字抄
 #       本体片段（改核 `优先 \`val\`、可变才 \`var\`` 这一识别特征短语）。
 #   接线数不变：仍是一道防线、一个名字（`CHECKS` 序列与 `guards.adoc` 清单表不动）。
-GUARD_WIRING_BASELINE = 103
+# **本轮（Issue #173）**：103 → 104。新增一道防线 `check_asciidoctor_stub_guard`
+#   （防"AsciiDoc 语法段只剩壳"：函数体须真的探测+缺工具即报错+逐个编译，且 CI 须真的跑
+#   `check_specs.py`）。实测失效：把该函数体换成 `phase(...); phase_done(); return 0` 后
+#   `check_specs.py` 仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个
+#   函数里）、CI 里也没有任何步骤核对"这次到底编了几份"。
+GUARD_WIRING_BASELINE = 104
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -3995,7 +4078,48 @@ GUARD_WIRING_BASELINE = 103
 #   核**提交说明 / 源分支 HEAD / 分支历史**的防线，`guards.adoc` 清单表同步插一行、后续序号重排。
 #   用例数 1271 → 1277（+6：干净态不得误报 / 提交说明含合并动作话术即报红 / 记录禁令自身的
 #   文字不得误报 / 分支历史出现合并提交即报红 / 非 git 根须跳过 / 措辞表须真从规则数据取到）。
+#   **本轮（Issue #173「main 上的问题帮忙修复」）**：上一轮（Issue #173 的对比报告）在
+#   `main` 上实测出三处**核验效力缺口**，本轮逐条修掉，每处都补了反例用例：
+#   ① **出题人自证的数不是被证明的数**（最高危，`main` 上形态更隐蔽）：`check_guard_manifest`
+#      数用例用的是**源码正则** `^\s+def (test_...)`，而 CI 与实际执行走
+#      `python3 -m unittest discover`。实测：在测试文件末尾的 `if __name__` 块**之后**
+#      注入一个仍缩进 4 的 `def test_`（源码数得到、`unittest` 收集不到），基线防线
+#      **全程未报红**、单测照旧全绿。改为**真实收集口径**（`_test_cases`：按缩进层级
+#      只认模块级类体内/顶格的 `test_*`，与 `discover` 同源）。
+#   ② **同一个数被两种写法算成两样**：上面的正则 `\s` 还会匹配**换行**（同一个 `def`
+#      被相邻两行的空白各命中一次，实测 1165 个命中里 1155 个是重复），且用例名**跨类
+#      复用**（`test_valid_passes` 在一个文件里出现 28 次）——"某个类里的那条被删"看不见。
+#      清单改为**类路径限定**（`类名.用例名`），同名跨类各算一条。
+#   ③ **AsciiDoc 语法段可以只剩壳**：`check_toolchain_present_guard` 钉的是"探测不到处理器
+#      即报错"这段代码与 CI 安装步骤的**文本**，但"真的编了每一份 .adoc"没有任何 CI 级断言。
+#      实测：把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); phase_done(); return 0`，
+#      脚本**仍报 OK**、`check_toolchain_present_guard` 照样全绿。新增
+#      `check_asciidoctor_stub_guard` 把"函数体真的探测 + 缺工具即 `err(` + 按 `ADOC_ROOTS`
+#      逐个 `_adoc_compile_cmd`"与"CI 真的有一步执行 `check_specs.py`"变成可核对的。
+#   另修一条**历史上真实发作过**的同根因形态（`main` 祖先提交 `8802613`：`unittest.main`
+#   写在文件**中段**，其后 2 个测试类从未进入 `main()`，`Ran 897 tests` 而源码 899 个
+#   `def test_`——2 条反例被静默吞掉、脚本与基线全绿）：测试文件的入口块必须落在文件末尾，
+#   且每条用例自己那一节里须有断言（防"删一条加一条"或"掏空成空壳"维持总数）。
+#   接线数与用例数分别以 `GUARD_WIRING_BASELINE` / `GUARD_TEST_BASELINE` 为唯一真源。
+# **口径修正 + 本轮增补（Issue #173，main 上实测失效）**：
+#   * **不是删了用例，是把数错的数改对**（1277 → 1266）：旧口径 `^\s+def (test_...)` 里
+#     `\s` 会匹配**换行**，同一个 `def` 被它所在行与其上一行的空白各命中一次——
+#     `check_specs_test.py` 那 1165 个命中里 1155 个是这种重复（真实 `def test_` 只有
+#     1165 行、980 个不同名字）；且用例名**跨类复用**（`test_valid_passes` 在一个文件里
+#     出现 28 次），只记名字时"某个类里的那条被删"根本看不见。改为 `类名.用例名` 的
+#     **真实收集口径**（与 CI 的 `-m unittest discover` 同源，见 `_test_cases`）后为 1266。
+#   * **本轮增补 11 条**：`check_guard_manifest` 新增 3 条（入口块在中段 / 用例被掏空 /
+#     同名跨类须唯一可标识）；新防线 `check_asciidoctor_stub_guard` 新增 8 条（空壳 /
+#     有探测无报错 / 有探测不编译 / 不覆盖全部维护根 / 函数被删 / CI 不跑脚本 /
+#     步骤名不算执行 / 正例）。1266 + 11 = **1277**，同源实取数 `Ran 1288 tests ... OK`
+#     （`Ran` 数与本基线口径不同：`unittest` 按收集到的用例计，本基线按模块内的类路径
+#     限定名去重——当前 1288 与 1277 的差正是"同名跨类"那批，两者都不得减少）。
 GUARD_TEST_BASELINE = 1277
+# 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
+# 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
+# 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
+# 登记本身让"掏空一条用例"这个动作在 diff 里可见。
+GUARD_EMPTY_TEST_NAMES = set()
 
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
@@ -4055,8 +4179,8 @@ GUARD_TEST_BASELINE = 1277
 #   `CHECKS` 里 `check_alter_merge_guard`（两侧合并带入）与 `check_conflict_resolution_guard`
 #   （本分支）各占一位；清单表按 `CHECKS` 实际次序重排为 96 行、编号 1..96 连续；
 #   两个基线各按**合并后同源实取数**回填：接线数 96、用例数 1111（`Ran 1111 tests ... OK`）。
-# 用例基线的计入口径是**两处文件**的 `test_*` 方法数逐条相加（见 `check_guard_manifest`）：
-# `check_specs_test.py` + `check_effective_test.py`，CI 上以
+# 用例基线的计入口径是 `script/` 下**全部** `*_test.py` 里**真正被收集**的用例数逐条相加
+# （`类名.用例名` 限定名去重，见 `check_guard_manifest` 与 `_test_cases`），CI 上以
 # `python3 -m unittest discover -s script -p '*_test.py'` 一次跑全。
 # **本轮（复核 PR #162：审出四处问题并修复）记账**：
 #   ① `check_ledger_source_paths_guard` 的来源解析改为按字符串字面量逐字段取
@@ -4267,6 +4391,86 @@ def _ledger_entries() -> list:
     return entries
 
 
+def _test_cases(module_name: str, src: str) -> list:
+    """把一个测试文件里的用例算成**唯一可标识的清单**：`[(类名, 用例名, 该用例正文)]`。
+
+    **口径必须与 CI / 实际执行同源**：`.github/workflows/check-specs.yml` 跑的是
+    `python3 -m unittest discover -s script -p '*_test.py'`，收集面＝**模块级**
+    `TestCase` 子类的一层缩进 `test_*` 方法 + 顶格 `test_*` 函数。
+
+    为什么"数 `def test_` 的个数"这个口径不成立（**本仓库本轮实测**，两处都会误判）：
+
+    * **数重**：`^\s+def (test_...)` 里 `\s` 会匹配到**换行**，于是同一个 `def` 会被它
+      所在行与其上一行的空白各命中一次——本仓库实测 `check_specs_test.py` 的 `1165`
+      里有 `1155` 是这种重复命中，真实 `def test_` **只有 1165 行、980 个不同名字**。
+      这不是"用例数"，是"正则命中数"。
+    * **同名不可区分**：用例名在**同一个文件里跨类复用**（实测 `test_valid_passes`
+      在 `check_specs_test.py` 出现过 28 次、`test_missing_file_reports` 13 次）。
+      只记名字时，"类 A 的 `test_valid_passes` 被删、类 B 的同名用例仍留"这个动作
+      **看不见**——名字还在集合里、计数也够，读者却会以为那条反例还钉着。
+
+    故清单按**类路径限定**给出（`类名.用例名`）：增删到"哪一个类里的哪一条"上。
+    缩进层级按 `def` 前的空白判，不按正则数 `def test_`——只有一层缩进（直接写在模块级
+    `class` 体内）与顶格（模块级函数）会被收集；坐在模块级 `if __name__ == "__main__":`
+    块里、仍缩进两层的 `def test_` 是**块内局部函数**：源码里"看得到"、运行时永远收集不到
+    （本仓库实测失效形态，见 `check_guard_manifest` 的入口块判据）。
+    """
+    lines = src.splitlines(keepends=True)
+    cls = None
+    cases = []
+    heads = []  # (行号, 限定名)
+    for idx, line in enumerate(lines):
+        mc = re.match(r"(?P<indent>[ \t]*)class ([A-Za-z_][A-Za-z0-9_]*)\b", line)
+        if mc:
+            indent = mc.group("indent").expandtabs(4)
+            cls = mc.group(2) if indent == "" or len(indent) == 4 else None
+            continue
+        md = re.match(r"(?P<indent>[ \t]*)def (test_[A-Za-z0-9_]+)\(", line)
+        if not md:
+            continue
+        indent = md.group("indent").expandtabs(4)
+        if indent == "":
+            heads.append((idx, md.group(2)))
+        elif len(indent) == 4 and cls:
+            heads.append((idx, f"{cls}.{md.group(2)}"))
+    if not heads:
+        return []
+    # 同层级的下一个定义（含装饰器）＝本条用例那一节的结束位置
+    stops = []
+    for idx, line in enumerate(lines):
+        m = re.match(r"(?P<indent>[ \t]*)(?:(?:def|class) [A-Za-z_]|@)", line)
+        if not m:
+            continue
+        indent = m.group("indent").expandtabs(4)
+        if indent == "" or len(indent) == 4:
+            stops.append(idx)
+    for idx, qualified in heads:
+        after = [d for d in stops if d > idx]
+        end = after[0] if after else len(lines)
+        cases.append((qualified, "".join(lines[idx:end])))
+    return cases
+
+
+def _has_any_assertion(body: str) -> bool:
+    """这一节里有没有任何断言（含 `self.assert*` / 裸 `assert` / `self.fail` / `skipTest`）。
+
+    只判"有没有"，不判断言对不对——后者是语义判断（见 `GUARD_CHECK_LIMITS`）。
+    YAML/文本夹具里出现的 `assert` 字样会误判成正例（放行），这是刻意的：本判据的
+    假阳性会误伤真实用例，故宁可窄（只拦"整节一条断言都没有"的确定性空壳形态）。
+    """
+    return bool(re.search(r"\bassert[A-Za-z_]*\b|\bself\.fail\b|\bskipTest\b|pytest\.raises", body))
+
+
+def _collectable_test_names(module_name: str, src: str) -> set:
+    """**会被收集**的用例限定名集合（`类名.用例名`，模块级函数用裸名）。"""
+    return {q for q, _ in _test_cases(module_name, src)}
+
+
+def _count_collectable_tests(module_name: str, src: str) -> int:
+    """**会被收集**的用例条数（按唯一限定名去重，见 `_test_cases`）。"""
+    return len(_test_cases(module_name, src))
+
+
 def check_guard_manifest():
     """『防线清单与删除记账』：防线的增删必须留下痕迹，清单本身的描述必须与实际一致。
 
@@ -4308,8 +4512,20 @@ def check_guard_manifest():
             "（函数体完好、台账也点了名），但永远不会执行；要么接线、要么删掉并记账",
             "script/check_specs.py")
 
-    # 用例数口径：`script/` 下**全部** `*_test.py` 的 `test_*` 方法数逐条相加
-    # （与"防线放在哪个文件"无关——新增一个测试文件时该数随之增长，不必回填口径）。
+    # 用例数口径：`script/` 下**全部** `*_test.py` 里**真正被执行**的 `test_*` 用例数
+    # 逐条相加（与"防线放在哪个文件"无关——新增一个测试文件时该数随之增长）。
+    #
+    # 口径为什么必须是"真实执行"而不是"源码里写了几个 `def test_`"（本仓库实证失效）：
+    # 旧实现按源码正则 `^\s+def (test_...)` 数，数的是「**写在那里的** `def test_`」；
+    # 而 CI 与实际执行走 `python3 -m unittest discover`（`.github/workflows/check-specs.yml`），
+    # 数的是「**真正被 collect 到的**用例」。两者一旦不等，"自证"与"被证明"就不是同一个数。
+    # 实测（本仓库，`main` 上）：在测试文件末尾的 `if __name__ == "__main__":` 块**之后**
+    # 注入一个仍缩进 4 的 `def test_`（源码正则数得到、`unittest` 收集不到）：
+    #   * 源码正则口径 → 比基线**高**，故"用例数减少"不报红；单测照旧 `Ran 1277 tests ... OK`；
+    #   * `check_specs.py` 只报"缺 AsciiDoc 处理器"一条环境错误，**基线防线全程未报红**。
+    # 同根因的历史实证（本仓库祖先提交 `8802613`）：`unittest.main` 被写在文件**中段**，
+    # 其后 2 个测试类从未进入 `main()`，`Ran 897 tests` 而源码有 899 个 `def test_`——
+    # 2 条反例被静默吞掉、脚本与基线全绿（那正是本条自己点名的最高危形态）。
     tests = 0
     script_dir = os.path.join(REPO_ROOT, "script")
     if os.path.isdir(script_dir):
@@ -4317,15 +4533,71 @@ def check_guard_manifest():
             if not fn.endswith("_test.py"):
                 continue
             src_i = _read_script_src(f"script/{fn}") or ""
-            tests += len(re.findall(r"(?m)^\s+def (test_[A-Za-z0-9_]+)\(", src_i))
+            tests += _count_collectable_tests(fn, src_i)
     if tests < GUARD_TEST_BASELINE:
         err(f"防线反例用例数从基线 {GUARD_TEST_BASELINE} 减到 {tests}——**反例用例是防线的"
             "实际效力来源**（一条防线被删时常连带删掉它的全部反例，而脚本与单测仍全绿）；"
             "确实要删就得说明删了哪些、为什么删（并同步 `GUARD_TEST_BASELINE`）。"
-            f"**本数是 `script/` 下全部 `*_test.py`**"
-            f"（各文件的 `test_*` 方法数逐条相加，当前 {tests}）；只核**数量不得减少**，"
+            "**本数是 `script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数**"
+            "（不是源码里写了几个 `def test_`——两者不等的形态即『写了却跑不到』，"
+            f"本仓库实测：末尾 `if __name__` 块之后仍缩进的 `def test_` 源码数得到、"
+            f"执行收集不到，两者当前 {tests}）；只核**数量不得减少**，"
             "同文件内改名/增删一进一出都能维持该数，故别把它读成「某条用例仍在」",
             "script/check_specs_test.py")
+
+    # 每条用例**逐个**核对"它那一节还在不在"：只核总数存在一个已点名的空缺——
+    # 同文件内"删 1 条、加 1 条"（甚至"改名"）都能维持该数，故总数过绿不代表某条用例仍在。
+    # 判据是**段级**的：每个 `def test_...` 从它在模块级类体内的定义位置起、到**同一层级的
+    # 下一个定义**（`def`/`class`/装饰器）或文件末尾为止，算"它那一节"；这一节里不含任何
+    # 断言（`self.assert*` / `assert` / `self.fail` / `self.skipTest` 等）时，说明这条用例
+    # 已被抽空成空壳——它仍在收集面内、仍占着那个数，却什么都证不了。
+    # 存量空壳（`pass` 占位、靠夹具调用防线再断言的形式由上面那组原生断言覆盖）不阻断：
+    # 本判据只拦"本轮新掏空的"，故基线里已存在的空壳名一并放行（见 `GUARD_EMPTY_TEST_NAMES`）。
+    # 免责：机械判据只到"这一节里有没有断言"这一层；"断言还对不对得上判据"属语义判断。
+    script_dir = os.path.join(REPO_ROOT, "script")
+    if os.path.isdir(script_dir):
+        for fn in sorted(os.listdir(script_dir)):
+            if not fn.endswith("_test.py"):
+                continue
+            src_i = _read_script_src(f"script/{fn}") or ""
+            for name, body in _test_cases(fn, src_i):
+                if name in GUARD_EMPTY_TEST_NAMES:
+                    continue
+                if not _has_any_assertion(body):
+                    err(f"用例 `{name}`（script/{fn}）的**这一节里没有任何断言**——"
+                        "总数基线只保证用例数不减少，同文件内删一条加一条（或把用例掏空成"
+                        "空壳）都能维持该数；被抽空的反例用例仍会被收集、仍占着那个数，"
+                        "却什么都证不了。要么把断言补回去，要么说明删了哪条、为什么删"
+                        "（并同步 `GUARD_TEST_BASELINE`）",
+                        f"script/{fn}")
+
+    # 测试文件不得在**中段**结束模块级代码（`if __name__ == "__main__":` 出现在中段、
+    # 或在其之后仍写模块级定义）：`unittest.main()` 只跑到那里为止，其后的测试类**永远
+    # 不会被 `unittest.main` 执行**——本仓库祖先提交 `8802613` 的真实形态（`unittest.main`
+    # 在第 10388 行、文件共 11041 行，其后 2 个测试类，`Ran 897 tests` 而源码 899 个
+    # `def test_`：2 条反例被静默吞掉，脚本与基线全绿）。
+    # CI 走 `-m unittest discover` 时这些类仍会被收集，故"能否被 discover 到"这一条看不出问题；
+    # 本判据钉的是**单文件自跑**（`python script/xxx_test.py`）这条路：入口块必须位于文件末尾。
+    if os.path.isdir(script_dir):
+        for fn in sorted(os.listdir(script_dir)):
+            if not fn.endswith("_test.py"):
+                continue
+            src_i = _read_script_src(f"script/{fn}") or ""
+            first = re.search(r'(?m)^if __name__ == ["\']__main__["\']:', src_i)
+            if not first:
+                continue
+            tail = src_i[first.start():]
+            # 入口块之后**任何缩进层级**的 `def` / `class` 都算"还有东西没跑到"：最隐蔽的
+            # 形态正是"仍缩进两层"的 `def test_`（老实排到模块级反而会被 discover 收走，
+            # 问题没这么隐蔽）——故这里**不要求顶格**。
+            later = [m.group(1) for m in
+                     re.finditer(r"(?m)^[ \t]*(?:class|def) ([A-Za-z_][A-Za-z0-9_]*)", tail[1:])]
+            if later:
+                err(f"script/{fn} 的 `if __name__ == \"__main__\":` 出现在**中段**——"
+                    f"其后仍有模块级定义 {later[:3]}。`unittest.main()` 只跑到该块为止，"
+                    "其后的测试类在单文件自跑时**永远不会执行**（本仓库祖先提交 `8802613` "
+                    "的真实形态：2 条反例被静默吞掉、脚本与基线全绿）。入口块必须落在文件末尾",
+                    f"script/{fn}")
 
     # 台账**逐条**声明：这条规范到底由哪一道防线钉住。旧实现只核"备注里点名的名字
     # 必须存在"，**没点名就没核对**——于是"有抓手"这个数字可以靠把备注里的防线名
@@ -10222,6 +10494,7 @@ CHECKS = (
     check_alter_merge_guard,
     check_toolchain_present_guard,
     check_template_separation_guard,
+    check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
 )
 
