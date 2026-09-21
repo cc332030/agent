@@ -1,0 +1,37 @@
+= Java 数据对象模板（技术栈层）
+
+**模板文件，不是规范文件**：本文件是**可整份照抄的完整模板**——其**判据本体**（`@Accessors` 的豁免理由、`@AllArgsConstructor` 的无参口径、集合的 `@Singular`）在 `specs/stack/java.adoc`「编码」，本文件只把它们**落到一处、连成一份可直接复制的清单**，故**不重复那些判据**（同一件事只在一处给真源，见 `specs/general/doc-design.adoc`「信息归属」）。
+
+**加载触发特征**：**新建一个 Java 数据对象**（POJO/DTO/VO/Entity/内部调用接口的请求响应类），或要**给既有对象补齐这套注解**、要问"这类对象的注解该怎么标"。**没有以上目的时不加载**——它是模板，**要么不读、要么整份读完**（判据分散在 `specs/stack/java.adoc` 的多条里，读一半等于只拿到半套模板，这正是不把它并进规范正文的原因）。
+
+== 模板（新增对象时整段照抄）
+
+[source,java]
+----
+@Data
+@Accessors(chain = true)
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Xxx {
+
+    private String name;
+
+    @Singular
+    private List<Xxx> items;
+}
+----
+
+照抄时的三条约定（**理由、机制与判定标准见** `specs/stack/java.adoc`「编码」的「数据对象模板」条，本文件**不重复它们**——同一件事只在一处给真源，见 `specs/general/doc-design.adoc`「信息归属」）；下面只写**照抄时怎么用**（取值本身即注解清单的一部分，与清单同处一份）：
+
+* **`@Accessors(chain = true)` 只在新增对象时加**：给既有对象**补注解时不加**（理由与判定标准见判据本体）。
+* **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。
+* **集合字段默认加 `@Singular`**：照抄时按"每个集合字段都标"处理（"除非有问题"这一前提与判定标准见判据本体）。
+* **`lombok.config` 实时读取**：注解的实际生成行为按项目根 `lombok.config` 的**当前内容**执行（`specs/stack/java.adoc`「编码」）；模板只固定注解清单，不固化其配置项。
+* **注解次序**：模板里的次序已按 `specs/general/coding.adoc`「命名与代码质量」的**注解排序**规则排好；该规则的细则**不在此重述**（本文件只回指、不重复判据），直接见那一节。
+
+== 生效面与存量
+
+**两档生效面**与其判定标准**见判据本体**，**不在此重述**；照抄时只需记住：本文件**不改写** `specs/stack/java.adoc`「编码」的判据，也**不得以「模板没写」为由绕过判据本体**。
+
+* 依据（标准名/编号）：**见判据本体**同一行——材料名与“三处取值属本集合的判据化取舍”这一声明都只在那里写一份，本文件不重述。

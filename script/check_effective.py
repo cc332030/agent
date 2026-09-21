@@ -72,7 +72,7 @@ MECHANISMS = [
      "check_filler_docs",      "check_filler_docs（占位段/完全重复段）"),
     ("文档须高质量（准确/完整/可执行/有价值/简洁/可验证）", "specs/general/doc.adoc",   "script/check_specs.py",
      "check_refs_exist",      "可验证性由 check_refs_exist/check_link_refs/check_section_refs 兜底，其余交人 review"),
-    ("INSTALL 模板代码块逐字保留（换行/空行不丢失）", "INSTALL.adoc",            "script/check_specs.py",
+    ("入口模板代码块逐字保留（换行/空行不丢失）", "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_install_codeblock",      "check_install_codeblock"),
     ("临时产物清理脚本可用",                     "specs/core/execution.adoc",       "script/clean_tmp.py",
      "script/clean_tmp.py",        "存在清理脚本"),
@@ -183,6 +183,20 @@ MECHANISMS = [
      "specs/stack/java.adoc「编码」", "script/check_specs.py",
      "check_java_interface_accessor_guard",
      "check_java_interface_accessor_guard 钉住 Java 栈「编码」的**判据本体**（不是轴名——只核『这一节在不在』属防线空转）：**只约束接口**（`interface` 与「类不适用本条」须同现——判定面被放大到类上会把正常的 lombok setter 判红）、**允许 get / 禁止 set** 两侧、**理由与后果**（下游可能加 `@Accessors(chain = true)` ⇒ **编译不过**——缺则读者不知道要防什么，遇到『接口不加 set 怎么写入』会把 setter 补回去）、**判定标准四条**（接口里声明了 set，含接口上的 lombok 访问器注解 / 以『没法写入』为由补 setter 而未走主动声明 / 自我豁免）、**存量口径**（用户点名『已经有的不管，也不告警』：不视违规、不告警、不整改、随动迁移）、**豁免面与范围**（除非主动声明、仅对该处生效、不得泛化）与依据行，并反向钉住通用层不得出现框架专名 `@Accessors`、技术栈层是判据的唯一落点；另钉调度器识别特征、README 同步与图书馆两处落点。**本条防的不是『没写规则』而是『判定面被放大或理由被抽掉』**——『某个接口算不算字段接口』属语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("Java 数据对象模板：新建时整段照抄；补注解不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`",
+     "specs/stack/java.adoc「编码」+ specs/stack/java-object.adoc（模板文件）", "script/check_specs.py",
+     "check_java_object_template_guard",
+     "check_java_object_template_guard 钉住两处结构：① **模板文件** `specs/stack/java-object.adoc`（**模板、不是规范文件**——"
+     "『要么不读、要么整份读完』的整段清单）须写明自身定位与触发特征（『没有以上目的时不加载』）、五项注解齐备、"
+     "**三条照抄约定各自回指判据本体**（取值只列一次、理由与判定标准只在 `specs/stack/java.adoc`「编码」写一份："
+     "模板文件自称『不重复那些判据』，在此再抄一份即第二真源；**两档生效面取值与依据行亦只回指、不复述**）；"
+     "② **判据本体**在 `specs/stack/java.adoc`「编码」的『数据对象模板』条**自己的正文里**，本条承载三处取值的取值/机制/判定标准；"
+     "**核对面须防兜底**：按整份文件核时同文件相邻条目的同样字样会兜住缺项、按整条 bullet 核时同一 bullet 末尾的"
+     "依据行会兜住清单缺项——故取『条目正文』与『清单句』两级（`bullet_tokens` 的 `anchor`/`until`）；"
+     "**模板侧另有反向核对**（`file_forbidden`）：机制、判定标准、取舍声明与两档生效面取值**不得**在模板侧再抄一份；"
+     "③ 加载门（调度器技术栈层登记 + 识别特征）与 README 目录说明（须写条目名 + 『模板文件、非规范文件』，只留子串会被路径兜住）。"
+     "**本条防的是『模板文件被并回规范』『判据本体被抽走只剩一份清单』『取值在模板侧另抄一份』三种失效**——"
+     "『某个类算不算数据对象、代码里到底标没标这些注解』属语义判断与运行时事实（见 GUARD_CHECK_LIMITS）"),
     ("Maven 未配置过仓库/镜像且外网出口 IP 在中国大陆时，须用指定中央仓库",
      "specs/stack/maven.adoc",
      "script/check_specs.py",
@@ -246,6 +260,7 @@ MECHANISMS = [
      "script/check_specs.py",
      "check_refinement_guard",
      "check_refinement_guard 钉住**判据本体**七组要点（重复面是必查项 L1 且与『没查过』分得清／判定标准『以完整表述出现』『改一处要记得改 N 处』／收敛形态『一处完整定义 + 其余位置只留一行引用』／与 P3 的边界『删的只能是重复表述、须留下可达的引用、无法确定的一律保留』／两类不得被当成重复收敛（最高关注项与其引用、各自的承接）／篇幅与重复是两件事／依据行 ISO 10007 与 ISO/IEC/IEEE 29148），并钉住**两处动作落点**——① 改完即审的固定动作里要真的核重复面（否则精炼性于每次改动都不生效）② 提示词公共片段 `delivery` 的「重复面的处理」（review/refactor 两个提示词都 include，一处维护两处生效）；"
+     "**机械抓手两道**（都在 `script/specs-rules/duplicate.toml`，阈值与例外理由写在规则数据里）：`check_duplicate_scan_guard`（逐字重复扫描——全仓逐字重合超阈值即报红，**是下界**）与 `check_pointer_no_verbatim_guard`（**自称回指的行不得同时复述取值**——补前者的下界：阈值 40 只报『长度极显著』的重合，而回指句顺手抄取值的公共子串常只有二十几字，前者核不出来）；"
      "**本条只钉要点文本仍在**——『这次到底查了几处、收敛了哪些、有没有把必要内容当重复删掉』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("信息密度：每句须承载（与「精炼性」的分工、判定标准、与 P3 的边界、适用面、依据行）",
      "specs/general/doc.adoc「信息密度（每句须承载）」+ library/sources.adoc「GB/T 7713 系列」",
@@ -357,24 +372,24 @@ MECHANISMS = [
      "check_http_semantics_guard", "check_http_semantics_guard 钉住「HTTP 接口语义」三处：①条文与级别（安全方法不得产生状态变更 **L1**、幂等与状态码 **L2**、Problem Details **L3 可选**——级别不得被顺手改动）；②适用范围（无 HTTP 接口的项目不适用，避免高频误伤）；③图书馆依据（RFC 9110 安全方法/幂等/状态码与 RFC 9457 的**逐字**引文、以及「判据化取值 vs 标准原文」的同义性差异如实标注）。缺口来源：此前只覆盖路径命名风格，方法与状态码语义未覆盖（`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用；错误包成 `200` 会让重试、缓存、监控与网关策略全部失效）。『某个接口实际用的是哪个方法、返回什么状态码』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py",
      "check_public_content_coverage", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定"),
-    ("安装取文件须有随规范分发的抓手：清单从入口自身解析、一次取全（不手拼逐条下载命令）", "AGENTS_COMMON.adoc + INSTALL.adoc", "script/check_specs.py",
-     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 INSTALL/AGENTS_COMMON/README 三处登记同步；语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("安装取文件须有随规范分发的抓手：清单从入口自身解析、一次取全（不手拼逐条下载命令）", "AGENTS_COMMON.adoc", "script/check_specs.py",
+     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("重新执行安装须能更新现有副本（安装脚本经常更新：以远程为准、内容不同才刷新，失败保留本地那一份）",
-     "INSTALL.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
+     "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
      "check_spec_fetch_guard 钉住抓取脚本的默认语义是**以远程为准**（每份文件取回的字节与本地比较、"
      "不同才原子落盘；`--keep` 才回到「本地已有即不动」）与**取回失败保留本地已有的那一份**"
-     "（不得把副本删掉换成没有），以及 INSTALL/AGENTS_COMMON/README 三处文档写明该语义——"
+     "（不得把副本删掉换成没有），以及 AGENTS_COMMON/README 两处文档写明该语义——"
      "防退回「本地既有就跳过」：它把安装结果绑在「本地以前取过什么」上，远端修好了、加了一节规范，"
      "用户重跑安装仍旧什么都不做（用户实测诉求）；反向也拦「失败也把本地删掉」这把「没更新」"
      "变成「没有」的形态。『某次重跑是否真的取到了最新内容』运行时事实（见 GUARD_CHECK_LIMITS）"
      "靠实测与留证（本仓库按逐字节比对、`--keep`/刷新三态各跑一遍复核）"),
     ("多模块项目的模块间依赖须有完整依赖关系文档（UML 表述、查依赖先读它、缺失即新增、不重复声明）", "specs/general/doc-design.adoc", "script/check_specs.py",
      "check_dependency_view_guard", "check_dependency_view_guard 钉住「依赖关系文档（模块间依赖的唯一视图）」节的要点（完整 / UML 优先 / 固定路径可直达 / 先查本文档 / 缺失即新增 / 同提交同步 / 不重复声明 / 与构建工具边界）与两处指向（加载调度器、依赖规范）；『某个项目的依赖视图是否真的完整、有没有过期』语义判断（见 GUARD_CHECK_LIMITS）"),
-    ("安装文档入口占位须保留三要点：优先取到本地副本 / 取不到就直接读远程 / 需要最新规范时再运行一次即是更新",
-     "INSTALL.adoc", "script/check_specs.py",
+    ("入口占位须保留三要点：优先取到本地副本 / 取不到就直接读远程 / 需要最新规范时再运行一次即是更新",
+     "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_shared_cache_guard",
-     "check_shared_cache_guard（内含 `_check_install_entry_placeholder_lines`）钉住安装文档模板那行的三个要点"
+     "check_shared_cache_guard（内含 `_check_install_entry_placeholder_lines`）钉住入口模板那行的三个要点"
      "——缺『优先取到本地副本』则网络不可达时本地那份可读副本没有了、缺『取不到就读远程』则把可选的一步"
      "读成前置条件、缺『再运行一次即是更新』则用户重跑安装仍拿本地旧副本（而入口占位还会被判成与模板一致、"
      "连那几行都不更新——用户实测两次点名『还是没改』）；`check_install_codeblock` 只核每行独立成行 + 空行完好，"
@@ -395,27 +410,35 @@ MECHANISMS = [
      "`check_specs.py` 报 OK、单测全通过、台账上的『抓手数』也没变；台账里的防线名改成不存在的"
      "名字仍报『有抓手』；清单两条被整条删掉仍报绿。『某次删除是否该被批准』语义判断（见 GUARD_CHECK_LIMITS）"
      "交人/子 agent 复核"),
-    ("入口文档须给『隔一次会话还认得回来』的清单：安装文档路径与取规范脚本路径、副本检索路径、取回与更新方式、要跨会话保留的本项目信息（落点只有用户家目录下的一处）",
-     "specs/general/entry-doc.adoc + INSTALL.adoc", "script/check_specs.py",
+    ("入口文档须给『隔一次会话还认得回来』的清单：安装与取回口径的落点路径与取规范脚本路径、副本检索路径、取回与更新方式、要跨会话保留的本项目信息（落点只有用户家目录下的一处）",
+     "specs/general/entry-doc.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_entry_doc_manifest",
      "check_entry_doc_manifest 分两处核：①**判据真源** specs/general/entry-doc.adoc"
      "（唯一持久落点/新实例只看到项目里的文件/与临时产物的分界/项目自身规范优先/『唯一真源』声明）；"
-     "②**入口模板** INSTALL.adoc 只核**路径链与副本两要点**（三条路径齐——规范入口/安装文档/"
-     "取规范脚本，缺安装文档路径则新实例不知道去哪儿读安装与更新的做法、缺取规范脚本路径则不知道"
+     "②**入口模板** AGENTS_COMMON.adoc「安装与更新」只核**路径链与副本两要点**（规范入口与"
+     "取规范脚本两条路径齐；缺取规范脚本路径则新实例不知道"
      "如何去下载规范，用户实测点名；落点=用户家目录/用户路径下的 `.cache/agent-specs`，按**要点**核"
      "『用户侧词的任一写法 + 落点名同现』、不核某一种写法的字面值；`fetch-specs`+『再运行一次』；"
      "下载来的**安装脚本**（取规范脚本与其平台入口、清理脚本）同样落这一处——"
      "用户口径是『所有下载的文件』，故 `check_shared_cache_guard` 另钉住脚本侧那几件"
      "（`INSTALL_SCRIPTS` 清单、落点里只保留文件名、落点里的入口须能直接跑），"
-     "`INSTALL.adoc` 侧则钉住『下载的文件一律只落这一处』这条要点），"
+     "公共入口侧则钉住『下载的文件一律只落这一处』这条要点），"
      "**不核模板的小节结构**——模板写成什么样**以用户手工编辑的形态为准**（用户点名不要 "
      "`= Agent 规范入口` 标题与『规范与安装文档的位置/规范副本的位置/本项目持久化到入口文档的信息』"
      "三节；上一版判据按节标题核，结果是把用户删掉的三节又『补』了回去，等于拿机械判据盖掉用户的"
      "手工编辑，故已撤）。落点那一档曾核字面值，核字面值时一次措辞精炼就让判据空转（本轮实测："
      "`~/.cache/agent-specs` 的写法被旧判据判为缺失），故改按要点核；"
+     "**『取回与更新方式』那一档只在模板那一段内核，且模板里本来就有 `fetch-specs`+"
+     "『再运行一次』——故它管不到「取规范到本地副本」一节被抽空**；该节现已收敛为『只写落点 + "
+     "回指真源』，故『怎么取、怎么更新』由 `check_spec_fetch_guard` 收尾调用的 "
+     "`_check_install_no_python_section` 核**真源那一侧**（`script/fetch-specs.py` 的头部注释："
+     "一次取全 / 清单从入口自身解析 / 以远程为准 / `--keep` / `--base` / 解释器兜底与处置次序）"
+     "写全，并核入口那一节**仍有落点与指向真源（及其部位）的回指**。用户口径是『这一节重复了』"
+     "——同一件事实写两处即两处漂移，故判据**不得**再要求入口复述那些句子"
+     "（要求复述＝把重复判成合规）；反向：入口只剩指针、真源被抽空，两种形态都报红。"
      "『某次安装是否真把项目信息写进入口文档』运行时事实（见 GUARD_CHECK_LIMITS）"),
     ("安装流程的幂等更新：用户手工编辑过的模板内容不自动改回（用户改过的以用户改过的为准）",
-     "INSTALL.adoc「重复执行（更新）时的行为」", "script/check_specs.py",
+     "AGENTS_COMMON.adoc「安装与更新」的「本流程可重复执行、且以远程为准」", "script/check_specs.py",
      "check_install_repeat_update_guard",
      "check_install_repeat_update_guard 钉住该节的三项要点——**用户手工编辑过的模板内容一律照原文"
      "保留**、**不自动改回**、不一致时**在汇报里指出等用户定**；缺它时『与最新模板不一致即就地"
@@ -434,15 +457,17 @@ MECHANISMS = [
      "怎么组织』，对引用方项目不成立，写进公共内容即放错受众。"
      "『某份内容到底算不算模板类内容』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("取规范入口的解释器兜底：不把「机器上有 python3」当前提，且入口不得代为安装运行时",
-     "specs/general/script.adoc + INSTALL.adoc", "script/check_specs.py",
+     "specs/general/script.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
      "check_spec_fetch_guard 钉住两个入口**按次序探测解释器、找不到就报错退出**"
      "（`_check_interpreter_fallback_entry_lines`：键须落在**同一条可执行行**上、次序只在"
      "候选代码行之间比较——只核全文关键词时，注释里写一句、或把某一级分支整条删掉都能骗过，"
-     "本仓库实测复现；缺一即「没有 python 的机器上装不上规范」），以及安装文档的一组**处置次序**"
-     "（`_check_install_no_python_section`：先按本平台既有软件分发方式装一个 python 3、"
-     "只装 python2 不算「一个都没有」、入口不得代为安装运行时、报错退出非 0 不得静默继续、"
-     "`curl … | python3 -` 那条远程执行形态同样要 python——删掉整节即报红）；"
+     "本仓库实测复现；缺一即「没有 python 的机器上装不上规范」），以及**取回与处置口径的真源**"
+     "（`_check_install_no_python_section` 核 `script/fetch-specs.py` 的**头部注释**：先按本平台"
+     "既有软件分发方式装一个 python 3、只装 python2 不算「一个都没有」、入口不得代为安装运行时、"
+     "报错退出非 0 不得静默继续、`curl … | python3 -` 那条远程执行形态同样要 python——"
+     "真源侧被抽掉即报红；同时核公共入口那一节**仍有落点与指向真源（及其部位）的回指**，"
+     "入口只剩一枚指针同样报红）——同一件事实只写一处，不得要求入口复述；"
      "反向钉住 `specs/general/script.adoc`「跨环境脚本」的边界条——**入口不得为「让逻辑跑起来」"
      "安装/下载/解压运行时**（改系统状态、要权限、对调用方不可预期；判据 ISO 9241-110），"
      "并钉住「可以做把逻辑层当命令直接跑的薄壳」这条，防把正当形态一并禁掉；"

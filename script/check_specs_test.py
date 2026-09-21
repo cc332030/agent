@@ -81,7 +81,8 @@ class CheckSpecsTestCase(unittest.TestCase):
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.SPECS_DIR = os.path.join(self.root, "specs")
         cm.PROJECT_SPECS_DIR = os.path.join(self.root, "specs-project-maintainer")
-        cm.INSTALL_FILE = os.path.join(self.root, "INSTALL.adoc")
+        # 安装口径已并入公共入口：夹具里的"安装文档"就是入口自己（同一文件两个角色）
+        cm.INSTALL_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.PROJECT_FILE = os.path.join(self.root, "AGENTS.adoc")
 
     def tearDown(self) -> None:
@@ -621,7 +622,7 @@ class TestExtractSpecsRefs(unittest.TestCase):
 class TestCollectAdocFiles(CheckSpecsTestCase):
     """钉住"检查集合的覆盖面"：纳入 `library/**`、`prompts/**` 与仓库根全部 .adoc。
 
-    原实现只收 `specs/` + `AGENTS_COMMON.adoc` + `AGENTS.adoc` + `INSTALL.adoc`，
+    原实现只收 `specs/` + `AGENTS_COMMON.adoc` + `AGENTS.adoc`，
     `library/**` 与根 `PUBLIC.adoc`/`README.adoc`/`PROMPTS.adoc`（连 `CHANGELOG.adoc`）
     全部漏收——语法编译、引用存在性、节名引用、链接格式四口径对它们整体失效。
     `prompts/**` 亦曾漏收，而它是要复制给未知项目执行的产物（见 `PUBLIC.adoc`）：
@@ -1134,74 +1135,129 @@ class TestCheckHistoricalNotes(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
-# check_install_codeblock（INSTALL.adoc 模板代码块逐字保留）
+# check_install_codeblock（公共入口「安装与更新」的模板代码块逐字保留）
 # --------------------------------------------------------------------------- #
 class TestCheckInstallCodeblock(CheckSpecsTestCase):
-    TEMPLATE = """= Agent 规范安装
+    """钉住入口模板代码块逐字保留 + 入口文件名规则。
 
-在目标项目根目录创建 `AGENTS.adoc`，内容为：
+    **落点已并入公共入口**（`AGENTS_COMMON.adoc`「安装与更新」）：安装文档此前是独立文件，
+    用户口径是"把它的内容压进入口前部、删除源文件、以后直接引用入口"。故夹具把模板与
+    文件名规则写在同一个文件的两处——模板在「安装与更新」节的代码块内，文件名规则在该节
+    正文里（缺一即报红）。
+    """
 
-[source,asciidoc]
-----
-本项目的 agent 执行规范入口为：
+    SECTION = "== 安装与更新（引用方接入与取回口径）\n\n"
+    # 文件名规则（默认 `AGENTS.adoc` + 兼容已存在的 `AGENTS.md`）；单独一段便于反例只去掉它。
+    FILENAME_RULES = (
+        "* **入口文档（安装流程）**：文件名取 `AGENTS.adoc`；已存在 `AGENTS.md` 时就地融合"
+        "（**不重命名、不迁移、不另建**）。\n\n")
+    TEMPLATE = (
+        "[source,asciidoc]\n----\n"
+        "本项目的 agent 执行规范入口为：\n\n"
+        "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+        "取规范脚本（要再取一次规范、或本机没有副本时用它）：\n\n"
+        "https://agent.c332030.com/script/fetch-specs.py\n\n"
+        "优先取到本地副本（避免网络原因无法访问）：**下载的文件一律只落 `~/.cache/agent-specs`**，"
+        "在项目根目录运行一次取文件抓手即可；取不到时就直接读上面的远程入口；"
+        "**需要最新规范时再运行一次取规范脚本即是更新**。\n\n"
+        "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。\n\n"
+        "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。\n"
+        "----\n")
 
-https://agent.c332030.com/AGENTS_COMMON.adoc
-
-https://agent.c332030.com/INSTALL.adoc
-
-https://agent.c332030.com/script/fetch-specs.py
-
-读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。
-
-规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。
-----
-"""
-
-    # 入口文件名规则（默认 `AGENTS.adoc` + 兼容已存在的 `AGENTS.md`），与真实 INSTALL.adoc 同口径；
-    # 单独一段便于反例只去掉它（钉住该规则被删时能被机械校验发现）。
-    FILENAME_RULES = """
-== 已存在 AGENTS 文档
-
-先检查根目录是否已存在 agent 规范文档，按 `AGENTS.adoc` → `AGENTS.md` 顺序取第一个命中者：仅 `AGENTS.md`
-存在时在它上面融合，文件名保持 `AGENTS.md`、**不重命名、不迁移**；已存在 `AGENTS.adoc` 时**不另建** `AGENTS.md`。
-"""
+    def _body(self, template=None, rules=None):
+        return (self.SECTION
+                + (self.FILENAME_RULES if rules is None else rules)
+                + (self.TEMPLATE if template is None else template))
 
     def test_wellformed_template_passes(self):
-        # 正例须含入口文件名规则（默认 AGENTS.adoc + 兼容 AGENTS.md），与真实 INSTALL.adoc 同口径
-        self.write("INSTALL.adoc", self.TEMPLATE + self.FILENAME_RULES)
+        # 正例：模板逐字保留 + 入口文件名规则齐备
+        self.write("AGENTS_COMMON.adoc", self._body())
         cm.check_install_codeblock()
         self.assertEqual(cm.errors, [])
 
-    def test_missing_install_file_skips(self):
-        # 不写 INSTALL.adoc：应跳过不报错
-        self.write("AGENTS_COMMON.adoc", "= t")
+    def test_missing_entry_file_skips(self):
+        # 入口文件不在：应跳过不报错（新根下什么都不写，文件自然不存在）
         cm.check_install_codeblock()
         self.assertEqual(cm.errors, [])
 
     def test_no_entry_title_passes(self):
         # 正例（用户口径）：模板不带 `= Agent 规范入口` 标题也应判绿——标题是用户手工
         # 删掉的可精炼项，不再作必备行（曾经必核，结果是把用户删的标题又"补"了回去）
-        self.write("INSTALL.adoc", self.TEMPLATE + self.FILENAME_RULES)
+        self.write("AGENTS_COMMON.adoc", self._body())
         cm.check_install_codeblock()
         self.assertEqual(cm.errors, [])
+
+    def test_section_removed_reports(self):
+        # 反例：承载模板的「安装与更新」节被删 → 安装口径与入口模板一并丢失
+        self.write("AGENTS_COMMON.adoc", "." + self._body())
+        cm.check_install_codeblock()
+        self.assertIn("安装与更新", self.error_texts())
+
+    def test_duplicate_path_reports(self):
+        # 反例（用户点名形态）：模板里同一个 URL 出现两次——两个不同名目
+        # （"规范入口"与"安装与更新的文档入口"）指向同一份文件，读的人以为有两个落点。
+        # 本仓库实证成因：安装口径并入公共入口、INSTALL.adoc 被删后，原来指向安装文档的
+        # 那一行被改成入口自己的地址，于是重复。
+        dup = self.TEMPLATE.replace(
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：\n\n",
+            "安装与更新的文档入口为（要重装、要更新时直接读它）：\n\n"
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：\n\n")
+        self.write("AGENTS_COMMON.adoc", self._body(template=dup))
+        cm.check_install_codeblock()
+        self.assertIn("同一路径重复出现", self.error_texts())
 
     def test_collapsed_blank_lines_reports(self):
         # 反例：AI 折叠了代码块内的空行，导致段落粘连、样式改变
         collapsed = self.TEMPLATE.replace(
             "本项目的 agent 执行规范入口为：\n\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
-            "https://agent.c332030.com/INSTALL.adoc\n\n"
-            "https://agent.c332030.com/script/fetch-specs.py\n\n"
-            "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：\n\n"
+            "https://agent.c332030.com/script/fetch-specs.py\n\n",
             "本项目的 agent 执行规范入口为：\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
-            "https://agent.c332030.com/INSTALL.adoc\n"
-            "https://agent.c332030.com/script/fetch-specs.py\n"
-            "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。")
-        self.write("INSTALL.adoc", collapsed + self.FILENAME_RULES)
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：\n"
+            "https://agent.c332030.com/script/fetch-specs.py\n")
+        self.write("AGENTS_COMMON.adoc", self._body(template=collapsed))
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
         self.assertIn("缺少空行", self.error_texts())
+
+    def test_blank_line_swallowed_between_description_and_path_reports(self):
+        # 反例（本轮实测复现的**防线空转**）：吞掉**说明段之间**的空行——两行仍各自独立成行、
+        # 且它们之间原本就隔着别的必备行，故"相邻必备行间距 ≥ 2"仍成立、旧判据全绿。
+        # 实测形态：`https://…/AGENTS_COMMON.adoc` 与 `取规范脚本（…）：` 之间的空行被吞。
+        collapsed = self.TEMPLATE.replace(
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：",
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+            "取规范脚本（要再取一次规范、或本机没有副本时用它）：")
+        self.write("AGENTS_COMMON.adoc", self._body(template=collapsed))
+        cm.check_install_codeblock()
+        self.assertIn("缺少空行", self.error_texts())
+
+    def test_blank_line_swallowed_before_last_lines_reports(self):
+        # 反例：模板末尾两条必备行之间那颗空行被吞——它们之间没有其它必备行，
+        # 但仍属"两段紧贴、样式会变"；判据须逐对相邻行核、不按"间距阈值"核
+        collapsed = self.TEMPLATE.replace(
+            "不得因未读取/记不全而跳过或放宽任何条款。\n\n"
+            "读取该入口及其引用的 specs/ 规范",
+            "不得因未读取/记不全而跳过或放宽任何条款。\n"
+            "读取该入口及其引用的 specs/ 规范")
+        self.write("AGENTS_COMMON.adoc", self._body(template=collapsed))
+        cm.check_install_codeblock()
+        self.assertIn("缺少空行", self.error_texts())
+
+    def test_parenthetical_note_may_hug_previous_line(self):
+        # 正例（真实模板的形态）：入口地址下一行紧接的**全角括注**是同一条信息的延续，
+        # 本就紧贴、须判绿——不给这条例外会把正确写法判红（真实文件即如此）
+        hugged = self.TEMPLATE.replace(
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n",
+            "https://agent.c332030.com/AGENTS_COMMON.adoc\n"
+            "（重装、更新、要完整的取法与退路，也读它——安装与取回口径在本文件内）\n\n")
+        self.write("AGENTS_COMMON.adoc", self._body(template=hugged))
+        cm.check_install_codeblock()
+        self.assertEqual(cm.errors, [])
 
     def test_merged_line_reports(self):
         # 反例：两段内容被合并到同一行，找不到独立成行的必备行
@@ -1209,48 +1265,40 @@ https://agent.c332030.com/script/fetch-specs.py
             "本项目的 agent 执行规范入口为：\n\n"
             "https://agent.c332030.com/AGENTS_COMMON.adoc",
             "本项目的 agent 执行规范入口为：https://agent.c332030.com/AGENTS_COMMON.adoc")
-        self.write("INSTALL.adoc", merged)
+        self.write("AGENTS_COMMON.adoc", self._body(template=merged))
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
         self.assertIn("缺失或行被合并", self.error_texts())
-
-    def test_missing_install_doc_path_reports(self):
-        # 反例：模板不给安装文档路径 → 新实例不知道去哪儿读安装/更新的做法
-        doc = self.TEMPLATE.replace("https://agent.c332030.com/INSTALL.adoc\n", "")
-        self.write("INSTALL.adoc", doc + self.FILENAME_RULES)
-        cm.check_install_codeblock()
-        self.assertIn("INSTALL.adoc", self.error_texts())
 
     def test_missing_fetch_script_path_reports(self):
         # 反例（用户点名形态）：模板不给取规范脚本路径 → 新实例不知道如何去下载规范
         doc = self.TEMPLATE.replace(
             "https://agent.c332030.com/script/fetch-specs.py\n", "")
-        self.write("INSTALL.adoc", doc + self.FILENAME_RULES)
+        self.write("AGENTS_COMMON.adoc", self._body(template=doc))
         cm.check_install_codeblock()
         self.assertIn("fetch-specs.py", self.error_texts())
 
     def test_missing_delimiters_reports(self):
         # 反例：代码块定界符不完整
         bad = self.TEMPLATE.replace("----\n", "")
-        self.write("INSTALL.adoc", bad)
+        self.write("AGENTS_COMMON.adoc", self._body(template=bad))
         cm.check_install_codeblock()
         self.assertIn("定界符", self.error_texts())
 
     def test_agents_md_only_in_fused_section_reports(self):
         # 反例：兼容规则只写"按 AGENTS.md 融合"，漏掉"不重命名 / 不另建"（会重命名或分叉出两个入口）
-        doc = self.TEMPLATE + (
-            "\n== 已存在 AGENTS 文档\n\n"
-            "仅 `AGENTS.md` 存在时在它上面融合（文件名为 `AGENTS.md`）。\n")
-        self.write("INSTALL.adoc", doc)
+        doc = self._body(
+            rules="* 入口文件名取 `AGENTS.adoc`；仅 `AGENTS.md` 存在时在它上面融合"
+                  "（文件名为 `AGENTS.md`）。\n\n")
+        self.write("AGENTS_COMMON.adoc", doc)
         cm.check_install_codeblock()
         self.assertIn("入口文件名规则被破坏", self.error_texts())
 
     def test_dropping_agents_md_compat_reports(self):
         # 反例：只认 AGENTS.adoc、把 AGENTS.md 兼容规则删掉（既有 AGENTS.md 的项目无法安装）
-        self.write("INSTALL.adoc", self.TEMPLATE)  # TEMPLATE 不含 FILENAME_RULES
+        self.write("AGENTS_COMMON.adoc", self.SECTION + self.TEMPLATE)
         cm.check_install_codeblock()
         self.assertNotEqual(cm.errors, [])
-        self.assertIn("入口文件名规则被破坏", self.error_texts())
         self.assertIn("AGENTS.md", self.error_texts())
 
 
@@ -2731,7 +2779,7 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
     """钉住『公共内容覆盖面防线』：公共内容的入口清单须完整、且与实际文件一致。
 
     背景：公共内容此前只有一句口头定义（"`AGENTS_COMMON.adoc` + `specs/`"），而
-    `INSTALL.adoc`（接入时读）、`prompts/_common.txt`（AI 以纯文本读取公共片段）与
+    公共入口 `AGENTS_COMMON.adoc`（接入时读其安装口径）、`prompts/_common.txt`（AI 以纯文本读取公共片段）与
     `script/clean_tmp.py`（随规范分发的通用工具）同样会被引用方取到——清单缺失会让
     机械检查漏掉半个公共内容，或把"自足"要求误加到只对维护方成立的文件上。
     """
@@ -2753,12 +2801,10 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n"
                    "== 公共内容入口清单\n"
-                   "| `INSTALL.adoc` | 安装入口\n"
-                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
+                   "| `AGENTS_COMMON.adoc` | 通用规范入口（安装与取回口径也在其中）\n"
                    "| `specs/` | 规范正文\n"
                    "| `prompts/_common.txt` | 公共片段\n"
                    "| `script/clean_tmp.py` | 随规范分发的工具\n")
-        self.write("INSTALL.adoc", "= 安装\n")
         self.write("AGENTS_COMMON.adoc", "= 入口\n")
         self.write("prompts/_common.txt", "片段\n")
         self.write("script/clean_tmp.py", "#!/usr/bin/env python3\n")
@@ -2781,13 +2827,12 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
                    "| `specs/` | 规范正文\n"
                    "| `prompts/_common.txt` | 公共片段\n"
                    "| `script/clean_tmp.py` | 随规范分发的工具\n\n"
-                   "== 组织与其边界\n\n引用方接入时读 `INSTALL.adoc`。\n")
+                   "== 组织与其边界\n\n引用方接入时读 `AGENTS_COMMON.adoc`。\n")
         cm.check_public_content_coverage()
-        self.assertIn("未把 INSTALL.adoc 列进", self.error_texts())
+        self.assertIn("未把 AGENTS_COMMON.adoc 列进", self.error_texts())
 
     def test_entry_in_table_link_form_passes(self):
         # 正例：同一格改用 AsciiDoc 惯用的 `link:` **文本**写法——表格结构、所在节、
@@ -2796,20 +2841,21 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| 安装入口 | link:INSTALL.adoc[INSTALL.adoc] |\n"
-                   "| 通用规范入口 | link:AGENTS_COMMON.adoc[AGENTS_COMMON.adoc] |\n")
+                   "| 通用规范入口 | link:AGENTS_COMMON.adoc[AGENTS_COMMON.adoc] |\n"
+                   "| 规范正文 | link:specs/[specs/] |\n")
         cm.check_public_content_coverage()
         self.assertNotIn("未把", self.error_texts())
 
     def test_names_in_zone_accepts_forms_but_keeps_row_anchor(self):
         # 钉住判据口径：表格行内任一点名形式均命中；非表格行（正文提及）仍不命中
-        z = "| 安装入口 |"
-        self.assertTrue(cm._names_in_zone(z + " `INSTALL.adoc` |", "INSTALL.adoc"))
-        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[INSTALL.adoc] |", "INSTALL.adoc"))
-        self.assertTrue(cm._names_in_zone(z + " link:INSTALL.adoc[] |", "INSTALL.adoc"))
-        self.assertTrue(cm._names_in_zone(z + " INSTALL.adoc |", "INSTALL.adoc"))
-        self.assertFalse(cm._names_in_zone("接入时读 INSTALL.adoc。", "INSTALL.adoc"))
-        self.assertFalse(cm._names_in_zone(z + " `AGENTS_COMMON.adoc` |", "INSTALL.adoc"))
+        z = "| 通用规范入口 |"
+        self.assertTrue(cm._names_in_zone(z + " `AGENTS_COMMON.adoc` |", "AGENTS_COMMON.adoc"))
+        self.assertTrue(cm._names_in_zone(
+            z + " link:AGENTS_COMMON.adoc[AGENTS_COMMON.adoc] |", "AGENTS_COMMON.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " link:AGENTS_COMMON.adoc[] |", "AGENTS_COMMON.adoc"))
+        self.assertTrue(cm._names_in_zone(z + " AGENTS_COMMON.adoc |", "AGENTS_COMMON.adoc"))
+        self.assertFalse(cm._names_in_zone("接入时读 AGENTS_COMMON.adoc。", "AGENTS_COMMON.adoc"))
+        self.assertFalse(cm._names_in_zone(z + " `README.adoc` |", "AGENTS_COMMON.adoc"))
 
     def test_listing_not_registered_reports(self):
         # 反例：清单未在项目规范入口登记（维护方读不到它）
@@ -2823,16 +2869,15 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| `AGENTS_COMMON.adoc` | 通用规范入口\n")
+                   "| `specs/` | 规范正文\n")
         cm.check_public_content_coverage()
-        self.assertIn("未列出 INSTALL.adoc", self.error_texts())
+        self.assertIn("未列出 AGENTS_COMMON.adoc", self.error_texts())
 
     def test_entry_list_section_renamed_reports(self):
         # 反例：清单节的标题被改写 → 按节切表格区的定位失效，须报错（不得静默不查）
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 入口一览\n"
-                   "| `INSTALL.adoc` | 安装入口\n"
                    "| `AGENTS_COMMON.adoc` | 通用规范入口\n")
         cm.check_public_content_coverage()
         self.assertIn("未找到「公共内容入口清单」节", self.error_texts())
@@ -2842,7 +2887,6 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| `INSTALL.adoc` | 安装入口\n"
                    "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
                    "| `prompts/gone.txt` | 已改名\n")
         cm.check_public_content_coverage()
@@ -2854,7 +2898,6 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self._write_valid()
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| `INSTALL.adoc` | 安装入口\n"
                    "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
                    "| `specs/` | 规范正文\n"
                    "| `prompts/_common.txt` | 公共片段\n"
@@ -2870,7 +2913,6 @@ class TestCheckPublicContentCoverage(CheckSpecsTestCase):
         self.write("internal-note.adoc", "= 维护方内容\n")
         self.write("PUBLIC.adoc",
                    "= 公共内容入口索引\n\n== 公共内容入口清单\n"
-                   "| `INSTALL.adoc` | 安装入口\n"
                    "| `AGENTS_COMMON.adoc` | 通用规范入口\n"
                    "| `specs/` | 规范正文\n"
                    "| `prompts/_common.txt` | 公共片段\n"
@@ -3064,11 +3106,11 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
 # check_prompts_primary（提示词主侧重与优先级防线：方向不得被删/降级）
 # --------------------------------------------------------------------------- #
 class TestCheckPublicFacingDocsStaySelfContained(CheckSpecsTestCase):
-    """钉住「公开面文档自足」：README/PROMPTS/INSTALL 不得给出维护方自查层的路径。
+    """钉住「公开面文档自足」：README/PROMPTS/公共入口 不得给出维护方自查层的路径。
 
     背景（本轮重构暴露的真实缺陷）：`specs/` 已被刚性拦住"引用维护方自查层"，但
     `README.adoc`（公开站点首页由它渲染）、`PROMPTS.adoc`（公开提示词入口）与
-    `INSTALL.adoc`（引用方安装文档）**同样会被未知项目看到**——它们里的路径引用方
+    公共入口 `AGENTS_COMMON.adoc`（引用方安装口径也在其中）**同样会被未知项目看到**——它们里的路径引用方
     按同样方式解析，指向维护方自查层就是死链（该层不随公共内容分发）。本轮就发生过：
     README 在重构中新增了 8 处指向该层的链接。
     """
@@ -3076,7 +3118,7 @@ class TestCheckPublicFacingDocsStaySelfContained(CheckSpecsTestCase):
     def test_clean_public_docs_pass(self):
         self.write("README.adoc", "本仓库另有一层只对维护方成立的规范，不随公共内容分发。\n")
         self.write("PROMPTS.adoc", "分级见 `specs/core/execution.adoc`。\n")
-        self.write("INSTALL.adoc", "安装文档。\n")
+        self.write("AGENTS_COMMON.adoc", "= AGENT 执行规范\n\n安装与取回口径见下文。\n")
         cm.check_public_facing_docs_stay_self_contained()
         self.assertEqual(cm.errors, [])
 
@@ -3091,6 +3133,13 @@ class TestCheckPublicFacingDocsStaySelfContained(CheckSpecsTestCase):
                    "定级见 `specs-project-maintainer/spec-lifecycle.adoc`。\n")
         cm.check_public_facing_docs_stay_self_contained()
         self.assertIn("PROMPTS.adoc", self.error_texts())
+
+    def test_common_entry_link_into_maintainer_layer_reports(self):
+        # 反例：公共入口自己指向维护方自查层 → 引用方读到的是死链（该层不随公共内容分发）
+        self.write("AGENTS_COMMON.adoc",
+                   "定级见 `specs-project-maintainer/spec-lifecycle.adoc`。\n")
+        cm.check_public_facing_docs_stay_self_contained()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_missing_docs_do_not_raise(self):
         cm.check_public_facing_docs_stay_self_contained()
@@ -3797,10 +3846,11 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明四类判据。
     """
 
+    # 调度器**只给触发特征**（要新建或改动 Java 测试类时即命中）——四类后缀与拆分裁决
+    # 是 `java-testing.adoc` 的条目本体，不再要求调度器逐字抄它们（放宽前的口径即第二真源）。
     JAVA_LINE = ("  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ "
                  "link:specs/stack/java.adoc[] + link:specs/stack/java-testing.adoc[]"
-                 "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端；"
-                 "一个被测类可按需求/分类拆多个测试类、不得滥拆）")
+                 "（识别特征：要新建或改动 Java 测试类）")
 
     def setUp(self) -> None:
         super().setUp()
@@ -3840,14 +3890,14 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         cm.check_java_test_naming()
         self.assertIn("BootTests", self.error_texts())
 
-    def test_dispatcher_missing_suffix_reports(self):
-        # 反例：调度器只写一半后缀 → 与规范命名契约口径漂移
+    def test_dispatcher_missing_trigger_reports(self):
+        # 反例：调度器登记了文件、却没有"要新建或改动测试类"这一触发特征 → 永不被加载。
+        # （放宽后**不再**要求调度器逐字抄四类后缀/拆分裁决——那是条目本体、抄了即第二真源）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
-                   "  ** Java 项目 → link:specs/stack/java-testing.adoc[]（含 `Tests` 后缀）")
+                   "  ** Java 项目 → link:specs/stack/java-testing.adoc[]")
         cm.check_java_test_naming()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
-        self.assertIn("PerfTests", self.error_texts())
 
     def test_not_registered_in_dispatcher_reports(self):
         # 反例：文件存在但未登记调度器 → 永不被加载
@@ -3881,20 +3931,16 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         cm.check_java_test_naming()
         self.assertEqual(cm.errors, [])
 
-    def test_dispatcher_without_split_ruling_reports(self):
-        # 反例：调度器只传达后缀、不传达拆分裁决 → 引用方把"一个被测类一个测试类"当硬规定
+    def test_spec_without_split_ruling_reports(self):
+        # 反例：**规范侧**只传达后缀、不传达拆分裁决 → 引用方把"一个被测类一个测试类"当硬规定
+        # （拆分裁决是 `java-testing.adoc` 的本体，须在**规范文件**里齐备；调度器只给触发特征）
         self.write("specs/stack/java-testing.adoc",
                    "= t\n\n== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n"
-                   "一个被测类可按需求/分类可拆成多个测试类；分类或属性相同的用例必须"
-                   "归入同一个测试类；不得为每个场景一个类而拆，禁止滥拆。\n")
-        self.write("AGENTS_COMMON.adoc",
-                   "  ** Java 项目 → link:specs/stack/java-testing.adoc[]"
-                   "（测试类命名契约：`Tests` 常规、`BootTests` 启动型、`PerfTests` 性能、`IT` 端到端）")
+                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n")
+        self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
-        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
-        self.assertIn("滥拆", self.error_texts())
+        self.assertIn("拆分裁决", self.error_texts())
 
 
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
@@ -4516,10 +4562,13 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
                    "* **哪些节点不设（L1）**：代码类改动不设复盘节点。\n\n== 下节\n")
         self.write("script/check_specs.py", "def check_demo_guard():\n    pass\n")
         self.write("script/clean_tmp.py", "# demo\n")
+        # 维护方侧**不重列**逐态取值（判据本体在通用层）——夹具与真实文件同形：
+        # 点出三态名 + 指向通用层的判据本体 + 写明"不得合并"这句话
         self.write("specs-project-maintainer/verify.adoc",
-                   "= 验证\n\n留证形态：**三态台账**——**通过**（附判据与取值）／"
-                   "**未发现问题**（附已复核角度与样本）／**悬置**（附未确证的原因与剩余风险），"
-                   "三态各占一栏、**不得合并**。\n")
+                   "= 验证\n\n留证形态是**三态台账**：三个态名——**通过**、**未发现问题**、"
+                   "**悬置**——与逐态取值、不得合并都是通用层的判据，"
+                   "唯一落点＝`specs/general/verify.adoc`「验证的效力等级」的「三态台账」，"
+                   "本文件不复述、只留落点。\n")
         self.write("specs/general/collab.adoc",
                    "= 协作\n\n**硬超时**：到点即视为失联，**不得无限等待**；"
                    "**超时的处置**：放弃该子 agent + 如实标悬置。"
@@ -5528,6 +5577,143 @@ class TestCheckRefinementGuard(CheckSpecsTestCase):
         self.assertIn("_common.txt", self.error_texts())
 
 
+class TestCheckDuplicateScanGuard(CheckSpecsTestCase):
+    """钉住『逐字重复扫描』防线：**同一条判据在两处逐字重复必须报红**。
+
+    这是「精炼性」在机械侧的唯一抓手（此前只有语义复核）。故用例的核心不是"防线函数
+    会不会被调用"，而是**逐字重复真的被拦下**、且**不该报的（短实体、例外清单、
+    历史留痕、片段引用）不误伤**——防线的误报会逼出"为了过检查而删内容"的反用，
+    与 `review.adoc`「精炼性」的边界相抵。
+    """
+
+    DUP = ("* **运行契约（L1）**：加载与遵守的代价是否说得清——加载面体积、时延与依赖要求"
+           "（含版本要求，且须给出不可用时的降级路径）；**不得以\"不贵\"含糊带过**。\n")
+    OTHER = "* **别的一条**：讲的是另一件事，措辞也不同，不会与上面逐字重合。\n"
+
+    def test_verbatim_duplication_reports(self):
+        self.write("specs/general/a.adoc", self.DUP)
+        self.write("specs/general/b.adoc", self.DUP)
+        cm.check_duplicate_scan_guard()
+        self.assertIn("重合", self.error_texts())
+
+    def test_no_duplication_passes(self):
+        self.write("specs/general/a.adoc", self.DUP)
+        self.write("specs/general/b.adoc", self.OTHER)
+        cm.check_duplicate_scan_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_include_reference_not_reported(self):
+        # `include::` 是"同一份内容被两处引入"（一处维护两处生效），逐字一致是本来的要求
+        self.write("prompts/_common.txt", "// tag::x[]\n内容占位，长到超过阈值用来核对不误伤。\n// end::x[]\n")
+        for n in ("a", "b"):
+            self.write(f"prompts/{n}.adoc", "include::_common.txt[tag=x]\n")
+        cm.check_duplicate_scan_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_excluded_history_not_reported(self):
+        # 历史留痕（CHANGELOG）的职责就是逐字保留，要求它"不重复"与它的角色直接冲突
+        self.write("specs/general/a.adoc", self.DUP)
+        self.write("CHANGELOG.adoc", self.DUP)
+        self.write("specs/general/b.adoc", self.OTHER)
+        cm.check_duplicate_scan_guard()
+        self.assertEqual(cm.errors, [])
+
+
+class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
+    """钉住『自称回指的行不得复述取值』防线（`check_pointer_no_verbatim_guard`）。
+
+    这是「同一件事只在一处给真源」的**第二道机械抓手**——补 `check_duplicate_scan_guard`
+    的**下界**：阈值 40 只报"长度极显著"的重合，而"回指句 + 顺手把取值抄一遍"的公共子串
+    常只有二十几字，`duplicate_scan` **核不出来**（本轮实证：`library/mirrors.adoc` 自称
+    "本文件只给实测记录、取舍本体见 `adoption.adoc`"，却仍逐字写下「每级先实测可用、
+    不跳级、不覆盖既有配置」21 字）。
+
+    用例覆盖：① 回指却复述取值 → 报红；② 纯回指 → 全绿；③ 不含回指标记的行不在核对面内；
+    ④ 标准名/材料名的正当重合按 `ignore` 豁免（防"为过检查而删标准名"）。
+    """
+
+    POINTER = ("* **须注意的语义差异（同义性）**：本集合据此推出的是自己的判据化取舍"
+               "（**取值见** `library/adoption.adoc`「库源次序」条，本文件只给实测记录）——"
+               "每级先实测可用、不跳级、不覆盖既有配置，且不覆盖引用方配置。\n")
+    ADOPTION = ("* **库源次序（本集合的判据化取舍）**：每级先实测可用、不跳级、"
+                "不覆盖既有配置，且不覆盖引用方配置。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("library/adoption.adoc", self.ADOPTION)
+        # 规则数据把整批"会自称回指"的文件都列进核对面，缺一份即报"落点无处承载"——
+        # 夹具须与规则数据的 `files` **同形**，否则用例会因"文件缺失"而非"判据命中"报红
+        # （这也是本防线的一条自查：新增落点时必须同步夹具，落点漂移不会被静默放过）。
+        for rel in cm.POINTER_SCAN_FILES:
+            if rel == "library/adoption.adoc":
+                continue
+            self.write(rel, "= 占位\n\n本文件只给实测记录与索引。\n")
+
+    def test_pointer_restating_values_reports(self):
+        self.write("library/mirrors.adoc", self.POINTER)
+        cm.check_pointer_no_verbatim_guard()
+        self.assertIn("重合", self.error_texts())
+
+    def test_pure_pointer_passes(self):
+        self.write("library/mirrors.adoc",
+                   "* **须注意的语义差异（同义性）**：本集合据此推出的是自己的判据化取舍"
+                   "（**取值见** `library/adoption.adoc`「库源次序」条，本文件只给实测记录）。\n"
+                   "* 取样条件与实测取值见下。\n")
+        cm.check_pointer_no_verbatim_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_line_without_marker_not_checked(self):
+        # 没自称"见别处"的行归 `duplicate_scan` 管（阈值口径不同），本条不越界
+        self.write("library/mirrors.adoc", self.ADOPTION)
+        cm.check_pointer_no_verbatim_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_scan_files_match_rule_data(self):
+        # 常驻常量与规则数据**逐项同源**：新增落点时两处必须一起改，
+        # 否则用例会因"文件缺失"报红（本防线的一条自查）
+        import tomllib
+        with open(os.path.join(HERE, "specs-rules", "duplicate.toml"), "rb") as fh:
+            data = tomllib.load(fh)
+        steps = data["guards"]["check_pointer_no_verbatim_guard"]
+        files = []
+        for st in steps:
+            files.extend(st.get("files", []))
+        self.assertEqual(sorted(set(files)), sorted(set(cm.POINTER_SCAN_FILES)),
+                         "核对面须与规则数据逐项一致（改一处必须改另一处）")
+
+    def test_scan_files_cover_all_adoc(self):
+        # **反面**：核对面里只列"当前已知会自称回指的那些文件"时，未列入的文件**永远不被扫描**
+        # ——防线静默少扫一层，读者却以为已覆盖（本轮实测：原清单只有 21 个文件，
+        # `specs/general/coding.adoc`、`prompts/*.adoc` 这类从未被扫过，而它们下一个改动里
+        # 完全可能写出"见别处"却顺手抄取值的行）。故核对面须**覆盖仓库里全部 .adoc**
+        # （历史留痕 `CHANGELOG.adoc` 除外——它的职责就是逐字保留历史产物）。
+        import subprocess
+        repo = os.path.dirname(HERE)
+        tracked = subprocess.run(["git", "ls-files", "*.adoc"], cwd=repo,
+                                 capture_output=True, text=True).stdout.split()
+        expected = sorted(f for f in tracked if f != "CHANGELOG.adoc")
+        self.assertEqual(list(cm.POINTER_SCAN_FILES), expected,
+                         "自称回指的核对面须覆盖全部 .adoc——只列已知文件会让未列入者"
+                         "永远处于盲区，且漏掉时防线静默少扫一层")
+
+    def test_code_and_prompt_files_are_scanned(self):
+        # **正面**：上一轮实证的两处盲区（通用层 `coding.adoc`、提示词正文）必须在核对面内——
+        # 它们是"回指句 + 顺手抄取值"最可能出现的两层（都把取值推给别处、又忍不住复述一遍）。
+        for rel in ("specs/general/coding.adoc", "prompts/review.adoc"):
+            self.assertIn(rel, cm.POINTER_SCAN_FILES)
+
+    def test_standard_name_exempt(self):
+        # 标准名/材料名本就该逐字一致（`specs/general/source.adoc`「外部引用」）——
+        # 规则数据的 `ignore` 把它排除，否则同一批标准名会被反复判红
+        self.write("library/adoption.adoc",
+                   "* 依据：The Twelve-Factor App（依赖须显式声明）。\n")
+        self.write("library/mirrors.adoc",
+                   "* **须注意的语义差异**：本集合据此推出的取舍见 `library/adoption.adoc`、"
+                   "本文件只给实测记录；外部材料含 The Twelve-Factor App（依赖须显式声明）一类。\n")
+        cm.check_pointer_no_verbatim_guard()
+        self.assertEqual(cm.errors, [])
+
+
 class TestCheckInfoDensityGuard(CheckSpecsTestCase):
     """钉住『信息密度（每句须承载）』防线：判据本体、两处互引与图书馆依据。
 
@@ -6309,14 +6495,17 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
     "压缩不吞合并提交缺失""文件缺失"等反例。
     """
 
+    # 夹具与真实文件**同形**：平台侧**只指向** git 侧的核对命令真源，**不**把
+    # `git merge-base <分支> <目标分支>` / `git rev-list --parents -n1` 的字面命令抄一份
+    # ——那是 `specs/general/git.adoc`「压缩后的合并关系核对」的正文取值，抄回平台层即第二真源
+    # （`terminology.adoc`「数据字典」的反膨胀；本 PR 的立项口径）。
     CNB = (
         "= CNB 规范（平台层）\n\n"
         "== 压缩提交（提交历史的整理）\n"
         "* **压缩须保留与目标分支的合并关系（L1）**：压缩后的提交**须仍以目标分支的最新提交为祖先**"
-        "（等价判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交；`git merge --no-ff <目标分支>`"
-        " 时**须保留双亲**、`git rev-list --parents -n1` 显示两个父提交）。**根因（真实失效）**："
-        "把\"解决冲突\"做成\"**照抄目标分支的文件内容后另起一个单亲提交**\"，工作树看起来一致，但"
-        "**目标分支并未成为本分支的祖先**，平台侧仍报冲突、PR 卡在 `code_conflict`"
+        "（核对命令见 `specs/general/git.adoc`「压缩后的合并关系核对」，本处不复述）。**本条在本平台的"
+        "真实失效**：把\"解决冲突\"做成\"**照抄目标分支的文件内容后另起一个单亲提交**\"，工作树看起来"
+        "一致，但**目标分支并未成为本分支的祖先**，平台侧仍报冲突、PR 卡在 `code_conflict`"
         "（判据：`git merge-base --is-ancestor <目标分支> <分支>` 为假）。**正确做法**：真做一次合并后"
         "以合并提交落盘；压缩**不吞掉合并提交**（**合并提交是\"已并入\"的凭据**）。\n"
         "* **禁止的压缩形态（L1）**：①他人提交；②已合入目标分支的历史。\n"
@@ -6347,14 +6536,25 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
         self.assertIn("合并关系", self.error_texts())
 
     def test_criteria_removed_reports(self):
-        # 反例（关键词堆砌式假绿）：只留标题与一句口号，可核对判据被抽掉
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号，**既不指向 git 侧真源、也给不出可核对的东西**。
+        # 本轮把锚点由"逐字抄 git 侧命令"放宽为"指点到真源"（抄进来即第二真源），故此处的反例
+        # 也改成"连真源都不指"——它才是放宽后真正要拦的形态。
         self._write_valid()
         self.write("specs/platform/cnb.adoc",
                    "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
                    "* **压缩须保留与目标分支的合并关系（L1）**：压缩后仍以目标分支最新提交为祖先，"
                    "**须仍以目标分支的最新提交为祖先**，务必谨慎。\n")
         cm.check_merge_relationship_guard()
-        self.assertIn("git merge-base", self.error_texts())
+        self.assertIn("合并关系", self.error_texts())
+
+    def test_verbatim_commands_not_required(self):
+        # 正例（本轮新增）：平台侧**只指向** git 侧真源、**不**逐字抄核对命令 → 全绿。
+        # 这是本 PR 的口径：`git merge-base <分支> <目标分支>` 等是 `git.adoc` 的正文取值，
+        # 抄回平台层即第二真源；平台侧只需让读者**走得到**真源。
+        self._write_valid()
+        self.assertNotIn("git rev-list --parents -n1", self.CNB)
+        cm.check_merge_relationship_guard()
+        self.assertEqual(cm.errors, [])
 
     def test_root_cause_removed_reports(self):
         # 反例：根因形态被删 → 条文会被读成"工作树一致即可"，正是要拦的失效
@@ -6362,8 +6562,7 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
         self.write("specs/platform/cnb.adoc",
                    "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
                    "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**，"
-                   "判据：`git merge-base <分支> <目标分支>` 等于目标分支最新提交、"
-                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交；"
+                   "核对命令见 `specs/general/git.adoc`「压缩后的合并关系核对」；"
                    "`git merge-base --is-ancestor <目标分支> <分支>` 为假即违规。\n")
         cm.check_merge_relationship_guard()
         self.assertIn("根因", self.error_texts())
@@ -6374,8 +6573,7 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
         self.write("specs/platform/cnb.adoc",
                    "= CNB 规范\n\n== 压缩提交（提交历史的整理）\n"
                    "* **压缩须保留与目标分支的合并关系（L1）**：**须仍以目标分支的最新提交为祖先**"
-                   "（`git merge-base <分支> <目标分支>` 等于目标分支最新提交；"
-                   "`git merge --no-ff <目标分支>` 时 `git rev-list --parents -n1` 显示两个父提交）；"
+                   "（核对命令见 `specs/general/git.adoc`「压缩后的合并关系核对」）；"
                    "根因：**照抄目标分支的文件内容后另起一个单亲提交**，"
                    "**目标分支并未成为本分支的祖先**；"
                    "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
@@ -6674,15 +6872,15 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         self.assertIn("只被要求压缩提交", self.error_texts())
 
     def test_dispatcher_squash_only_feature_removed_reports(self):
-        # 反例：调度器缺"只被要求压缩提交"这一识别特征 → 该触发面永不被加载
+        # 反例：调度器缺"冲突/压缩提交"这一触发特征 → 该触发面永不被加载
+        # （调度器只写触发特征，不抄条目本体：`先解冲突、再压缩、最终只有一个提交` 那类是本体取值）
         self._write_valid()
         self.write(
             "AGENTS_COMMON.adoc",
             "* **版本管理** → `specs/general/version-control.adoc`\n"
-            "* CNB 平台 → cnb（**冲突与压缩提交同时提出（先解冲突、再压缩、最终只有一个提交；"
-            "解冲突后须核查是否丢内容）**）\n")
+            "* CNB 平台 → cnb（**评论**）\n")
         cm.check_conflict_resolution_guard()
-        self.assertIn("只被要求压缩提交", self.error_texts())
+        self.assertIn("压缩提交", self.error_texts())
 
     def test_readme_squash_only_clause_removed_reports(self):
         # 反例：公开面只看得见"同时提出"那一种触发面
@@ -7193,10 +7391,12 @@ class TestCheckExternalScriptGuard(CheckSpecsTestCase):
                    "* 见「跨语言执行脚本（SQL / Lua 等）」。\n"
                    "* 加载时机：性能敏感路径按静态常量读一次；需求要求内容会变的模板"
                    "不适用缓存。\n")
+        # 调度器**只给触发特征**（要把 SQL/Lua 等放进资源目录时即命中），
+        # 不抄条目本体的落点取值（`src/main/resources/` 在 `java.adoc` 里）。
         self.write("AGENTS_COMMON.adoc",
-                   "通用编码 `specs/general/coding.adoc`（含「跨语言执行脚本的落点（资源文件夹，"
-                   "不写字符串拼接/模板）」：SQL/Lua）；Java 登记 `specs/stack/java.adoc`"
-                   "（跨语言脚本 `src/main/resources/` 下）\n")
+                   "通用编码 `specs/general/coding.adoc`（识别特征：跨语言——要把 SQL/Lua "
+                   "等被调语言内联在宿主语言里）；Java 登记 `specs/stack/java.adoc`"
+                   "（识别特征：跨语言——要把 SQL/Lua 等放进资源目录）\n")
         self.write("README.adoc",
                    "目录结构：通用编码（含**跨语言执行脚本的落点**、**加载时机**）。\n")
 
@@ -8615,9 +8815,12 @@ class TestCheckSelfDispatchGuard(CheckSpecsTestCase):
                    "**平台层写明该前提成立**时按强制判；平台不提供同 Agent 子执行者时"
                    "**不得援引本条跳过复核**或把任务停在中间。\n")
         self.write("prompts/_common.txt", "// tag::delivery[]\n8. 交付\n// end::delivery[]\n")
+        # 调度器**只给触发特征**（要发评论/按评论派发时即命中），不抄条目本体的禁令句。
         self.write("AGENTS_COMMON.adoc",
-                   "* 多 agent 协作（派发入口；**执行者不得自行发评论唤起自己**）\n"
-                   "* CNB 平台（评论唤起新实例；**执行者不得自行发评论唤起自己**）\n")
+                   "* 多 agent 协作 → `specs/general/collab.adoc`"
+                   "（识别特征：要发评论、要按评论派发一次执行）\n"
+                   "* CNB 平台 → `specs/platform/cnb.adoc`"
+                   "（识别特征：要发评论或处置评论、要派发或复核）\n")
         self.write("prompts/review.adoc",
                    "= 检查修复\n\n[listing]\n----\n"
                    "10. **不得自行发评论唤起自己（L1，防无限派发）**："
@@ -9045,14 +9248,14 @@ class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
         "依据：RFC 3986。\n"
     )
 
+    # 调度器**只给触发特征**（何时命中），不抄条目本体——刻意写成"只登记"的形态，
+    # 与放宽后的守卫口径一致（`请求响应类`/`路由路径`/`对外接口…返回值…用什么类承载`）。
     GENERIC = (
         "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
-        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「跨服务调用的请求响应类优先移动复用」**："
-        "给已有接口加内部调用接口（如 Feign）时，请求/响应类**优先移动沿用、不新建**"
-        "（例外只两类：数据库实体类除声明外不移动、类里引用了第三方类型；**本项目自身的依赖不算三方依赖**）；"
-        "检测特征：加接口时另建请求/响应类）\n"
-        "  ** Spring 项目 → link:specs/stack/spring.adoc[]（**HTTP 接口路径优先用中划线**："
-        "路由路径片段用小写 + `-`，不得用 `_` 或驼峰；检测特征：写/改路由路径）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（识别特征："
+        "要**新增一个内部调用接口**的请求响应类；要判定对外接口的请求/响应参数与返回值"
+        "用什么类承载）\n"
+        "  ** Spring 项目 → link:specs/stack/spring.adoc[]（识别特征：写/改路由路径）\n"
     )
 
     README = "# README\n\n## 目录结构\n* 通用层：请求响应类优先移动复用\n* 技术栈层：接口路径优先用中划线\n"
@@ -9170,18 +9373,19 @@ class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
                    "  ** Spring 项目 → link:specs/stack/spring.adoc[]（**HTTP 接口路径优先用中划线**："
                    "路由路径片段用小写 + `-`）\n")
         cm.check_api_contract_reuse_guard()
-        self.assertIn("请求响应类优先移动复用", self.error_texts())
+        self.assertIn("请求响应类", self.error_texts())
 
     def test_dispatcher_spring_entry_not_pointing_reports(self):
         # 反例：调度器 Spring 条目识别特征被删 → Spring 执行者读不到该条
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
                    "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
-                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「跨服务调用的请求响应类优先移动复用」**："
-                   "请求/响应类**优先移动沿用、不新建**；**本项目自身的依赖不算三方依赖**）\n"
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（识别特征："
+                   "要**新增一个内部调用接口**的请求响应类；要判定对外接口的请求/响应参数与返回值"
+                   "用什么类承载）\n"
                    "  ** Spring 项目 → link:specs/stack/spring.adoc[]\n")
         cm.check_api_contract_reuse_guard()
-        self.assertIn("接口路径优先用中划线", self.error_texts())
+        self.assertIn("路由路径", self.error_texts())
 
     def test_readme_not_synced_reports(self):
         # 反例：README 目录说明未同步 → 公开面看不到这两条
@@ -9266,13 +9470,14 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
     )
 
+    # 调度器**只给触发特征**（在哪个类里调持久化 API、要查/改库时即命中），
+    # 不抄条目本体的成员方法名与禁止面。
     GENERIC = (
         "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
-        "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
-        "走该技术给定的**统一入口**，禁止字符串写列名表名的构造方式；具体技术的入口与"
-        "禁止清单见 link:specs/stack/java.adoc[] 等栈文件）\n"
-        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
-        "强制走 `IService` 的 `lambdaQuery()`/`ktQuery()`，禁止 `new QueryWrapper` 及其子类）\n"
+        "  ** 编写代码 → link:specs/general/coding.adoc[]（识别特征：要写持久化访问代码"
+        "——在哪个类里调持久化 API、要查/改库）\n"
+        "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（识别特征：持久化访问"
+        "——要查/改库、出现统一入口/查询构造 API/包装器构造器字样）\n"
     )
 
     def setUp(self) -> None:
@@ -9406,25 +9611,26 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_dispatcher_java_entry_marker_removed_reports(self):
-        # 反例：Java 栈登记只剩条名、成员方法与禁止面被删 → Java 项目看不到判据
+        # 反例：Java 栈登记只剩文件路径、连"要查/改库"这一触发特征都没有 → Java 项目看不到判据
+        # （放宽后**不再**要求调度器抄成员方法名与禁止面——那是 `java.adoc` 的条目本体）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
                    "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
-                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
-                   "走该技术给定的**统一入口**）\n"
-                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**）\n")
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（识别特征：要写持久化访问代码"
+                   "——在哪个类里调持久化 API、要查/改库）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]\n")
         cm.check_persistence_access_guard()
-        self.assertIn("lambdaQuery", self.error_texts())
+        self.assertIn("Java 技术栈登记", self.error_texts())
 
     def test_dispatcher_general_entry_framework_name_reports(self):
         # 反例：通用层调度条目仍带框架专名 → 非 Java 项目也被带入 MyBatis-Plus 术语、与归属层冲突
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
                    "= AGENT 执行规范\n\n== 分类与懒加载（加载调度器）\n"
-                   "  ** 编写代码 → link:specs/general/coding.adoc[]（含**「持久化访问（数据库/缓存等）」**："
-                   "走该技术给定的**统一入口**，强制走 `IService` 的 `lambdaQuery()`）\n"
-                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（**MyBatis-Plus 持久化访问**："
-                   "强制走 `IService` 的 `lambdaQuery()`/`ktQuery()`，禁止 `new QueryWrapper` 及其子类）\n")
+                   "  ** 编写代码 → link:specs/general/coding.adoc[]（识别特征：要写持久化访问代码"
+                   "——在哪个类里调 `IService` 的 `lambdaQuery()`）\n"
+                   "  ** Java 项目（存在 `.java`）→ link:specs/stack/java.adoc[]（识别特征：持久化访问"
+                   "——要查/改库、出现统一入口/查询构造 API/包装器构造器字样）\n")
         cm.check_persistence_access_guard()
         self.assertIn("IService", self.error_texts())
 
@@ -10258,7 +10464,7 @@ class TestCheckEntityDtoGuard(CheckSpecsTestCase):
                    "  ** 任何代码活动 → link:specs/general/coding.adoc[]"
                    "（含**数据库实体类不进对外契约**：**数据契约**）\n")
         cm.check_entity_dto_guard()
-        self.assertIn("识别特征", self.error_texts())
+        self.assertIn("对外接口", self.error_texts())
 
     def test_adoption_not_registered_reports(self):
         # 反例⑭：图书馆未登记该取舍 → 读者把本站口径读成标准规定
@@ -10470,6 +10676,281 @@ class TestCheckJavaInterfaceAccessorGuard(CheckSpecsTestCase):
         self.assertIn("adoption.adoc", self.error_texts())
 
 
+class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
+    """钉住『Java 数据对象模板』（用户口径：模板属"要么不读、要么整份读完"的产物，故单列成
+    **模板文件**、不并进 `specs/stack/java.adoc`；判据本体仍留在规范文件里）。
+
+    该条对应四处真实失效：
+      * **模板被并回规范** —— 规范正文被撑大（每次加载都付上下文），而它又不一定被读到；
+      * **判据本体被抽走** —— 只剩一份清单，读者不知道"为什么补注解不加 `@Accessors`"，
+        于是"补注解也加上吧"重新成立（看起来只是多一个注解）；
+      * **加载门丢了** —— 新建对象时该文件永不被加载，模板形同不存在；
+      * **三处取值被删** —— 无参 `@AllArgsConstructor`、集合 `@Singular` 两条各自都可能被
+        当成风格偏好顺手去掉。
+    故本组用例除正例外逐条覆盖上述反例，以及"相邻条目的字样兜住已消失的要求"这一反例本体
+    （`specs/stack/java.adoc`「编码」里构造注解字样在相邻条目里同样出现）。
+    """
+
+    # 判据本体夹具：与真实文件**同形**——含「清单句」（五项齐备）、三处取值的判据面、
+    # 两档生效面、依据行。防线的 `bullet_tokens` 步按这些锚点核「本条自己的正文」，
+    # 故夹具必须真的把它们写在本条正文里（否则正例即报红——正是本条要防的形态）。
+    JAVA_RULE = (
+        "* **数据对象模板（新建时整段照抄；存量主动声明才补）**：**新建**一个 Java 数据对象时"
+        "注解清单整段照抄 `specs/stack/java-object.adoc` 的模板——`@Data`、"
+        "`@Accessors(chain = true)`、`@SuperBuilder`、`@NoArgsConstructor`、"
+        "`@AllArgsConstructor`。**模板文件不是规范文件**：那份文件只给可复制清单，本文件是其判据本体。\n"
+        "** **新增对象时加 `@Accessors(chain = true)`；给既有对象补注解时不加（L1）**：Spring 的 "
+        "`BeanUtils` 会**忽略带泛型参数的 set 方法**（链式 setter 返回 `this`），拷贝时静默丢数据。"
+        "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了 "
+        "`@Accessors(chain = true)`；② 新建对象的注解清单缺 `@Accessors(chain = true)`。\n"
+        "** **`@AllArgsConstructor` 无参数时不加（L1）**：类里**没有任何实例字段**时两者是同一个构造。"
+        "**判定标准**：无字段的类上出现 `@AllArgsConstructor` 即违规。\n"
+        "** **POJO 里的集合字段默认加 `@Singular`（L1）**：除非有问题。**判定标准（任一命中即违规）**："
+        "① builder 侧**没有单个元素入口**、只能整集合设置。\n"
+        "** **两档生效面**：**既有对象不主动改**、**主动声明**才补；**存量不告警**。\n"
+        "** 依据（标准名/编号）：**Project Lombok 官方文档**、Spring Framework 官方文档。\n")
+
+    JAVA = (
+        "= Java 规范（技术栈层）\n\n== 编码\n\n"
+        "* **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：`@NoArgsConstructor`、"
+        "`@RequiredArgsConstructor`、`@AllArgsConstructor`。\n"
+        + JAVA_RULE)
+
+    # 模板夹具：**只给"照抄时怎么用"，取值/机制/判定标准一律回指判据本体**——与真实文件
+    # 同形（模板文件自称"不重复那些判据"，若在此再抄一份理由与判定标准，夹具自己就在
+    # 示范第二真源，防线的用例反而把要防的形态固化成"正确写法"）。
+    TPL = (
+        "= Java 数据对象模板（技术栈层）\n\n"
+        "**模板文件，不是规范文件**：本文件是**可整份照抄的完整模板**，其**判据本体**在 "
+        "`specs/stack/java.adoc`（同一件事只在一处给真源）。**要么不读、要么整份读完**。\n\n"
+        "**加载触发特征**：**新建一个 Java 数据对象**；**没有以上目的时不加载**。\n\n"
+        "== 模板\n\n[source,java]\n----\n@Data\n@Accessors(chain = true)\n@SuperBuilder\n"
+        "@NoArgsConstructor\n@AllArgsConstructor\n----\n\n"
+        "照抄时的三条约定（**理由、机制与判定标准见** `specs/stack/java.adoc`「编码」的"
+        "「数据对象模板」条，本文件**不重复它们**）：\n\n"
+        "* **`@Accessors(chain = true)` 只在新增对象时加**：**补注解时不加**（理由与判定标准见判据本体）。\n"
+        "* **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。\n"
+        "* **集合字段默认加 `@Singular`**：按\"每个集合字段都标\"处理（\"除非有问题\"与判定标准见判据本体）。\n"
+        "* **注解次序**：模板里的次序已按 `specs/general/coding.adoc`「命名与代码质量」的"
+        "**注解排序**规则排好；该规则**不在此重述**。\n\n"
+        "== 生效面与存量\n\n"
+        "**两档生效面**与其判定标准**见判据本体**，**不在此重述**；本文件**不改写**判据，也"
+        "**不得以「模板没写」为由绕过判据本体**。\n\n"
+        "**依据（标准名/编号）**：**见判据本体**同一行——材料名与取舍声明只在那里写一份，"
+        "本文件不重述。\n")
+
+    COMMON = "** Java 数据对象模板 → `specs/stack/java-object.adoc`（识别特征：`@Singular`、`@Accessors(chain = true)`）\n"
+    README = "技术栈层：**java-object（Java 数据对象模板——模板文件、非规范文件）**。\n"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_common = cm.GENERIC_FILE
+        self._orig_readme = cm.README_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.README_FILE = os.path.join(self.root, "README.adoc")
+        self.write("specs/stack/java.adoc", self.JAVA)
+        self.write("specs/stack/java-object.adoc", self.TPL)
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        self.write("README.adoc", self.README)
+
+    def tearDown(self) -> None:
+        (cm.JAVA_STACK_FILE, cm.GENERIC_FILE, cm.README_FILE) = (
+            self._orig_java, self._orig_common, self._orig_readme)
+        super().tearDown()
+
+    def test_valid_passes(self):
+        cm.check_java_object_template_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_template_file_deleted_reports(self):
+        # 反例①：模板文件被删/被并回规范 → 回到"撑大规范正文、而它又不一定被读"
+        os.remove(os.path.join(self.root, "specs", "stack", "java-object.adoc"))
+        cm.check_java_object_template_guard()
+        self.assertIn("java-object.adoc", self.error_texts())
+
+    def test_template_self_positioning_removed_reports(self):
+        # 反例②：模板文件不再声明自己是模板/不是规范文件 → 会被当成又一份规范正文
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "**模板文件，不是规范文件**", "**本文件是规范正文**").replace(
+            "要么不读、要么整份读完", "随时可读"))
+        cm.check_java_object_template_guard()
+        self.assertIn("模板文件，不是规范文件", self.error_texts())
+
+    def test_trigger_removed_reports(self):
+        # 反例③：加载触发特征被删 → 新建对象时该文件永不被加载，模板形同不存在
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "**加载触发特征**：**新建一个 Java 数据对象**；**没有以上目的时不加载**。\n", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("加载触发特征", self.error_texts())
+
+    def test_template_annotation_removed_reports(self):
+        # 反例④：模板体的整段清单缺一项 → "照抄"照出来的是半套，且缺的那项没有替代提示。
+        # `@SuperBuilder` 在**判据本体**的"照抄后应齐备的五项"里同样出现，故一侧缺项即可报出。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "@SuperBuilder\n", "", 1))
+        cm.check_java_object_template_guard()
+        self.assertIn("@SuperBuilder", self.error_texts())
+
+    def test_spec_annotation_removed_reports(self):
+        # 反例④′：**判据本体**的"注解清单应齐备"缺一项（如把 `@SuperBuilder` 抽走）——
+        # 模板文件仍给出五项，模板侧照抄得对，但判据本体已不再说"要包含它"，
+        # "五项齐备"这条要求实际只剩模板文件一处承载（第二真源）。
+        self.write("specs/stack/java.adoc", self.JAVA.replace("`@SuperBuilder`、", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("@SuperBuilder", self.error_texts())
+
+    def test_half_add_rule_removed_reports(self):
+        # 反例⑤（用户点名的失效形态）：把"补注解时不加"这半句抽掉 → "补注解也加上吧"重新成立。
+        # 按真实文件的同形写法抽（真实文件是"只在新增对象时加**：**给既有对象**补注解时不加**"）。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "：**补注解时不加**", "：**新增与既有都加**"))
+        cm.check_java_object_template_guard()
+        self.assertIn("补注解时不加", self.error_texts())
+
+    def test_no_field_rule_removed_reports(self):
+        # 反例⑦：无参不加 `@AllArgsConstructor` 被删 → 无字段的类上被补出"看起来像全参构造"的注解
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "* **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。\n", ""))
+        cm.check_java_object_template_guard()
+        # 整段清单里另有 `@AllArgsConstructor`（模板体第五项）、且缺的是**这一条自己的正文**：
+        # 防线按"这条要点缺了"报红，故断言看缺失要点提示而非注解字样本身
+        self.assertIn("缺失要点", self.error_texts())
+
+    def test_singular_rule_removed_reports(self):
+        # 反例⑧：集合默认 `@Singular` 被删 → 单元素入口这条要求消失
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "* **集合字段默认加 `@Singular`**：按\"每个集合字段都标\"处理（\"除非有问题\"与判定标准见判据本体）。\n", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("@Singular", self.error_texts())
+
+    def test_scope_removed_reports(self):
+        # 反例⑨（用户点名要件）：两档生效面被删 → L1 被扩到存量对象上，或反向被读成"存量无所谓"。
+        # 真实文件把生效面写成 `== 生效面与存量` 一节，故按该节的两条约定删（夹具同形）。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "**两档生效面**与其判定标准**见判据本体**，**不在此重述**；",
+            "**生效面**：看情况。"))
+        cm.check_java_object_template_guard()
+        self.assertIn("两档生效面", self.error_texts())
+
+    def test_rule_body_removed_from_spec_reports(self):
+        # 反例⑩（反例本体）：判据本体从规范文件里被整条抽走 → 模板文件成第二真源
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范（技术栈层）\n\n== 编码\n\n* **别的条目**：略。\n")
+        cm.check_java_object_template_guard()
+        self.assertIn("数据对象模板", self.error_texts())
+
+    def test_rule_body_hollowed_by_neighbor_rule_reports(self):
+        # 反例⑩′（相邻条目兜底，本仓库实测过的形态）：本条正文里的判据被抽走，而相邻的
+        # 「无参 / 必参 / 全参构造优先用 lombok」那条同样含 `@AllArgsConstructor` 等字样
+        # → 按整节核关键词时会把已消失的要求兜住。故判据须在本条**自己的正文**里核。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "`BeanUtils` 会**忽略带泛型参数的 set 方法**（链式 setter 返回 `this`），拷贝时静默丢数据。",
+            "会有些问题。"))
+        cm.check_java_object_template_guard()
+        self.assertIn("忽略带泛型参数的 set 方法", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑪：判定标准被抽成一句口径 → 读者不知道自己是否命中
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了", "**注意**：① 加上了"))
+        cm.check_java_object_template_guard()
+        self.assertIn("在既有对象的补注解改动里加上了", self.error_texts())
+
+    def test_backref_removed_reports(self):
+        # 反例⑥：回指判据本体这一句被抽掉（改用"同上"之类含糊指代）→ 模板侧只剩取值、
+        # 读者拿不到机制与判定标准，"补注解也加上吧"重新成立（**本文件不重复判据**是它的定位）。
+        # 同段三条各自回指判据本体，本用例一并抽掉，否则另两条的 `见判据本体` 会把已消失的
+        # 回指兜住（正是本条要防的"相邻兜底"）。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "（理由与判定标准见判据本体）", "（照做即可）").replace(
+            "（无实例字段时该注解没有落点，判定标准见判据本体）", "（照做即可）").replace(
+            '（"除非有问题"与判定标准见判据本体）', "（照做即可）"))
+        cm.check_java_object_template_guard()
+        self.assertIn("缺失要点", self.error_texts())
+
+    def test_template_duplicates_rule_mechanism_reports(self):
+        # 反例⑥′（本文件的定位）：自称"不重复那些判据"，却把判据本体的**机制**抄回模板侧
+        # → 同一件事两处各给一份真源、必各自漂移（这条靠**反向**核对：机制字样不得出现）。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "（理由与判定标准见判据本体）",
+            "（`BeanUtils` 会忽略带泛型参数的 set 方法，故补注解时不得加）"))
+        cm.check_java_object_template_guard()
+        self.assertIn("忽略带泛型参数的 set", self.error_texts())
+
+    def test_template_duplicates_rule_criteria_reports(self):
+        # 反例⑥″：把判据本体的**判定标准**抄回模板侧 → 同样属"在本文件示范重复"
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "（理由与判定标准见判据本体）",
+            "（**判定标准（任一命中即违规）**：补注解时加了即违规）"))
+        cm.check_java_object_template_guard()
+        self.assertIn("判定标准（任一命中即违规）", self.error_texts())
+
+    def test_dispatcher_trigger_removed_reports(self):
+        # 反例⑫：调度器没登记/没识别特征 → 新建对象时该文件永不被加载（规则实际失效）
+        self.write("AGENTS_COMMON.adoc", "= 通用规范\n** Java 项目\n")
+        cm.check_java_object_template_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_checklist_sentence_missing_item_reports(self):
+        # 反例⑭（本轮实测补的空白）：**清单句**里的 `@SuperBuilder` 被抽走，而同一个 bullet
+        # 末尾的**依据行**仍罗列该注解名（Project Lombok 官方文档那一段）——以前按 bullet 级
+        # 核时被同一 bullet 的后半句兜住、防线全绿。防线的「清单句」步按 `until` 截到依据行前，
+        # 故此处必须报红。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "`@SuperBuilder`、", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("@SuperBuilder", self.error_texts())
+
+    def test_rule_body_criteria_backed_by_sibling_half_reports(self):
+        # 反例⑮（本轮实测补的空白）：取值一的**判定标准**被抽走，而取值二/三处同样写着
+        # 「判定标准」——按共享短语核时被同一 bullet 的另两处兜住。防线改核该句**独有的正文**
+        # （`在既有对象的补注解改动里加上了`），故此处必须报红。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了",
+            "**注意**：① 加上了"))
+        cm.check_java_object_template_guard()
+        self.assertIn("在既有对象的补注解改动里加上了", self.error_texts())
+
+    def test_readme_entry_name_only_reports(self):
+        # 反例⑯（本轮实测补的空白）：README 只留 `java-object` 这个**子串**（路径里也会出现）、
+        # 没写条目名与「模板文件、非规范文件」的定位——单核子串太弱，防线要求两者同现。
+        self.write("README.adoc", "技术栈层：见 `specs/stack/java-object.adoc`。\n")
+        cm.check_java_object_template_guard()
+        self.assertIn("模板文件、非规范文件", self.error_texts())
+
+    def test_template_duplicates_scope_values_reports(self):
+        # 反例⑰（本轮补的反向锚点）：模板侧把两档生效面的**取值**抄回（“既有对象主动声明才补、
+        # 存量不告警”）——读起来像“结论摘要”、实为判据本体内容，是模板侧最易漏的一处重复。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "== 模板", "== 模板\n\n既有对象主动声明才补、存量不告警。"))
+        cm.check_java_object_template_guard()
+        self.assertIn("存量不告警", self.error_texts())
+
+    def test_template_duplicates_own_tradeoff_claim_reports(self):
+        # 反例⑱（本轮补的反向锚点）：模板侧把判据本体的**出处声明**（“是本集合自己的判据化取舍”）
+        # 抄回——该声明只在判据本体与图书馆写，模板侧只回指。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "== 模板", "== 模板\n\n三处取值是本集合自己的判据化取舍。"))
+        cm.check_java_object_template_guard()
+        self.assertIn("是本集合自己的判据化取舍", self.error_texts())
+
+    def test_ordering_pointer_removed_reports(self):
+        # 反例⑲（本轮实测补的空白）：模板侧不再点名 `coding.acoc` 的「注解排序」节（次序判据
+        # 的真源）——只核 `不在此重述` 会被同文件的「生效面」组兜住，防线改核本条独有的整句。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "模板里的次序已按", "模板次序是随便排的，"))
+        cm.check_java_object_template_guard()
+        self.assertIn("模板里的次序已按", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑬：README 目录说明未同步 → 读者按 README 学习时无从知道有这条规则
+        self.write("README.adoc", "目录结构：（未同步）。\n")
+        cm.check_java_object_template_guard()
+        self.assertIn("README", self.error_texts())
+
+
 class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
     """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
 
@@ -10507,13 +10988,13 @@ class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
         "内**）。`{@link ...}` / `@see` 里按类全名做的"
         "**成员引用**（javadoc 标签要求合法引用，须全限定）照常。\n")
 
+    # 调度器**只给触发特征**（要写文档注释/说明文字、要提到某个类型时即命中），
+    # 不抄条目本体的取值（`不写类全名`/`包名 + 类名`/`classpath` 都在 `doc.adoc`/`java.adoc` 里）。
     COMMON = (
         "= 通用规范\n"
-        "** 写注释/文档/格式（**文档里提到某个类型时优先写类名 + `import`、"
-        "不写类全名**（识别特征：文中出现\"包名 + 类名\"形态的指代））\n"
-        "** Java 项目（**类型指代**：javadoc/文档里写类名 + `import`、不写全限定类名"
-        "（除非该类型不在本仓库的 classpath 内；`{@link}` 成员引用与配置/反射按名加载"
-        "照旧全限定））\n")
+        "** 写注释/文档/格式 → `specs/general/doc.adoc`（识别特征：要写文档注释或说明文字、"
+        "文中要提到一个类型）\n"
+        "** Java 项目（**类型指代**：要写 javadoc、要提到一个类）\n")
 
     def setUp(self) -> None:
         super().setUp()
@@ -10603,18 +11084,14 @@ class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
 
     def test_dispatcher_trigger_removed_reports(self):
         # 反例⑨：调度器没有识别特征 → 规则永不被触发加载（实际失效）
-        self.write("AGENTS_COMMON.adoc", "= 通用规范\n** 写注释/文档/格式\n")
+        self.write("AGENTS_COMMON.adoc", "= 通用规范\n** 别的条目\n")
         cm.check_doc_type_notation_guard()
-        self.assertIn("包名 + 类名", self.error_texts())
+        self.assertIn("文档", self.error_texts())
 
     def test_java_trigger_removed_reports(self):
         # 反例⑩：Java 栈条目的识别特征被删
         self.write("AGENTS_COMMON.adoc",
-                   self.COMMON.replace("（**类型指代**：javadoc/文档里写类名 + `import`、"
-                                       "不写全限定类名"
-                                       "（除非该类型不在本仓库的 classpath 内；"
-                                       "`{@link}` 成员引用与配置/反射按名加载"
-                                       "照旧全限定））", ""))
+                   self.COMMON.replace("（**类型指代**：要写 javadoc、要提到一个类）", ""))
         cm.check_doc_type_notation_guard()
         self.assertIn("类型指代", self.error_texts())
 
@@ -10838,7 +11315,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc",
                    "* **Maven 构建**（存在 `pom.xml`）→ `specs/stack/maven.adoc`\n")
         cm.check_maven_parallel_guard()
-        self.assertIn("构建并行度", self.error_texts())
+        self.assertIn("构建", self.error_texts())
 
     def test_library_source_anchor_removed_reports(self):
         # 反例⑦：图书馆官方原文锚点被删（依据只剩名称）
@@ -12080,8 +12557,11 @@ class TestCheckScriptHeaderGuard(CheckSpecsTestCase):
                        "= 栈\n\n== 入口\n"
                        f"* **入口的头部注释只写入口自己**：判据见「{cm.SCRIPT_HEADER_SECTION}」"
                        "下的「入口的注释边界（L1）」；本栈用 `rem`/`::` 行注释。\n")
+        # 调度器**只给触发特征**（要新写或改脚本、要写脚本文档头时即命中），
+        # 不抄条目本体的取值（`文档头先行`/`常量名` 在 `script.adoc` 里）。
         self.write("AGENTS_COMMON.adoc",
-                   "脚本：**文档头先行**（取值写**常量名**）；识别特征：新写或改脚本。\n")
+                   "脚本 → `specs/general/script.adoc`（识别特征：要新写或改脚本、"
+                   "要写脚本文档头）。\n")
         self.write("README.adoc", "目录：脚本（含**文档头先行**与**跨环境脚本**）。\n")
         self.write("library/adoption.adoc",
                    "* **「脚本头部注释（文档头）先行、细节有落点」是本站取舍**："
@@ -12261,9 +12741,9 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         self.write("specs/stack/powershell.adoc",
                    "= 栈\n\n== 注释与文档头\n"
                    "* **用基于注释的帮助（comment-based help）承载文档头**。\n")
+        # 调度器**只给触发特征**（要为脚本另建独立文档时即命中），不抄条目本体的取值。
         self.write("AGENTS_COMMON.adoc",
-                   "脚本：**文档默认写进脚本自身**（脚本单打独斗，按多行文档注释→**多行块注释**"
-                   "→普通注释取值）。\n")
+                   "脚本 → `specs/general/script.adoc`（识别特征：要为脚本另建独立文档）。\n")
         self.write("README.adoc",
                    "目录：脚本（含**文档默认写进脚本自身**与**跨环境脚本**）。\n")
 
@@ -12487,8 +12967,11 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
 
     对应用户实测点名的形态：安装把入口文档落到目标项目，它是**唯一持久化到项目里的产物**，
     而原模板只写"入口地址 + 遵守要求"——"规范副本落在哪、怎么再取一次"只存在于本人的会话里，
-    **新开实例即丢失**。故反例逐项覆盖：承载判据的通用层文件被删、三条路径链缺项、
+    **新开实例即丢失**。故反例逐项覆盖：承载判据的通用层文件被删、路径链缺项、
     副本落点被写成笼统说法、取回方式缺项。
+
+    **落点已并入公共入口**（安装文档删除后，"工序侧"就是入口的「安装与更新」节）：
+    判据与模板在同一个文件里，故夹具只有一个文件——节内的模板承载路径链与副本要点。
 
     **模板形态以用户手工编辑为准**（用户点名：不要 `= Agent 规范入口` 标题与那三节），
     故本类**不核模板小节结构**——核的是路径链与副本两要点**在模板正文里出现**；
@@ -12496,12 +12979,12 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
     """
 
     TEMPLATE = (
-        "= 安装\n\n判据见 `specs/general/entry-doc.adoc`（那是判据的唯一真源，本文件不重复其条文）。\n\n"
+        "= AGENT 执行规范\n\n"
+        "== 安装与更新（引用方接入与取回口径）\n\n"
+        "**写入判据**见 `specs/general/entry-doc.adoc`——那是唯一真源，本文件不重复其条文。\n\n"
         "[source,asciidoc]\n----\n"
         "本项目的 agent 执行规范入口为：\n\n"
         "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
-        "安装与更新的文档入口为：\n\n"
-        "https://agent.c332030.com/INSTALL.adoc\n\n"
         "取规范脚本：\n\n"
         "https://agent.c332030.com/script/fetch-specs.py\n\n"
         "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
@@ -12516,7 +12999,7 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
             "本文件是这一判据的**唯一真源**；本文件不抄那几条路径的字面值。\n")
 
     def _write_manifest_valid(self, install_text=None):
-        self.write("INSTALL.adoc", install_text or self.TEMPLATE)
+        self.write("AGENTS_COMMON.adoc", install_text or self.TEMPLATE)
         self.write("specs/general/entry-doc.adoc", self.SPEC)
 
     def test_entry_doc_manifest_passes(self):
@@ -12534,13 +13017,10 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
     def test_path_chain_removed_reports(self):
-        # 反例（用户点名形态）：模板不给安装文档路径与取规范脚本路径 → 新实例不知道如何下载规范
+        # 反例（用户点名形态）：不给取规范脚本路径 → 新实例不知道如何下载规范
         self._write_manifest_valid(
-            self.TEMPLATE.replace(
-                "https://agent.c332030.com/INSTALL.adoc\n", "").replace(
-                "https://agent.c332030.com/script/fetch-specs.py\n", ""))
+            self.TEMPLATE.replace("https://agent.c332030.com/script/fetch-specs.py\n", ""))
         cm.check_entry_doc_manifest()
-        self.assertIn("INSTALL.adoc", self.error_texts())
         self.assertIn("fetch-specs.py", self.error_texts())
 
     def test_spec_entry_removed_reports(self):
@@ -12553,8 +13033,7 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
     def test_copy_points_removed_reports(self):
         # 反例：模板里不留落点 → 新实例不知道副本落在哪、只能自己猜路径
         self._write_manifest_valid(
-            self.TEMPLATE.replace(
-                "规范文件统一下载到 `~/.cache/agent-specs`，", ""))
+            self.TEMPLATE.replace("规范文件统一下载到 `~/.cache/agent-specs`，", ""))
         cm.check_entry_doc_manifest()
         self.assertIn("用户家目录", self.error_texts())
 
@@ -12577,7 +13056,7 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
     def test_install_pointer_removed_reports(self):
         # 反例：工序侧不再指向判据真源 → "该不该写"只能在本文件里再写一套
         self._write_manifest_valid(
-            self.TEMPLATE.replace("那是判据的唯一真源，本文件不重复其条文", "详见上文"))
+            self.TEMPLATE.replace("那是唯一真源，本文件不重复其条文", "详见上文"))
         cm.check_entry_doc_manifest()
         self.assertIn("判据的真源", self.error_texts())
 
@@ -12600,29 +13079,29 @@ class TestCheckEntryDocManifest(CheckSpecsTestCase):
                 "**需要最新规范时再运行一次取规范脚本即是更新**。", ""))
         cm.check_entry_doc_manifest()
         self.assertIn("再运行一次", self.error_texts())
-
-
 class TestCheckInstallRepeatUpdateGuard(CheckSpecsTestCase):
     """钉住『安装幂等更新防线』：用户手工编辑过的模板内容不得被模板自动改回。
 
     对应本仓库实测的返工：上一轮实施按"与最新模板不一致即就地更新为最新模板"，
     把用户手工删掉的标题与三节**按判据恢复**了回去——用户点名『我手动删的，你不要给我补上去』
     『不要给我补，以我的为准』。故反例逐项覆盖：该条被删、只剩『以用户为准』而无『不自动改回』、
-    不一致时不说（用户不知道入口文档与模板已不一致）、整节被删（该条无处承载）。
+    不一致时不说（用户不知道入口文档与模板已不一致）、整条被删（该条无处承载）。
+
+    **落点已并入公共入口**：安装口径现在写在 `AGENTS_COMMON.adoc`「安装与更新」的
+    「本流程可重复执行、且以远程为准」一条里（原为独立安装文档的「重复执行（更新）时的行为」节）。
     """
 
     SECTION = (
-        "== 重复执行（更新）时的行为\n\n"
-        "* **入口文档（幂等）**：先按上面的规则判命中哪个文件名，再核对其内容：\n"
-        "** 已含入口占位且**与最新模板逐字一致**：不动。\n"
-        "** 已含入口占位但**与最新模板不一致**：**就地更新为最新模板的那几行**。\n"
+        "== 安装与更新（引用方接入与取回口径）\n\n"
+        "* **本流程可重复执行、且以远程为准**：\n"
+        "** **入口文档（幂等）**：已含入口占位且与它逐字一致：不动；已含但不一致：就地更新为最新模板。\n"
         "** **用户改过的行以用户改过的为准**：**用户手工编辑过的模板内容一律照原文保留**"
-        "——不符合本模板时**不自动改回**，只在汇报里指出不一致、等用户定。\n"
+        "——不符合本模板时**不自动改回**，只在汇报里指出不一致、**等用户定**。\n"
     )
 
     def _write_valid(self, section=None):
-        self.write("INSTALL.adoc",
-                   "= 安装\n\n" + (section if section is not None else self.SECTION))
+        self.write("AGENTS_COMMON.adoc",
+                   "= AGENT 执行规范\n\n" + (section if section is not None else self.SECTION))
 
     def test_repeat_update_passes(self):
         # 正例：三项要点齐（以用户改过的为准 / 不自动改回 / 等用户定）
@@ -12635,7 +13114,7 @@ class TestCheckInstallRepeatUpdateGuard(CheckSpecsTestCase):
         # 用户的手工编辑必被改回（本仓库实测过的返工形态）
         self._write_valid(self.SECTION.replace(
             "** **用户改过的行以用户改过的为准**：**用户手工编辑过的模板内容一律照原文保留**"
-            "——不符合本模板时**不自动改回**，只在汇报里指出不一致、等用户定。\n", ""))
+            "——不符合本模板时**不自动改回**，只在汇报里指出不一致、**等用户定**。\n", ""))
         cm.check_install_repeat_update_guard()
         self.assertIn("以用户改过的为准", self.error_texts())
 
@@ -12647,22 +13126,20 @@ class TestCheckInstallRepeatUpdateGuard(CheckSpecsTestCase):
 
     def test_silent_disagreement_reports(self):
         # 反例：不一致时什么都不说 → 用户不知道入口文档与模板已不一致
-        self._write_valid(self.SECTION.replace("只在汇报里指出不一致、等用户定", "自行处置"))
+        self._write_valid(self.SECTION.replace("**等用户定**", "自行处置"))
         cm.check_install_repeat_update_guard()
         self.assertIn("等用户定", self.error_texts())
 
     def test_section_removed_reports(self):
-        # 反例：整节被删 → 该条无处承载，"不一致即就地更新"反而成了唯一口径
-        self.write("INSTALL.adoc", "= 安装\n\n== 约束\n\n* 只创建入口占位。\n")
+        # 反例：整条被删 → 该条无处承载，"不一致即就地更新"反而成了唯一口径
+        self.write("AGENTS_COMMON.adoc", "= AGENT 执行规范\n\n== 约束\n\n* 只创建入口占位。\n")
         cm.check_install_repeat_update_guard()
-        self.assertIn("重复执行（更新）时的行为", self.error_texts())
+        self.assertIn("本流程可重复执行", self.error_texts())
 
     def test_missing_install_reports(self):
-        # 反例：安装文档不在 → 幂等更新的一条无从核对
+        # 反例：入口文件不在 → 幂等更新的一条无从核对
         cm.check_install_repeat_update_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
-
-
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     """钉住『规范抓取（安装取文件）防线』：随规范分发的取文件脚本不得被删或退化。
 
@@ -12706,6 +13183,23 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'def main():\n'
         '    """默认跳过已存在；需要最新内容加 --force；落点相对当前工作目录；os.replace 原子落盘"""\n'
     )
+    # **脚本头部注释＝取回口径的工序侧真源**（公共入口那一节只留落点与回指，不再复述这些句子）：
+    # 夹具须与真实文件同形，否则"真源被抽空"这类反例在夹具里根本不成立。
+    SCRIPT_PY_HEAD = (
+        '"""fetch-specs - 把本规范集合取到本地副本。\n'
+        '\n'
+        '取回与更新口径（本节是"怎么取、怎么更新"的真源，公共入口只回指本节）：\n'
+        '  - 一次取全：一次运行把入口与其 specs/ 全部取回，不必手拼逐条下载命令；\n'
+        '  - 清单从入口自身解析：按加载调度器登记自动解析，新增一份规范不必改脚本、也不会漏取；\n'
+        '  - 默认以远程为准：取回的字节与本地不同才落盘、远端改过就刷新，重复执行即是更新；\n'
+        '  - --keep：不动本地那份；--base：换规范来源；\n'
+        '  - 取回失败保留本地已有的那一份，不把副本删掉换成没有；\n'
+        '  - 退出码：0 成功、1 有文件没取到、2 参数或前置条件错误——非 0 就别把副本当已就绪；\n'
+        '  - 解释器兜底：一个都没有时**先按本平台既有的软件分发方式装一个 python 3**再重跑，\n'
+        '    这是**人**的一步，入口**不得**代为安装运行时；\n'
+        '    只装 python2 的发行版不算"一个都没有"；不建议改用 curl … | python3 -：它同样要 python。\n'
+        '"""\n')
+    SCRIPT_PY = SCRIPT_PY_HEAD + SCRIPT_PY
     SCRIPT_SH = (
         '#!/usr/bin/env bash\n'
         'set -u\n'
@@ -12745,21 +13239,21 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                      b')\r\n'
                      b'%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
                      b'exit /b %errorlevel%\r\n')
-        # INSTALL.adoc：既有各节要点 + 入口模板代码块（后者承载"怎么取/取不到怎么办/怎么更新"三要点）
-        self.write("INSTALL.adoc", self.INSTALL_BODY)
-
-        self.write("AGENTS_COMMON.adoc", "取文件见 fetch-specs；副本落点与取回方式以 "
-                                        "INSTALL.adoc「取规范到本地副本」为唯一真源。\n")
-        self.write("README.adoc", "工具 fetch-specs：落点、取回与更新方式见 INSTALL.adoc"
+        # 入口（**兼具安装口径**）：既有各节要点 + 入口模板代码块（承载"怎么取/取不到怎么办/怎么更新"三要点）
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY)
+        self.write("README.adoc", "工具 fetch-specs：落点、取回与更新方式见 AGENTS_COMMON.adoc"
                                  "「取规范到本地副本」（唯一真源）。\n")
-        self.write("PUBLIC.adoc", "抓取工具：落点与取回方式见 INSTALL.adoc"
+        self.write("PUBLIC.adoc", "抓取工具：落点与取回方式见 AGENTS_COMMON.adoc"
                                  "「取规范到本地副本」（唯一真源）。\n")
 
-    # 安装文档夹具：模板代码块里放"入口占位那一行"（三要点齐备；个别用例替换它跑反例）
+    # 入口文件（**兼具安装口径**）：模板代码块里放"入口占位那一行"（三要点齐备；
+    # 个别用例替换它跑反例）。安装文档已删，模板与取回口径都落在入口这个文件里。
     INSTALL_BODY = (
-        "= 安装\n\n同时将 tmp* 加入到 .gitignore\n\n"
+        "= AGENT 执行规范（公共入口）\n\n"
+        "== 访问与解析（引用方须知）\n\n取本地副本见 fetch-specs。\n\n"
+        "== 安装与更新（引用方接入与取回口径）\n\n"
         "[source,asciidoc]\n----\n"
-        "= Agent 规范入口\n\n本项目的 agent 执行规范入口为：\n\n"
+        "本项目的 agent 执行规范入口为：\n\n"
         "https://agent.c332030.com/AGENTS_COMMON.adoc\n\n"
         "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
         "在项目根目录运行一次取文件抓手即可；取不到时就直接读上面的远程入口；"
@@ -12767,20 +13261,20 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。\n\n"
         "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。\n"
         "----\n\n"
-        "== 取规范到本地副本\n\n见 fetch-specs：副本取到用户家目录下的 `~/.cache/agent-specs`"
-        "这一处（本机所有项目共用一份）；落点与取回方式以本节为唯一真源；取不到时直接读远程入口。"
-        "默认入口文件名 AGENTS.adoc；已存在 AGENTS.md 时就地融合、不重命名、不另建。"
-        "下载的东西一律只落这一处：规范副本、取规范脚本（fetch-specs.py 及其同名入口）、"
-        "清理脚本 clean_tmp.py 都落这一个路径下，不在项目里另留副本；"
-        "默认以远程为准：内容不同才落盘、重复执行即是更新、取回失败保留本地那一份，"
-        "要不动本地那份加 --keep。\n\n"
-        "== 取规范时连 python 都没有\n\n"
-        "按下面的次序走：\n\n"
-        "这里说的是**一个都没有**：只装 python2 的发行版不算，上一条的次序会取到 `python`。\n"
-        "* **先按本平台既有的软件分发方式装一个 python 3**：这是**人**的一步，"
-        "入口**不得**代为安装运行时（改系统状态、要权限、对调用方不可预期）。\n"
-        "* 取不到时脚本报错、退出码非 0，**不得静默继续**。\n"
-        "* 不建议改用 `curl … | python3 -`：它同样要 python。\n")
+        "* **入口文档（安装流程）**：文件名取 `AGENTS.adoc`；已存在 `AGENTS.md` 时就地融合"
+        "（**不重命名、不迁移、不另建**）。**写入判据**见 `specs/general/entry-doc.adoc`"
+        "——那是唯一真源。\n"
+        "* **本流程可重复执行、且以远程为准**：\n"
+        "** **入口文档（幂等）**：已含入口占位且逐字一致：不动；**用户改过的行以用户改过的为准**："
+        "**用户手工编辑过的模板内容一律照原文保留**——不符合本模板时**不自动改回**，"
+        "只在汇报里指出不一致、**等用户定**。\n\n"
+        "== 取规范到本地副本\n\n"
+        "* 落点只有一处：副本取到**用户家目录**下的 `.cache/agent-specs` 这一处"
+        "（本机所有项目共用一份）；下载的东西一律只落这一处：规范副本、取规范脚本"
+        "（fetch-specs.py 及其同名入口）、清理脚本 clean_tmp.py 都落这一个路径下，"
+        "不在项目里另留副本；取不到时直接读远程入口。\n"
+        "* 取回口径的工序侧真源是 `script/fetch-specs.py` 的**头部注释**：怎么取、怎么更新、"
+        "脚本开关与解释器兜底次序都写在那里，本节不复述、也不在别处再抄一份。\n")
 
     ENTRY_LINE = (
         "优先取到本地副本（避免网络原因无法访问）：规范文件统一下载到 `~/.cache/agent-specs`，"
@@ -12789,7 +13283,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
     def _write_install_with_entry_line(self, entry_line: str) -> None:
         """把给定的"入口占位那一行"替进模板代码块（其余要点照旧）——用于跑反例。"""
-        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(self.ENTRY_LINE, entry_line))
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(self.ENTRY_LINE, entry_line))
 
     def test_valid_passes(self):
         self._write_valid()
@@ -12882,23 +13376,23 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         # 反例：安装文档只写规范副本的落点、不提"下载来的安装脚本也落这" → 清理脚本等
         # 下载物仍会被手工存到别处（用户口径是"所有下载的文件"）
         self._write_valid()
-        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
             "下载的东西一律只落这一处：规范副本、取规范脚本（fetch-specs.py 及其同名入口）、"
             "清理脚本 clean_tmp.py 都落这一个路径下，不在项目里另留副本；", ""))
         cm.check_spec_fetch_guard()
         self.assertIn("clean_tmp.py", self.error_texts())
 
     def test_docs_not_synced_reports(self):
-        # 反例：INSTALL 未登记抓手 → 安装时读者又不知道有它
+        # 反例：入口未登记抓手 → 安装时读者又不知道有它
         self._write_valid()
-        self.write("INSTALL.adoc", "把规范下载到 tmp。\n")
+        self.write("AGENTS_COMMON.adoc", "把规范下载到 tmp。\n")
         cm.check_spec_fetch_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     # ---- 解释器兜底（本仓库实证：入口原先只调 python3，"没有 python 的机器装不上"）----
     # 只保留两条机械可核对的：①探测次序写反（后写的会被前面的分支永久遮住）；
-    # ②判别串互相包含导致次序判错。安装文档的兜底措辞与"入口不得代为安装运行时"
-    # 属文档口径、无对应的机械核对，故不再单设用例（该职责由 `INSTALL.adoc` 正文承担）。
+    # ②判别串互相包含导致次序判错。说明口径本身由 `_check_install_no_python_section`
+    # 按节取文本核对（落点是公共入口的「取规范到本地副本」）。
 
     def test_lookup_order_regression_reports(self):
         # 反例：次序写反（python 排在 python3 前）→ 该分支把 python3 永久遮住，等于没有兜底
@@ -12938,41 +13432,38 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("command -v python3", self.error_texts())
 
     def test_install_without_fallback_note_reports(self):
-        # 反例：安装文档不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
+        # 反例：入口不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
         self._write_valid()
-        self.write("INSTALL.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
+        self.write("AGENTS_COMMON.adoc", "见 fetch-specs 与 tmp/agent-specs 落点。\n")
         cm.check_spec_fetch_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
-        self.assertIn("取规范时连 python 都没有", self.error_texts())
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        self.assertIn("取规范到本地副本", self.error_texts())
 
     def test_install_without_next_step_reports(self):
-        # 反例（用户追问"没有 python 也要下载啊"）：只写"报错退出"、不写"接下来怎么办"
-        # → 引用方看到失败仍不知道下一步（装一个？谁装？能不能不装？）
+        # 反例（用户追问"没有 python 也要下载啊"）：真源（脚本头部注释）只写"报错退出"、
+        # 不写"接下来怎么办" → 引用方看到失败仍不知道下一步（装一个？谁装？能不能不装？）
+        # 本反例锚点已从"入口那一节"移到**真源侧**（入口不再复述这些句子）。
         self._write_valid()
-        self.write("INSTALL.adoc",
-                   "== 取规范时连 python 都没有\n\n"
-                   "连 python 都没装时报错退出；只装 python2 的发行版同样可用。\n")
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("先按本平台既有的软件分发方式装一个 python 3", ""))
         cm.check_spec_fetch_guard()
         self.assertIn("装一个 python 3", self.error_texts())
 
     def test_entry_allowed_to_install_runtime_reports(self):
-        # 反例：把"装一个运行时"写成脚本/入口的一步（而非人的一步）
+        # 反例：在**真源**里把"装一个运行时"写成脚本/入口的一步（而非人的一步）
         # → 入口从"门"变成"装门的施工队"（改系统状态、要权限、对调用方不可预期）
         self._write_valid()
-        self.write("INSTALL.adoc",
-                   "== 取规范时连 python 都没有\n\n"
-                   "装一个 python 3 再重跑（脚本会自己下载安装）；只装 python2 的发行版同样可用；"
-                   "报错、退出码非 0 不得静默继续；`curl | python3 -` 同样要 python。\n")
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            "这是**人**的一步，入口**不得**代为安装运行时；", "脚本会自己下载安装运行时；"))
         cm.check_spec_fetch_guard()
         self.assertIn("代为安装", self.error_texts())
 
     def test_install_runtime_note_removed_reports(self):
-        # 反例：把"报错退出非 0、不得静默继续"这条抽掉 → "没取到规范"被混进"取到了"
+        # 反例：真源里把"报错退出非 0、不得静默继续"这条抽掉 → "没取到规范"被混进"取到了"
         self._write_valid()
-        self.write("INSTALL.adoc",
-                   "== 取规范时连 python 都没有\n\n"
-                   "装一个 python 3 再重跑。这是**人**的一步，入口**不得**代为安装运行时；"
-                   "只装 python2 的发行版同样可用；`curl | python3 -` 同样要 python。\n")
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("退出码：0 成功、1 有文件没取到、2 参数或前置条件错误——"
+                                          "非 0 就别把副本当已就绪；", ""))
         cm.check_spec_fetch_guard()
         self.assertIn("非 0", self.error_texts())
 
@@ -13022,33 +13513,118 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("解释器兜底", self.error_texts())
 
     def test_install_no_python_section_removed_reports(self):
-        # 反例：把「取规范时连 python 都没有」整节删掉 → 旧实现只核全文关键词，仍报绿
+        # 反例：把承载解释器兜底的「取规范到本地副本」整节删掉 → 旧实现只核全文关键词，仍报绿
         # （本仓库实测复现），故改为**先按节标题定位整节、再在节内逐条核对**。
         self._write_valid()
         import re as _re
-        self.write("INSTALL.adoc", _re.sub(
-            r"^== 取规范时连 python 都没有.*?(?=\Z)", "", self.INSTALL_BODY, flags=_re.S | _re.M))
+        self.write("AGENTS_COMMON.adoc", _re.sub(
+            r"^== 取规范到本地副本.*?(?=\Z)", "", self.INSTALL_BODY, flags=_re.S | _re.M))
         cm.check_spec_fetch_guard()
-        self.assertIn("取规范时连 python 都没有", self.error_texts())
+        self.assertIn("取规范到本地副本", self.error_texts())
 
     def test_install_without_no_runtime_note_reports(self):
-        # 反例：节还在，但"入口不得代为安装/不得静默继续"这两条被抽掉 → 读者会以为入口会自己搞定
+        # 反例：真源里把"这是**人**的一步、入口不得代为安装运行时"整条抽掉
+        # → 读者会以为入口会自己搞定
         self._write_valid()
-        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
-            "* **先按本平台既有的软件分发方式装一个 python 3**：这是**人**的一步，"
-            "入口**不得**代为安装运行时（改系统状态、要权限、对调用方不可预期）。\n", ""))
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            "这是**人**的一步，入口**不得**代为安装运行时；", ""))
         cm.check_spec_fetch_guard()
         self.assertIn("不得**代为安装", self.error_texts())
 
     def test_install_missing_python2_case_reports(self):
-        # 反例：删掉"只装 python2 的发行版同样可用"→ 该分支的收益没人知道（CentOS/RHEL 8 及更早）
+        # 反例：真源里删掉"只装 python2 的发行版不算"
+        # → 该分支的收益没人知道（CentOS/RHEL 8 及更早）
         self._write_valid()
-        self.write("INSTALL.adoc", self.INSTALL_BODY.replace(
-            "\n这里说的是**一个都没有**：只装 python2 的发行版不算，上一条的次序会取到 `python`。", ""))
+        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
+            '只装 python2 的发行版不算"一个都没有"；', "只装 python 的发行版同样可用；"))
         cm.check_spec_fetch_guard()
         self.assertIn("python2", self.error_texts())
 
     # ---- 共享缓存落点（用户实测诉求：别每个项目都下载一遍同几份文件）----
+
+    def test_install_fetch_method_source_emptied_reports(self):
+        # 反例（本轮）：真源（脚本头部注释）里的**取回与更新口径**整段被抽走
+        # ——入口那一节已收敛为"只写落点 + 回指"，故"怎么取、怎么更新"无处可读时
+        # 必须由真源侧报红（旧判据把这段留在入口、且要求入口复述那些句子，正是用户点名的重复形态）。
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("  - 一次取全：一次运行把入口与其 specs/ 全部取回，"
+                                          "不必手拼逐条下载命令；\n", "")
+                   .replace("  - 清单从入口自身解析：按加载调度器登记自动解析，"
+                            "新增一份规范不必改脚本、也不会漏取；\n", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("一次取全", self.error_texts())
+        self.assertIn("清单从入口自身解析", self.error_texts())
+
+    def test_install_fetch_method_remote_authority_removed_reports(self):
+        # 反例："默认以远程为准"与 `--keep` 被删 → 『重复执行即是更新』只说了一半，
+        # 执行者无法判断远端改过要不要覆盖本地那份
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY.replace("  - 默认以远程为准：取回的字节与本地不同才落盘、"
+                                          "远端改过就刷新，重复执行即是更新；\n", "")
+                   .replace("  - --keep：不动本地那份；--base：换规范来源；\n", ""))
+        cm.check_spec_fetch_guard()
+        self.assertIn("以远程为准", self.error_texts())
+        self.assertIn("--keep", self.error_texts())
+
+    def test_install_fetch_section_pointer_removed_reports(self):
+        # 反例（本轮新增）：入口那一节只剩落点、**回指被抽掉** → 读者读到本节仍不知道
+        # 取法的细则在哪，等于把同一件事实再抄一遍或干脆丢掉
+        # （本仓库实测：只点名文件而不给部位——去掉「头部注释」四字——同属此形态）。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
+            "* 取回口径的工序侧真源是 `script/fetch-specs.py` 的**头部注释**：怎么取、怎么更新、"
+            "脚本开关与解释器兜底次序都写在那里，本节不复述、也不在别处再抄一份。\n",
+            "* 取回口径见脚本自身。\n"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("回指", self.error_texts())
+
+    def test_install_fetch_section_pointer_without_part_reports(self):
+        # 反例（本轮新增）：回指只点名文件、不给**部位**（"头部注释"）→ 读者仍不知道该读哪一段
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
+            "* 取回口径的工序侧真源是 `script/fetch-specs.py` 的**头部注释**：",
+            "* 取回口径的工序侧真源是 `script/fetch-specs.py`："))
+        cm.check_spec_fetch_guard()
+        self.assertIn("头部注释", self.error_texts())
+
+    def test_install_fetch_section_pointer_with_wrong_part_reports(self):
+        # 反例（本轮实测复现的**防线空转**）：回指给的**部位是错的**（"头部注释"改成
+        # "段尾注释"）——按**整节**核时，节里别处（如落点那条）出现的 `script/fetch-specs.py`
+        # 会把缺失兜住、防线全绿；而读者按"段尾注释"去找仍找不到细则。
+        # 故回指须按**同一行**核（与真源侧要点同一口径）。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
+            "`script/fetch-specs.py` 的**头部注释**", "`script/fetch-specs.py` 的**段尾注释**"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("头部注释", self.error_texts())
+
+    def test_install_fetch_section_pointer_backed_by_neighbor_reports(self):
+        # 反例（本轮实测复现的**相邻兜底**）：把"回指真源"那一条**整行删掉**，而本节里另一条
+        # （“取回口径与判据分家”）顺带也点了 `script/fetch-specs.py` 与"头部注释"——按
+        # “任一行含这两个字样”核时被该条兜住、六道相关防线全绿（本仓库实测）。
+        # 故回指须按**声明真源那一行**核（用该行独有的"工序侧真源"措辞认出来）。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
+            "* 取回口径的工序侧真源是 `script/fetch-specs.py` 的**头部注释**：怎么取、怎么更新、"
+            "脚本开关与解释器兜底次序都写在那里，本节不复述、也不在别处再抄一份。\n",
+            "本节不复述取法与更新口径。\n"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("工序侧真源", self.error_texts())
+
+    def test_install_fetch_section_landing_not_on_same_line_reports(self):
+        # 反例（同一空转的另一半）：落点那一处事实被拆开——用户侧词在一句、落点名在另一句，
+        # 按整节核时两样都在节里、防线全绿。判据要求"同现"须落在**同一行**上，
+        # 否则读者仍读不到"副本具体落在谁的家目录下"这处定位。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY.replace(
+            "副本取到**用户家目录**下的 `.cache/agent-specs` 这一处"
+            "（本机所有项目共用一份）；",
+            "副本取到**用户家目录**下的一处（本机所有项目共用一份）。\n"
+            "目录名是 `.cache/agent-specs`；"))
+        cm.check_spec_fetch_guard()
+        self.assertIn("缺失落点", self.error_texts())
 
     def test_shared_cache_guard_passes(self):
         # 正例：落点只有用户家目录下的一处（由两个常量拼出）+ 按来源分槽 + 不删除落点文件 + 四处文档同步
@@ -13057,27 +13633,28 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
     def test_landing_copied_again_without_reference_reports(self):
-        # 反例（用户本轮点名的形态：「依旧有很多相同的描述在不同的地方」）：公共入口**又把落点
+        # 反例（用户本轮点名的形态：「依旧有很多相同的描述在不同的地方」）：另一处文档**又把落点
         # 抄了一遍**、且没指向真源 → 同一描述出现两处，两处会各自漂移，读者也不知道以哪处为准；
-        # 收敛形态是"一处完整定义 + 其余一行引用"
+        # 收敛形态是"一处完整定义（真源＝公共入口）+ 其余一行引用"。
+        # 落点真源现已并入公共入口，故"第二处"用 README 举例（可写自己的落点、也可给一行引用）。
         self._write_valid()
-        self.write("AGENTS_COMMON.adoc",
-                   "取文件见 fetch-specs；副本只取到用户家目录下的 .cache/agent-specs 这一处"
+        self.write("README.adoc",
+                   "工具 fetch-specs：副本只取到用户家目录下的 .cache/agent-specs 这一处"
                    "（本机所有项目共用一份）；默认以远程为准、以 --keep 保留本地那份。\n")
         cm.check_shared_cache_guard()
-        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        self.assertIn("README.adoc", self.error_texts())
         self.assertIn("唯一真源", self.error_texts())
 
     def test_landing_owner_must_write_it_out_reports(self):
         # 反例：**真源自己**把落点改成"见别处"→ 谁都不写落点，等于没人写（收敛不能把唯一落点也省掉）
         self._write_valid()
-        self.write("INSTALL.adoc",
+        self.write("AGENTS_COMMON.adoc",
                    self.INSTALL_BODY.replace(".cache/agent-specs", "the-cache-dir")
                    .replace("~/.the-cache-dir", "the-cache-dir")
                    .replace("~/.cache/agent-specs", "the-cache-dir")
                    + "\n见 fetch-specs：副本落点以脚本头部注释为准（本节不再自己写一遍）。\n")
         cm.check_shared_cache_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_vague_cache_wording_still_reports(self):
         # 反例：把落点换成『用户级缓存』这类笼统说法又不给引用 → 读者仍要自己猜路径
@@ -13087,11 +13664,11 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("README.adoc", self.error_texts())
 
     def test_install_without_shared_cache_note_reports(self):
-        # 反例：安装文档不提落点 → 引用方不知道副本落在哪、以为会往项目里写一份
+        # 反例：入口不提落点 → 引用方不知道副本落在哪、以为会往项目里写一份
         self._write_valid()
-        self.write("INSTALL.adoc", "见 fetch-specs 与它的落点。\n")
+        self.write("AGENTS_COMMON.adoc", "见 fetch-specs 与它的落点。\n")
         cm.check_shared_cache_guard()
-        self.assertIn("INSTALL.adoc", self.error_texts())
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_common_entry_without_shared_cache_note_reports(self):
         # 反例：公共入口不提落点 → 按入口加载的引用方不知道副本落在哪

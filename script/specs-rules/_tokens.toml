@@ -1119,7 +1119,6 @@ _LIB_ROOT_FILES = [
     "README.adoc",
     "PROMPTS.adoc",
     "CHANGELOG.adoc",
-    "INSTALL.adoc",
     "check_specs.py",
     "check_effective.py",
     "clean_tmp.py",

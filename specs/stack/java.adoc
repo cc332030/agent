@@ -21,6 +21,12 @@
 * **局部变量强制使用 `val`/`var`，且优先 `val`、可变才用 `var`（L1）**：局部变量声明**必须且一律**使用 `val`/`var`（类型由初始化表达式推断），**不得为显式写出类型而放弃**；其中**先取 `val`**（不可变），仅当该变量**确实需要重新赋值**时才用 `var`——两者都优先于显式类型，**不得为「写清类型」而放弃**；`val`/`var` 仅适用于局部变量，字段不得使用。**`var` 是例外档、不是并列选项**：能 `val` 就 `val`，用 `var` 时该变量在后续语句里必有二次赋值。**判定标准（任一命中即违规）**：① 局部变量写了显式类型，而该类型可由初始化表达式表示且不属下条例外；② **用 `var` 声明的局部变量此后从未重新赋值**（本条所指的「可变」落不了地）；③ 同一方法里等价的局部变量一半 `val` 一半显式类型。**例外（L2）**：类型推断结果不清晰（复杂泛型、联合类型、匿名类、以 `null` 字面量初始化）等确需显式类型提示的场景可写显式类型，此类例外须克制使用。**未引入 lombok 时**：JDK 自身只有 `var`（JDK 10 起，只覆盖「可变」这一半）、**没有 `val`**，此时按 `var` 执行、不为 `val` 另引依赖。**依据（标准名/编号）**：ISO/IEC 25010（可维护性：类型声明只有一处来源）、ISO/IEC/IEEE 29148（判定须可验证）、Project Lombok 官方文档、Google Java Style Guide（局部变量类型推断的取舍，以及「可读性优先于省字」的边界）。**「优先 `val`、可变才 `var`」是本集合对 lombok 的判据化取值**（标准只说明 `var` 的语义与推断规则）。
 * **`lombok.config` 实时读取**：`lombok.config` 内容可能调整，规范不固化具体配置项；使用 lombok 或涉及 lombok 默认行为时，实时读取项目根目录 `lombok.config`，按当前配置执行。
 * **对象创建统一用 builder**：禁止 `new Xxx(参数...)` 创建对象，创建一律使用 builder（优先 `@SuperBuilder` 而非 `@Builder`，支持继承场景）；实体类用 `@Data`、`@NoArgsConstructor`、`@AllArgsConstructor`；`@AllArgsConstructor` 等构造注解仅用于框架注入或序列化等特殊场景，业务创建对象不得依赖其生成的构造器。
+* **数据对象模板（新建时整段照抄；存量主动声明才补）**：**新建**一个 Java 数据对象（POJO/DTO/VO/Entity、内部调用接口的请求响应类）时，注解清单整段照抄 `specs/stack/java-object.adoc` 的模板——`@Data`、`@Accessors(chain = true)`、`@SuperBuilder`、`@NoArgsConstructor`、`@AllArgsConstructor`。**模板文件不是规范文件**：那份文件是**要么不读、要么整份读完**的可复制清单，故不把整段并进本文件（内容多、放了又不一定读）；本文件是其判据本体。三处判据如下：
+** **新增对象时加 `@Accessors(chain = true)`；给既有对象补注解时不加（L1）**：Spring 的 `BeanUtils` 会**忽略带泛型参数的 set 方法**——链式 setter 返回 `this`（返回类型带类自身的泛型）即被跳过，于是**拷贝时静默丢数据、各个地方都可能出问题**（不是只在某一处）。**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了 `@Accessors(chain = true)`；② 新建对象的注解清单缺 `@Accessors(chain = true)`；③ 以"链式看起来多余""存量反正没人拷贝"为由自我豁免。
+** **`@AllArgsConstructor` 无参数时不加（L1）**：类里**没有任何实例字段**时，全参构造与无参构造是同一个构造——多标该注解生成不出第二个构造，只会让读者以为"这里有个全参构造"。**判定标准**：无字段的类上出现 `@AllArgsConstructor` 即违规。
+** **POJO 里的集合字段默认加 `@Singular`（L1）**：除非有问题，否则集合字段一律标 lombok 的 `@Singular`——让 builder 有**单个元素**的入口，而不是每次先造集合再整集合塞进去。**判定标准（任一命中即违规）**：① 数据对象的集合字段在 builder 侧只能整集合设置、没有单个元素入口；② 以"这个集合可能为空/可能为 null"为由不加（该顾虑不影响"单个元素怎么加"）；③ 以"集合字段不多"为由自我豁免。
+** **两档生效面，都不发动全库改造**：**新增对象**整段适用；**既有对象不主动改**，只有**主动声明**（代码注释 / PR 描述 / Issue 要求）要求补时才补（补时按上面第一条**不加** `@Accessors`）；**存量不告警、不要求整改**，按 `specs/core/execution.adoc`「规范变更的存量处理」随动迁移。
+** 依据（标准名/编号）：Spring Framework 官方文档（`BeanUtils` 的批量属性拷贝按 setter 发现属性）、Project Lombok 官方文档（`@Accessors` 的 `chain`/`fluent`、`@Builder`/`@SuperBuilder`、`@Singular`、三个构造注解）、ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148（判定须可验证）。**三处取舍（补注解不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`）是本集合自己的判据化取舍**——外部材料只给机制，**未**规定这三条（本集合取舍的逐条论证见依据图书馆『规范准入与自身取舍』主题）。
 * **无参 / 必参 / 全参构造优先用 lombok、不手写（L1）**：构造方法一律由 lombok 注解生成，**不得手写**任何构造方法体或参数列表——
 ** **无参构造**：用 `@NoArgsConstructor`（需要时配 `@NoArgsConstructor(access = AccessLevel.PRIVATE)` 一类访问级别）；
 ** **必参构造**（只含必填/不变字段）：用 `@RequiredArgsConstructor`（字段以 `private final` 修饰，或在 `lombok.config` 里另行声明必填判据）；
@@ -66,7 +72,7 @@
 
 == 持久化访问（MyBatis-Plus / JPA 等）
 
-持久化访问按 `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」执行——**统一入口** + **优先用类型安全/声明式查询构造 API** + **替代优先**三条 L1 的抽象形态在通用层（该层不写具体框架类名）；**框架专名与禁止清单以本文件为唯一落点**。
+持久化访问按 `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」执行——**三条 L1 的抽象形态（哪三条、各自判据）只在该层写一份**，本文件不复述其取值（通用层不写具体框架类名）；**框架专名与禁止清单以本文件为唯一落点**。
 
 * **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `IService` 的成员方法——`lambdaQuery()`、`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`（Kotlin 用 `kt*`），**不手工 `new` 任何 Wrapper**。**禁止** `new QueryWrapper<>()`、`new UpdateWrapper<>()`、**及其子类**（含 `new LambdaQueryWrapper<>()`、`new LambdaQueryChainWrapper<>()`、`new UpdateChainWrapper<>()`、匿名子类与自定义 Wrapper 子类）；`new LambdaQueryWrapper<>()` 虽同样类型安全，仍属本条禁止面——**强制走 `IService` 成员方法这一统一入口**，保证同一项目只有一种写法。识别特征：Service 实现类有 `extends ServiceImpl<XxxMapper, Xxx>` 却没走 `lambdaQuery()`/`lambdaUpdate()` 的调用点、调用点出现 Wrapper 的 `new`。
 * **`IService` 之外用 `Wrappers` 静态方法或映射文件（L1）**：需要 `Mapper` 专有方法或分页等 `IService` 不覆盖的能力时，用 **`Wrappers` 的 lambda 静态方法**（`Wrappers.lambdaQuery()`/`Wrappers.lambdaUpdate()`）或**在 Mapper 接口上用注解/映射文件**声明该查询，**不得**为此 `new` 构造器；同一操作在项目内已有先例时跟随先例。

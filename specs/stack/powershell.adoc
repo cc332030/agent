@@ -1,6 +1,6 @@
 = PowerShell 脚本规范（技术栈层）
 
-适用于 PowerShell（`.ps1`）脚本。跨所有脚本语言的通用格式规则见 `specs/general/script.adoc`；本文件只收录本栈专属规则。换行符（行尾）的权威口径见 `specs/general/encoding.adoc`「换行符」，本文件只重申本栈的取值。
+适用于 PowerShell（`.ps1`）脚本。通用格式规则见 `specs/general/script.adoc`；行尾口径见 `specs/general/encoding.adoc`「换行符」。本文件只收录 PowerShell 专属规则
 
 == 注释与文档头
 
@@ -10,14 +10,14 @@
 == 启动脚本（同名 .bat）
 
 * **`.ps1` 脚本须配一个同名 `.bat` 启动脚本**（如 `foo.ps1` 配 `foo.bat`）：`.ps1` 无法直接双击运行，且受 PowerShell 执行策略限制、命令行运行（需显式 `powershell -File ...`）也很麻烦，故须提供一个 `.bat` 文件作为启动入口，便于直接双击或命令行运行。
-* **`.bat` 启动脚本的落点与写法属批处理栈（唯一落点，本文件不复制）**：编码（纯 ASCII、不写 BOM）、行尾（CRLF）、**块语句/引用/续行的坑**、"启动脚本为何是 Windows 侧入口"、以及 `-ExecutionPolicy Bypass` 的完整条文都在 `specs/stack/batch.adoc`（含「需要 PowerShell 能力时按本文件写法由 `.bat` 承接」一条，那里同时给出三条齐备的参考形态）。本处**只留与本栈绑定的一句**：`.ps1` 的启动由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，**不要求用户手动修改系统执行策略**。
+* **`.bat` 启动脚本的落点与写法属批处理栈（唯一落点，本文件不复制）**：编码（纯 ASCII、不写 BOM）、行尾（CRLF）、**块语句/引用/续行的坑**、"启动脚本为何是 Windows 侧入口"、以及 `-ExecutionPolicy Bypass` 的完整条文都在 `specs/stack/batch.adoc`（含"需要 PowerShell 能力时怎么由 `.bat` 承接"那一条，那里同时给出三条齐备的参考形态）。本处**只留与本栈绑定的一句**：`.ps1` 的启动由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，**不要求用户手动修改系统执行策略**。
 * **同名但格式要求不同**：`.bat` 纯 ASCII + CRLF、`.ps1` UTF-8 + CRLF——**按字节读行尾的 `cmd.exe` 遇 BOM 或 LF 会直接解析失败**，故两者**分别**按 `specs/stack/batch.adoc`「编码与行尾」与本文件「编码与行尾」保存。
 
 == 作为跨环境入口（Windows 与 Linux 并存时）
 
-* **`.ps1` 与同名 `.bat` 只做薄壳（L1）**：脚本要在多个操作系统上跑时，逻辑**只写一份**放跨平台逻辑代码、`.bat` 只负责启动（见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）——不得在 `.ps1` 里另写一遍 Linux 侧逻辑，也不得把参数解析、路径拼装放进入口；参数用 `%*` 原样透传、退出码须原样返回给调用方。**`.ps1` 的头部注释只写入口自己**：判据属通用层、唯一落点＝`specs/general/script.adoc`「脚本头部注释（文档头）」下的「入口的注释边界（L1）」，本文件不重复。
-* **入口的位置与命名**：本栈取值＝逻辑 `foo.py` → 入口 `foo.bat`（需要 PowerShell 能力时再加 `foo.ps1` + 同名 `.bat`），**不另建 `windows/`、`bin/` 目录**；判据属通用层（见 `specs/general/script.adoc`「入口层须与逻辑代码同处一目录、同名不同扩展名」）。本栈另有一条：调用方**只输 `foo.bat`（或双击）就能跑**——不得要求调用方加 `powershell -File`/`-ExecutionPolicy Bypass` 一类前后命令（该参数固定写在 `.bat` 内部）。
-* **入口语言选择（入口的语言取值）**：Windows 入口**取 `.bat`/`.cmd`**（需要 PowerShell 时按「启动脚本（同名 .bat）」用 `.ps1` + 同名 `.bat`）——判据与反例面属通用层（见 `specs/general/script.adoc`「入口语言取舍」）与批处理栈（见 `specs/stack/batch.adoc`），本文件不重复。
+* **`.ps1` 与同名 `.bat` 只做薄壳（L1）**：脚本要在多个操作系统上跑时，`.bat` 只负责启动、逻辑只写一份（判据属通用层，见 `specs/general/script.adoc`「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」）——不得在 `.ps1` 里另写一遍 Linux 侧逻辑；参数用 `%*` 原样透传、退出码原样返回给调用方。**`.ps1` 的头部注释只写入口自己**：本栈取值＝文档头按本文件「注释与文档头」的 comment-based help 承载；边界（不复述逻辑层的参数语义与默认值）见 `specs/general/script.adoc`「脚本头部注释（文档头）」的「入口的注释边界」。
+* **入口的位置与命名**：取值＝逻辑 `foo.py` → `foo.bat`（需要 PowerShell 能力时再加 `foo.ps1` + 同名 `.bat`），命名与位置的判据一律按 `specs/general/script.adoc`「入口层须与逻辑代码同处一目录、同名不同扩展名」。本栈另有一条：调用方**只输 `foo.bat`（或双击）就能跑**——不得要求调用方加 `powershell -File`/`-ExecutionPolicy Bypass` 一类前后命令（该参数固定写在 `.bat` 内部）。
+* **入口语言选择（入口的语言取值）**：取值同上（批处理栈那一条），本栈只补：**需要 PowerShell 能力时**按本文件「启动脚本（同名 .bat）」用 `.ps1` + 同名 `.bat` 承接，不因此要求引用方先改执行策略。
 
 == 编码与行尾
 

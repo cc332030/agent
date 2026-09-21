@@ -1,0 +1,209 @@
+# 『逐字重复扫描（同一件事不得两处逐字重复）』规则数据。
+#
+# 判据本体在 `specs/general/review.adoc`「精炼性（同一描述只写一处）」——真源一处完整定义、
+# 其余位置只留「这是什么 + 在哪」的一行引用。本条给"重复面是必查项"一个**机械抓手**
+# （此前只有语义复核）：把文档切成语义实体，先按 n-gram 粗筛出候选对，再做全对
+# 最长公共子串检测。
+#
+# **本条是下界、不是上界**：阈值以下、或换了说法的重复核不出来——那属语义复核的事
+# （不得把"机械全绿"读成"没有重复"）。
+#
+# 阈值与例外都是**故意收着取**的：误报会把真问题淹掉、也会逼出"为了过检查而删内容"的
+# 反用（与 `review.adoc`「精炼性」的边界相抵）。故只报**长度极显著**的重合，
+# 短重合与"引用/重申"形态一律放过。
+[[guards.check_duplicate_scan_guard]]
+kind = "duplicate_scan"
+# 参与检测的落点：**共用一条链上的公共内容**（入口 + specs + 提示词 + 提示词公共片段），
+# 加上**维护方自查层**与**依据图书馆**——后两者不在默认引用面内，但它们的判据是
+# "规则本体在别处、这里只补依据/只补维护方口径"，与规范正文逐字重合同样是第二真源。
+sources = [
+    "AGENTS_COMMON.adoc",
+    "specs/",
+    "prompts/",
+    "specs-project-maintainer/",
+    "library/",
+]
+# 阈值 40（本轮由 24 提到 40 后又**主动降到 40 并实测偏误**）：低于它的重合多为主题名、
+# 文件名/节名、标准名、固定搭配这类**本来就该一样**的词，属巧合。
+# **为什么取 40，以及 40 上下各有什么**（实测同一批语料）：
+#   * 40 以上、当前语料**已无超标重合**（本轮把查出的每一处都收敛掉了：判据被抄回、
+#     题头句成串复用、同一文件内两节复述同一判据、栈文件互抄取值……）；
+#   * 40 以下到 24 之间的命中**基本是引文/依据行/交叉互指**——标准名与编号、书名与题名、
+#     `git merge-base` 一类命令字面量、`link:` 引用行、本仓库自己的判例小节名。这些**本就
+#     该逐字一致**（引文可逐字核对、标准名逐字一致才是可核对的前提），压下去只会逼出
+#     "为了过检查而删内容"，与 `review.adoc`「精炼性」的边界相抵。
+# 故阈值不动（40），把"哪些是正当重合"写进 `ignore` / `ignore_units` —— 这是本条反复
+# 踩到的偏误来源：**报红只说明"有两处长重合"，是不是第二真源仍要逐条判**。
+min_overlap = 40
+# 历史留痕不参与：`CHANGELOG.adoc` 的角色就是**逐字保留历史产物**，要求它与现行规范
+# "不重复"与它的职责直接冲突（依据见 `specs/general/changelog.adoc`）。
+exclude = [
+    "CHANGELOG.adoc",
+]
+# `ignore`：含该子串的实体**不参与核对**（不是"给它们开后门"，而是这些实体本就该逐字一致）：
+#   * 「依据（标准名/编号）」——标准名逐字一致才是可核对的前提（`source.adoc`「外部引用」）；
+#   * 以 `==`/`===` 开头的行——**节名**一致是"同一主题在两层各有一节"的正常形态。
+#   * `include::` 行——**片段引用**是同一份内容被两处引入（`PROMPTS.adoc` 的"一处维护、
+#     两处生效"），与"同一描述写两遍"正相反，逐字一致是本来的要求。
+ignore = [
+    "依据（标准名/编号）",
+    "==",
+    "include::",
+    "https://",
+    # `*-.*（IEEE Std …）`一类**标准名的括注**：标准名逐字一致才是可核对的前提；
+    # 本仓库实证：同一批标准在表格的"依据"列与馆藏主题里各列一次，属正当重合。
+    "IEEE Std",
+    # 表格行（`| …`）：三视角表、清单表的**某一列**放的是同一批标准编号或文件路径，
+    # 相邻两行在该列上必然逐字相同。表格是"同一维度的多个取值并列"，不是"同一件事写两处"。
+    "| ",
+]
+# `ignore_units`：**例外清单**——每条理由都写在这里，不得为了让检查变绿而加：
+#   * 图书馆的**逐字引文**实体：其定义就是"抄一份可逐字核对的原文"，与"同一条判据在
+#     别处复述"是两件事（`library/README.adoc`「放什么、不放什么」）；
+#   * 图书馆的**决策记载**实体：用户原话口径与既有规则名属**带出处的记载**，
+#     按 `library/usage.adoc` 的触发特征就是要逐条落档。
+ignore_units = [
+    "逐字摘",
+    "逐字（",
+    "官方文本已取回",
+    "**本项目实证**",
+    "用户原文口径",
+    "规则本体见",
+    # `library/` 是**依据层**、`specs-project-maintainer/` 是**维护方自查层**——两者的定位
+    # 就是"规则本体在别处、这里只补依据/只补维护方口径"。它们的实体里出现与正文相同的
+    # 句子，多是"引文/判例/取舍说明"而非第二真源；判它是不是真重复**须逐条读上下文**，
+    # 机械层不替这个判断。本条的具体判据见 `library/README.adoc`「放什么、不放什么」。
+    "依据要点",
+    "须注意的语义差异",
+    "**依据名",
+]
+# `skip_substrings`：实体里出现这些串时，**把该串之后的核对对象用"引用名"替代**——
+# 用于"路径/文件引用"这类本就要逐字一致的字面量：`specs/general/script.adoc` 在 A 处与
+# B 处都写全，是"被引用的落点一致"，不是第二真源。
+message = "逐字重复：{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字——`{frag}`；同一件事只在一处完整定义、其余位置只留「这是什么 + 在哪」的一行引用（判据见 specs/general/review.adoc「精炼性（同一描述只写一处）」）；收敛时删的只能是重复表述本身、被删处须留下可达的引用，无法确定是否重复的一律保留"
+
+
+# 『自称回指的行不得同时复述被指文件的取值』（`pointer_no_verbatim`）：`duplicate_scan` 的
+# 阈值 40 是**下界**，"回指句 + 顺手把取值抄一遍"的公共子串常只有二十几字、它核不出来。
+# 这类行的自相矛盾**可逐字判定**：同一行里既说"见别处"、又把别处的话写了一遍，至少是多写的。
+# 判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」。
+[[guards.check_pointer_no_verbatim_guard]]
+kind = "pointer_no_verbatim"
+# 参与核对的落点＝**维护范围内的全部 .adoc**（与 `duplicate_scan` 的覆盖面同源：
+# 入口 + `specs/` + 提示词 + 维护方自查层 + 图书馆；历史留痕 `CHANGELOG.adoc` 除外）。
+#
+# **为什么把落点写全、而不是只列"当前已知会自称回指的那些文件"**：判据是"自称回指的行
+# 不得复述取值"，**任何一个文件都可能下一个改动里写出这样一行**。按已知清单列的代价是
+# 那一层永远处于盲区——加一个文件进清单要改两处（脚本常量 + 本文件），而漏掉时防线**静默**
+# 少扫一层：本轮实证，原清单只列 21 个文件，`specs/general/coding.adoc`、
+# `specs/general/testing.adoc`、`prompts/*.adoc` 等**从来就没被扫过**。
+# 全量扫描的代价只是一次正则扫描（毫秒级），故取全量。
+files = [
+    "AGENTS.adoc",
+    "AGENTS_COMMON.adoc",
+    "PROMPTS.adoc",
+    "PUBLIC.adoc",
+    "README.adoc",
+    "library/README.adoc",
+    "library/adoption.adoc",
+    "library/mirrors.adoc",
+    "library/performance.adoc",
+    "library/quality.adoc",
+    "library/sources.adoc",
+    "library/throughput.adoc",
+    "library/usage.adoc",
+    "prompts/refactor.adoc",
+    "prompts/review.adoc",
+    "specs-project-maintainer/context.adoc",
+    "specs-project-maintainer/guards.adoc",
+    "specs-project-maintainer/priority.adoc",
+    "specs-project-maintainer/spec-lifecycle.adoc",
+    "specs-project-maintainer/verify.adoc",
+    "specs/core/execution.adoc",
+    "specs/general/changelog.adoc",
+    "specs/general/ci-cd.adoc",
+    "specs/general/coding.adoc",
+    "specs/general/collab.adoc",
+    "specs/general/context.adoc",
+    "specs/general/dependency.adoc",
+    "specs/general/doc-design.adoc",
+    "specs/general/doc-lifecycle.adoc",
+    "specs/general/doc-module.adoc",
+    "specs/general/doc-tool.adoc",
+    "specs/general/doc.adoc",
+    "specs/general/encoding.adoc",
+    "specs/general/entry-doc.adoc",
+    "specs/general/git.adoc",
+    "specs/general/planning.adoc",
+    "specs/general/review.adoc",
+    "specs/general/scope.adoc",
+    "specs/general/script.adoc",
+    "specs/general/security.adoc",
+    "specs/general/self-check.adoc",
+    "specs/general/source.adoc",
+    "specs/general/sql.adoc",
+    "specs/general/terminology.adoc",
+    "specs/general/testing.adoc",
+    "specs/general/verify.adoc",
+    "specs/general/version-control.adoc",
+    "specs/platform/cnb.adoc",
+    "specs/stack/bash.adoc",
+    "specs/stack/batch.adoc",
+    "specs/stack/java-object.adoc",
+    "specs/stack/java-syntax.adoc",
+    "specs/stack/java-testing.adoc",
+    "specs/stack/java.adoc",
+    "specs/stack/maven.adoc",
+    "specs/stack/powershell.adoc",
+    "specs/stack/python.adoc",
+    "specs/stack/spring.adoc",
+]
+# 阈值取 20：本轮实证的漏网形态是 21 字（`library/mirrors.adoc` 里"每级先实测可用、不跳级、
+# 不覆盖既有配置"），低于 20 的多为"文件基名/节名"这类本就该出现的词。
+min_overlap = 20
+# 依据行与标准名括注本就该逐字一致（`source.adoc`「外部引用」），排除在外——
+# 它们与 `duplicate_scan` 的 `ignore` 同口径，理由见上面的 `duplicate_scan` 规则数据。
+ignore = [
+    "依据（标准名/编号）",
+    "IEEE Std",
+    # 材料/标准名本身（`The Twelve-Factor App`、`ISO/IEC/IEEE 25010` 一类）**本就该逐字一致**：
+    # 名字写错一位即无法检索、也无从核对（`specs/general/source.adoc`「外部引用」）。本轮
+    # 实测的假命中即 `The Twelve-Factor App（依赖显式声明）`（去空白后与 `adoption.adoc`
+    # 的标准名逐字相同）——这是"引用名"、不是"复述取值"。
+    "The Twelve-Factor App",
+    # **条目名/两把尺子的名称**同理：回指时得说得出"我指的是哪一条"，故 `同一描述有几处`
+    # （`review.adoc`「精炼性」与 `doc.adoc`「信息密度」互指时各自引用的名称）、
+    # `同表同类操作合并为一条`（`sql.adoc` 的条目名，`java.adoc` 回指时引用）这类**名称**
+    # 本就该逐字一致——它们不是"取值"，换个说法就不成其为回指。
+    # 判据同 `specs/general/terminology.adoc`：名称是检索键、须逐字一致才检索得到。
+    "同一描述有几处",
+    "同表同类操作合并为一条",
+    # **节名/题名**同理：回指时得指名到节（`改完规范必做的五件事（机械手段必跑，干净子 agent
+    # 复核不可漏）`——`AGENTS.adoc` 与维护方 `verify.adoc` 都按题名回指 `specs/general/verify.adoc`
+    # 的那一节；`跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）`——三个栈文件都按题名回指
+    # `specs/general/script.adoc` 的那一节）。节名逐字一致才定位得到，换个说法即找不到，
+    # 与 `specs/general/doc.adoc`「引用路径」的"引用须指向真实存在的节名"同源。
+    "改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）",
+    "跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）",
+    # **术语/固定译法**：`progressive disclosure` 是业界通行术语（`library/throughput.adoc`
+    # 与维护方 `priority.adoc` 都引它），译名不统一的代价高于逐字一致——与标准名同口径。
+    "progressive disclosure",
+    # **清单式目录**（`：编译/运行验证、判准维度、验证的适用边界、…`）——维护方 `verify.adoc`
+    # 用本节名清单告诉读者"哪些内容已随公共内容归位"，它本就是**节名的枚举**、不是判据正文；
+    # 节名逐字一致才核得到（与上面那组题名同口径）。
+    "编译/运行验证、判准维度、验证的适用边界",
+    # **主题名**（`决策记载（ADR/MADR/AWS Prescriptive Guidance）`）：图书馆的**主题登记名**，
+    # 用于"引用方按依据名反查"（`library/README.adoc`「依据的定位协议」）——名字逐字一致才定位得到。
+    "决策记载（ADR / MADR / AWS Prescriptive Guidance）",
+    # **跨两栈同源的单一取值**（"不要求用户手动修改系统执行策略"）：批处理栈与 PowerShell 栈
+    # **各自都要给出这一条**（两边都是"本栈的取值"，且**两边都必须让本栈读者直接读到**，
+    # 不许把一方推给另一方）。它不是"同一件事写两遍"——两栈的读者是两批人，
+    # 而它换任何说法都会改变语义（"不要求改策略"与"避免改策略"不是一回事）。
+    "不要求用户手动修改系统执行策略",
+    # **回指时点上被指文件的节名**（`取规范到本地副本` / `ISO/IEC Directives Part 2`）：
+    # 前者是 `AGENTS_COMMON.adoc` 的节名、后者是标准名，两者逐字一致才定位/检索得到
+    # （与上面那组"节名/标准名"同口径）。
+    "取规范到本地副本",
+    "ISO/IEC Directives Part 2",
+]
+message = "自称回指却复述了取值：{file}:{line} 与本行引用的 `{ref}` 逐字重合 {overlap} 字——`{frag}`；同一行里既写“见别处”、又把别处的话抄一遍，至少是多写的：取值只留一处（判据见 specs/general/review.adoc「精炼性（同一描述只写一处）」），本行只应留「这是什么 + 在哪」"

@@ -13,7 +13,7 @@
      集合），防"只建文件不登记"导致规则实际失效。
   6. 私有约定误导入：禁止把项目私有强约束（C/IC 前缀、@Bean c 前缀等）当作通用规范。
   7. 历史来源声明：禁止指向旧文件/旧命名/旧位置的历史来源注记（会让引用悬空）。
-  8. INSTALL 模板：INSTALL.adoc 的入口模板代码块须逐字保留（含换行空行），且入口文件名规则
+  8. 入口模板：公共入口 `AGENTS_COMMON.adoc`「安装与更新」的入口模板代码块须逐字保留（含换行空行），且入口文件名规则
      须兼容 `AGENTS.md`、默认 `AGENTS.adoc`（含已存在 `AGENTS.md` 时就地融合、不重命名）。
   9. 文档注水兜底：只拦机械可判定、必然成立的形态（纯占位段、完全逐字重复段）；不设字符数阈值以免误伤。
 
@@ -94,7 +94,7 @@
      ③`AGENTS.adoc`/`README.adoc` 点名的 `check_*` 与脚本名须在 `script/` 真实存在
      （防"声称有防线而防线已改名/删除"）；④子 agent 复核的**硬超时**与留证**三态台账**
      须仍在（防"卡死无人负责"与"查不出/没做无法分辨"退化成口号）。
- 19. 公开面文档自足：README.adoc（公开站点首页由其渲染）/ PROMPTS.adoc / INSTALL.adoc
+ 19. 公开面文档自足：README.adoc（公开站点首页由其渲染）/ PROMPTS.adoc / AGENTS_COMMON.adoc
      不得出现维护方自查层『specs-project-maintainer/』的路径——引用方按同样方式解析，
      指向该层即死链（该层不是公共入口的加载项：引用方按公共输入加载时取不到、其项目里
      也没有本仓库的文件）；要说明"本仓库另有一层只对维护方成立"
@@ -112,10 +112,10 @@
      文件**双向一致**；外部标准的**逐字引文锚点**仍在（依据不得被压成名称）；馆内引用
      **按仓库根可解析**（悬空引用等于依据链断在这里）。
  22. 公共内容覆盖面：`PUBLIC.adoc`（公共内容入口索引，维护方内容）须存在且被
-     `AGENTS.adoc` 登记；两个公开入口（`INSTALL.adoc`、`AGENTS_COMMON.adoc`）须都在
-     清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时读的
-     安装文档、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共内容、
-     并把"自足"要求误加到只对维护方成立的文件上。清单里的 `script/fetch-specs.py`
+     `AGENTS.adoc` 登记；公开入口（`AGENTS_COMMON.adoc`，安装口径也在其中）须在
+     清单里；清单以反引号点名的文件须真实存在——公共内容有多个公开入口（接入时与每次
+     会话读的规范入口、公共片段、随规范分发的工具），覆盖面无清单会让检查漏掉半个公共
+     内容、并把"自足"要求误加到只对维护方成立的文件上。清单里的 `script/fetch-specs.py`
      条目须写明**解释器兜底**（运行它不再以"机器上有 python3"为前提）。
  23. 规范抓取（安装取文件）防线：随规范分发的 `script/fetch-specs.py` 与其同名平台入口
      （`.sh`/`.bat`）须存在且形态正确（清单**从入口自身解析**而非手工清单、**默认以远程为准**
@@ -131,9 +131,9 @@
      也不得保留换落点的入口（改落点的参数与环境变量）；家目录取不到时须报错退出、
      不得静默换地方（用户口径：落点只有这一个，不用管什么系统什么环境）。
      仍须保留 `--keep`（"不动本地那份"的唯一路径）与"以远程为准"的默认语义。
-     INSTALL.adoc/AGENTS_COMMON.adoc/README.adoc/PUBLIC.adoc 须同步写明这同一个落点。
+     AGENTS_COMMON.adoc/README.adoc/PUBLIC.adoc 须同步写明这同一个落点。
      由 `check_shared_cache_guard` 钉住。
- 25. 入口占位三要点检查（INSTALL.adoc 模板那一行）：模板里"怎么取、取不到怎么办、怎么更新"这一行
+ 25. 入口占位三要点检查（公共入口「安装与更新」模板那一行）：模板里"怎么取、取不到怎么办、怎么更新"这一行
      ——"优先取到本地副本（避免网络原因无法访问）/ 取不到就直接读远程 / 需要最新规范时再运行一次
      即是更新"三个要点须齐备。缺失任一条读者都会读错：只有"优先取到本地副本"会让人以为取不到就
      用不了规范；缺"再运行一次即是更新"则用户重跑安装仍拿本地旧副本（而入口占位还会被判成与模板
@@ -148,14 +148,15 @@
      本人的电脑与会话里，**新开实例即丢失**——用户实测点名的形态：取规范脚本没进入口文档，
      下一实例不知道如何去下载规范）。**最小集这条要求本身的真源是 `specs/general/entry-doc.adoc`**
      （本防线核它须写明：唯一持久落点/新实例只看到项目里的文件/与临时产物的分界/项目自身规范优先，
-     以及"本文件是唯一真源"的分家声明）；**入口模板 `INSTALL.adoc` 只核路径链与副本两要点**
-     （三条路径齐——规范入口/安装文档/取规范脚本；落点须写到用户家目录下具体那一处，
+     以及"本文件是唯一真源"的分家声明）；**入口模板（公共入口「安装与更新」）只核路径链与副本两要点**
+     （路径齐——规范入口与取规范脚本两条；落点须写到用户家目录下具体那一处，
      按要点核"家目录/用户路径/`~` 之一 + `.cache/agent-specs` 同现"、不得换成笼统的
      『用户级缓存』；取回方式=`fetch-specs` + 「再运行一次即是更新」）。
      **模板的小节结构以用户手工编辑的形态为准、不作判据**：用户已点名不要
      `= Agent 规范入口` 标题与「规范与安装文档的位置 / 规范副本的位置 / 本项目持久化到入口文档的
      信息」三节；上一版按节标题核，结果是把用户删掉的三节又"补"了回去，等于拿机械判据盖掉
-     用户的手工编辑——故撤掉该判据（用户口径：删了就是不算数，不要再补）。
+     用户的手工编辑——故撤掉该判据（用户口径：删了就是不算数，不要再补）。**模板里
+     不再要求"安装文档路径"**：安装口径已并入公共入口，模板里那一行指向的就是本入口。
      由 `check_entry_doc_manifest`、`_check_install_entry_placeholder_lines` 与
      `check_install_codeblock` 钉住。
  27. 防线清单与删除记账：`CHECKS` 序列里的防线个数、反例用例个数、以及
@@ -482,7 +483,7 @@
      不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
      钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
 
- 58. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+ 58. 安装幂等更新防线：公共入口「安装与更新」的「本流程可重复执行、且以远程为准」须写明**用户手工编辑过的
      模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
      在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
      实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
@@ -572,7 +573,7 @@
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
 **不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（入口见 `PUBLIC.adoc`：
-`AGENTS_COMMON.adoc` + `specs/`、安装时读的 `INSTALL.adoc`、公共片段 `prompts/_common.txt`、
+`AGENTS_COMMON.adoc` + `specs/`（含安装与取回口径）、公共片段 `prompts/_common.txt`、
 随规范分发的 `script/clean_tmp.py`），其内部操作在本仓库的校验中不可见。
 
 用法：
@@ -600,7 +601,7 @@
      不生效"**——那正是用户说的"应该在 review 及重构时强制生效"。由 `check_refinement_guard`
      钉住（配"重复面被抹成口号""delivery 片段该条被删"两条反例）。
 
- 66. 安装幂等更新防线：`INSTALL.adoc`「重复执行（更新）时的行为」须写明**用户手工编辑过的
+ 66. 安装幂等更新防线：公共入口「安装与更新」的「本流程可重复执行、且以远程为准」须写明**用户手工编辑过的
      模板内容不自动改回**——入口文档是**用户项目的文件**，用户改过的行按原文保留，不一致时
      在汇报里指出、等用户定。缺它时"与最新模板不一致即就地更新为最新模板"会孤立生效，
      实施者据此把人的手写改回模板（本仓库实测：上一轮把用户删掉的标题与三节"补"了回去，
@@ -651,6 +652,25 @@
      SQL 与宿主语言代码共处一个文件；裸表名落到默认库不同的连接上**改错库**；
      判据齐备但**加载不到**（调度器未登记/引用未接/路径取不回）。
      由 `check_alter_merge_guard` 钉住；「某条迁移该不该合并、某次改的是不是用户主动写的 DML」属语义判断，交人/子 agent 复核。
+ 69. Java 数据对象模板防线（**用户提出，Issue #168**）：**模板文件 + 判据本体两处结构**——
+     模板文件 `specs/stack/java-object.adoc`（**模板、不是规范文件**：整段照抄的注解清单，
+     属"要么不读、要么整份读完"的产物，故**单列**而不并进 `specs/stack/java.adoc`）与判据本体
+     （`specs/stack/java.adoc`「编码」的「数据对象模板」条）**两处都不得被删、被合并或降级**；
+     三处取值齐备（新增时加、**补注解不加** `@Accessors(chain = true)` 并给机制"`BeanUtils`
+     忽略带泛型参数的 set 方法 ⇒ 静默丢数据"／无参不加 `@AllArgsConstructor`／集合默认加
+     `@Singular`）、两档生效面（新增适用、**既有对象主动声明才补**、存量不告警）、加载门
+     （调度器技术栈层登记 + 识别特征）与 README 目录说明一并在核。
+     失效形态：模板被并回规范（撑大正文又不一定被读）；判据本体被抽走只剩一份清单
+     （"补注解也加上吧"重新成立）；判据本体侧的"五项注解齐备"被删而只剩模板侧一处承载；
+     模板文件没登记而永不被加载；判据被**再抄一份**到模板侧（自称"不重复那些判据"
+     却在示范重复，两处各自漂移——此向由 `file_forbidden` 反向核：机制、判定标准、
+     取舍声明与两档生效面取值皆在禁列）。
+     **核对面本身也要防兜底**：判据本体侧按**条目自己的正文**核（不是整份文件——
+     同文件「对象创建统一用 builder」条含 `@SuperBuilder`、「构造方法不手写」条含
+     `@NoArgsConstructor`/`@AllArgsConstructor`），"五项齐备"另**只核清单句**（同一 bullet
+     末尾的依据行同样罗列这些名字）——两处都按整条/整节核时会全绿（实测过）。
+     由 `check_java_object_template_guard` 钉住；「某个类算不算数据对象、代码里到底标没标这些注解」
+     属语义判断与运行时事实，交人/子 agent 复核。
 
 """
 
@@ -702,6 +722,22 @@ class RulesContext:
 
     def bullet(self, section, prefix):
         return _bullet_text(section, prefix)
+
+    def log(self, msg):
+        log(msg)
+
+    def list_files(self, prefix, suffix=""):
+        """列出 `prefix` 下的文件（相对仓库根）。给 `duplicate_scan` 取"目录下全部文档"。"""
+        root = os.path.join(REPO_ROOT, *prefix.split("/"))
+        if not os.path.isdir(root):
+            return []
+        out = []
+        for cur, _dirs, names in os.walk(root):
+            for name in names:
+                if suffix and not name.endswith(suffix):
+                    continue
+                out.append(os.path.relpath(os.path.join(cur, name), REPO_ROOT).replace(os.sep, "/"))
+        return sorted(out)
 
     def prompt_files(self):
         return [os.path.relpath(f, REPO_ROOT).replace(os.sep, "/")
@@ -824,8 +860,12 @@ SPECS_DIR = os.path.join(REPO_ROOT, "specs")
 # **不在普通引用方项目加载**；与面向任意项目的公共内容（`specs/`）分目录隔离，
 # 避免被误当公共规则执行或在精简中被顺手删掉。
 PROJECT_SPECS_DIR = os.path.join(REPO_ROOT, "specs-project-maintainer")
-# 安装文档（非规范本体，但属本仓库维护范围，且其内代码块模板须逐字保留，一并纳入机械校验）
-INSTALL_FILE = os.path.join(REPO_ROOT, "INSTALL.adoc")
+# 安装与更新口径的落点：**已并入公共入口**（用户口径：把安装文档压进入口前部、删除源文件、
+# 以后直接引用入口）——入口内既有「安装与更新」的入口文档模板（代码块须逐字保留、并执行
+# 幂等更新），也有「取规范到本地副本」的取回口径，故模板与落点两类判据都落在同一个文件上。
+INSTALL_FILE = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
+# 落点在文档里以「仓库根相对路径」出现时用的写法（一处真源：报错信息与测试夹具都取它）
+INSTALL_REL = "AGENTS_COMMON.adoc"
 # 分类与准入规范（公共内容）：回答"一条规则属公共规范还是项目规范、属哪一层、
 # 该不该收、新增提案如何校验"——它是规范集合的准入口径，被删则后续新增失去判定
 # 依据，故与最高关注项、提示词方向一样加机械防线（见 check_spec_admission_guard）。
@@ -1203,8 +1243,8 @@ REGISTRY_LIBRARY_ANCHORS = (
     ("单次采样不构成结论", "不构成\"某源更快\"的结论"),
 )
 
-# 公共内容入口索引（维护方内容）：公共内容有多个公开入口（安装文档、通用规范入口 +
-# specs/、公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
+# 公共内容入口索引（维护方内容）：公共内容有多个公开入口（通用规范入口 + specs/、
+# 公共片段、随规范分发的工具），只认单一口径会让检查漏掉半个公共内容。
 # 本文件是那份清单，也是 check_public_content_coverage 的核对对象。
 PUBLIC_FILE = os.path.join(REPO_ROOT, "PUBLIC.adoc")
 
@@ -1282,7 +1322,7 @@ def collect_adoc_files():
 
     口径：**本仓库维护范围内的全部 .adoc** = `specs/` 下全部规范文件（含
     `specs-project-maintainer/`）+ 仓库根的全部 .adoc（通用规范入口
-    `AGENTS_COMMON.adoc`、项目自身规范 `AGENTS.adoc`、安装文档 `INSTALL.adoc`、
+    `AGENTS_COMMON.adoc`（含安装与取回口径）、项目自身规范 `AGENTS.adoc`、
     公共内容入口索引 `PUBLIC.adoc`、说明文档 `README.adoc`/`PROMPTS.adoc`、
     变更记录 `CHANGELOG.adoc`）+ 图书馆 `library/` 下的全部 .adoc + 任务提示词
     `prompts/` 下的全部 .adoc（会被复制给未知项目执行，见 `PUBLIC.adoc`）——即
@@ -1702,13 +1742,18 @@ def check_quality_guard():
     _section_anchor_check(QUALITY_SPEC, QUALITY_SECTION, QUALITY_ANCHORS)
     with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
         generic = fh.read()
+    # 核的是**触发特征**（何时命中「写代码」这件事），不是条目名本身——
+    # 原先要求调度器行里出现 `代码质量（新产出即高质）` 这一**节标题**（条目本体），
+    # 属把本体的名抄进调度器（`terminology.adoc`「数据字典」的反膨胀）；已改为按
+    # 「写/改代码 + 评审」这类可判读的触发特征定位该行。
     disp = next((ln for ln in generic.splitlines()
-                 if "specs/general/coding.adoc" in ln and QUALITY_SECTION in ln), "")
+                 if "specs/general/coding.adoc" in ln
+                 and "新代码" in ln and "代码评审" in ln), "")
     if not disp:
         err(f"加载调度器缺少「{QUALITY_SECTION}」的加载项与识别特征——"
             "缺则改代码时永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
     else:
-        for token in ("写任何新代码", "改任何既有代码", "代码评审"):
+        for token in ("新代码", "代码评审"):
             if token not in disp:
                 err(f"加载调度器代码质量条目缺少识别特征 `{token}`——"
                     "触发特征不全时，执行者会「没想到要按质量下限自查」", "AGENTS_COMMON.adoc")
@@ -1821,6 +1866,115 @@ def check_refinement_guard():
                 err(f"精炼性防线被破坏：{rel_common} 缺失 `{token}`——{why}", rel_common)
     phase_done()
 
+
+# ---- 『逐字重复扫描』防线（同一件事不得两处逐字重复）----
+# 用户要求（本轮）："全局检查下重复项，并处理"。
+#
+# 缺它时的失效：`specs/general/review.adoc`「精炼性」把"重复面"列为**必查项**，但此前
+# **只有语义复核、没有机械抓手**——"同一件事只在一处给真源"于是靠自觉（本仓库实证：
+# 同一段判据在 `verify.adoc` 与 `specs-project-maintainer/context.adoc` 各存一份；
+# 两个提示词的公共步骤逐字重复、却不在公共片段里；git 侧与平台侧的推送口径逐字重复）。
+#
+# 本条**只做可逐字判定的事**：把文档切成语义实体（bullet 一级项含其续行 / 单行），做
+# **全对**最长公共子串检测，再按**句子**扫一遍（拦"一处折叠、一处展开"与"成分被重组"）。
+# 它是**下界**——阈值以下、或换了说法的重复核不出来，那是语义复核的事；把下界当上界
+# （"机械全绿 ⇒ 没有重复"）与本条的初衷相反。
+def check_duplicate_scan_guard():
+    """『逐字重复扫描』防线：同一件事被两处逐字重复即报红（规则见 `specs-rules/duplicate.toml`）。
+
+    落点与阈值一律在规则数据里；本函数只负责开阶段、接线与收尾——规则数据外置后，
+    改判据（加一处落点、调阈值）不必动脚本（判据见 `specs/general/script.adoc`
+    「规则与脚本的隔离（规则数据外置）」）。
+    """
+    phase("逐字重复扫描（同一件事不得两处逐字重复）")
+    run_rule_guard("check_duplicate_scan_guard")
+    phase_done()
+
+
+# 『自称回指的行不得复述取值』的核对面（与 `script/specs-rules/duplicate.toml` 的
+# `check_pointer_no_verbatim_guard.files` **逐项同源**）：用例按这一常量建夹具，故
+# "新增一个落点却忘了同步用例"不会静默过去（用例会因"文件缺失"报红，逼出同步动作）。
+# **取维护范围内的全部 .adoc**（历史留痕 `CHANGELOG.adoc` 除外，与 `duplicate_scan`
+# 的覆盖面同源）：只列"当前已知会自称回指的文件"时，未列入的文件**永远不被扫描**——
+# 防线静默少扫一层，读者却以为已经覆盖（本轮实测：原清单 21 个文件，
+# `specs/general/coding.adoc` 这类从未被扫过）。
+POINTER_SCAN_FILES = (
+    "AGENTS.adoc",
+    "AGENTS_COMMON.adoc",
+    "PROMPTS.adoc",
+    "PUBLIC.adoc",
+    "README.adoc",
+    "library/README.adoc",
+    "library/adoption.adoc",
+    "library/mirrors.adoc",
+    "library/performance.adoc",
+    "library/quality.adoc",
+    "library/sources.adoc",
+    "library/throughput.adoc",
+    "library/usage.adoc",
+    "prompts/refactor.adoc",
+    "prompts/review.adoc",
+    "specs-project-maintainer/context.adoc",
+    "specs-project-maintainer/guards.adoc",
+    "specs-project-maintainer/priority.adoc",
+    "specs-project-maintainer/spec-lifecycle.adoc",
+    "specs-project-maintainer/verify.adoc",
+    "specs/core/execution.adoc",
+    "specs/general/changelog.adoc",
+    "specs/general/ci-cd.adoc",
+    "specs/general/coding.adoc",
+    "specs/general/collab.adoc",
+    "specs/general/context.adoc",
+    "specs/general/dependency.adoc",
+    "specs/general/doc-design.adoc",
+    "specs/general/doc-lifecycle.adoc",
+    "specs/general/doc-module.adoc",
+    "specs/general/doc-tool.adoc",
+    "specs/general/doc.adoc",
+    "specs/general/encoding.adoc",
+    "specs/general/entry-doc.adoc",
+    "specs/general/git.adoc",
+    "specs/general/planning.adoc",
+    "specs/general/review.adoc",
+    "specs/general/scope.adoc",
+    "specs/general/script.adoc",
+    "specs/general/security.adoc",
+    "specs/general/self-check.adoc",
+    "specs/general/source.adoc",
+    "specs/general/sql.adoc",
+    "specs/general/terminology.adoc",
+    "specs/general/testing.adoc",
+    "specs/general/verify.adoc",
+    "specs/general/version-control.adoc",
+    "specs/platform/cnb.adoc",
+    "specs/stack/bash.adoc",
+    "specs/stack/batch.adoc",
+    "specs/stack/java-object.adoc",
+    "specs/stack/java-syntax.adoc",
+    "specs/stack/java-testing.adoc",
+    "specs/stack/java.adoc",
+    "specs/stack/maven.adoc",
+    "specs/stack/powershell.adoc",
+    "specs/stack/python.adoc",
+    "specs/stack/spring.adoc",
+)
+
+
+def check_pointer_no_verbatim_guard():
+    """『自称回指的行不得同时复述取值』防线（规则见 `specs-rules/duplicate.toml`）。
+
+    `check_duplicate_scan_guard` 的阈值（40）是**下界**，只报"长度极显著"的重合；而"回指句 +
+    顺手把取值抄一遍"这种形态的公共子串常只有二十几字（本轮实证：`library/mirrors.adoc` 自称
+    "本文件只给实测记录、取舍本体见 `adoption.adoc`"，却仍把「每级先实测可用、不跳级、不覆盖
+    既有配置」21 字逐字写在同段里，`duplicate_scan` **核不出来**）。这类行的自相矛盾是**可逐字
+    判定**的：同一行里既说"见别处"、又把别处的话写了一遍，至少是多写的。判据见
+    `specs/general/review.adoc`「精炼性（同一描述只写一处）」。
+
+    落点、标记词与阈值一律在规则数据里；本函数只负责开阶段与接线。
+    """
+    phase("自称回指的行不得复述取值（精炼性）防线检查")
+    run_rule_guard("check_pointer_no_verbatim_guard")
+    phase_done()
 
 # ---- Java 序列化 / 局部变量推断 / 链式换行 三道判据本体 ----（用户本轮提出）：
 #   ① "java 下调整规范 serialVersionUID 给个默认值 1L？避免老是报警告，自动加（仅限已经实现了
@@ -2010,7 +2164,10 @@ def check_alter_merge_guard():
         else:
             # 四点识别特征缺任一即"该条永不触发加载"：`ALTER TABLE` 是改 DDL 的入口，
             # `.sql` 是"SQL 须独立成文件"，库名是"须带库名"，`INSERT` 是 DML 合并那条。
-            for token in ("ALTER TABLE", ".sql", "库名", "INSERT"):
+            # 只核**触发特征**（要写/改 SQL 语句时即命中）：`ALTER TABLE`/`.sql`/`INSERT`
+            # 是"要写 SQL"这类触发面（保留），`库名` 是 sql.adoc 的条目本体取值
+            # （"须带库名"），抄进调度器即第二真源，故去掉。
+            for token in ("ALTER TABLE", ".sql", "INSERT"):
                 if token not in disp:
                     err(f"加载调度器 `{ALTER_MERGE_SPEC}` 登记项缺少 `{token}` 识别特征——"
                         "触发特征不全时该条永不触发加载（改 SQL 的执行者会"
@@ -2114,11 +2271,16 @@ def check_java_serial_guard():
         err(f"缺少 {rel_common}——三条规则的加载触发特征无处登记", rel_common)
     else:
         common_text = open(common_path, encoding="utf-8").read()
+        # 这里**只核识别特征**（触发该条所需的字样），不要求把条目本体的判据正文
+        # 抄进调度器——调度器抄正文即第二真源（`terminology.adoc`「数据字典」的反膨胀）。
+        # 原先逐字要求 `链式调用一律换行`、`优先 `val`、可变才 `var`` 都是**条目本体的取值**，
+        # 已按同口径放宽为「命中该主题所需的最短特征」：`链式调用`、`val`/`var`。
         for token, why in (
-            ("链式调用一律换行", "通用层条目缺该识别特征时，写非 Java 项目代码也不会加载本条"
-                                 "（用户明确要求『所有语言』）"),
+            ("链式调用", "通用层条目缺该识别特征时，写非 Java 项目代码也不会加载本条"
+                         "（用户明确要求『所有语言』）"),
             ("serialVersionUID", "Java 栈条目缺该识别特征时，该条永远不会被触发加载"),
-            ("且优先 `val`、可变才 `var`", "Java 栈条目缺该识别特征时，局部变量推断口径不会被加载"),
+            ("`val`", "Java 栈条目缺该识别特征时，局部变量推断口径不会被加载"),
+            ("`var`", "Java 栈条目缺该识别特征时，局部变量推断口径不会被加载"),
         ):
             if token not in common_text:
                 err(f"Java 序列化防线被破坏：{rel_common} 缺 `{token}`——{why}", rel_common)
@@ -2421,7 +2583,7 @@ def _ref_base(f: str) -> str:
     **基准口径与渲染者一致（单一说明，不留第二套说法）**：本仓库的 `.adoc` 由站点
     `index.html` 用 **Asciidoctor.js（浏览器端现渲染）** 渲染，其 `link:` 目标按
     **文档源所在目录**解析。站点渲染的文档在**仓库根**，故 `link:` 相对仓库根解析——
-    即 `link:INSTALL.adoc[]` 在站点上解析为 `/INSTALL.adoc`（仓库根的 `INSTALL.adoc`）。
+    即 `link:AGENTS_COMMON.adoc[]` 在站点上解析为 `/AGENTS_COMMON.adoc`（仓库根的该入口）。
     本函数对**仓库根文件**返回空串（基准=仓库根）正是为与之一致。
 
     为何"根文件约定按仓库根书写"：AsciiDoc 的 `link:` 没有"仓库根"概念，只有"文档
@@ -2803,46 +2965,57 @@ def _order_violation(text: str, order, comment: str = "#") -> bool:
 
 
 def check_install_codeblock():
-    """校验 INSTALL.adoc 的入口模板代码块逐字保留 + 入口文件名规则与 `AGENTS.md` 兼容。
+    """校验入口文档模板代码块逐字保留 + 入口文件名规则与 `AGENTS.md` 兼容。
 
-    背景一（模板逐字）：AI 读取 INSTALL.adoc 在目标项目创建入口文档时，若模板代码块内的
+    **落点已并入公共入口**（`AGENTS_COMMON.adoc`「安装与更新」）：安装文档此前是独立文件，
+    用户口径是"把它的内容压进入口前部、删除源文件、以后直接引用入口"——故模板与模板所在
+    文档合成一处，本检查只改**读哪个文件**，判据本体一条不动。
+
+    背景一（模板逐字）：AI 照着入口文档里的模板在目标项目创建入口文档时，若代码块内的
     换行/空行被折叠、行被合并，会导致生成文档样式改变。为让『逐字原样保留』成为
-    可执行约束而非靠自觉，本检查扫描 INSTALL.adoc 的模板代码块，逐一确认每段必备
-    行都各自独立成行（未被合并/折叠），且必备行之间的空行分隔完好。
+    可执行约束而非靠自觉，本检查扫描该模板代码块，逐一确认每段必备行都各自独立成行
+    （未被合并/折叠），且必备行之间的空行分隔完好。
 
     背景二（兼容 `AGENTS.md`）：平台与生态对 agent 规范文档的**默认命名是 `AGENTS.md`**
     （CodeBuddy、Cursor 等平台的固有约定），只认 `AGENTS.adoc` 会让安装规则在既有
-    `AGENTS.md` 的项目上落不了地（重命名会打断平台识别、删旧建新会丢内容），而安装文档
-    的体积上限又不允许把兼容说明写成大段（见本文件检查项 11）。故把"默认 `AGENTS.adoc`、
-    已存在 `AGENTS.md` 时就地融合且不重命名、不另建"钉成机械可核对的判据，防止这条兼容
-    规则在后续维护中被删掉或只说"兼容"却无做法。
+    `AGENTS.md` 的项目上落不了地（重命名会打断平台识别、删旧建新会丢内容）。故把"默认
+    `AGENTS.adoc`、已存在 `AGENTS.md` 时就地融合且不重命名、不另建"钉成机械可核对的判据。
     """
-    phase("INSTALL 入口模板代码块检查")
+    phase("入口模板代码块检查（公共入口「安装与更新」）")
     if not os.path.isfile(INSTALL_FILE):
-        log("  未找到 INSTALL.adoc，跳过")
+        log(f"  未找到 {INSTALL_REL}，跳过")
         phase_done()
         return
     with open(INSTALL_FILE, encoding="utf-8") as fh:
         lines = fh.readlines()
 
-    # 定位模板代码块定界（首个 ``----`` 为开，其后下一个 ``----`` 为闭）
-    delim = [i for i, l in enumerate(lines) if l.strip() == "----"]
+    # 定位模板代码块定界：**先定位「安装与更新」节**，再取其内第一对 `----`——公共入口里
+    # 可能还有别的代码块，按"全文首个 `----`"取会在入口新增示例时静默改盯另一个块。
+    sec_i = _section_line_index(lines, "安装与更新（引用方接入与取回口径）")
+    if sec_i is None:
+        err(f"{INSTALL_REL} 未找到「安装与更新（引用方接入与取回口径）」节——"
+            "入口文档模板无处承载（安装口径已并入公共入口，该节被删即等于安装流程丢失）",
+            INSTALL_REL)
+        phase_done()
+        return
+    delim = [i for i, l in enumerate(lines) if i > sec_i and l.strip() == "----"]
     if len(delim) < 2:
-        err("INSTALL.adoc 未找到完整的模板代码块定界符 `----`（需一对）",
-            os.path.relpath(INSTALL_FILE, REPO_ROOT))
+        err(f"{INSTALL_REL} 的「安装与更新」节未找到完整的模板代码块定界符 `----`（需一对）",
+            INSTALL_REL)
         phase_done()
         return
     open_i, close_i = delim[0], delim[1]
     body = lines[open_i + 1:close_i]
 
     # 必备内容：每行必须各自独立成行（不得与其它行合并/折叠）。
+    # **不再要求模板里出现"安装文档路径"**：安装文档已并入本入口，新实例按规范入口地址
+    # 即读到安装与取回口径（模板里那一行仍指向本入口，故它对老安装形态继续成立）。
     # 不含 `= Agent 规范入口` 这类可精炼的标题/小节——入口文档的"最小集"由
     # `specs/general/entry-doc.adoc` 作真源（用户口径：模板以用户手工编辑的形态为准，
     # 不因机械判据往回补标题与三节）。
     REQUIRED_LINES = [
         "本项目的 agent 执行规范入口为：",
         "https://agent.c332030.com/AGENTS_COMMON.adoc",
-        "https://agent.c332030.com/INSTALL.adoc",
         "https://agent.c332030.com/script/fetch-specs.py",
         "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
         "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。",
@@ -2854,25 +3027,37 @@ def check_install_codeblock():
             found[line] = True
     for s, ok in found.items():
         if not ok:
-            err(f"INSTALL.adoc 模板代码块缺失或行被合并/改写：未找到独立成行的『{s}』"
-                "（模板须逐字原样保留，不得折叠换行）",
-                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+            err(f"{INSTALL_REL} 模板代码块缺失或行被合并/改写：未找到独立成行的『{s}』"
+                "（模板须逐字原样保留，不得折叠换行）", INSTALL_REL)
+
+    # 同一路径不得在模板里出现两次（**用户点名**：入口模板里
+    # `https://agent.c332030.com/AGENTS_COMMON.adoc` 重复出现）。成因是本仓库实测的
+    # 一次合并：安装口径并入公共入口、`INSTALL.adoc` 被删后，模板里原来指向安装文档的
+    # 那一行被改成入口自己的地址——于是同一个 URL 出现两次、对外两个不同名目
+    # （"规范入口"与"安装与更新的文档入口"）指向同一份文件，读的人以为有两个落点。
+    # 判据按**逐字相同的路径行**核：取同一路径的重复次数，>1 即报。
+    path_lines: dict[str, int] = {}
+    for raw in body:
+        line = raw.rstrip("\n").rstrip("\r")
+        if line.startswith("http://") or line.startswith("https://"):
+            path_lines[line] = path_lines.get(line, 0) + 1
+    for path, n in path_lines.items():
+        if n > 1:
+            err(f"{INSTALL_REL} 模板代码块里同一路径重复出现 {n} 次：『{path}』——"
+                "模板是给新实例照抄的『下一站地址表』，同一地址挂两个名目（如既作规范入口、"
+                "又作安装文档入口）会让读的人以为有两个不同落点；安装口径已并入本入口时，"
+                "那一行就是多余的第二真源，须删（判据见 specs/general/review.adoc「精炼性」）",
+                INSTALL_REL)
 
     # 入口文件名规则：默认 AGENTS.adoc，且兼容已存在的 AGENTS.md（就地融合、不重命名/不另建）
     with open(INSTALL_FILE, encoding="utf-8") as fh:
         install_text = fh.read()
-    # 三条路径链：规范入口 / 安装文档 / 取规范脚本——新实例要能一站直达，
-    # 缺一条即只能靠猜（用户点名："入口文档里面放一个安装路径 放一个规范路径"）。
+    # 取规范脚本路径须在模板正文里（缺它时新实例不知道如何去下载规范）
     for key, desc in (
-            ("https://agent.c332030.com/INSTALL.adoc",
-             "安装文档路径须写进入口模板——重装/更新/取法的权威说明在它那里，"
-             "缺它时新实例不知道去哪儿读安装与更新的做法（用户实测：「你下载规范的脚本"
-             "就没有放到入口文档里面，他下一次怎么知道如何去下载规范呢」）"),
             ("https://agent.c332030.com/script/fetch-specs.py",
-             "取规范脚本路径须写进入口模板——缺它时新实例不知道如何去下载规范")):
+             "取规范脚本路径须写进入口模板——缺它时新实例不知道如何去下载规范"),):
         if key not in install_text:
-            err(f"INSTALL.adoc 入口模板缺『{key}』——{desc}",
-                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+            err(f"{INSTALL_REL} 入口模板缺『{key}』——{desc}", INSTALL_REL)
 
     for key, desc in (
             ("AGENTS.adoc", "默认入口文件名"),
@@ -2880,22 +3065,40 @@ def check_install_codeblock():
             ("不重命名", "已存在 AGENTS.md 时不得重命名/迁移成 AGENTS.adoc（会打断平台识别）"),
             ("不另建", "已存在 AGENTS.md 时不得再另建一个 AGENTS.adoc（双入口会分叉）")):
         if key not in install_text:
-            err(f"INSTALL.adoc 入口文件名规则被破坏：缺失『{key}』（{desc}）——"
-                "只认单一扩展名会让安装规则在已有其他命名的项目上落不了地",
-                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+            err(f"{INSTALL_REL} 入口文件名规则被破坏：缺失『{key}』（{desc}）——"
+                "只认单一扩展名会让安装规则在已有其他命名的项目上落不了地", INSTALL_REL)
 
-    # 必备行之间须有恰当的空行分隔，确保样式不变（防止空行被吞掉导致段落粘连）
-    indices = [i for i, raw in enumerate(body) if raw.rstrip("\n\r") in found]
-    for a, b in zip(indices, indices[1:]):
-        gap = b - a
-        # 『入口为：』与 URL 之间、URL 与『读取…』之间需空行，其余相邻段落之间同样应留空行
-        if gap < 2:
-            prev = body[a].rstrip("\n\r")
-            nxt = body[b].rstrip("\n\r")
-            err(f"INSTALL.adoc 模板代码块中『{prev}』与『{nxt}』之间缺少空行"
-                "（空行被吞会导致样式变化，须逐字保留）",
-                os.path.relpath(INSTALL_FILE, REPO_ROOT))
+    # **空行须逐字保留**：只核"行在不在"拦不住空行被吞——被吞的行会与上/下一段粘成一块，
+    # 而"空行被吞导致样式变化"正是本条要拦的形态。
+    #
+    # 判据取**段落结构**：模板体里凡"非空行紧接非空行"处即报（正常模板的每一段之间都有空行，
+    # 段内不会两行紧贴）。**不比"相邻必备行之间的行距"**：模板里相邻必备行之间本就隔着说明段
+    # （实测两个 URL 之间隔 4 行、最后两行之间隔 6 行），删掉中间那处空行后行距仍 ≥ 2、
+    # 防线全绿；也不给"哪些行必须空行"开例外清单——模板以用户手工编辑的形态为准，
+    # 例外清单会随措辞调整失效（实测某版按"必备行 + 括注续行"给例外，仍漏掉说明段前后的空行）。
+    # **唯一例外**：以全角括号起头的**括注续行**（如入口地址下一行的
+    # `（重装、更新、要完整的取法与退路…）`）——它与上一行是同一条信息的延续，
+    # 模板里本就紧贴（见 `AGENTS_COMMON.adoc` 模板体），要求它俩之间留空行等于把正确写法判红。
+    # 例外只认"括注"这一种形态：它本身是**续行**（不独立成段），与"两段之间被吞掉空行"
+    # 的形态在文本上可分（后者不会以全角左括号起头）。
+    for i in range(len(body) - 1):
+        cur, nxt = body[i].rstrip("\n\r"), body[i + 1].rstrip("\n\r")
+        if not (cur.strip() and nxt.strip()):
+            continue
+        if nxt.lstrip().startswith("（"):
+            continue
+        err(f"{INSTALL_REL} 模板代码块中『{cur}』与『{nxt}』之间缺少空行"
+            "（两行紧贴＝空行被吞、两段会粘成一块，新实例照抄出来的入口文档样式随之改变；"
+            "模板须逐字原样保留，段与段之间一律留空行）", INSTALL_REL)
     phase_done()
+
+
+def _section_line_index(lines, title: str):
+    """返回 `== <title>` 节标题所在的行号（找不到返回 None）。"""
+    for i, line in enumerate(lines):
+        if line.strip() == "== " + title:
+            return i
+    return None
 
 
 # 解释器兜底的**逐条行段判据**（键须与同一条可执行行同时命中——见 `_code_lines`）。
@@ -2959,9 +3162,28 @@ def _check_interpreter_fallback_entry_lines():
     phase_done()
 
 
-# 安装文档「取规范时连 python 都没有」一节须齐备的要点（键组同样按**同一行**核——
-# 这些要点是"遇到这种情况按什么次序处置"的清单，被折叠成一句话就会被读漏一条）。
-INSTALL_NO_PYTHON_SECTION = "取规范时连 python 都没有"
+# 解释器兜底与取回口径要点须齐备的**承载文件**（键组同样按**同一行**核——这些要点是"遇到这种
+# 情况按什么次序处置"的清单，被折叠成一句话就会被读漏一条）。
+#
+# **本轮改动（用户口径：入口那一节与脚本头部注释重复）**：入口「取规范到本地副本」与
+# `script/fetch-specs.py` 的头部注释描述了同一件事（探测次序、处置次序、脚本开关）。
+# 同一件事实写两处即两处漂移，故收敛为**一处完整定义 + 其余回指**：
+#   * 工序侧真源（怎么取、怎么更新、探测与处置次序、脚本开关）＝ `script/fetch-specs.py` 头部注释；
+#   * 公共入口那一节只留**落点那一处事实**，其余回指脚本头部注释。
+# 跟随该收敛，本防线**不得再要求入口复述那些句子**（要求复述＝把重复判成合规，
+# 正是用户点名的形态）——它改为核**真源那一侧**写全、入口**给回指**。
+INSTALL_FETCH_SOURCE_REL = "script/fetch-specs.py"
+# **真源在文件里的哪一处**：只给文件名而不给部位时读者仍不知道读哪一段，
+# 故入口的回指须点名"头部注释"（本仓库实测：去掉这四字，只点名文件的旧判据仍报绿）。
+INSTALL_FETCH_SOURCE_POINT = "头部注释"
+# 入口里承载落点与回指的那一节（落点那一处事实与回指都落在它头上，故先定位再核）
+INSTALL_FETCH_SECTION = "取规范到本地副本"
+# 副本落点：同一条要点可以有多种等价写法，故按**要点**核、不核某一种写法的字面值——
+# 『用户家目录』与『用户路径』同指用户家目录（`~` 的写法亦然）；核字面值时一次措辞精炼
+# 就会让判据空转（本仓库实测：那句话被压成 `~/.cache/agent-specs` 后旧字面判据报红，
+# 而"落点只有一处"这条要求本身并未被削弱）。
+HOME_WORDINGS = ("用户家目录", "用户路径", "家目录", "~")
+LANDING_NAME = ".cache/agent-specs"
 INSTALL_NO_PYTHON_POINTS = (
     (("装一个 python 3",), "须给第一条处置：按本平台既有的软件分发方式装一个 python 3（并说明"
                         "脚本自身**不得代为安装**）"),
@@ -2974,36 +3196,111 @@ INSTALL_NO_PYTHON_POINTS = (
     (("python2",), "须写清「一个都没有」的边界：**只装 python2 的发行版不算**（CentOS/RHEL 8 及更早、"
                    "老 macOS 上 `python` 就是 python2），上一条的次序会取到它、脚本照样跑——"
                    "缺这句时这些机器会被误判成「必须先去装 python3」"),
+    (("一次取全",), "须写明一次取全（入口与其 `specs/` 一起取回，不用手拼逐条下载命令）——"
+                   "缺则『怎么取』只剩入口模板里一行地址"),
+    (("清单从入口自身解析",), "须写明清单从入口自身解析（按加载调度器登记自动解析），"
+                          "故新增一份规范不必改脚本、也不会漏取——缺则执行者会另拼一份文件清单，"
+                          "该清单随即与调度器脱钩"),
+    (("以远程为准",), "须写明默认以远程为准（取回的字节与本地不同才落盘、远端改过就刷新），"
+                    "『重复执行即是更新』才是可核对的——缺则『更新』只说了一半，"
+                    "执行者无法判断要不要覆盖本地那份"),
+    (("--keep",), "须写明『不动本地那份』的开关——缺则只想核对、不想覆盖的执行者只能先删本地副本"),
+    (("--base",), "须写明来源可改（`--base`）——缺则换来源的人只能改脚本"),
+)
+
+# 回指那一行的**识别标记**：本节里"真源"二字不止一处（「取回口径与判据分家」条也说
+# 判据真源在 entry-doc.adoc），故须用**只属于回指那一行**的措辞把它认出来——
+# 它声明的是"**工序侧**真源"（与防线 docstring 同一口径：工序侧＝怎么取、怎么更新）。
+INSTALL_FETCH_POINTER_MARKER = "工序侧真源"
+
+# 入口「取规范到本地副本」一节收敛后**仍须自己写明**的两件事：落点那一处事实 + 指向真源的
+# 回指（读者按这一行就能找到细则，不必回头问用户）。两组都按**要点**核、不核句式。
+INSTALL_FETCH_POINTER_KEYS = (
+    (("__home_wording__",),
+     "须把落点写成**用户侧**的定位（" + "、".join(HOME_WORDINGS) + " 任一写法与落点名同现）"
+     "——本节是落点那一处事实的落点，缺则读者不知道副本在哪；只写裸路径字面值也不够，"
+     "读者不知道那是「谁的家目录」"),
+    # 回指真源的那一条：**须是"声明真源在哪"的那一行**，不是"任意提到两者"的一行——
+    # 本节里别处也会顺带点到 `script/fetch-specs.py` 与其头部注释（如「取回口径与判据分家」
+    # 条把处置次序也指向它），若按"任一行含这两个字样"核，把回指那一行整条删掉仍会被
+    # 那一处兜住（本仓库实测复现：删掉该行，六道相关防线全绿）。故按**同一行**核、
+    # 且要求该行带只属于它的措辞 `INSTALL_FETCH_POINTER_MARKER`，与别处的顺带提及区分开。
+    ((INSTALL_FETCH_SOURCE_REL, INSTALL_FETCH_SOURCE_POINT, INSTALL_FETCH_POINTER_MARKER),
+     "须回指真源**及其部位**（`script/fetch-specs.py` 的**头部注释**是「怎么取、怎么更新、"
+     "解释器兜底」的真源）——只写落点而不给去向，读者读到本节仍不知道取法的细则在哪，"
+     "等于把同一件事实再抄一遍或干脆丢掉；只给文件名而不给部位同样等于没给去向；"
+     "该回指须落在**声明真源是哪一处**的那一行上（本节别处顺带提到文件名不算给了去向）"),
 )
 
 
 def _check_install_no_python_section():
-    """『取规范时连 python 都没有』整节存在性 + 每条要点落在同一行上。
+    """解释器兜底与取回口径要点：**真源那一侧**写全 + 入口只留落点与回指。
 
-    旧实现只核全文里的几个词（`("兜底", "python")`、`("装一个 python 3",)` 一类），
-    把整节删掉仍能命中（本仓库实测复现）——本条改为**先按节标题定位整节**、再在节内逐条核对。
+    本函数原按 **入口的「取规范到本地副本」一节**逐条核那几组要点。用户点名该节与
+    `script/fetch-specs.py` 头部注释重复后，判据随之改为**核真源**：
+
+    * 要点（探测次序、处置次序「装一个 python 3 / 只装 python2 不算 / 退出码非 0 /
+      `curl|python3` 同样要 python / 入口不得代为安装运行时」，以及取回与更新口径
+      「一次取全 / 清单从入口自身解析 / 以远程为准 / `--keep` / `--base`」）须在
+      `script/fetch-specs.py` 的**头部注释**里写全——它是"怎么取、怎么更新"的工序侧真源；
+    * 入口那一节**不得**被抽空成一枚指针：它仍须自己写明**落点那一处事实**（落点名 +
+      用户侧定位），**且**必须给出指向真源**及其部位**的回指。
+
+    反向也拦：旧判据要求入口复述那几句时，"把同一件事实写两处"会被判成合规——正是本轮
+    用户点名的形态，故**不得**再按"入口里有没有这些句子"判红。
     """
-    phase("解释器兜底防线检查（安装文档处置次序）")
-    text = _read_script_src("INSTALL.adoc")
+    phase("解释器兜底与取回口径防线检查（真源=脚本头部注释，入口只留落点与回指）")
+    text = _read_script_src(INSTALL_REL)
     if text is None:
-        err("缺失 INSTALL.adoc——取规范时没有解释器的处置次序无处承载", "INSTALL.adoc")
+        err(f"缺失 {INSTALL_REL}——取回口径的落点与回指无处承载", INSTALL_REL)
         phase_done()
         return
-    m = re.search(r"^==+ *" + re.escape(INSTALL_NO_PYTHON_SECTION) + r".*?(?=^==+ |\Z)",
+    # ① 要点须在真源那一侧（脚本头部注释）写全
+    source = _read_script_src(INSTALL_FETCH_SOURCE_REL)
+    if source is None:
+        err(f"缺失 {INSTALL_FETCH_SOURCE_REL}——解释器兜底与取回口径失去真源",
+            INSTALL_FETCH_SOURCE_REL)
+    else:
+        head = source.split('"""')
+        head_text = head[1] if len(head) > 1 else ""
+        if not head_text:
+            err(f"{INSTALL_FETCH_SOURCE_REL} 没有模块文档字符串——真源部位（头部注释）不存在",
+                INSTALL_FETCH_SOURCE_REL)
+        else:
+            source_lines = [l.strip() for l in head_text.splitlines() if l.strip()]
+            for keys, desc in INSTALL_NO_PYTHON_POINTS:
+                if not any(all(k in line for k in keys) for line in source_lines):
+                    err(f"{INSTALL_FETCH_SOURCE_REL} 的头部注释缺失要点 {list(keys)}"
+                        f"（须落在同一行上）——{desc}；公共入口已不再复述这些句子"
+                        "（同一件事实只写一处），真源这一侧缺即等于整条规则没有落点",
+                        INSTALL_FETCH_SOURCE_REL)
+    # ② 入口那一节不得被抽空：落点那一处事实 + 指向真源（及其部位）的回指
+    m = re.search(r"^==+ *" + re.escape(INSTALL_FETCH_SECTION) + r".*?(?=^==+ |\Z)",
                   text, re.S | re.M)
     if not m:
-        err(f"INSTALL.adoc 缺少『{INSTALL_NO_PYTHON_SECTION}』整节——"
-            "被删掉后'没有解释器的机器上怎么把规范取下来'无人回答，读者会把"
-            "「机器上得先有 python3」当成本流程的前提（本仓库实测：删掉整节，旧实现仍报绿）",
-            "INSTALL.adoc")
+        err(f"{INSTALL_REL} 缺少『{INSTALL_FETCH_SECTION}』整节——取回口径的落点与回指"
+            "（本落点在哪、细则去哪儿读）一并失去落点", INSTALL_REL)
         phase_done()
         return
-    section_lines = [l.strip() for l in m.group(0).splitlines() if l.strip()]
-    for keys, desc in INSTALL_NO_PYTHON_POINTS:
-        hit = any(all(k in line for k in keys) for line in section_lines)
-        if not hit:
-            err(f"INSTALL.adoc『{INSTALL_NO_PYTHON_SECTION}』一节缺失要点 {list(keys)}"
-                f"（须落在同一行上）——{desc}", "INSTALL.adoc")
+    # **按行核、不按整节核**：整节核时，节里任何一处出现该字样就算命中——回指那一句被改成
+    # "真源见 script/fetch-specs.py"（部位写成"段尾注释"、或干脆不给部位）时，别的行里
+    # 出现的文件名会把缺失兜住，防线全绿（本条要核的恰是"这一句有没有把去向说全"）。
+    # 故与 `INSTALL_NO_PYTHON_POINTS` 同一口径：一行的正文里须**同时**出现整组键。
+    lines_in_section = [l.strip() for l in m.group(0).splitlines()
+                        if l.strip() and l.strip() != "----"]
+    for keys, desc in INSTALL_FETCH_POINTER_KEYS:
+        if keys == ("__home_wording__",):
+            if not any(any(k in line for k in HOME_WORDINGS) and LANDING_NAME in line
+                       for line in lines_in_section):
+                err(f"{INSTALL_REL}『{INSTALL_FETCH_SECTION}』一节缺失落点（"
+                    f"{'、'.join(HOME_WORDINGS)} 任一写法须与 `{LANDING_NAME}` "
+                    "落在同一行上）——" + desc, INSTALL_REL)
+            continue
+        if not any(all(k in line for k in keys) for line in lines_in_section):
+            err(f"{INSTALL_REL}『{INSTALL_FETCH_SECTION}』一节缺失 {list(keys)}"
+                "（须落在同一行上）——" + desc
+                + "（本节的职责已收敛为『写明落点 + 回指真源』，两件事缺一即读者要么不知道"
+                "副本在哪、要么不知道去哪儿读取回与更新细则）", INSTALL_REL)
     phase_done()
 
 
@@ -3085,7 +3382,7 @@ def check_spec_fetch_guard():
 # 判据**按行段核**（`_code_lines` / `_order_violation`）：键必须与同一条**去注释后的
 # 可执行行**同时命中，探测次序也只在候选代码行之间比较——只核"整份文件里有没有这几个词"
 # 时，注释里写一句就能骗过（本仓库实测复现：`.bat` 只探 python3 不探 `py`、`.sh` 次序
-# 写反、把安装文档那一节整节删掉，旧实现全都报绿）。
+# 写反、把入口的取回与处置口径那一节整节删掉，旧实现全都报绿）。
     _check_interpreter_fallback_entry_lines()
     _check_install_no_python_section()
     # 落盘形态：`.bat` 纯 ASCII + CRLF、`.sh` LF（入口按各自平台规范落盘）
@@ -3103,13 +3400,13 @@ def check_spec_fetch_guard():
         raw = open(sh, "rb").read()
         if b"\r\n" in raw:
             err("script/fetch-specs.sh 含 CRLF 行尾——.sh 一律 LF", "script/fetch-specs.sh")
-    # 公开说明同步：安装文档与公共入口须让执行者知道这个抓手
+    # 公开说明同步：公共入口与 README 须让执行者知道这个抓手
     for rel, keys, desc in (
-        ("INSTALL.adoc", ("fetch-specs", "用户家目录"),
-         "安装文档须写明取文件抓手与它的落点（用户家目录下的那一处）——"
+        (INSTALL_REL, ("fetch-specs", "用户家目录"),
+         "入口的安装与取回口径须写明取文件抓手与它的落点（用户家目录下的那一处）——"
          "否则安装时又回到手拼下载命令"),
-        ("INSTALL.adoc", ("clean_tmp.py", "下载"),
-         "安装文档须写明：**下载来的文件（含安装脚本）都只落这一处**——"
+        (INSTALL_REL, ("clean_tmp.py", "下载"),
+         "入口的安装与取回口径须写明：**下载来的文件（含安装脚本）都只落这一处**——"
          "只写规范副本的落点时，清理脚本等下载物仍会被手工存到别处，"
          "用户口径『下载的文件一律只落这一个地方』就对不上了"),
         ("AGENTS_COMMON.adoc", ("fetch-specs",),
@@ -3176,25 +3473,22 @@ def check_shared_cache_guard():
                 err(f"取规范落点防线被破坏：{rel} 仍出现 {present}——{desc}；"
                     "用户口径是『只有这个路径了，没有其他路径了』，多一套落点必然与人对不上",
                     rel)
-    # 落点那**一处取值**只能有一个真源：安装文档（它是"落点长什么样、怎么再取一次"的
-    # 工序侧唯一真源）。其余文档**不得再抄一遍落点路径** —— 抄一份即多一个漂移点，
+    # 落点那**一处取值**只能有一个真源：公共入口（安装口径已并入它，它是"落点长什么样、
+    # 怎么再取一次"的工序侧唯一真源）。其余文档**不得再抄一遍落点路径** —— 抄一份即多一个漂移点，
     # 而"抄过来的那句"与真源不一致时，读者无从判断以哪处为准（用户本轮点名：
     # "依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）。
     # 判据按**要点**核：要么自己写出落点（用户侧词 + 落点名同现），要么给出指向真源的
     # 引用；既不写落点、也不给引用（只留"用户级缓存"这类笼统说法）即报红。
     for rel, desc, landing_owner in (
-        ("INSTALL.adoc",
-         "安装文档是本落点与取回方式的**唯一真源**：它必须自己写明落点"
+        (INSTALL_REL,
+         "公共入口的「取规范到本地副本」是本落点与取回方式的**唯一真源**：它必须自己写明落点"
          "（用户家目录/用户路径下的 `.cache/agent-specs`），不得改成指向别处的引用",
          True),
-        ("AGENTS_COMMON.adoc",
-         "公共入口的「加载方式」须让引用方知道副本落在哪：写明落点，或给出指向安装文档的引用",
-         False),
         ("README.adoc",
-         "README 的取法说明须让读者知道副本落在哪：写明落点，或给出指向安装文档的引用",
+         "README 的取法说明须让读者知道副本落在哪：写明落点，或给出指向入口的引用",
          False),
         ("PUBLIC.adoc",
-         "公开内容清单须让引用方知道这些工具会把副本放在哪：写明落点，或给出指向安装文档的引用",
+         "公开内容清单须让引用方知道这些工具会把副本放在哪：写明落点，或给出指向入口的引用",
          False),
     ):
         path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -3209,12 +3503,12 @@ def check_shared_cache_guard():
         elif not landing_owner and not written and not referenced:
             err(f"取规范落点防线被破坏：{rel} 既未写明落点、也未指向真源——{desc}；"
                 "按『同一描述只写一处』它只该给一行引用"
-                f"（含『{LANDING_REFERENCE_MARKER}』+ 指向 `INSTALL.adoc`），"
+                f"（含『{LANDING_REFERENCE_MARKER}』+ 指向 `{INSTALL_REL}`），"
                 "否则读者不知道自己读到的是不是最新的那一份", rel)
         elif not landing_owner and written and not referenced:
             err(f"取规范落点防线被破坏：{rel} 又抄了一遍落点路径、且未指向真源——"
                 "同一描述出现在第二处即多一个漂移点；收敛形态是**一处完整定义 + 其余一行引用**"
-                "（真源＝`INSTALL.adoc`「取规范到本地副本」），"
+                f"（真源＝`{INSTALL_REL}`「取规范到本地副本」），"
                 f"引用须含『{LANDING_REFERENCE_MARKER}』", rel)
     phase_done()
 
@@ -3236,7 +3530,7 @@ ENTRY_PLACEHOLDER_LINES = (
 
 
 def _check_install_entry_placeholder_lines():
-    """『入口占位三要点』：安装文档入口模板里「怎么取、取不到怎么办、怎么更新」那一行不得被弱化。
+    """『入口占位三要点』：公共入口「安装与更新」的入口模板里「怎么取、取不到怎么办、怎么更新」那一行不得被弱化。
 
     三要点＝①优先取到本地副本（网络不可达时的可读副本，**不钉具体落点**）；②取不到时的退路
     是直接读远程入口；③需要最新规范时再运行一次即是更新。缺任一即报红并说明读者会怎么读错。
@@ -3244,24 +3538,27 @@ def _check_install_entry_placeholder_lines():
 
     """
     phase("入口占位三要点检查")
-    path = os.path.join(REPO_ROOT, "INSTALL.adoc")
+    path = os.path.join(REPO_ROOT, INSTALL_REL)
     if not os.path.isfile(path):
-        err("缺失 INSTALL.adoc——安装文档不在，入口占位的取法/退路/更新三要点无从核对", "INSTALL.adoc")
+        err(f"缺失 {INSTALL_REL}——安装口径不在，入口占位的取法/退路/更新三要点无从核对",
+            INSTALL_REL)
         phase_done()
         return
     with open(path, encoding="utf-8") as fh:
         lines = fh.readlines()
-    delim = [i for i, l in enumerate(lines) if l.strip() == "----"]
-    if len(delim) < 2:
-        err("INSTALL.adoc 未找到入口模板代码块定界符 `----`（需一对）——"
-            "入口占位三要点无处承载", "INSTALL.adoc")
+    sec_i = _section_line_index(lines, "安装与更新（引用方接入与取回口径）")
+    delim = [i for i, l in enumerate(lines)
+             if l.strip() == "----" and (sec_i is None or i > sec_i)]
+    if sec_i is None or len(delim) < 2:
+        err(f"{INSTALL_REL} 未找到「安装与更新」节的入口模板代码块定界符 `----`（需一对）——"
+            "入口占位三要点无处承载", INSTALL_REL)
         phase_done()
         return
     body = "".join(lines[delim[0] + 1:delim[1]])
     for keys, desc in ENTRY_PLACEHOLDER_LINES:
         missing = [k for k in keys if k not in body]
         if missing:
-            err(f"安装文档入口占位三要点缺失 {missing}——{desc}", "INSTALL.adoc")
+            err(f"入口占位三要点缺失 {missing}——{desc}", INSTALL_REL)
     phase_done()
 
 
@@ -3271,8 +3568,7 @@ ENTRY_DOC_SPEC = "specs/general/entry-doc.adoc"
 # 新实例就只能回来问用户或自己猜）。核的是**路径本身在不在模板正文**，**不核它挂在哪
 # 一节**——模板的小节结构以用户手工编辑的形态为准（用户已点名不要那三节）。
 ENTRY_DOC_PATH_POINTS = (
-    ("https://agent.c332030.com/AGENTS_COMMON.adoc", "规范路径（本项目的执行规范入口）"),
-    ("https://agent.c332030.com/INSTALL.adoc", "安装文档路径（重装/更新/取法的唯一权威说明）"),
+    ("https://agent.c332030.com/AGENTS_COMMON.adoc", "规范路径（本项目的执行规范入口，安装与取回口径也在其中）"),
     ("https://agent.c332030.com/script/fetch-specs.py", "取规范脚本路径（下一次怎么下载规范）"),
 )
 # 副本落点与取回方式两要点（按模板正文核，不依赖小节标题）
@@ -3283,8 +3579,8 @@ ENTRY_DOC_PATH_POINTS = (
 # 后，旧字面判据报红，而"落点只有一处"这条要求本身并未被削弱）。
 HOME_WORDINGS = ("用户家目录", "用户路径", "家目录", "~")
 # 落点"指向真源"的识别特征：同一描述只写一处，其余位置给一行引用时必须点名真源
-# （`INSTALL.adoc`「取规范到本地副本」是落点与取回方式的唯一真源）。判据按要点核、
-# 不核句式——"唯一真源/唯一落点/见（安装文档）…"任一形态都算给了引用。
+# （公共入口「取规范到本地副本」是落点与取回方式的唯一真源）。判据按要点核、
+# 不核句式——"唯一真源/唯一落点/见（公共入口）…"任一形态都算给了引用。
 LANDING_REFERENCE_MARKER = "唯一真源"
 LANDING_NAME = ".cache/agent-specs"
 ENTRY_DOC_COPY_POINTS = (
@@ -3294,15 +3590,15 @@ ENTRY_DOC_COPY_POINTS = (
 )
 # 「判据与工序分家」的**单一真源声明**（去重要求的机械抓手）：同一件事的两半各有唯一落点——
 #   判据侧（该不该写、与临时产物的分界）＝ `specs/general/entry-doc.adoc`；
-#   工序侧（入口文档里具体写哪几条路径、落点长什么样）＝ `INSTALL.adoc`。
+#   工序侧（入口文档里具体写哪几条路径、落点长什么样）＝ 公共入口「安装与更新」。
 # 缺这两句声明时，两边"你抄我一段、我抄你一段"的重写会重新长出来（本仓库实测：入口模板
 # 与 entry-doc.adoc 曾逐句重复"唯一持久化产物/会话结束就丢"的整段，改一处必漏另一处）。
 ENTRY_DOC_SINGLE_SOURCE_MARKERS = (
     ("本文件是这一判据的**唯一真源**", "判据侧（entry-doc.adoc）缺『本文件是唯一真源』声明——"
      "不声明则可被别处再复述一遍，两处必然各自漂移"),
     ("本文件不抄那几条路径的字面值", "判据侧缺『工序字面值不在本文件』声明——"
-     "不声明则本文件可再抄一份路径，与安装文档打架"),
-    ("那是判据的唯一真源", "工序侧（INSTALL.adoc）缺『判据的真源在 entry-doc.adoc、"
+     "不声明则本文件可再抄一份路径，与入口打架"),
+    ("那是唯一真源", "工序侧（公共入口）缺『写入判据的真源在 entry-doc.adoc、"
      "本文件不重复其条文』这句——不声明则『该不该写』只能在本文件里再写一套，"
      "两处必然各自漂移"),
 )
@@ -3317,11 +3613,11 @@ def check_entry_doc_manifest():
     新开实例即丢失（用户原话："放其他地方新开实例就丢了"）。
 
     故本检查核两处，互不替代：
-      * **判据真源**（`specs/general/entry-doc.adoc`）：最小集（规范入口、安装文档路径、
-        取规范脚本路径、副本检索路径、取回与更新方式、跨会话保留信息）与『与临时产物的
-        分界』必须写在那里——"该不该写"由它管。
-      * **入口模板**（`INSTALL.adoc`）：只核**路径链与副本两要点**（三条路径齐、落点写到
-        具体那一处、取回方式齐），**不核模板的小节结构**——模板写成什么样**以用户手工编辑
+      * **判据真源**（`specs/general/entry-doc.adoc`）：最小集（规范入口、取规范脚本路径、
+        副本检索路径、取回与更新方式、跨会话保留信息）与『与临时产物的分界』必须写在那里
+        ——"该不该写"由它管。
+      * **入口模板**（`AGENTS_COMMON.adoc`「安装与更新」）：只核**路径链与副本两要点**
+        （路径齐、落点写到具体那一处、取回方式齐），**不核模板的小节结构**——模板写成什么样**以用户手工编辑
         的形态为准**（用户已点名不要 `= Agent 规范入口` 标题与那三节；曾经核过，结果是把
         用户删掉的三节又"补"了回去）。核字面值时"措辞精炼"与"判据被换成笼统说法"分不开，
         故按要点核：只拦"笼统说法/缺路径"，不拦写法优化。
@@ -3352,19 +3648,21 @@ def check_entry_doc_manifest():
             if key not in spec_text:
                 err(f"入口文档持久化防线被破坏：{desc}", ENTRY_DOC_SPEC)
     if not os.path.isfile(INSTALL_FILE):
-        err("缺失 INSTALL.adoc——入口文档模板不在，入口文档清单无从核对", "INSTALL.adoc")
+        err(f"缺失 {INSTALL_REL}——入口文档模板不在，入口文档清单无从核对", INSTALL_REL)
         phase_done()
         return
     install_text = open(INSTALL_FILE, encoding="utf-8").read()
     if ENTRY_DOC_SINGLE_SOURCE_MARKERS[2][0] not in install_text:
         err(f"入口文档持久化防线被破坏：{ENTRY_DOC_SINGLE_SOURCE_MARKERS[2][1]}",
-            "INSTALL.adoc")
+            INSTALL_REL)
     with open(INSTALL_FILE, encoding="utf-8") as fh:
         lines = fh.readlines()
-    delim = [i for i, l in enumerate(lines) if l.strip() == "----"]
-    if len(delim) < 2:
-        err("INSTALL.adoc 未找到入口模板代码块定界符 `----`（需一对）——"
-            "入口文档的两节清单无处承载", "INSTALL.adoc")
+    sec_i = _section_line_index(lines, "安装与更新（引用方接入与取回口径）")
+    delim = [i for i, l in enumerate(lines)
+             if l.strip() == "----" and (sec_i is None or i > sec_i)]
+    if sec_i is None or len(delim) < 2:
+        err(f"{INSTALL_REL} 未找到「安装与更新」节的入口模板代码块定界符 `----`（需一对）——"
+            "入口文档的清单无处承载", INSTALL_REL)
         phase_done()
         return
     body = "".join(lines[delim[0] + 1:delim[1]])
@@ -3377,36 +3675,37 @@ def check_entry_doc_manifest():
     # 模板写成什么样由用户定。
     #
     # 仍留在模板里的、必须核到的**要点**（不依赖小节标题，按正文核）：
-    #   * 三条路径链（规范入口 / 安装文档 / 取规范脚本）——新实例要能一站直达；
+    #   * 路径链（规范入口 / 取规范脚本）——新实例要能一站直达；
     #   * 副本落点（用户侧词 + 落点名同现）与取回/更新方式——新实例据此定位副本。
     # 判据按**要点**核、不核某一种写法的字面值（措辞精炼不该报红，笼统说法才该报红）。
     for key, desc in ENTRY_DOC_PATH_POINTS:
         if key not in body:
-            err(f"INSTALL.adoc 入口模板缺失 {key}——{desc}；入口文档要能一站直达这三条路径，"
+            err(f"{INSTALL_REL} 入口模板缺失 {key}——{desc}；入口文档要能一站直达这些路径，"
                 "缺一条时新实例就不知道该去哪儿重装/更新/怎么下载规范"
-                "（用户实测点名：取规范脚本没进入口文档）", "INSTALL.adoc")
+                "（用户实测点名：取规范脚本没进入口文档）", INSTALL_REL)
     if LANDING_NAME not in body or not any(k in body for k in HOME_WORDINGS):
-        err("INSTALL.adoc 入口模板未写明副本落点"
+        err(f"{INSTALL_REL} 入口模板未写明副本落点"
             "（用户家目录/用户路径下的 `.cache/agent-specs`）——新实例是靠模板里这一处去定位"
             "副本的，只写『用户级缓存』这类笼统说法时它仍要猜路径；判据是用户侧词"
             f"（{list(HOME_WORDINGS)} 之一）与 `{LANDING_NAME}` 同现，"
-            "只出现其中一个时该要求已被换成别的说法，机械判据随之空转", "INSTALL.adoc")
+            "只出现其中一个时该要求已被换成别的说法，机械判据随之空转", INSTALL_REL)
     for keys, desc in ENTRY_DOC_COPY_POINTS:
         if keys is HOME_WORDINGS:
             continue  # 落点已单独核过
         missing = [k for k in keys if k not in body]
         if missing:
-            err(f"INSTALL.adoc 入口模板缺失 {missing}——{desc}；"
+            err(f"{INSTALL_REL} 入口模板缺失 {missing}——{desc}；"
                 "副本位置是新实例按入口文档定位规范的唯一线索，缺一项即只能重新手工下载一遍",
-                "INSTALL.adoc")
+                INSTALL_REL)
     phase_done()
 
 
-# 安装流程的**幂等更新**那一节的判据要点（`INSTALL.adoc`「重复执行（更新）时的行为」）。
+# 安装流程的**幂等更新**那一处的判据要点（`AGENTS_COMMON.adoc`「安装与更新」的
+# 「本流程可重复执行、且以远程为准」一条——安装口径已并入公共入口，节名随之变化）。
 # 背景（本仓库实证）：模板与安装流程的分工是"机械判据按模板核、人不按模板被机械改回"——
 # 上一轮实施把用户手工删掉的标题与三节**按判据恢复**了回去，等于拿机械判据盖掉人的手工编辑
 # （用户点名："我手动删的，你不要给我补上去"）。只在脚本注释里写这句"以用户手工编辑为准"
-# 挡不住下一次：实施者照 `INSTALL.adoc` 读流程，读到的仍是"与模板不一致就地更新为最新模板"。
+# 挡不住下一次：实施者照 `AGENTS_COMMON.adoc` 读流程，读到的仍是"与模板不一致就地更新为最新模板"。
 # 故把这条**工序判据**落到安装流程里，并机械钉住——缺它时"拿机械判据盖掉人工编辑"会重演。
 REPEAT_UPDATE_POINTS = (
     ("以用户改过的为准",
@@ -3426,7 +3725,7 @@ REPEAT_UPDATE_POINTS = (
 def check_install_repeat_update_guard():
     """『安装幂等更新防线』：安装流程须写明"用户手工编辑过的模板内容不自动改回"。
 
-    判据本体：`INSTALL.adoc`「重复执行（更新）时的行为」一条不得只说"与最新模板不一致即
+    判据本体：`AGENTS_COMMON.adoc`「安装与更新」的幂等更新一条不得只说"与最新模板不一致即
     就地更新为最新模板"——入口文档是**用户项目的文件**，用户改过的行按用户改过的原文保留，
     不一致时汇报、等用户定（见 `specs/general/scope.adoc`「只改当前工作空间」与「拒绝的形态」：
     未获用户声明时，"按模板修正"同样是把改动落到用户的文件上）。
@@ -3434,7 +3733,7 @@ def check_install_repeat_update_guard():
     本函数只核**文本要点**（某次安装是否真的没改回用户的手写属运行时行为，交人/子 agent 复核）。
     """
     phase("安装幂等更新防线检查（用户手工编辑不得被模板盖掉）")
-    rel = "INSTALL.adoc"
+    rel = INSTALL_REL
     path = os.path.join(REPO_ROOT, rel)
     if not os.path.isfile(path):
         err(f"缺失 {rel}——安装流程不在，幂等更新的一条无从核对", rel)
@@ -3443,16 +3742,19 @@ def check_install_repeat_update_guard():
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     section = ""
-    m = re.search(r"(?ms)^== 重复执行（更新）时的行为$.*?(?=^== |\Z)", text)
+    m = re.search(r"(?ms)^\* \*\*本流程可重复执行、且以远程为准\*\*：.*?(?=^== |\Z)", text)
+    if not m:
+        # 兼容：该条也可能被写成独立的三级节
+        m = re.search(r"(?ms)^=== 本流程可重复执行.*?(?=^== |\Z)", text)
     if m:
         section = m.group(0)
     if not section:
-        err(f"{rel} 未找到「重复执行（更新）时的行为」一节——幂等更新的判据无处承载；"
-            "缺该节时『与模板不一致就地更新』这条会孤立地生效，用户的手工编辑必被改回", rel)
+        err(f"{rel} 未找到「本流程可重复执行、且以远程为准」一条——幂等更新的判据无处承载；"
+            "缺该条时『与模板不一致就地更新』这条会孤立地生效，用户的手工编辑必被改回", rel)
     else:
         for key, desc in REPEAT_UPDATE_POINTS:
             if key not in section:
-                err(f"{rel}「重复执行（更新）时的行为」缺失『{key}』——{desc}", rel)
+                err(f"{rel}「本流程可重复执行、且以远程为准」缺失『{key}』——{desc}", rel)
     phase_done()
 
 
@@ -3538,8 +3840,141 @@ def check_install_repeat_update_guard():
 #   「报错文案里写了引擎不认识的占位符即报错」1 条（实测形态：`{rel_exec}` 未被替换、
 #   原样留在报错正文里），`check_specs_test.py` 新增「同一处缺失不得被重复报出」1 条
 #   （同一防线名被多处落点重复接线时，实测 12 条报错里只有 4 条是不同问题）。
-GUARD_WIRING_BASELINE = 99
-GUARD_TEST_BASELINE = 1191
+#   本轮（Issue #168）记账：新增 `check_java_object_template_guard`（Java 数据对象模板——
+#   模板文件 `specs/stack/java-object.adoc` + 判据本体 `specs/stack/java.adoc`「编码」两处结构）；
+#   本分支新增该防线的 15 条反例用例，含"相邻条目兜底""判据本体被抽走"两条反例本体。
+#   **解决冲突一轮（合并 main 的 #170「模板类内容单独归类」）**：目标分支 main 在本分支开工后
+#   并入 `check_template_separation_guard`，与本分支的 `check_java_object_template_guard`
+#   **是两道不同的防线、都不得丢**，故两个基线各按**合并后的实取数**回填：
+#     * **接线数 99 → 100**：`CHECKS` 序列里 `check_template_separation_guard` 与
+#       `check_java_object_template_guard` 同时在序；`guards.adoc` 清单表同步重排为
+#       100 行、编号 1..100 连续且与 `CHECKS` 逐一同序（两侧新增防线各自占位，不覆盖）。
+#     * **用例数 1191 → 1206**：main 侧 1191 条 + 本分支 15 条，按**合并后同源实测**
+#       回填（`Ran 1206 tests ... OK`）——
+#       不按两侧各自数目相加，避免基线虚高后"删用例不报红"。
+#   **全局 review 一轮（本 PR 内）**：用例数 1206 → 1209（同源实测 `Ran 1209 tests ... OK`）——
+#   该防线补三条反例：① **判据本体侧**的"五项注解齐备"被删（此前只有模板侧被钉，
+#   判据本体把 `@SuperBuilder`/`@NoArgsConstructor` 抽走时防线全绿——模板文件成了唯一
+#   真源）；② 模板侧把判据本体的**机制**抄回一份；③ 模板侧把**判定标准**抄回一份
+#   （②③ 由新增反向原语 `file_forbidden` 核）。接线数不变：仍是一道防线、一个名字。
+#   另：`rules_engine_test.py` 新增 `file_forbidden` 的 3 条（命中 / 未命中 / 文件缺失），
+#   用例总数再 +3。
+#   **全文重构优化一轮（本 PR 内，用户要「全文重构优化」）**：用例数 1212 → **1222**（同源实测
+#   `Ran 1222 tests ... OK`）。本轮把「同一件事只在一处给真源」在**模板文件 / 判据本体 / 调度器**
+#   三侧贯彻到底，并逐条补上对应的反例用例：
+#     * 模板侧再删三处**判据本体内容**（生效面取值、依据行材料名与取舍声明、有判据正文的次序约定），
+#       改为只回指；`check_specs_test.py` 的该防线新增 5 条（生效面取值抄回 / 取舍声明抄回 /
+#       次序回指被抽 / README 只留子串 / 清单句缺项）。
+#     * 判据本体侧修两处**空转**（相邻兜底）：此前按 `file_groups` 核**整份文件**，`@SuperBuilder`
+#       在同文件「对象创建统一用 builder」条里已出现 → 从本条抽走它防线全绿；改按**条目自己的正文**
+#       核（`bullet_tokens`），并把「五项齐备」单列一步只核**清单句**（依据行里同样罗列这些名字，
+#       bullet 级核会被同一 bullet 的后半句兜住）。
+#     * 反向原语 `file_forbidden` 补 3 条漏网机制锚点（`无实例字段` / `链式 setter 会丢数据` /
+#       `是本集合自己的判据化取舍`）与两档生效面取值锚点（`存量不告警` / `不主动改既有对象`）。
+#     * 规则引擎新增 `bullet_tokens` 的 `anchor` / `until` 两个选项（`rules_engine_test.py` +4）。
+#     * 调度器 Java 行清掉残留条目本体（`IService` 调用面、SQL 写法三条、`lambdaQuery` 一族
+#       由“取值”改述为“识别特征”）；`check_java_serial_guard` 相应地不再要求调度器逐字抄
+#       本体片段（改核 `优先 \`val\`、可变才 \`var\`` 这一识别特征短语）。
+#   接线数不变：仍是一道防线、一个名字（`CHECKS` 序列与 `guards.adoc` 清单表不动）。
+GUARD_WIRING_BASELINE = 102
+# 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
+# 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
+# `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
+# 并改核**真源侧**。反例用例按**同源实取数**回填：删 1 条（本节被抽空——该形态已随收敛消失）、
+# 改 4 条锚点到真源侧、新增 4 条（真源侧被抽空 ×2、入口回指被抽、回指不给部位），基线 1231 → 1234（= 1231 − 1 + 4，同源实取数）。
+#   本轮（**review 修复一轮**）：对上述新判据做**逐行删除的模糊核对**（每次删一行、重跑相关
+#   防线，看有没有"删了仍报绿"的位置），复现三处**防线空转**，各补反例用例：
+#     * `check_install_codeblock` 的"空行逐字保留"原先只比**相邻必备行之间的行距**——
+#       模板里相邻必备行之间本就隔着说明段（实测两个 URL 之间隔 4 行），故吞掉那处空行后行距
+#       仍 ≥ 2、防线全绿；改为**逐对相邻非空行**核（唯一例外：以全角括号起头的括注续行），
+#       补 3 条（说明段前后被吞 ×2、括注紧贴的正例 ×1）。
+#     * `_check_install_no_python_section` 的"落点 + 回指"原先按**整节**核——节里别处出现的
+#       `script/fetch-specs.py` 会把"回指没给部位/部位写错/整行被删"兜住；改为按**同一行**核、
+#       且用只属于回指那一行的措辞（"工序侧真源"）认出来，补 3 条（回指部位写错、
+#       落点被拆到两行、回指整行被删后被相邻条目兜住）。
+#   用例数 1234 → 1240（同源实取数 `Ran 1240 tests ... OK`）。
+#   本轮（PR #171：用户口径「全局检查下重复项，并处理」）记账：**新增 `check_duplicate_scan_guard`**
+#   ——「精炼性（同一描述只写一处）」此前只有语义复核、没有机械抓手，本轮补上（规则数据见
+#   `script/specs-rules/duplicate.toml`，阈值与例外理由都写在里面）。新原语 `duplicate_scan`
+#   的反例用例按同源实取数回填：`rules_engine_test.py` +9（TestDuplicateScan）、
+#   `check_specs_test.py` +4（TestCheckDuplicateScanGuard，含真实仓库口径的四个形态）。
+#   接线数 100 → 101（新增一道防线、一个名字；`CHECKS` 序列与 `guards.adoc` 清单表同步追加第 94 位）。
+#   本轮（PR #171 续：用户口径「继续全局检查下重复项，并处理」）：
+#   ① **修掉 `duplicate_scan` 自己的漏检**——粗筛的 n-gram 取样原先按 `gram` 步长跳取，
+#      公共子串在两串里的起点未必同余，整段公共子串可能一个样本都取不到；本轮实证：
+#      两个 bullet 有 55 字公共子串（"不重复读"的判据在两个栈文件里各存一份）而桶交集为空、
+#      防线**静默放行**。改为逐位滑动取样后如实报红（规则数据里的阈值与例外理由同轮补全：
+#      `IEEE Std` 与表格行 `| ` 两类正当重合写进 `ignore` 并注明理由）。
+#   ② **再收敛一轮逐字重复**：同一句回指句在三处栈文件逐字复用、同一份文件两节复述同一
+#      判据（`context.adoc` 的"不重复读"）、题头句成串复用（`script.adoc` → 三栈）、
+#      `prompts` 两个提示词的读取说明与动手前步骤、`cnb.adoc` 复述 `git.adoc` 的判据本体
+#      （合并关系命令、交付形态、冲突处理）、`verify.adoc` 三视角表的依据列、`sources.adoc`
+#      同主题内两处列同一组标准编号、`spring.adoc` 抄 `java.adoc` 的职责边界与强度等级、
+#      `library/` 三个主题互相复述取舍与量化取值——均按"本体留一处、别处一行引用"收敛。
+#   ③ 同步放宽三处"要求抄本体"的防线锚点（`check_checklist_guard` 的三态附带信息、
+#      `check_toolchain`/`check_dev_flow` 侧的提示词清单、`batch`/`bash`/`powershell` 的
+#      头部注释锚点）：本体齐备时照原样核，但**不再要求把通用层的条文逐字抄回本文件**。
+#   用例数 1253 → 1257（+4：`rules_engine_test` 覆盖"同文件两节""回指句逐字复用"
+#   "行内代码不误伤""标准名括注豁免"四个形态，同源实取数 `Ran 1257 tests ... OK`）。
+#   本轮（PR #171 第三轮：用户口径「**继续全局检查下重复项，并处理**」）：
+#   ① **补上 `duplicate_scan` 的"下界"之外那道抓手**：阈值 40 只报"长度极显著"的重合，而
+#      "**回指句 + 顺手把取值抄一遍**"的公共子串常只有二十几字——本轮实证：`library/mirrors.adoc`
+#      自称"本文件只给实测记录、取舍本体见 `adoption.adoc`"，却仍逐字写下
+#      「每级先实测可用、不跳级、不覆盖既有配置」21 字，`duplicate_scan` **核不出来**。
+#      新增原语 `pointer_no_verbatim` 与第 95 道防线 `check_pointer_no_verbatim_guard`
+#      （规则数据见 `script/specs-rules/duplicate.toml`，标记词/落点/阈值与假命中豁免都写在里面，
+#      含 `The Twelve-Factor App` 这类"标准名本就该逐字一致"的豁免）。
+#   ② **本轮由它查出的三处并已收敛**：
+#      * `specs/general/context.adoc`「运行契约」节自称"只留三维的**索引**"，却把三维的
+#        取值与判定标准**整段重述**（与 `specs/general/verify.adoc`「运行契约」重合）→
+#        改为只给维名 + 回指真源（这一处正是维护方 `context.adoc` 上一轮改对了、通用层**漏改**的同一形态）；
+#      * `specs/platform/cnb.adoc`「压缩须保留与目标分支的合并关系」自称"本处不重复"，
+#        却把 `specs/general/git.adoc`「压缩后的合并关系核对」的**核对命令**与**根因句**
+#        逐字抄了回来（根因句 35 字逐字重合）→ 平台侧只留**自己观测得到的失效**
+#        （工作树/`git diff` 看不出、本平台仍报冲突并卡 `code_conflict`），命令与机制回指 git 侧；
+#        配套把 `check_merge_relationship_guard` 的两组锚点由"逐字抄 git 侧命令/根因句"
+#        改为"**指得到真源** + 给出平台侧可观测的失效"（抄进来即第二真源）；
+#      * `library/mirrors.adoc`「同义性差异」段自称"取舍本体见 `adoption.adoc`、本文件只给实测记录"，
+#        却仍写出取值 → 只留"本集合据此推出"的定位 + 回指。
+#      * `AGENTS_COMMON.adoc`「最高优先级铁律」末条"优先站在前人的肩膀上看世界"把
+#        `specs/general/source.adoc`「外部引用」的取值（优先引用哪一类、只写名称/编号）逐字抄了 54 字
+#        → 改为"先看有没有可援引的标准/文献"这一动作 + 回指。
+#   ③ **另修一处悬空自指**：调度器 Java 行的"识别特征"括注写着"这一形态的完整口径见本节的
+#      「Java 项目」条"——**它自己就是**「Java 项目」条（上一轮把回指句逐字复用时残留的自指），
+#      读者按它找不到任何东西；改为"与本节「任何代码活动」条同一形态、同一口径"。
+#   用例数 1257 → 1269（+12：`check_merge_relationship_guard` 新增
+#   `test_verbatim_commands_not_required` 正例（平台侧只回指、不逐字抄命令，须全绿），
+#   另改 3 条该组用例的夹具与断言到新锚点；新原语 `pointer_no_verbatim` 补 6 条
+#   （`rules_engine_test.TestPointerNoVerbatim`：回指却复述取值 / 纯回指 / 不含回指标记 /
+#   标准名豁免 / 阈值可配 / 文件缺失），新防线补 5 条
+#   （`check_specs_test.TestCheckPointerNoVerbatimGuard`：同上四形态的真实仓库口径 + 1 条
+#   核对面与规则数据逐项同源）。
+#   新防线的核对面由 `POINTER_SCAN_FILES` 常量与规则数据**逐项同源**（补 1 条
+#      `test_scan_files_match_rule_data`——新增落点时两处必须一起改，防"落点漂移"静默过去）。
+#   同源实取数 `Ran 1269 tests ... OK`）。
+#   接线数 101 → 102（新增一道防线、一个名字；`CHECKS` 序列与 `guards.adoc` 清单表同步追加第 95 位，
+#   原 95..101 顺次平移为 96..102）。
+#   本轮（**PR #171 全文 review 一轮**）：修掉本轮改动自己带出的四处问题，每条都补了反例用例：
+#     * **`pointer_no_verbatim` 的核对面只列了 21 个文件**——未列入的文件**永远不被扫描**，
+#       而防线不会报"少扫了一层"（静默盲区）。实测：`specs/general/coding.adoc`、
+#       `specs/general/testing.adoc`、`prompts/review.adoc` 等**从来就没被扫过**，而它们正是
+#       "把取值推给别处、又忍不住复述一遍"最可能出现的两层。改为**覆盖仓库里全部 .adoc**
+#       （历史留痕 `CHANGELOG.adoc` 除外，与 `duplicate_scan` 同口径），并补一条双向用例：
+#       核对面须**逐项等于**仓库里被跟踪的 .adoc 清单（新增一个 .adoc 却忘了纳入即报红）。
+#     * **本轮自己带出的重复**：`specs/general/encoding.adoc`「读写编码」新增的批处理编码条，
+#       与 `specs/stack/batch.adoc`「编码与行尾」的同一件事**各自完整写了一遍、又各自回指对方**
+#       （两边互指即"都以为对方是真源"，正是本轮立项要拦的形态）。收敛为：通用层只留
+#       "这是显式例外 + 要求"，取值与做法只在 `batch.adoc` 一处；行尾条同口径收窄。
+#     * **悬空自指**：`specs/general/testing.adoc` 新增的「回归用例」指针写"唯一落点＝**本节末**
+#       「线上问题与缺陷反哺」"，而该条在**下一节**（`== 环境与兼容` 之前）——读者按它找不到；
+#       该处与本节「回归测试」条本就重复，整条删除、指向留在既有那条上。
+#     * **陈旧回指**：`script/fetch-specs.py` 头部注释仍称"见 AGENTS_COMMON.adoc「加载方式」"
+#       （入口里早已没有该节）、"安装文档只会写这一个落点"（安装文档已删并入入口）；
+#       `check_specs.py` / `check_effective.py` 的数处注释与报错文案也仍按"安装文档 + 三条路径"
+#       的旧口径描述已改过的判据（读注释的人会被指向不存在的东西）。同步改到与判据一致。
+#   用例数 1269 → 1271（+2：核对面覆盖全部 .adoc 的双向用例；同源实取数 `Ran 1271 tests ... OK`）。
+#   接线数不变（102）：本轮不增删防线，只收紧核对面与修文本。
+GUARD_TEST_BASELINE = 1271
 
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
@@ -4002,7 +4437,7 @@ def _ref_titles(path: str):
     每类都收录别名，便于按习惯省略级别/括号说明：完整文本、去掉括号后缀的简化名
     （`信息归属（同一信息只写一处）` → `信息归属`）、括号内的文字
     （`分类与懒加载（加载调度器）` → `加载调度器`）。
-    `----` 代码块内的行不采集（如 INSTALL.adoc 模板首行 `= Agent 规范入口` 并非节）。
+    `----` 代码块内的行不采集（如入口模板里被逐字复制的代码块正文并非节）。
 
     **历史缺陷（本轮实测）**：原实现只采集 `=` 起头的节标题，`link:a.adoc[]「某条目」`
     一律判为悬空——于是「指向条目」这种正确写法**无法通过校验、只能改成节名**。
@@ -4611,17 +5046,17 @@ def check_java_test_naming():
         err(f"Java 测试规范 {rel} 未在加载调度器登记（不会被加载、其中命名契约实际失效）",
             "AGENTS_COMMON.adoc")
     else:
+        # 调度器**只须带「什么时候要加载」的触发特征**（要新建或改动 Java 测试类），
+        # 四类后缀与拆分裁决是 `java-testing.adoc` 的**条目本体**——原先要求调度器逐字
+        # 抄全后缀名与「多个测试类/不得滥拆」，是把本体复制进调度器（第二真源：
+        # `terminology.adoc`「数据字典」的反膨胀、`doc-design.adoc`「信息归属」）。
+        # 本体齐备由上面对 `java-testing.adoc` 的核对负责，这里只核「调度器能不能被触发」。
         java_line = "\n".join(java_lines)
-        missing = [s for s in JAVA_TEST_SUFFIXES if f"`{s}`" not in java_line]
-        if missing:
-            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
-                f"『{'/'.join(missing)}』后缀——调度器与该命名契约口径漂移"
-                "（引用方照调度器学习会漏掉该类测试）", "AGENTS_COMMON.adoc")
-        if "滥拆" not in java_line or "多个测试类" not in java_line:
-            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记未写明"
-                "「一个被测类可按需求/分类拆多个测试类、且不得滥拆」的口径——"
-                "调度器只传达后缀、不传达拆分裁决，引用方照调度器学习会把"
-                "「一个被测类一个测试类」当硬规定", "AGENTS_COMMON.adoc")
+        if not any(t in java_line for t in ("测试类", "测试规范", "测试")):
+            err("Java 测试类命名防线被破坏：AGENTS_COMMON.adoc 的 Java 技术栈登记"
+                "未写明「要新建或改动 Java 测试类」这一触发特征——"
+                "缺则写测试类时该文件不会被加载，其中的命名契约实际失效",
+                "AGENTS_COMMON.adoc")
     phase_done()
 
 
@@ -5262,8 +5697,8 @@ def check_public_facing_docs_stay_self_contained():
     """『公开面文档自足性防线』：会被**分发给引用方/在公开站点渲染**的文档不得指向维护方自查层。
 
 """
-    phase("公开面文档自足性检查（README/PROMPTS/INSTALL 不指向维护方层）")
-    for rel in ("README.adoc", "PROMPTS.adoc", "INSTALL.adoc"):
+    phase("公开面文档自足性检查（README/PROMPTS/公共入口 不指向维护方层）")
+    for rel in ("README.adoc", "PROMPTS.adoc", "AGENTS_COMMON.adoc"):
         path = os.path.join(REPO_ROOT, rel)
         if not os.path.isfile(path):
             continue
@@ -6095,7 +6530,10 @@ def check_performance_guard():
         err("加载调度器缺少性能测试的加载项与识别特征（应含『性能测试』字样）——"
             "缺则它永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
     else:
-        for token in ("性能测试", "性能敏感", "方案组合"):
+        # 只核**触发特征**（何时算命中性能测试）：`方案组合` 是性能测试条目的
+        # 条目本体取值（调度器抄它即第二真源），已去掉；`性能测试`/`性能敏感` 只是
+        # 「什么时候要加载」的判读特征，保留。
+        for token in ("性能测试", "性能敏感"):
             if token not in disp:
                 err(f"加载调度器性能测试条目缺少识别特征 `{token}`——"
                     "触发特征不全时，执行者会\"没想到要做性能测试\"", "AGENTS_COMMON.adoc")
@@ -6183,6 +6621,10 @@ def check_dispatcher_no_details_guard():
                 "「名称的定义按作用域归档、引用只写名称」）", "AGENTS_COMMON.adoc", lineno)
     else:
         log("  调度器条目形态合规：只登记文件与触发特征，未抄条目细节")
+    # 细节词只能拦"判定标准/任一命中"这类**措辞标记**，拦不住把**取值**成串抄进来。
+    # 补一道**逐字重合**核对：调度行的说明段与被引文件正文的最长公共子串超阈值即报红
+    # （规则与阈值见 `script/specs-rules/dispatcher.toml`）。
+    run_rule_guard("check_dispatcher_no_details_guard")
     phase_done()
 
 
@@ -6748,10 +7190,15 @@ def check_dependency_view_guard():
         run_rule_guard("check_dependency_view_guard")
     # 加载调度器：设计文档条目须指向它（多模块项目不知道有这份视图 = 规则不会被触发）
     generic = open(GENERIC_FILE, encoding="utf-8").read()
-    if DEPENDENCY_VIEW_SECTION not in generic:
-        err("依赖关系文档防线被破坏：AGENTS_COMMON.adoc 的设计文档加载条目未指向"
-            f"「{DEPENDENCY_VIEW_SECTION}」——多模块项目与『增删依赖』场景不会加载到它"
-            "（规则写了但不会被触发）", "AGENTS_COMMON.adoc")
+    # 只核**触发特征**（要增删依赖/改模块结构、多模块项目时即命中）：`依赖关系文档（…）`
+    # 是 `doc-design.adoc` 的**节标题**（条目本体），抄进调度器即第二真源。
+    dep_disp = next((ln for ln in generic.splitlines()
+                     if "specs/general/doc-design.adoc" in ln), "")
+    if not dep_disp or ("依赖" not in dep_disp and "模块结构" not in dep_disp):
+        err("依赖关系文档防线被破坏：AGENTS_COMMON.adoc 的设计文档加载条目缺少触发特征"
+            "（要增删依赖/新增模块/改模块结构、多模块项目时即命中）——"
+            "多模块项目与『增删依赖』场景不会加载到它（规则写了但不会被触发）",
+            "AGENTS_COMMON.adoc")
     # 依赖规范：『引入依赖』须指向本视图（按依赖规范学习时也要能读到）
     dep_file = os.path.join(SPECS_DIR, "general", "dependency.adoc")
     if os.path.isfile(dep_file):
@@ -7230,7 +7677,9 @@ def check_maven_parallel_guard():
         err("加载调度器缺少 Maven 栈的加载项——构建并行度与仓库镜像都失去触发特征",
             "AGENTS_COMMON.adoc")
     else:
-        for token in ("构建并行度", "构建/测试时", "`.mvn/maven.config`"):
+        # 只核**触发特征**（要跑构建/配包源时即命中）：`构建并行度`/`.mvn/maven.config`
+        # 是 `maven.adoc` 的条目本体措辞，抄进调度器即第二真源。
+        for token in ("构建", "镜像"):
             if token not in disp:
                 err(f"加载调度器 Maven 条目缺少识别特征 `{token}`——"
                     "触发特征不全时，执行者不会在『要跑构建』时想到这条", "AGENTS_COMMON.adoc")
@@ -7324,16 +7773,16 @@ def _names_in_zone(zone_body: str, rel: str) -> bool:
     "某入口被悄悄移出表格"这类改动因此不会被拦下。
 
     **点名形式**取表格行内任一种（这是"内容在不在表里"这一件判据，不该绑死某一种
-    排版）：反引号（`` | `INSTALL.adoc` | ... ``）、`link:` 文本（`| link:x[INSTALL.adoc] |`）、
-    裸文件名（`| INSTALL.adoc |`）。历史缺陷：原实现只认"反引号 + 文件名字面"，于是
+    排版）：反引号（`` | `AGENTS_COMMON.adoc` | ... ``）、`link:` 文本（`| link:x[AGENTS_COMMON.adoc] |`）、
+    裸文件名（`| AGENTS_COMMON.adoc |`）。历史缺陷：原实现只认"反引号 + 文件名字面"，于是
     把同一格改成 AsciiDoc 惯用的 `link:` 文本写法（表格结构、所在节、覆盖面均未变，
     纯排版）后，**明明列在表里却报"未列进表"**——判据把"行的位置"与"文件名的排版"
     混成了一件。
     """
     # **限定在"文件"这一列**（表格第 2 格）：表格是 `| 入口 | 文件 | 说明`，
-    # 若只在**说明列**里顺带提到某文件（如"见 `AGENTS.adoc`（另见 INSTALL.adoc 的说明）"），
+    # 若只在**说明列**里顺带提到某文件（如"见 `AGENTS.adoc`（另见 README.adoc 的说明）"），
     # 那不是"它被列进了清单"——按"整行任一点名"判定会把说明列的提及也算命中（实测：
-    # 把 `INSTALL.adoc` 那行改成"文件列写别的、说明列提一句 INSTALL.adoc"，检查不报）。
+    # 把该行改成"文件列写别的、说明列提一句"，检查不报）。
     # 故取"第一个 `|` 之后、**第二个 `|` 之前**"这一段（= 文件列）来判。
     for line in zone_body.split("\n"):
         if not line.startswith("|"):
@@ -7364,7 +7813,7 @@ def check_public_content_coverage():
     phase("公共内容覆盖面检查（入口清单与实际一致）")
     if not os.path.isfile(PUBLIC_FILE):
         err("缺少公共内容入口索引 PUBLIC.adoc——"
-            "公共内容有多个公开入口（安装文档、通用规范入口 + specs/、公共片段、"
+            "公共内容有多个公开入口（通用规范入口 + specs/、公共片段、"
             "随规范分发的工具），没有清单则覆盖面界不清：检查会漏掉半个公共内容、"
             "自足要求会被误加到只对维护方成立的文件上（见 AGENTS.adoc「校验范围」）",
             "PUBLIC.adoc")
@@ -7377,14 +7826,14 @@ def check_public_content_coverage():
     if "PUBLIC.adoc" not in project_entry:
         err("公共内容入口索引未在本仓库项目规范入口（AGENTS.adoc）登记——"
             "维护方无从知道公共内容有哪些入口", "AGENTS.adoc")
-    # 两个公开入口须**列进「入口清单」表**：`rel not in listing` 判的是**全文**，
-    # 正文里提一句（如"'为什么需要本索引'里举例说 INSTALL.adoc 也会被读到"）同样命中，
-    # 于是"某入口被移出表格、只剩正文提到"这种改动**不会被发现**——而表格才是覆盖面
-    # 的定义处（实测：把 `INSTALL.adoc` 那行从表里删掉、只在正文保留一句 `INSTALL.adoc`，
-    # 检查仍全绿）。故本条须按**表格区**判定，与下面按节切的核对口径一致。
+    # 公开入口须**列进「入口清单」表**：`rel not in listing` 判的是**全文**，正文里提一句
+    # 同样命中，于是"某入口被移出表格、只剩正文提到"这种改动**不会被发现**——而表格才是
+    # 覆盖面的定义处。故本条须按**表格区**判定，与下面按节切的核对口径一致。
+    # **安装入口已并入公共入口**（用户口径：安装文档内容压进入口、删源文件）——清单里的
+    # 「安装入口」一行随之指向同一个文件（一个文件可承担多个入口角色，覆盖面不因此缩小）。
     sections_pre = _split_adoc_sections(listing)
     list_bodies = [b for t, b in sections_pre if "入口清单" in t]
-    for rel in ("INSTALL.adoc", "AGENTS_COMMON.adoc"):
+    for rel in ("AGENTS_COMMON.adoc",):
         if rel not in listing:
             err(f"公共内容入口清单未列出 {rel}——"
                 "漏一个入口即半个公共内容不在覆盖面内"
@@ -7773,13 +8222,16 @@ def check_script_header_guard():
         err(f"缺少 {rel_common}——脚本头部注释条的调度器登记无从核对", rel_common)
     else:
         common = open(common_path, encoding="utf-8").read()
-        missing = [k for k in ("文档头先行", "常量名")
-                   if k not in common]
-        if missing:
-            err(f"脚本头部注释防线被破坏：{rel_common} 缺失要点 {missing}——"
-                "加载调度器的脚本加载项须有本条的识别特征（要新写或改脚本、文档头只剩一句用途、"
-                "注释里写死与常量重复的取值），缺则该条永远不会被触发加载、规则实际失效",
-                rel_common)
+        # 只核**触发特征**（要写脚本、要写脚本文档头时即命中）：`文档头先行`/`常量名`
+        # 是 `script.adoc` 的条目本体取值，抄进调度器即第二真源。
+        script_disp = next((ln for ln in common.splitlines()
+                            if "specs/general/script.adoc" in ln), "")
+        if not script_disp:
+            err(f"脚本头部注释防线被破坏：{rel_common} 未登记 `specs/general/script.adoc`——"
+                "缺则该文件永远不会被加载、本条实际失效", rel_common)
+        elif "脚本" not in script_disp:
+            err(f"脚本头部注释防线被破坏：{rel_common} 的脚本加载项缺少触发特征——"
+                "缺则该条永远不会被触发加载、规则实际失效", rel_common)
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
         rd = open(README_FILE, encoding="utf-8").read()
@@ -7878,13 +8330,19 @@ def check_script_selfdoc_guard():
         err(f"缺少 {rel_common}——脚本自述文档条的调度器登记无从核对", rel_common)
     else:
         common = open(common_path, encoding="utf-8").read()
-        missing = [k for k in ("脚本单打独斗", "多行块注释")
-                   if k not in common]
-        if missing:
-            err(f"脚本自述文档防线被破坏：{rel_common} 缺失要点 {missing}——"
-                "加载调度器的脚本加载项须有本条的识别特征（要为脚本另建独立文档、"
-                "脚本的定位用法写在代码之外），缺则该条永远不会被触发加载、规则实际失效",
-                rel_common)
+        # 只核**触发特征**（要为脚本另建独立文档时即命中）：`脚本单打独斗`/`多行块注释`
+        # 是 `script.adoc` 的条目本体取值，抄进调度器即第二真源。
+        # **取调度器那一行**：入口里点 `script.adoc` 的地方不止一处（取回口径一节也回指它的
+        # 「脚本头部注释（文档头）」，"第一处命中"会取到那一行、把本判据判成缺失——本轮实测）。
+        # 调度器的加载项形态是**识别特征 + `→` 引用**，故按它定位。
+        script_disp = next((ln for ln in common.splitlines()
+                            if "specs/general/script.adoc" in ln and "→" in ln), "")
+        if not script_disp:
+            err(f"脚本自述文档防线被破坏：{rel_common} 未登记 `specs/general/script.adoc`——"
+                "缺则该文件永远不会被加载、本条实际失效", rel_common)
+        elif "另建独立文档" not in script_disp:
+            err(f"脚本自述文档防线被破坏：{rel_common} 的脚本加载项缺少『要为脚本另建独立文档』"
+                "这一触发特征——缺则该条永远不会被触发加载、规则实际失效", rel_common)
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
         rd = open(README_FILE, encoding="utf-8").read()
@@ -8129,6 +8587,20 @@ DOC_TYPE_NOTATION_SECTION = "文档中提及类型优先写类名 + import，不
 JAVA_INTERFACE_ACCESSOR_SECTION = "字段接口只加 get 方法、不加 set 方法"
 
 
+# 『Java 数据对象模板防线』（`specs/stack/java-object.adoc` + `specs/stack/java.adoc`「编码」）：
+# **用户点名**的规范条目——"java 数据对象模板……应该算模板文件，不应和规范文件放一起
+# （内容多，放了又不一定读）"；三处取值：新增对象时加 `@Accessors(chain = true)`、补注解时
+# **不加**（Spring 的 `BeanUtils` 会忽略带泛型参数的 set 方法 ⇒ 静默丢数据、各个地方都可能
+# 出问题）、`@AllArgsConstructor` 无参数时不加、POJO 的集合字段默认加 `@Singular`（除非有问题）；
+# 生效面两档：新增对象整段适用、既有对象**主动声明才补**。
+# **本条是"模板文件 + 规范文件"两处结构**：模板文件给"整段照抄的清单"（要么不读、要么整份
+# 读完），判据本体在规范文件里（同一件事只有一处真源）——两处任一被删/被合并即防线失守。
+JAVA_OBJECT_TEMPLATE_FILE = "specs/stack/java-object.adoc"
+# 本条判据本体的条目名（只用于"条目整条不见了"时的报错文案；判据正文的锚点核对由
+# `script/specs-rules/java.toml` 的 `file_groups` 承担）。
+JAVA_OBJECT_TEMPLATE_SECTION = "数据对象模板"
+
+
 def _java_interface_accessor_rule_text(text: str) -> str:
     """取出『字段接口只加 get、不加 set』**这一条自己的正文**。
 
@@ -8179,6 +8651,48 @@ JAVA_INTERFACE_ACCESSOR_RULES = (
      "**定性**：须写明这是本集合自己的判据化取舍（外部材料只给方向与下限）——"
      "缺则会被读成 lombok 或某标准的明文要求"),
 )
+
+
+def check_java_object_template_guard():
+    """『Java 数据对象模板防线』：模板文件与判据本体两处都不得被删、被合或降级。
+
+    用户口径：数据对象模板属"**要么不读、要么整份读完**"的产物，故**单列成模板文件**、
+    不并进 `specs/stack/java.adoc`；判据本体必须留在规范文件里。失效形态有四类：
+      * **模板文件被删或被并回规范** —— 回到"撑大规范正文、而它又不一定被读"；
+      * **判据本体从规范文件里消失** —— 只剩一份清单，读者不知道"为什么补注解不加
+        `@Accessors`"，于是"补注解也加上吧"重新成立（看起来只是多一个注解）；
+      * **加载门丢了** —— 新建对象时该文件永不被加载，模板形同不存在；
+      * **三处取值被删或降级** —— 无参 `@AllArgsConstructor`、集合 `@Singular` 两条各自
+        都可能被当成风格偏好顺手去掉。
+    故逐组核模板文件与规范文件的**可核对那句话**（取值 + 机制 + 判定标准 + 依据；锚点与
+    分组见 `script/specs-rules/java.toml`），并核调度器登记与 README 同步。"某个类算不算
+    数据对象、代码里到底标没标"属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("Java 数据对象模板防线检查")
+    rel_tpl = JAVA_OBJECT_TEMPLATE_FILE
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel_tpl.split("/"))):
+        err(f"缺少 {rel_tpl}——『Java 数据对象模板』的模板本体丢失"
+            "（该条是 Java 栈专属、且是「要么不读、要么整份读完」的产物，"
+            "故单列为模板文件而**不并进** `specs/stack/java.adoc`）", rel_tpl)
+    else:
+        run_rule_guard("check_java_object_template_guard")
+    # 判据本体：`specs/stack/java.adoc`「编码」里的「数据对象模板」条——先确认**条目还在**
+    # （标题级，条目整条被删时给出可读的报错），再逐组核条目正文的锚点（锚点在
+    # `script/specs-rules/java.toml` 的 `file_groups` 里）。
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——『数据对象模板』的判据本体无处承载"
+            "（模板文件只给整段清单，判据必须留在规范文件里）", rel_java)
+    else:
+        text = open(JAVA_STACK_FILE, encoding="utf-8").read()
+        if f"**{JAVA_OBJECT_TEMPLATE_SECTION}" not in text:
+            err(f"Java 数据对象模板防线被破坏：{rel_java}「编码」缺少"
+                f"`* **{JAVA_OBJECT_TEMPLATE_SECTION}` 条目——判据本体不在规范文件里时，"
+                "模板文件成了第二真源（两处各自漂移），或读者只拿到清单、不知道"
+                "『为什么补注解不加 `@Accessors`』", rel_java)
+        run_rule_guard("check_java_object_template_guard")
+    phase_done()
 
 
 def check_java_interface_accessor_guard():
@@ -8545,10 +9059,13 @@ def check_entity_dto_guard():
         rel_common = _rel_of(GENERIC_FILE)
         with open(GENERIC_FILE, encoding="utf-8") as fh:
             gtext = fh.read()
-        hit = next((l for l in gtext.split("\n") if "数据库实体类不进对外契约" in l), "")
+        # 定位该行**不靠条目名**（`数据库实体类不进对外契约` 是 `coding.adoc` 的判据正文，
+        # 抄进调度器即第二真源）——按「加载项是 coding.adoc + 带到对外接口的触发特征」定位。
+        hit = next((l for l in gtext.split("\n")
+                    if "specs/general/coding.adoc" in l and "对外接口" in l), "")
         if not hit:
             err(f"数据契约的载体防线被破坏：{rel_common} 的加载调度器里找不到带"
-                "「数据库实体类不进对外契约」的条目——缺则写对外接口参数时"
+                "「对外接口」触发特征的 `coding.adoc` 条目——缺则写对外接口参数时"
                 "不会触发加载这条（等于没写）", rel_common)
         else:
             for keys, desc in (
@@ -8634,6 +9151,19 @@ def check_persistence_access_guard():
                         f"出现框架专名 `{token}`——通用层识别特征不得点名框架类名"
                         "（否则非 Java 项目也被带入 MyBatis-Plus 术语、且与归属层冲突）",
                         rel_common)
+        # 两处调度条目须带**触发特征**（何时命中）：`查/改库`。只核这一点，不要求抄
+        # 条目本体的成员方法名与禁止面（那是 `java.adoc` 的取值，抄进调度器即第二真源）。
+        coding_line = next((ln for ln in ctext.splitlines()
+                            if "specs/general/coding.adoc" in ln), "")
+        if not coding_line or "查/改库" not in coding_line:
+            err(f"持久化访问防线被破坏：{rel_common} 的通用层『编写代码』条目缺少触发特征"
+                "（要写持久化访问代码——在哪个类里调持久化 API、要查/改库时即命中）——"
+                "缺则读到它的场景（写持久化访问代码）不会触发加载", rel_common)
+        java_line = next((ln for ln in ctext.splitlines()
+                          if "specs/stack/java.adoc" in ln), "")
+        if not java_line or "查/改库" not in java_line:
+            err(f"持久化访问防线被破坏：{rel_common} 的 Java 技术栈登记缺少触发特征"
+                "（要查/改库时即命中）——缺则 Java 项目按栈登记加载时看不到这条", rel_common)
     # 公开面：README 目录说明（读者按 README 学习时须能看到这条存在、且两处分层一致）
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE) and "持久化访问" not in open(
@@ -9036,9 +9566,20 @@ def check_self_dispatch_guard():
     a_path = os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc")
     if os.path.isfile(a_path):
         atext = open(a_path, encoding="utf-8").read()
-        if atext.count("执行者不得自行发评论唤起自己") < 2:
-            err("不得自行发评论唤起自己防线被破坏：AGENTS_COMMON.adoc 的调度器须在"
-                "『多 agent 协作』与『CNB 平台』两处带识别特征（缺则该 L1 永远不会被触发加载）",
+        # 只核**触发特征**（要发评论 / 按评论派发时即命中），不核条目本体句
+        # （`执行者不得自行发评论唤起自己` 是 `collab.adoc`/`cnb.adoc` 的判据正文，
+        # 抄进调度器即第二真源）：两处（多 agent 协作 + CNB 平台）都要能触发本条。
+        collab_disp = next((ln for ln in atext.splitlines()
+                            if "specs/general/collab.adoc" in ln), "")
+        cnb_disp = next((ln for ln in atext.splitlines()
+                         if "specs/platform/cnb.adoc" in ln), "")
+        if not collab_disp or "评论" not in collab_disp:
+            err("不得自行发评论唤起自己防线被破坏：AGENTS_COMMON.adoc 的『多 agent 协作』"
+                "条目须含触发特征（要发评论/按评论派发即命中，缺则该 L1 永远不会被触发加载）",
+                "AGENTS_COMMON.adoc")
+        if not cnb_disp or "评论" not in cnb_disp:
+            err("不得自行发评论唤起自己防线被破坏：AGENTS_COMMON.adoc 的『CNB 平台』"
+                "条目须含触发特征（要发评论/按评论派发即命中，缺则该 L1 永远不会被触发加载）",
                 "AGENTS_COMMON.adoc")
     else:
         err("缺少 AGENTS_COMMON.adoc——加载调度器无处登记该识别特征", "AGENTS_COMMON.adoc")
@@ -9162,12 +9703,27 @@ def check_merge_relationship_guard():
              "L1 与判据：平台层「压缩提交」节须有『压缩须保留与目标分支的合并关系』一条，"
              "并写明『须以目标分支最新提交为祖先』这一可核对判据"
              "（删除或降级则『照抄内容后另起单亲提交』的失效复发、PR 卡 conflict）"),
-            (("git merge-base <分支> <目标分支>", "git rev-list --parents -n1"),
-             "可核对判据：须给出祖先关系与双亲的核对命令（`git merge-base` / `git rev-list --parents`），"
-             "让『已并入』这件事可被机械核对、而不是只靠工作树差异宣称"),
-            (("照抄目标分支的文件内容后另起一个单亲提交", "目标分支并未成为本分支的祖先"),
-             "根因形态：须写明真实失效（照抄目标分支文件内容后另起单亲提交→目标分支不是祖先→"
-             "平台仍报冲突），否则条文会被读成『工作树一致即可』——正是本条要拦的失效"),
+            # 只核"本处给得出可核对的判据、并指向真源"，**不要求逐字抄 git 侧的核对命令**：
+            # `git merge-base <分支> <目标分支>` / `git rev-list --parents -n1` 是
+            # `specs/general/git.adoc`「压缩后的合并关系核对」的正文取值，抄回平台层即第二真源
+            # （`terminology.adoc`「数据字典」的反膨胀）——真源侧的命令由上面那条
+            # `specs/general/git.adoc` 自身的防线钉住，此处只防"平台侧只说'要保留合并关系'
+            # 而给不出任何可核对的东西"。
+            (("specs/general/git.adoc`「压缩后的合并关系核对」",),
+             "可核对面：平台侧须**指向** git 侧的核对命令真源（`specs/general/git.adoc`"
+             "「压缩后的合并关系核对」）——让『已并入』这件事可被机械核对、而不是只靠工作树差异宣称；"
+             "**不要求**把 `git merge-base`/`git rev-list --parents` 的字面命令再抄一份到平台层"),
+            # 只核"**平台侧给出了自己能观测到的真实失效**"，**不要求逐字抄 git 侧的根因句**：
+            # `照抄目标分支的文件内容后另起一个单亲提交`/`目标分支并未成为本分支的祖先` 是
+            # `specs/general/git.adoc`「压缩后的合并关系核对」的正文取值，抄回平台层即第二真源
+            # （本 PR 的立项口径：「同一件事只在一处给真源」）。平台侧该写的是**自己观测得到的那一面**
+            # ——工作树/`git diff` 看不出毛病、本平台仍报冲突并卡 `code_conflict`。
+            # 本条防的仍是"平台侧把失效整段删掉、条文被读成『工作树一致即可』"。
+            (("照抄目标分支的文件内容", "仍报冲突"),
+             "失效形态：须写明**平台侧能观测到的**真实失效（照抄目标分支内容 + 单亲提交 → "
+             "工作树看不出毛病、本平台仍报冲突/卡 `code_conflict`），否则条文会被读成『工作树一致即可』"
+             "——正是本条要拦的失效；**不要求**逐字抄 git 侧的根因句（那是 git.adoc 的正文，"
+             "抄回平台层即第二真源）"),
             (("git merge-base --is-ancestor <目标分支> <分支>"),
              "假绿的判据：须写明 `--is-ancestor` 为假这一判据（工作树一致、`git diff` 无输出时"
              "唯一能看出问题的信号，缺则防线看不到坏形态）"),
@@ -9512,6 +10068,7 @@ CHECKS = (
     check_dispatcher_no_details_guard,
     check_ledger_source_paths_guard,
     check_java_interface_accessor_guard,
+    check_java_object_template_guard,
     check_maven_mirror_guard,
     check_registry_mirror_guard,
     check_throughput_guard,
@@ -9520,6 +10077,8 @@ CHECKS = (
     check_generation_efficiency_guard,
     check_after_change_review_guard,
     check_refinement_guard,
+    check_duplicate_scan_guard,
+    check_pointer_no_verbatim_guard,
     check_info_density_guard,
     check_java_serial_guard,
     check_maven_parallel_guard,
