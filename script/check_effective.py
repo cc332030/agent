@@ -256,6 +256,7 @@ MECHANISMS = [
      "script/check_specs.py",
      "check_quality_guard",
      "check_quality_guard 钉住该节仍在、十项要点与判定标准、存量边界与依据行，以及调度器识别特征与图书馆依据主题 library/quality.adoc（坏味道与可读性依据＋同义性差异与取样状态）；"
+     "「失败与边界」那一项的**条件例外**（`Enum.valueOf` 一类查找式 API 允许空 `catch`：准入三条 + 两类扩大方向的排除）另由 `check_java_enum_valueof_catch_guard` 逐条钉住（判据本体在本条、Java 落点与加载门在那边）；"
      "**本条只钉要点文本仍在**——『某次交付的代码质量到底过不过』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("生成效率：先定完成判据、一次做对做完、延后验证一次到位、失败一次查根因、按需读取、不重做已做完的事",
      "specs/general/context.adoc「生成效率（同等质量下最少往返）」",

@@ -11444,6 +11444,162 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         self.assertIn("README", self.error_texts())
 
 
+class TestCheckJavaEnumValueofCatchGuard(CheckSpecsTestCase):
+    """钉住『Java 枚举查找的空 catch』（用户点名：`Enum.valueOf` 的异常只有可能是值没匹配上，
+    另有自写枚举工具，故 Java 下允许空 `catch`）。
+
+    本条是 L1「不得吞异常」的**唯一放宽口**，故最易被破坏的形态**不是"没写例外"，而是
+    "例外被读宽"**——本组用例逐条覆盖：
+      * **例外被抄成通用豁免** —— 准入条件（异常语义单一 + 取默认值即业务语义）与判定标准
+        被删后，任何 `catch (Exception) {}` 都能自证"我这是枚举查询"；
+      * **扩大的方向一：类级空 `catch`** —— `catch (Throwable)`/`catch (Exception)` 会把同一个
+        `try` 里其他语句的异常一并吞掉，而它在代码表面恰恰"符合"例外（本条最危险的形态）；
+      * **扩大的方向二：给已返回默认值的写法再补空 `catch`** —— 把本来已经正确的写法改坏；
+      * **判据本体只活在一处** —— 通用层与 Java 侧各写一份判据（第二真源、两处各自漂移）；
+      * **依据被读成标准规定** —— 图书馆不登记取舍，读者会把"允许空 catch"当成 JDK 的规定。
+    故夹具按**判据本体**（准入四条、判定标准、两类扩大的排除）造，正例即真实文件的同形写法。
+    """
+
+    CODING_RULE = (
+        "* **显式处理失败与边界（L1）**：**不得吞异常**（`catch` 后空实现、只打日志不处理）。"
+        "**条件例外（L2，把\"查不到 → 取默认值\"这类纯取值转换写成空 `catch`）**："
+        "只在该 API 的**异常只有一种原因**且调用方**以该查找的默认值为业务语义**时成立。"
+        "**三条同时成立才算命中、缺一即回到 L1**：① **异常语义单一**；② **取不到即无值**；"
+        "③ **默认值取自同一 API 的返回值**；**且该处须写明\"异常只有这一种原因\"的依据**。"
+        "**判定标准（任一命中即不合规）**：① 该 API 的异常**不止一种原因**却按本例外空 `catch`；"
+        "③ 借本例外绕过**可探测的非法输入**。"
+        "**边界（防反用）**：命中的调用点**仍是空 `catch`**。\n")
+
+    JAVA_RULE = (
+        "* **`Enum.valueOf` 与自写枚举工具的空 `catch`（L1，本条是通用层「显式处理失败与边界」"
+        "在 Java 的落点）**：`Enum.valueOf(...)` 抛出的 `IllegalArgumentException` "
+        "**只有\"没有该枚举常量\"这一种原因**（因值不匹配而抛），且取不到值时取**默认值**"
+        "就是业务语义——故此类调用**允许空 `catch`**；**自写的枚举工具**满足同一条件时同样允许。"
+        "**判据本体在** `specs/general/coding.adoc`「代码质量（新产出即高质）」的"
+        "「显式处理失败与边界」（准入三条 + 判定标准；本处不复述，只给 Java 落点与反面清单）。"
+        "**判定标准（任一命中即不合规）**：① `catch` 住的是**非枚举查询的异常**却写空块体；"
+        "③ 用带默认值的查询**绕开本该做的参数校验**；"
+        "④ 空 `catch` 处**没有写明\"异常只有这一种原因\"的依据**。"
+        "**边界（防反用）**：① **只放宽空块体**——该 `catch` 仍须捕获**具体异常类型**，"
+        "**不得**写成 `catch (Throwable)`/`catch (Exception)` 这种**类级空 `catch`**"
+        "（那种写法会把**同一个 `try` 里的其他语句**的异常一并吞掉）；"
+        "② **工具类自身是正常类**：查不到就返回 `null`/`Optional.empty()` 的**本身就合规**，"
+        "**此时无需、也不得**为该返回值再补一个空 `catch`；"
+        "③ 只约束 Java、**替换主语测试**：非 Java 的对应能力另行判定。"
+        "**存量**按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。"
+        "**依据（标准名/编号）**：Java 官方 API 文档、ISO/IEC 25010、ISO/IEC/IEEE 29148。"
+        "**「只此一种原因才允许空 `catch`」是本集合的判据化取值**。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_coding = cm.CODING_FILE
+        self._orig_common = cm.GENERIC_FILE
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        self.write("specs/stack/java.adoc",
+                   "= Java 规范（技术栈层）\n\n== 健壮性\n\n" + self.JAVA_RULE)
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 代码质量（新产出即高质）\n\n" + self.CODING_RULE)
+        self.write("library/adoption.adoc",
+                   "= 取舍\n\n== 同义性差异与覆盖点（本集合自己承认的）\n"
+                   "* 空 `catch`：`Enum.valueOf` 是本集合自己的判据化取舍，"
+                   "也是「不得吞异常」的**唯一放宽口**。\n")
+        self.write("library/sources.adoc",
+                   "= 依据\n\n== 枚举查找的异常与空 `catch`\n"
+                   "* `Enum.valueOf`（**本次未逐字取回**）。\n"
+                   "* **须注意的语义差异（同义性，L1）**：API 文档未规定该不该吞。\n")
+
+        self.write("AGENTS_COMMON.adoc",
+                   "= 调度器\n\n**枚举查找的失败处理**（出现 `Enum.valueOf` 时）\n")
+
+    def tearDown(self) -> None:
+        (cm.JAVA_STACK_FILE, cm.CODING_FILE) = (self._orig_java, self._orig_coding)
+        cm.GENERIC_FILE = self._orig_common
+        super().tearDown()
+
+    def _write_java(self, text):
+        self.write("specs/stack/java.adoc", "= Java 规范（技术栈层）\n\n== 健壮性\n\n" + text)
+
+    def _write_coding(self, text):
+        self.write("specs/general/coding.adoc",
+                   "= 通用编码规范\n\n== 代码质量（新产出即高质）\n\n" + text)
+
+    def test_valid_passes(self):
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_java_rule_removed_reports(self):
+        # 反例①：Java 落点整条被删 → 例外无处可依（读者按栈文件学不到，或以为 L1 仍一刀切）
+        self._write_java("* **别的条目**：略。\n")
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("Enum.valueOf", self.error_texts())
+
+    def test_no_link_to_criteria_body_reports(self):
+        # 反例②：不再回指通用层判据本体 → 本条要么失去判据、要么被就地再抄一份（第二真源）
+        self._write_java(self.JAVA_RULE.replace(
+            "**判据本体在** `specs/general/coding.adoc`「代码质量（新产出即高质）」的"
+            "「显式处理失败与边界」（准入三条 + 判定标准；本处不复述，只给 Java 落点与反面清单）。", ""))
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("显式处理失败与边界", self.error_texts())
+
+    def test_admission_condition_removed_reports(self):
+        # 反例③（最危险的形态）：准入条件被删 → 例外只剩"允许空 catch"一句，任何 catch 都能自证合规
+        self._write_java(self.JAVA_RULE.replace(
+            "**只有\"没有该枚举常量\"这一种原因**（因值不匹配而抛）", "可能抛异常"))
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("这一种原因", self.error_texts())
+
+    def test_scope_class_level_catch_removed_reports(self):
+        # 反例④：扩大的方向一没被排除 → `catch (Exception) {}` 会被当成"符合例外"
+        self._write_java(self.JAVA_RULE.replace(
+            "**不得**写成 `catch (Throwable)`/`catch (Exception)` 这种**类级空 `catch`**"
+            "（那种写法会把**同一个 `try` 里的其他语句**的异常一并吞掉）；", ""))
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("类级空 `catch`", self.error_texts())
+
+    def test_default_value_boundary_removed_reports(self):
+        # 反例⑤：扩大的方向二没被排除 → 给已返回默认值的写法再补空 catch
+        self._write_java(self.JAVA_RULE.replace(
+            "**此时无需、也不得**为该返回值再补一个空 `catch`", ""))
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("再补一个空 `catch`", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑥：依据行与取舍定性被删 → 读者把"允许空 catch"读成 JDK 的规定
+        self._write_java(self.JAVA_RULE.replace(
+            "**依据（标准名/编号）**：Java 官方 API 文档、ISO/IEC 25010、ISO/IEC/IEEE 29148。"
+            "**「只此一种原因才允许空 `catch`」是本集合的判据化取值**。", ""))
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("Java 官方 API 文档", self.error_texts())
+
+    def test_general_layer_criteria_removed_reports(self):
+        # 反例⑦：通用层的判据本体被抽走（只剩 Java 侧的一处）→ 例外失去准入判据、成通用豁免
+        self._write_coding("* **显式处理失败与边界（L1）**：**不得吞异常**。\n")
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("三条同时成立才算命中", self.error_texts())
+
+    def test_library_adoption_removed_reports(self):
+        # 反例⑧：图书馆不登记取舍 → 该例外被读成某标准的规定
+        self.write("library/adoption.adoc", "= 取舍\n\n== 同义性差异与覆盖点（本集合自己承认的）\n文字。\n")
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("唯一放宽口", self.error_texts())
+
+    def test_library_sources_removed_reports(self):
+        # 反例⑨：依据段被删 → 依据只存名称，日后无从核对"它今天还成立吗"
+        self.write("library/sources.adoc", "= 依据\n\n== 别的主题\n文字。\n")
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("Enum.valueOf", self.error_texts())
+
+    def test_load_gate_removed_reports(self):
+        # 反例⑩：加载门没了（调度器不登记识别特征）→ 写 `Enum.valueOf` 时该条永不被加载，
+        # 例外形同不存在；与 `check_java_object_template_guard` 同口径
+        self.write("AGENTS_COMMON.adoc", "= 调度器\n\n别的条目。\n")
+        cm.check_java_enum_valueof_catch_guard()
+        self.assertIn("识别特征", self.error_texts())
+
+
 class TestCheckDocTypeNotationGuard(CheckSpecsTestCase):
     """钉住『文档中提及类型优先写类名 + import，不写类全名』（用户提出的规范要求）。
 
@@ -12345,7 +12501,10 @@ class TestCheckQualityGuard(CheckSpecsTestCase):
         "* **职责单一、结构清晰（L1）**：能不能**一句话说清**它做什么；嵌套**三层以内**。\n"
         "* **命名表意、不用缩写（L1）**：同一概念在项目中只有一个叫法；禁缩写与拼音。\n"
         "* **可读性优先（L1）**：不用**魔法值**；同一表达式不重复求值。\n"
-        "* **显式处理失败与边界（L1）**：**不得吞异常**；**边界条件必须显式处理**。\n"
+        "* **显式处理失败与边界（L1）**：**不得吞异常**；**边界条件必须显式处理**。"
+        "**条件例外（L2，纯取值转换的查找式 API）**：须**异常语义单一**、**三条同时成立才算命中**、"
+        "不得绕过**可探测的非法输入**、命中处**仍是空 `catch`**、"
+        '须写明"异常只有这一种原因"的依据。\n'
         "* **无资源泄漏（L1）**：一律用**确定性释放**机制、成对释放。\n"
         "* **无并发隐患（L1）**：**共享可变状态**须有明确同步策略；锁范围与顺序写清。\n"
         "* **性能不写退化写法（L2）**：**循环内** IO 与查询、**N+1** 查询。\n"
@@ -12409,6 +12568,17 @@ class TestCheckQualityGuard(CheckSpecsTestCase):
         self._write_all(section=self.SECTION.replace("**不得吞异常**；", ""))
         cm.check_quality_guard()
         self.assertIn("不得吞异常", self.error_texts())
+
+    def test_conditional_exception_removed_reports(self):
+        # 反例：条件例外的**判据本体**被抽走（用户口径：`Enum.valueOf` 一类允许空 catch）——
+        # 例外一宽即等于把"不得吞异常"整条的其余部分作废（任何 `catch (Exception) {}`
+        # 都能自证"我这是枚举查询"），故它与「不得吞异常」本体同列本防线的要点。
+        self._write_all(section=self.SECTION.replace(
+            "**条件例外（L2，纯取值转换的查找式 API）**：须**异常语义单一**、"
+            "**三条同时成立才算命中**、不得绕过**可探测的非法输入**、命中处**仍是空 `catch`**、"
+            '须写明"异常只有这一种原因"的依据。', ""))
+        cm.check_quality_guard()
+        self.assertIn("异常语义单一", self.error_texts())
 
     def test_resource_release_removed_reports(self):
         self._write_all(section=self.SECTION.replace("一律用**确定性释放**机制、成对释放",
