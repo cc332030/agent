@@ -3774,6 +3774,53 @@ class TestCheckPublicContentSelfContained(CheckSpecsTestCase):
         cm.check_public_content_is_self_contained()
         self.assertEqual(cm.errors, [])
 
+    def test_prompts_dir_private_file_ref_reports(self):
+        # 反例（本轮实测失效）：`PROMPTS.adoc` 的公共约定把读者指向**本仓库私有文件**
+        # （维护方索引 `PUBLIC.adoc`）——它是公开面文档，引用方那里没有这份文件、读到的是死链。
+        # 当时三条防线（公开面自足 / 不得声明机械防线 / 本条）全绿：它们只看维护方自查层路径
+        # 与裸抓手名，不看**文件级**私有引用。
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("PROMPTS.adoc",
+                   "= 提示词入口\n\n两条本仓库特有约定见 `PUBLIC.adoc`。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("PROMPTS.adoc", self.error_texts())
+
+    def test_readme_root_changelog_ref_reports(self):
+        # 反例：公开面文档指向**本仓库根目录那份** `CHANGELOG.adoc`（引用方那里同名文件
+        # 是它自己的变更日志，指向本仓库那份即死链）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("README.adoc",
+                   "= 说明\n\n改动记录见仓库根目录 `CHANGELOG.adoc`。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_agents_adoc_as_referrer_own_entry_passes(self):
+        # 正例：`AGENTS.adoc` 作为**引用方自己的**项目规范入口被提及（公共内容通篇这么写），
+        # 属正当表述，不得误判为私有引用
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc.adoc",
+                   "= 文档\n\n本文引用的仓库内路径按加载入口（`AGENTS_COMMON.adoc` / "
+                   "项目根 `AGENTS.adoc`）所在目录解析。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_module_level_readme_passes(self):
+        # 正例：`README.adoc` 作为**引用方项目的模块级**索引页被提及，属正当表述
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/doc-module.adoc",
+                   "= 模块文档\n\n模块 `doc/` 下按需放 `README.adoc` 作模块文档索引。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
+    def test_library_name_without_path_in_prompts_passes(self):
+        # 正例：公开面文档只给**依据名**、不给可点开的图书馆路径（不误伤）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("PROMPTS.adoc",
+                   "= 提示词入口\n\n依据找不全时按依据规范如实标未确证（依据存放在本仓库的"
+                   "依据主题集合里，不在默认引用面内）。\n")
+        cm.check_public_content_is_self_contained()
+        self.assertEqual(cm.errors, [])
+
 
 class TestCheckNoMechanismClaimsInPublic(CheckSpecsTestCase):
     """钉住「公共内容不得声明机械防线」：机械防线只有维护规范集合的那一方有。
@@ -4638,18 +4685,27 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
     """
 
     def _write_valid(self):
+        # 口径（用户指出）：这件事的**默认动作**是「不新增、不修改」——用户本次明确要求才写，
+        # 且**不再要求**"主动声明"这种额外声明（用户直接说"记一条/改 changelog"即算）。
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
-                   "——「主动声明」指用户**本次明确要求**新增、修改、整理或压缩 changelog；"
-                   "**其余一切情形按\"未声明\"处理**：未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"，"
+                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
+                   "**本仓库的默认动作是「不新增、不修改」**，"
+                   "**只有用户本次明确要求**新增、修改、整理或压缩 changelog 时才写——**不再要求**"
+                   "\"主动声明\"这种额外声明。**其余一切情形按\"未要求\"处理**："
+                   "未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
                    "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        # 登记表侧须是**单行**：该行同时给出抓手名与默认动作口径（判据只认这一行）
         self.write("script/check_effective.py",
                    "ROWS = [\n"
-                   "    (\"本仓库 changelog 除非主动声明，否则不新增、不修改\",\n"
+                   "    (\"本仓库 changelog 的默认动作是不新增、不修改\",\n"
                    "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
                    "     \"check_changelog_timing_guard 钉住默认动作条\"),\n"
-                   "]\n")
+                   "]\n"
+                   "# 普通注释里单独提一次抓手名（不在登记表那一行上）\n"
+                   "# 该条由 check_changelog_timing_guard 钉住\n")
 
     def _patch_root(self):
         # check_effective.py 按 REPO_ROOT 解析，直接写入临时根即可
@@ -4668,36 +4724,57 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         self.assertIn("登记时机", self.error_texts())
 
     def test_default_action_wording_removed_reports(self):
-        # 反例：只留"除非主动声明"，删掉默认动作"一律不新增、不修改"
+        # 反例：只留"用户明确要求才写"，删掉**默认动作**「不新增、不修改」
+        # （默认动作不被单独说出来时，读者仍要先判"这算不算已声明"——用户指出的失效）
         self._write_valid()
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：用户**本次明确要求**新增、修改、整理或压缩 changelog 时按口径写。"
+                   "= 项目入口\n\n* 登记时机：**只有用户本次明确要求**新增、修改、整理或压缩 changelog 时才写。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("一律不新增、不修改", self.error_texts())
+        self.assertIn("本仓库的默认动作是「不新增、不修改」", self.error_texts())
 
-    def test_declaration_criteria_removed_reports(self):
-        # 反例：默认动作在、但"主动声明"没有判据（"这应该也算声明"重新可用）
+    def test_extra_declaration_requirement_removed_reports(self):
+        # 反例：把"不再要求主动声明"抽掉（"这应该也算声明"重新可用；用户直接说"
+        # 记一条"时执行者还要先自问算不算声明）
         self._write_valid()
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
-                   "——**其余一切情形按\"未声明\"处理**：未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"，"
-                   "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改）："
+                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写。"
+                   "**其余一切情形按\"未要求\"处理**：未提到该文件、**只要求更新文档或 README**、"
+                   "只说\"改动了什么\"、只要求\"调整项目规范\"，均**不得**新增条目（含\"顺手补一条\"）。"
+                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("本次明确要求", self.error_texts())
+        self.assertIn("不再要求", self.error_texts())
 
     def test_undeclared_forms_removed_reports(self):
-        # 反例：默认动作与声明判据都在，但没点名"未声明"的越界形态
-        # （用户只说改文档，执行者仍可把"改文档"读成"改 changelog"）
+        # 反例：默认动作与声明口径都在，但没点名"未要求"的越界形态
+        # （用户只说改文档/改规范，执行者仍可把"改文档"读成"改 changelog"）
         self._write_valid()
         self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（**主动声明**才算）：**除非用户主动声明，否则一律不新增、不修改本文件**"
-                   "——「主动声明」指用户**本次明确要求**新增、修改、整理或压缩 changelog；"
-                   "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
+                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写——**不再要求**"
+                   "\"主动声明\"这种额外声明。均**不得**新增条目（含\"顺手补一条\"）。"
+                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
                    "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
         cm.check_changelog_timing_guard()
         self.assertIn("只要求更新文档或 README", self.error_texts())
+
+    def test_removal_disposition_removed_reports(self):
+        # 反例：抽掉"用户要求移除时的处置"（执行者会为"版本线连续"自造一条新版本号顶上，
+        # 等于换个说法把删掉的条目留在文件里；本轮 PR #179 的真实场景）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
+                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写——**不再要求**"
+                   "\"主动声明\"这种额外声明。**其余一切情形按\"未要求\"处理**："
+                   "未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
+                   "均**不得**新增条目（含\"顺手补一条\"）。"
+                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("保留其余内容与既有版本号不动", self.error_texts())
 
     def test_missing_agents_file_reports(self):
         # 反例：项目规范入口被删（条目无处承载）
@@ -4706,12 +4783,232 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         cm.check_changelog_timing_guard()
         self.assertIn("AGENTS.adoc", self.error_texts())
 
+    def test_registry_row_without_wording_reports(self):
+        # 反例：抓手名还散落在别处（注释/别行），但**登记表那一行**抽掉了「默认动作」口径 →
+        # 仍须报错（"整份文件核"会被别处的同名字样兜住，核的不是"登记处登记了没有"）
+        self._write_valid()
+        self.write("script/check_effective.py",
+                   "ROWS = [\n"
+                   "    (\"登记时机\",\n"
+                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "     \"见登记时机一条\"),\n"
+                   "]\n"
+                   "# 该条由 check_changelog_timing_guard 钉住\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("没有登记行", self.error_texts())
+
     def test_effective_registry_missing_reports(self):
         # 反例：check_effective 未登记该条（定义了却没抓手＝又变成靠自觉）
         self._write_valid()
         self.write("script/check_effective.py", "ROWS = []\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("check_effective.py", self.error_texts())
+        self.assertIn("没有登记行", self.error_texts())
+
+
+class TestCheckRuleInstanceSeparationGuard(CheckSpecsTestCase):
+    """钉住『规则与实例分离防线』（用户指出：规范里到处是用户原话/环境实例）。
+
+    失效形态：把"某次问过什么、某次在哪台机器上跑"当成规则的一部分登记下来——读者拿不到
+    那句话/那个环境的场景就会**静默改写**本集合规则。故默认动作是"不写"：只有用户本次
+    明确要求登记时才写，且只写进本仓库的实例落点（图书馆与 `CHANGELOG.adoc`）。
+    """
+
+    def _write_valid(self):
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 规则与实例分离（本仓库默认动作：不写实例）：本仓库自身规范与公共规范"
+                   "一律**保持通用**——**不得**把本仓库/当前环境专有的实例（用户原话、本机路径、"
+                   "`tmp/` 文件名、轮次与日期、内部代号）写进规范文件、公共内容与提示词；"
+                   "这类实例只在用户本次明确要求时登记，且只登记在本仓库的实例落点——变更依据进图书馆 "
+                   "`library/adoption.adoc`、实证与官方逐字摘进 `library/sources.adoc`、历史进 `CHANGELOG.adoc`。"
+                   "**默认动作是「不写」**：用户说\"调整项目规范\"时改的是规则本身，**不得**"
+                   "顺手把原话抄进规范。失效形态是把用户某次说过的话当成规则的一部分登记下来，"
+                   "读者拿不到这句话的场景就会静默改写本集合规则（用户指出）。"
+                   "由 `script/check_specs.py` 的 `check_rule_instance_separation_guard` 钉住。\n")
+        # 登记表侧须是**单行**：该行同时给出抓手名与「规范保持通用」这条口径
+        self.write("script/check_effective.py",
+                   "ROWS = [\n"
+                   "    (\"规范保持通用（规则与实例分离）\",\n"
+                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "     \"check_rule_instance_separation_guard 钉住该条（规范保持通用）\"),\n"
+                   "]\n"
+                   "# 普通注释里单独提一次抓手名（不在登记表那一行上）\n"
+                   "# 该条由 check_rule_instance_separation_guard 钉住\n")
+
+    def test_valid_rule_instance_separation_guard_passes(self):
+        self._write_valid()
+        cm.check_rule_instance_separation_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_clause_reports(self):
+        # 反例①：整条被删（"用户说调整规范"重新被读成"把原话抄进规范"）
+        self._write_valid()
+        self.write("AGENTS.adoc", "= 项目入口\n\n* 统一变更日志：根目录 `CHANGELOG.adoc`。\n")
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("规则与实例分离", self.error_texts())
+
+    def test_generality_requirement_removed_reports(self):
+        # 反例②：抽掉"保持通用"（只留下"实例写哪"，读者会把实例当成规范内容）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 规则与实例分离（本仓库默认动作：不写实例）：实例登记在"
+                   "`library/adoption.adoc`、`library/sources.adoc` 与 `CHANGELOG.adoc`。"
+                   "**默认动作是「不写」**：用户说\"调整项目规范\"时改的是规则本身，**不得**顺手抄。"
+                   "失效形态：读者拿不到这句话的场景就会静默改写本集合规则（用户指出）。"
+                   "由 `script/check_specs.py` 的 `check_rule_instance_separation_guard` 钉住。\n")
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("保持通用", self.error_texts())
+
+    def test_landing_points_removed_reports(self):
+        # 反例③：抽掉实例登记落点（"该写哪"没了，执行者只能写进规范本身）
+        self._write_valid()
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* 规则与实例分离（本仓库默认动作：不写实例）：本仓库自身规范与公共规范"
+                   "一律**保持通用**，**不得**把用户原话、本机路径、`tmp/` 文件名、轮次与日期写进规范、"
+                   "公共内容与提示词。**默认动作是「不写」**：用户说\"调整项目规范\"时改的是规则本身，"
+                   "**不得**顺手抄。失效形态：读者拿不到这句话的场景就会静默改写本集合规则（用户指出）。"
+                   "由 `script/check_specs.py` 的 `check_rule_instance_separation_guard` 钉住。\n")
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_effective_registry_missing_reports(self):
+        # 反例④：check_effective 未登记该条（定义了却没抓手＝又变成靠自觉）
+        self._write_valid()
+        self.write("script/check_effective.py", "ROWS = []\n")
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("没有登记行", self.error_texts())
+
+    def test_missing_agents_file_reports(self):
+        # 反例⑤：项目规范入口被删（条目无处承载）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "AGENTS.adoc"))
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_registry_row_without_wording_reports(self):
+        # 反例⑥：抓手名还散落在别处（注释/别行），但**登记表那一行**抽掉了「规范保持通用」→
+        # 仍须报错（"整份文件核"会被别处的同名字样兜住，核的不是"登记处登记了没有"）
+        self._write_valid()
+        self.write("script/check_effective.py",
+                   "ROWS = [\n"
+                   "    (\"规范保持通用（规则与实例分离）\",\n"
+                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "     \"见规则与实例分离一条\"),\n"
+                   "]\n"
+                   "# 该条由 check_rule_instance_separation_guard 钉住\n")
+        cm.check_rule_instance_separation_guard()
+        self.assertIn("没有登记行", self.error_texts())
+
+
+class TestCheckDeclarativeRuleGuard(CheckSpecsTestCase):
+    """钉住『以对象定义规则、不给具体操作』（用户要求：规范以对象定义、不给具体操作）。
+
+    失效形态：写规则时顺手把"怎么取"也写进规范——规范给读者的成了一个随环境变的操作流程，
+    而不是一条判据。用户给的判据形态是「定义 `mvn -T <核心数>` 就好了，不要在规范里写
+    如何去拿核心数」，并点名"新增、修复、review 时都要遵守"。
+    """
+
+    LIFE = "specs-project-maintainer/spec-lifecycle.adoc"
+
+    SUBSECTION = (
+        "=== 以对象定义规则、不给具体操作（写规范的写法口径）\n\n"
+        "规则用**面向对象的思路**去定义：**定义「是什么、取什么值」**，**不写「怎么把它做出来」**。"
+        "取值写成**带占位符的形态**（如 `mvn -T <核心数>`），**括号里那个量是什么**就是规则的边界；"
+        "**这个量怎么得到属执行动作，不进规范**。\n\n"
+        "* **只定义取值、不定义取法（L1）**：规则正文只到**取值本身**为止。**判定标准（任一命中即违规）**："
+        "① 正文里出现**获取该取值的命令或步骤**；② 正文列出**该取值的多种可能来源**并给出取舍或次序；"
+        "③ 为\"取不到\"补一条**具体的兜底做法**——**若\"取不到\"确实有歧义**，**只写\"取不到时怎么判\"**，"
+        "**不写\"取不到时就用某个具体写法\"**：规则并没有变干净。\n"
+        "* **例外只在有歧义时开口（L1）**：只有当**按定义做不出唯一动作**时才给具体操作——"
+        "且**只补\"消除歧义所需的那一句\"**。\n"
+        "* **生效面（L1）**：**新增、修复、review** 三类动作都按本条判定（存量随动迁移；"
+        "review 时把\"正文里写着怎么取\"当必查项）。\n"
+        "* **判定标准（可核对）**：抽掉**本仓库/当前环境/当前平台**的专有名词后规则是否仍成立——"
+        "**要靠\"在哪台机器上、用什么命令取\"才成立的句子，就不是规则**。\n"
+        "* **依据（标准名/编号）**：ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148。"
+        "**\"规则只写到取值形态为止\"是本集合按现场用量判据化的取舍。**\n")
+
+    def _fixture(self):
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION)
+        self.write("specs/stack/maven.adoc",
+                   "* 默认启用多线程构建（L2）：取值＝当前构建设备的核心数，即 `mvn -T <核心数>`——"
+                   "核心数怎么得到是执行动作，不写进规范（这是本集合对**所有**规则一视同仁的写法："
+                   "取值只定义到占位符那一层）。\n")
+        self.write("prompts/_common.txt",
+                   "// tag::build-parallel[]\n`mvn -T <核心数>`；本条到此为止：核心数怎么得到是执行动作。"
+                   "取值只定义到这一层。\n// end::build-parallel[]\n")
+        self.write("AGENTS.adoc",
+                   "= 项目入口\n\n* **以对象定义规则、不给具体操作**（L1）：写规范时只定义「是什么、"
+                   "取什么值」；判据本体见 `specs-project-maintainer/spec-lifecycle.adoc`"
+                   "「以对象定义规则、不给具体操作」。\n")
+
+    def test_positive_passes(self):
+        self._fixture()
+        cm.check_declarative_rule_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_landing_file_reports(self):
+        # 反例①：判据本体的落点文件缺失（写规则时又会把取法一并写进规范）
+        self._fixture()
+        os.remove(os.path.join(self.root, "specs-project-maintainer", "spec-lifecycle.adoc"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("spec-lifecycle.adoc", self.error_texts())
+
+    def test_subsection_deleted_reports(self):
+        # 反例②：整条被删（只剩"规则要写得通用"这类无落点的印象）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n== 准入判定\n* 别的\n")
+        cm.check_declarative_rule_guard()
+        self.assertIn("以对象定义规则、不给具体操作", self.error_texts())
+
+    def test_boundary_sentence_removed_reports(self):
+        # 反例③：抽掉"定义与取法的分界"（读者仍会把"怎么取"当规则的一部分）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION.replace(
+            "**不写「怎么把它做出来」**", "**写得清楚一些**"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("怎么把它做出来", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例④：只留"只定义取值"、抽掉三条判定标准（"写到哪算够"回到执行者手里）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION.replace(
+            "**判定标准（任一命中即违规）**", "**要求**"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("任一命中即违规", self.error_texts())
+
+    def test_scope_of_effect_removed_reports(self):
+        # 反例⑤：生效面被抽掉（本条只在"新增规范"那一次生效，修既有条目与 review 时照旧写回取法）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION.replace(
+            "**新增、修复、review** 三类动作都按本条判定", "新增时按本条判定"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("新增、修复、review", self.error_texts())
+
+    def test_maven_value_removed_reports(self):
+        # 反例⑥：Maven 侧取值退回"要自己去探测核数"（本条要治的正是它）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   "* 默认启用多线程构建（L2）：取值按**当前构建设备**补齐"
+                   "（先实测核数再取）。\n")
+        cm.check_declarative_rule_guard()
+        self.assertIn("mvn -T <核心数>", self.error_texts())
+
+    def test_maintainer_entry_unregistered_reports(self):
+        # 反例⑧：维护方入口（`AGENTS.adoc`）未登记该口径的落点——判据齐备但没有入口，
+        # 执行者读入口时看不到它（"调整规范"时照旧会写回取法）
+        self._fixture()
+        self.write("AGENTS.adoc", "= 项目入口\n\n* 统一变更日志：根目录 `CHANGELOG.adoc`。\n")
+        cm.check_declarative_rule_guard()
+        self.assertIn("spec-lifecycle.adoc", self.error_texts())
+
+    def test_prompt_fragment_value_fixed_reports(self):
+        # 反例⑦：提示词片段又把"如何取核心数"写回去
+        self._fixture()
+        self.write("prompts/_common.txt",
+                   "// tag::build-parallel[]\n先实测核数（`nproc`/`sysctl -n hw.ncpu`）再取。\n"
+                   "// end::build-parallel[]\n")
+        cm.check_declarative_rule_guard()
+        self.assertIn("mvn -T <核心数>", self.error_texts())
 
 
 class TestCheckChecklistGuard(CheckSpecsTestCase):
@@ -11406,7 +11703,8 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
 
     SECTION = (
         "= Maven 规范\n\n== 构建并行度\n"
-        "* 默认启用多线程构建（L2）：未配置过并行度时默认开 `-T`，取值 `--threads 1C`；"
+        "* 默认启用多线程构建（L2）：未配置过并行度时默认开 `-T`，**取值＝当前构建设备的核心数**，"
+        "即命令形态 `mvn -T <核心数>`——**核心数怎么得到是执行动作，不写进规范**；"
         "不写 `-T` 即默认单线程。\n"
         "* 配置过即以配置为准（L2）：`.mvn/maven.config` 是项目级配置里优先探测的落点，不得覆盖、不得重复追加。\n"
         "* 并行度只到模块粒度（L1）：`-T` 作用于模块间，同一模块禁止并行构建。\n"
@@ -11420,7 +11718,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         "// tag::build-parallel[]\n"
         "**构建并行度（仅限 Maven 多模块构建）**：只对 Maven 多模块构建生效；先探测——项目已经配过并行度时"
         "以项目配置为准，配过就一律沿用、不覆盖、不重复追加；没配过才在本次构建命令上补默认"
-        "并行参数（用 `-T 1C`）；并行到模块粒度为止。\n"
+        "并行参数（`mvn -T <核心数>`，核心数怎么得到是执行动作，**不得写死 `-T 1C`**）；并行到模块粒度为止。\n"
         "// end::build-parallel[]\n")
 
     def _fixture(self):
@@ -11471,6 +11769,33 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
                    self.SECTION.replace("不写 `-T` 即默认单线程", "按需自行决定"))
         cm.check_maven_parallel_guard()
         self.assertIn("不写 `-T` 即默认单线程", self.error_texts())
+
+    def test_default_value_not_cores_reports(self):
+        # 反例①-2：取值口径退回「写死的 1C」→ 取的不是当前设备核心数（用户点名）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("**取值＝当前构建设备的核心数**", "取值一律 `--threads 1C`"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("取值＝当前构建设备的核心数", self.error_texts())
+
+    def test_value_how_to_get_written_back_reports(self):
+        # 反例①-4：取值写着"核心数"，却又把"怎么取核数"写回正文（用户点名要治的形态：
+        # 规范只定义取值，不要在规范里写如何去拿核心数）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace(
+                       "核心数怎么得到是执行动作，不写进规范",
+                       "核心数用 `nproc`／`sysctl -n hw.ncpu` 一类命令实测得到"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("核心数怎么得到是执行动作", self.error_texts())
+
+    def test_prompt_value_fixed_at_1c_reports(self):
+        # 反例①-3：片段又变回「命令行补 `-T 1C`」→ 执行侧按写死值开（取不到当前设备核心数）
+        self._fixture()
+        self.write("prompts/_common.txt",
+                   self.COMMON.replace("**不得写死 `-T 1C`**", "命令行补 `-T 1C`"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("不得写死", self.error_texts())
 
     def test_config_priority_removed_reports(self):
         # 反例②：最易被精简掉的一半——"配过即沿用、不得覆盖"（缺则去改引用方配置）
@@ -11538,7 +11863,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         # 反例⑩：片段只留"默认开并行"、抽掉"配过就沿用不覆盖" → 执行者会去改引用方配置
         self._fixture()
         self.write("prompts/_common.txt",
-                   "// tag::build-parallel[]\n没配过就补 `-T 1C`。\n// end::build-parallel[]\n")
+                   "// tag::build-parallel[]\n没配过就补 `-T 2C`。\n// end::build-parallel[]\n")
         cm.check_maven_parallel_guard()
         self.assertIn("一律沿用", self.error_texts())
 

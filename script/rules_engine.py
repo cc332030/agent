@@ -235,7 +235,9 @@ def _step_line_tokens(rules, step):
     line = next((ln for ln in text.splitlines()
                  if all(a in ln for a in step["anchor"])), "")
     if not line:
-        ctx.err(_msg(step, "missing_line_message"), rel)
+        # `{file}` 与其余步骤同口径：报错须给出**缺的是哪份文件**，否则读者只看到一句
+        # "没有对应条目"、连去哪找都无从知道（`_msg` 返回的默认文案含该占位符）
+        ctx.err(_msg(step, "missing_line_message").replace("{file}", rel), rel)
         return
     miss = [t for t in step["tokens"] if t not in line]
     if miss:
