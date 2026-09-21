@@ -173,14 +173,30 @@ MECHANISMS = [
      "check_reuse_precedent_guard", "check_reuse_precedent_guard 钉住通用层两条 L1 条文与典型反例（UUID 手写、集合判空手写）、Java 栈 java-syntax.adoc 优先级顺序（项目自有/已引入库须排在 JDK 之前）、java.adoc 的识别特征与 README 同步；『某次编码是否真的先查了先例』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("跨语言执行脚本须放资源文件夹、扩展名取被调语言的扩展名，且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_external_script_guard", "check_external_script_guard 钉住通用层「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」的四条 L1（落点／扩展名取被调语言，无通用扩展名时取该技术支持的文件形式如 MyBatis 的 `*.xml`／按资源读取后执行／加载时机：性能敏感路径首次读取一次并缓存、需求要求内容可变的不适用缓存）、可逐条核对的判定标准与典型反例、依据行，以及 Java 落点（`sql`/`lua` 放 `src/main/resources/`、Redis 用 `DefaultRedisScript` 按静态常量声明、MyBatis 的 `${}` 白名单、`EVALSHA` 复用）与 Java 侧加载时机、Spring 引用承接、调度器两处登记与 README 同步；『某次编码是否真的把脚本放进了资源文件夹、是否真的只读一次』语义判断（见 GUARD_CHECK_LIMITS）"),
-    ("本仓库 changelog 除非主动声明，否则不新增、不修改（默认动作是不改）",
+    ("本仓库 changelog 的默认动作是不新增、不修改：用户本次明确要求才写（不再要求『主动声明』这种额外声明），"
+     "未要求时一律不写、不改；用户要求移除时删指定条目、保留其余与既有版本号不动、不得自造新版本号顶上",
      "AGENTS.adoc「版本与变更记录」", "script/check_specs.py",
      "check_changelog_timing_guard",
-     "check_changelog_timing_guard 钉住本仓库的默认动作条（除非主动声明否则一律不新增不修改）"
-     "、『主动声明』的判据（用户本次明确要求新增/修改/整理/压缩 changelog 或改写其组织方式与条目形态）"
-     "、未声明的越界形态（未提到该文件／只要求更新文档或 README／只说『改动了什么』／概括转述不算）"
-     "与顺手补一条、以及与抓手登记；『某次是否真的自行新增或改写了条目、用户声明到底成不成立』"
+     "check_changelog_timing_guard 钉住本仓库的默认动作条（默认动作是不新增、不修改／不再要求『主动声明』这种额外声明，用户直接说『记一条/改 changelog』即算）"
+     "、未要求的越界形态（未提到该文件／只要求更新文档或 README／只说『改动了什么』／只要求『调整项目规范』）"
+     "、顺手补一条、用户要求移除时的处置（删指定条目、既有版本号不动、不得自造新版本号顶上，含防『同版本号换个说法记一遍』）"
+     "以及与抓手登记；『某次是否真的自行新增或改写了条目、用户要求到底成不成立』"
      "属运行时行为与语义判断（提交内容与评论记录），机械无法判定"),
+    ("规范保持通用（规则与实例分离）：本仓库默认不写实例——用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号"
+     "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）与 `CHANGELOG.adoc`",
+     "AGENTS.adoc「规范组织与自身重构（本仓库落点）」", "script/check_specs.py",
+     "check_rule_instance_separation_guard",
+     "check_rule_instance_separation_guard 钉住本仓库该条（**规范保持通用**／默认动作是「不写」／实例的登记落点／失效形态与出处）"
+     "与它在 check_effective 的登记；『某条新加的判据里到底有没有夹带实例』属语义判断（实例是自由文本），"
+     "机械核不出来，交人/子 agent 复核"),
+    ("规则以对象定义、不给具体操作：写规范时只定义「是什么、取什么值」（取值写成带占位符的形态，如 `mvn -T <核心数>`），"
+     "「这个量怎么得到」属执行动作、不进规范；新增、修复、review 三类动作都按此判定，例外只在按定义做不出唯一动作时开口",
+     "specs-project-maintainer/spec-lifecycle.adoc「以对象定义规则、不给具体操作」", "script/check_specs.py",
+     "check_declarative_rule_guard",
+     "check_declarative_rule_guard 钉住本条判据本体（定义与取法的分界／只定义取值不定义取法含三条判定标准／"
+     "兜底不写具体写法／例外只在有歧义时开口／生效面为新增·修复·review／抽掉专有名词的判定标准／依据行），"
+     "并核两处已按新口径收敛的落点（`specs/stack/maven.adoc` 与 `prompts/_common.txt` 的 `build-parallel` 片段）；"
+     "『某条新写的规则里到底算不算多写了取法』属语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核"),
     ("Java 序列化：已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、局部变量优先 `val`、链式调用一律换行",
      "specs/stack/java.adoc「序列化（`Serializable`）」+ specs/general/coding.adoc「表达式与调用写法」",
      "script/check_specs.py",
@@ -217,7 +233,8 @@ MECHANISMS = [
      "specs/stack/maven.adoc「构建并行度」",
      "script/check_specs.py",
      "check_maven_parallel_guard",
-     "check_maven_parallel_guard 钉住该节仍在、默认值口径（没配过就默认开 `-T`、取值 `--threads 1C`）、"
+     "check_maven_parallel_guard 钉住该节仍在、默认值口径（没配过就默认开 `-T`、**取值按当前构建设备的核心数**"
+     "——**不得写死 `-T 1C`**，`C` 是 core multiplied、不必然等于当前设备核心数）、"
      "既有配置优先（`.mvn/maven.config` 优先探测、不得覆盖不得重复追加）、并行只到模块粒度、"
      "构建并行与测试并行是两件事（`forkCount`/`reuseForks` 显式写）与依据名，"
      "以及三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段 `build-parallel` 与两个提示词的引入）"

@@ -2124,6 +2124,127 @@ def check_template_separation_guard():
     phase_done()
 
 
+DECLARATIVE_RULE_SUBSECTION = "以对象定义规则、不给具体操作（写规范的写法口径）"
+def check_rule_instance_separation_guard():
+    """『规则与实例分离防线』：规范保持通用，本仓库特有的实例不写进规范（本仓库特有）。
+
+    失效形态（用户指出）：规范文件里到处是**本仓库/当前环境专有的实例**——用户某次的
+    原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号。读者拿不到那句话的场景（换个项目、
+    换个环境、这句话没随规范一起被取到）就会**静默改写本集合规则**：把"某次问过什么"
+    当成规则的一部分。
+
+    本条默认动作是"不写"——只有用户本次**明确要求登记**时才写，且只写进本仓库的实例落点
+    （图书馆 `library/adoption.adoc` / `library/sources.adoc`、`CHANGELOG.adoc`）。
+
+    只钉"要求文本仍在"——"某条新加的判据里到底有没有夹带实例"属语义判断，
+    机械核不出来（实例是自由文本），交人/子 agent 复核。
+    """
+    phase("规则与实例分离防线检查")
+    rel_agents = "AGENTS.adoc"
+    path_agents = os.path.join(REPO_ROOT, rel_agents)
+    if not os.path.isfile(path_agents):
+        err(f"缺少项目规范入口 {rel_agents}——规则与实例分离条无处承载", rel_agents)
+    else:
+        run_rule_guard("check_rule_instance_separation_guard")
+    rel_eff = os.path.join("script", "check_effective.py")
+    if os.path.isfile(os.path.join(REPO_ROOT, rel_eff)):
+        run_rule_guard("check_rule_instance_separation_guard")
+    else:
+        err(f"缺少 {rel_eff}——『定义未执行』登记处缺失，本条成为无抓手条款", rel_eff)
+    phase_done()
+
+
+# 『提示词取值路径与装配状态防线』要点（须同时命中多处要素，否则别处一句同名字样即可假绿）
+PROMPT_SURFACE_GUARD_KEYS = (
+    (("查看与复制方式", "按取值路径判断", "只在 AsciiDoc 处理器", "不是"),
+     "公共片段须给出取值路径的判据（『按取值路径判断、不按渲染视图这个印象』＋"
+     "『include 只在处理器解析时展开』），否则执行者只能靠印象推断是否要补齐"),
+    (("经处理器装配过的内容", "未经处理器装配的内容"),
+     "两类取值路径须分列：装配过的（IDE 预览 / asciidoctor / 站点页面内渲染）与"
+     "未装配的（远程原始文件地址 / 本地读取）"),
+    (("逐字节一致", "直出"),
+     "未装配一侧须写明实证（远程原始文件地址与工作区逐字节一致、站点对非 HTML 直出仓库字节），"
+     "否则后来者仍会按『站点 = 渲染视图』推断"),
+    (("不得", "当成取用时的事实", "原始文件地址与本地文件都不会装配"),
+     "须有禁止式表述：不得把『站点/渲染视图已展开』当成取用时的事实（本条对应用户指出的"
+     "既有偏差：原表述与两条取值路径都不吻合）"),
+    (("本地读本文件", "等价"),
+     "须写明『远程读本文件与本地读它等价、都未装配』——防把它读成『一份装配好的、"
+     "一份没装配的』"),
+)
+
+# 图书馆侧的同一判据（本轮用户确认一并修复）：站点直链同为未装配的仓库字节，
+# 不得让读者按「站点 = 渲染视图」推断图书馆被装配过。
+PROMPT_SURFACE_LIBRARY_FILES = _RULES_TOKENS["PROMPT_SURFACE_LIBRARY_FILES"]
+
+PROMPT_SURFACE_LIBRARY_KEYS = (
+    (("未经处理器装配的仓库字节", "index.html", "正文区"),
+     "图书馆入口的取值形态须写明『站点直链是未经处理器装配的仓库字节、页面内装配只发生在 "
+     "index.html 正文区』，并指向提示词侧的同一判据（不得按『站点 = 渲染视图』推断）"),
+    (("未经装配的仓库字节",),
+     "图书馆用法文档的「入口」一步须写明直链取到的是未经装配的仓库字节"),
+    (("未经处理器装配的仓库字节", "逐字节一致"),
+     "图书馆依据文档的取用侧实测记录须写明直链取到的是未经处理器装配的仓库字节、且逐字节一致"),
+)
+
+PROMPT_SURFACE_PROMPT_KEYS = (
+    (("给 AI 的读取说明", "内容有没有被 AsciiDoc 处理器装配过"),
+     "各提示词的读取说明须按『内容是否被处理器装配过』判定（不得按『像不像渲染过的页面』）"),
+    (("原始文件", "不会被展开", "补齐"),
+     "读取说明须写明：取到原始文件（远程原始文件地址、本地直接读）时指令不展开、须先补齐"),
+    (("不得", "渲染视图", "跳过补齐"),
+     "须有禁止式表述：不得以『这是站点的渲染视图、片段已展开』为由跳过补齐"),
+)
+
+
+
+# 『登记处只做索引、不复述片段正文』防线。
+# 背景（本轮重构实测）：`PROMPTS.adoc` 的"公共约定"曾把 `prompts/_common.txt` 各片段的
+# 要点**逐条复述一遍**——同一约束有第二份正文，片段一改这里就漂移（规范的既有失效之一）。
+# 本轮把它改为**索引**（只写"有哪几个片段、每个片段管哪条边界、正文唯一落点在片段里"）。
+# 但"索引"也有反向失效：把某条边界从索引里**整条删掉**，读者就再也找不到它。
+# 故本防线钉住**每条的落点必须能从登记处走到**（两种允许形态之一，逐条可核对）：
+#   ① 登记处**自己写出**该边界的要点；或
+#   ② 登记处**同时**写明该点**所归片段的名字**与"正文在 `_common.txt`"这一指向。
+# 只认"要点文本还在登记处"会误判合规的索引形态；只认"片段名出现过"会漏掉"整条被删"。
+_PROMPTS_INDEX_ENTRIES = (
+    (("baseline-and-compat", "compat"), "基线与兼容（先查现状/最佳方案/先定基线、老用例不得改判）"),
+    (("scope-boundary",), "改动范围边界（只改当前工作空间/当前项目）"),
+    (("delivery",), "交付边界（交付即汇报、按环境区分、不合并）"),
+    (("self-dispatch",), "不得自行发评论唤起自己"),
+)
+# ② 形态的必需指向语：登记处须显式说明"正文在片段里、此处只作索引"（否则读者以为这就是全文）
+_PROMPTS_INDEX_POINTERS = ("不复述正文", "正文只写在", "一处维护、两处生效")
+
+def check_declarative_rule_guard():
+    """『以对象定义规则、不给具体操作』防线：规则只写到取值形态为止（写规范的写法口径）。
+
+    失效形态（用户指出）：写规则时**顺手把"怎么取"也写进规范**——于是规范里给读者的
+    是一个随环境变的操作流程，而不是一条判据；换个执行者、换台机器，同一句话读出的动作
+    就不一样。用户给的判据形态是"定义 `mvn -T <核心数>` 就好了，不要在规范里写如何去拿核心数"。
+
+    本条钉**判据本体**（条目正文本身、而非"这一节在不在"），并核两处已按新口径收敛的
+    落点（Maven 栈规范与提示词公共片段）。只核文本形态——"某条新写的规则里到底算不算
+    多写了取法"是否越过"消除歧义所需"这一层，属语义判断，交人/子 agent 复核。
+    """
+    phase("以对象定义规则、不给具体操作防线检查")
+    rel_life = "specs-project-maintainer/spec-lifecycle.adoc"
+    path = os.path.join(REPO_ROOT, *rel_life.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel_life}——『以对象定义规则、不给具体操作』的判据本体无处承载"
+            "（缺则写规则时又会把取法一并写进规范）", rel_life)
+    else:
+        text = open(path, encoding="utf-8").read()
+        if not _subsection_text(text, "以对象定义规则、不给具体操作"):
+            err(f"{rel_life} 缺少「{DECLARATIVE_RULE_SUBSECTION}」小节——"
+                "「规则只写到取值形态为止」失去落点：新写的规则会带着取数流程一起进规范",
+                rel_life)
+        else:
+            run_rule_guard("check_declarative_rule_guard")
+            run_rule_guard("check_declarative_rule_guard")
+    phase_done()
+
+
 def check_alter_merge_guard():
     """『ALTER 同类操作合并』防线：判据本体与判定标准不得被删或降级。
 
@@ -3987,7 +4108,7 @@ def check_install_repeat_update_guard():
 #   `check_specs.py`）。实测失效：把该函数体换成 `phase(...); phase_done(); return 0` 后
 #   `check_specs.py` 仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个
 #   函数里）、CI 里也没有任何步骤核对"这次到底编了几份"。
-GUARD_WIRING_BASELINE = 105
+GUARD_WIRING_BASELINE = 108
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4131,7 +4252,15 @@ GUARD_WIRING_BASELINE = 105
 #     （正例 / 普通接口侧返回类型被抽走 / Feign 侧被抽走 / `convert` 的禁止面被删 /
 #     元数据保留这一理由被删 / 判定标准被删 / 相邻条目分工被删 / 整节被删），
 #     1277 + 8 = **1285**（同源实取数，`Ran` 数为 1296）。接线数 104 → **105**。
-GUARD_TEST_BASELINE = 1285
+#   **解决冲突一轮（PR #179 合并 main 的 #181「MyBatis-Plus 分页返回契约」）**：
+#     * **接线数 105 → 108**：本分支的 `check_rule_instance_separation_guard` /
+#       `check_declarative_rule_guard` 与 main 的 `check_pagination_guard` 在 `CHECKS`
+#       序列里各占一个位置，一道都不丢；清单表同步重排为 108 行、编号 1..108 连续
+#       且与 `CHECKS` 逐一同序（两侧新增防线各自占位，不覆盖）。
+#     * **用例数 1285 → 1314**：按**合并后同源实测**回填（两侧新增的 10 + 8 条反例都保留），
+#       数字一律按**真实收集**口径（`类名.用例名` 限定名去重）同源实取，不按两侧各自数目相加，
+#       避免基线虚高后"删用例不报红"。
+GUARD_TEST_BASELINE = 1314
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -6071,13 +6200,22 @@ def check_public_content_has_no_private_refs():
     phase_done()
 
 
+# 「自证不在默认引用面内」的括号说明：说明文档介绍图书馆时必然要点出它的路径，同时
+# **同一句**里写明"引用方拿不到"。这类句子不是"把读者引过去"，故不算路径型引用。
+# 判据落在**语义要素**（"不在默认引用面内"）而不是某个固定搭配上。
+_SELF_EXCLUDING_NOTE = re.compile(r"[（(][^）)]*不(?:在|是|会)?[^）)]*默认引用面[^）)]*[）)]")
+
+
 def _has_library_path_ref(line: str) -> bool:
     """该行是否含指向图书馆的**路径型**引用（`link:../library/x[]`、`library/x.adoc` 等）。
 
-    只认路径形态（带 `library/` 目录前缀或 `link:` 指向它），不误伤"图书馆"这个词本身
-    （"依据落点在图书馆"属正当表述；给的是**依据名**而非可点开的路径）。
+    只认路径形态（带 `library/` 目录前缀或 `link:` 指向它），不误伤两类正当表述：
+    ① "图书馆"这个词本身（"依据落点在图书馆"给的是**依据名**而非可点开的路径）；
+    ② 说明文档里**自证不在默认引用面内**的括号说明（同一句里已写明"引用方拿不到"）。
     """
     if "library/" not in line:
+        return False
+    if _SELF_EXCLUDING_NOTE.search(line):
         return False
     # 反引号路径、link: 目标、裸路径三种写法都算——**先取"去掉 `../` 前缀"的形态**
     # （公共内容里指图书馆要向上跳出 specs/，写作 `../../library/...`，
@@ -6085,36 +6223,68 @@ def _has_library_path_ref(line: str) -> bool:
     return bool(re.search(r"(?:link:|`|\s|^)(?:\.\./)*library/", line))
 
 
-def check_public_content_is_self_contained():
-    """『公共内容自足性防线』：公共内容（`AGENTS_COMMON.adoc` + `specs/`）不得引用私有落点。
+_PUBLIC_FACING_DOCS = ("README.adoc", "PROMPTS.adoc")
 
-"""
+# 私有落点枚举里的①类（本仓库私有目录）与②类（本仓库私有文件，作为跨目录引用目标时）：
+# 逐类给出「可机械判定的引用形态」与「为什么读者拿到的是死链」。
+# 端点（协议头 `https://` / 文件名紧跟在 `link:`、反引号、空白之后）与 `_has_library_path_ref` 同源。
+_PRIVATE_LOCATION_REFS = (
+    (r"(?:link:|`|\s|^)(?:\.\./)*specs-project-maintainer/",
+     "维护方自查层『specs-project-maintainer/』",
+     "该层不是公共入口的加载项，引用方按公共输入加载时看不到该文件（读到的规则只成立一半）"),
+    # ③类里的**文件级**私有落点——只把"本仓库的"这类文件算进来：`AGENTS.adoc` 作为
+    # *引用方自己的*项目规范入口（公共内容通篇如此写）、`README.adoc` 作为*引用方项目
+    # 模块级*索引页（`doc-module.adoc` 讲的就是它）都是正当表述，故两者**不列入**本枚举；
+    # 能明确指到"本仓库"的是这两处。
+    (r"(?:link:|`|\s|^)(?:\.\./)*PUBLIC\.adoc\b",
+     "维护方公共内容索引『`PUBLIC.adoc`』",
+     "它是维护方内容、不在默认引用面内，引用方项目里没有这份文件"),
+    (r"(?:根|仓库根|项目根)\s*目录[^\n]{0,12}?CHANGELOG\.adoc",
+     "本仓库根目录的『`CHANGELOG.adoc`』",
+     "同一文件名在引用方项目里指它自己的变更日志，指向本仓库那份就是死链"),
+)
+
+
+def check_public_content_is_self_contained():
+    """『公共内容自足性防线』：会被引用方读到 / 复制到未知项目执行的文本不得引用私有落点。
+
+    约束对象见 `PUBLIC.adoc`「自足要求的适用范围」两类：①会被入口取到的
+    （`AGENTS_COMMON.adoc` + `specs/**`）；②会被复制到未知项目执行的（`prompts/**`）。
+    另按 `PUBLIC.adoc` 明写，**公开面说明文档**（`README.adoc` / `PROMPTS.adoc`）同受约束。
+
+    本仓库实测失效（本轮）：`PROMPTS.adoc` 的公共约定里新加了一句把读者指向
+    `AGENTS.adoc`（本仓库私有文件）的说明，当时 `check_public_facing_docs_stay_self_contained` /
+    `check_no_mechanism_claims_in_public` / 本条**三条防线全绿**——它们只看
+    `specs-project-maintainer/` 路径、防线声明与裸抓手名，不看**文件级**私有引用。
+    故本条按 `PUBLIC.adoc` 的私有落点枚举**逐类**核，公开面文档一并纳入。
+    """
     phase("公共内容自足性检查（不引用私有落点）")
-    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files():
+    for f in [_rel_of(GENERIC_FILE)] + collect_adoc_files() + list(_PUBLIC_FACING_DOCS):
         rel = _rel_of(f)
         if rel == "AGENTS.adoc":
             continue  # 根 AGENTS.adoc 是项目自身内容，可引用任意私有落点
         # 自足受限集合 = ①会被入口取到的（AGENTS_COMMON.adoc + specs/**）
-        #              ∪ ②会被复制到未知项目执行的（prompts/**，见 PUBLIC.adoc）
+        #              ∪ ②会被复制到未知项目执行的（prompts/**）
+        #              ∪ ③会被引用方阅读 / 在公开站点渲染的说明文档（README / PROMPTS）
         if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
-                and not rel.startswith("prompts/"):
-            continue  # 其余（library/、README 等）不属本条的约束对象
+                and not rel.startswith("prompts/") and rel not in _PUBLIC_FACING_DOCS:
+            continue  # 其余（library/ 等）不属本条的约束对象
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         if not os.path.isfile(path):
             continue
         with open(path, encoding="utf-8") as fh:
             for j, line in enumerate(fh.readlines(), 1):
-                if "specs-project-maintainer/" in line:
-                    err("公共内容不得引用维护方自查层『specs-project-maintainer/』——"
-                        "该层不是公共入口的加载项，引用方按公共输入加载时看不到该文件"
-                        "（读到的规则只成立一半）；"
-                        "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
                 if _has_library_path_ref(line):
-                    err("公共内容不得引用图书馆『library/』——"
-                        "图书馆不在默认引用面内（无公共加载项、引用方项目里也没有本仓库的"
-                        "文件），引用方按公共输入加载时拿到的是死链；"
-                        "公共内容里只留**依据名 + 判据**，不给可点开的图书馆路径"
-                        "（口径见 AGENTS.adoc「依据图书馆」与 library/README.adoc）", rel, j)
+                    err(f"{'公开面文档' if rel in _PUBLIC_FACING_DOCS else '公共内容'}"
+                        "不得引用图书馆『library/』——图书馆不在默认引用面内"
+                        "（无公共加载项、引用方项目里也没有本仓库的文件）；"
+                        "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
+                for pattern, name, why in _PRIVATE_LOCATION_REFS:
+                    if not re.search(pattern, line):
+                        continue
+                    err(f"{'公开面文档' if rel in _PUBLIC_FACING_DOCS else '公共内容'}"
+                        f"不得引用{name}——{why}；"
+                        "请把这条规则在公共内容里自足表达，或把它移出公共内容", rel, j)
     phase_done()
 
 
@@ -10504,6 +10674,7 @@ CHECKS = (
     check_self_dispatch_guard,
     check_delivery_guard,
     check_changelog_timing_guard,
+    check_rule_instance_separation_guard,
     check_prompt_delivery_surface_guard,
     check_prompts_index_guard,
     check_api_contract_reuse_guard,
@@ -10543,6 +10714,8 @@ CHECKS = (
     check_template_separation_guard,
     check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
+    check_pagination_guard,
+    check_declarative_rule_guard,
 )
 
 
