@@ -84,40 +84,41 @@
 | 68 | `check_prompts_index_guard` | 登记处索引形态防线——`PROMPTS.adoc` 的公共约定可以只做索引，但**每条边界必须可达**
 | 69 | `check_api_contract_reuse_guard` | 请求/响应类优先移动复用 + HTTP 接口路径优先中划线——防线
 | 70 | `check_api_naming_guard` | Feign 接口命名带所属域/项目前缀防线——Feign 接口的命名前缀不得退回"随手取名"
-| 71 | `check_persistence_access_guard` | 持久化访问防线——通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层
-| 72 | `check_conversion_guard` | 对象转换防线——多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径
-| 73 | `check_entity_dto_guard` | 数据契约的载体防线——数据库实体类不进对外契约（L1）、识别按表结构来源不看类名、边界（纯内部调用/持久化出口）、存量不管、用户声明可豁免
-| 74 | `check_lombok_constructor_guard` | 构造方法不手写、优先 lombok 防线——无参/必参/全参构造一律由 lombok 注解生成
-| 75 | `check_doc_type_notation_guard` | 文档类型指代（类名 + import）防线——文档里写类名、不写类全名
-| 76 | `check_dev_flow_guard` | 开发流程防线——先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删
-| 77 | `check_checklist_guard` | 清单逐项与文档-脚本一致性防线——把"可机械核对却被漏掉"的判定点补成抓手
-| 78 | `check_rename_split_guard` | 重命名与内容修改须分两个提交防线——用户提出的 P7 要求不得被删或降级
-| 79 | `check_criteria_not_axis_guard` | 防线的核对对象是判据本体、不是轴名——防线：本轮实测教训不得只活在代码注释里
-| 80 | `check_runtime_env_guard` | 运行环境须与项目声明一致——防线：用户提出的硬性要求不得被删或降级
-| 81 | `check_wiring_guard` | 防线接线完整性——定义了的防线必须会被执行（`CHECKS` 序列 + 闭包可达），防"定义了却不执行"
-| 82 | `check_guard_order_guard` | 防线次序与清单表一致——`CHECKS` 序列与本表逐一同序
-| 83 | `check_dispatcher_no_details_guard` | 调度器只登记不抄条目——两道核对：① 加载项里不得出现条目级细节词（`判定标准`/`任一命中`…）；② **加载项的说明段与被引文件正文逐字重合不得超阈值**（补①拦不住的"把**取值**成串抄进来"，由 `dispatcher_no_verbatim` 原语按最长公共子串判定，作用于「加载调度器」那一节、入口的「最高优先级铁律」摘要不误伤）
-| 84 | `check_ledger_source_paths_guard` | 台账来源列须指向真实存在的文件
-| 85 | `check_java_interface_accessor_guard` | Java 字段接口只加 get、不加 set 防线——**只约束接口**（类不适用）、下游可能加 `@Accessors(chain = true)` 的编译后果、判定标准、存量不管与主动声明豁免不得被删或降级到类上
-| 86 | `check_java_object_template_guard` | Java 数据对象模板防线——模板文件（`specs/stack/java-object.adoc`，**模板文件、非规范文件**：整段照抄的注解清单）与判据本体（`specs/stack/java.adoc`「编码」的「数据对象模板」条）两处都不得被删、被合并或降级；判据本体侧**按条目自己的正文核**（不是整份文件——同文件相邻条目含同样字样会兜住缺项），「五项齐备」另**只核清单句**（依据行里同样罗列那些名字，bullet 级核会被同一 bullet 的后半句兜住）；**模板侧只回指**、反向核对**不得**再抄一份判据本体内容（机制、判定标准、取舍声明、两档生效面取值皆在禁列）；加载门（调度器登记 + 识别特征）与 README 目录说明一并钉住；**判据本体侧的核对须落在条目正文与清单句上**——按整份文件核时，相邻条目的同样字样会兜住缺项（`@SuperBuilder` 被抽走仍全绿）
-| 87 | `check_maven_mirror_guard` | Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改
-| 88 | `check_registry_mirror_guard` | 包源与镜像源防线——推荐的包源地址**已实测可用**、且**换源有次序与降级边界**
-| 89 | `check_throughput_guard` | 执行吞吐——防线：轮次纪律的判据、常驻层引用与调度器登记不得被删
-| 90 | `check_performance_guard` | 性能测试防线——测量与记录两半的要点不得被删或降级
-| 91 | `check_quality_guard` | 代码质量（新产出即高质）——防线：十项下限、判定标准与依据不得被删或降级
-| 92 | `check_generation_efficiency_guard` | 生成效率 / token 纪律——防线：两条判据、边界条与调度器登记不得被删或降级
-| 93 | `check_after_change_review_guard` | 改动后复核——防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级
-| 94 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级
-| 95 | `check_duplicate_scan_guard` | 逐字重复扫描——「同一件事不得两处逐字重复」的**机械抓手**（此前只有语义复核）：把公共内容（入口 + `specs/` + `prompts/` + 维护方自查层 + 图书馆）切成语义实体、按 n-gram 粗筛后做全对最长公共子串检测，超阈值即报红；阈值与例外（历史留痕、逐字引文、片段引用、依据行）一律写在 `script/specs-rules/duplicate.toml` 并注明理由。**它是下界不是上界**——阈值以下、换了说法的重复仍交语义复核
-| 96 | `check_pointer_no_verbatim_guard` | 自称回指的行不得复述取值——「同一件事只在一处给真源」的**第二道机械抓手**（补 `check_duplicate_scan_guard` 的**下界**）：`duplicate_scan` 阈值 40 只报"长度极显著"的重合，而"回指句 + 顺手把取值抄一遍"的公共子串常只有二十几字（本轮实证：`library/mirrors.adoc` 自称"本文件只给实测记录、取舍本体见 `adoption.adoc`"，却仍逐字写下「每级先实测可用、不跳级、不覆盖既有配置」21 字），它**核不出来**。本道对**含回指标记的行**取其引用文件的正文做最长公共子串检测，超阈值即报红；标记词、落点与阈值一律写在 `script/specs-rules/duplicate.toml` 并注明理由。判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」
-| 97 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级
-| 98 | `check_java_serial_guard` | Java 序列化防线——已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、JDK 14+ 补 `@Serial`、不得为未实现者补字段或顺手加 `implements Serializable`、不得以抑制代替显式声明；另钉「优先 `val`、可变才 `var`」与「链式调用一律换行」两处判据本体
-| 99 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改
-| 100 | `check_alter_merge_guard` | SQL 写法防线——真源 `specs/general/sql.adoc`「SQL 写法」（用户追加：SQL 是跨语言写法，独立成文件、不埋在技术栈文件里）：同表同类操作合并（**DDL 强制**、DML 优先且**用户主动写的除外、不告警**、该例外只适用于 DML）的判据本体（含「同类操作」定义、合并不了的例外、判定标准、依据行、存量边界）不得被删或降级；另钉**加载门**（调度器通用层登记 + 识别特征、Java 栈「跨语言执行脚本」的一跳引用、登记路径须能被取回脚本的 `specs/*.adoc` 清单解析命中）与图书馆依据落点。**同一事项只有一个真源**：另两条 SQL 写法（独立成文件、写库名）的判据本体**不在本条再钉一份**（前者由 `check_external_script_guard` 钉，后者在正文规则名与判定标准里已可核对）
-| 101 | `check_toolchain_present_guard` | 校验工具链齐备防线——校验手段依赖的工具须装齐、**缺工具不得静默跳过**（公共条文 + 本仓库落点 + CI **真的调用处理器**三处同口径；权威定义在公共条文、本仓库落点只登记「哪一道防线承载」）
-| 102 | `check_template_separation_guard` | 模板类内容的单独归类防线——「要么不读、要么读全部」的内容（代码模板）须**不与规则混放**、各自独立（例外：有关联性或内容不多暂不拆），含归类判据、不得混放与「各自独立」的判定标准、公共侧一跳引用与维护方入口登记，三处落点不得被删或降级 |
-| 103 | `check_asciidoctor_stub_guard` | AsciiDoc 语法段不得只剩壳——`check_asciidoctor_syntax` 的**函数体**须真的（探测处理器 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`），且 CI 须有一步**真的执行** `python3 script/check_specs.py`（判据按每步实际执行的命令取值、不看步骤名与注释）。实测失效：函数体换成 `phase(...); phase_done(); return 0` 后脚本仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个函数里）
-| 104 | `check_asciidoctor_syntax` | 对维护范围内全部 .adoc 做一次语法编译验证（收集规则与 `collect_adoc_files` 同源、覆盖根由 `ADOC_ROOTS` 给定）；处理器探测不到即**报错**（不得跳过），`asciidoctor` 带 `--failure-level=WARN`
+| 71 | `check_pagination_guard` | 分页查询返回类型与转换防线（**用户提出，Issue #180**）——`specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」须有该条并标 L1：**普通接口**分页查询返回 `Result<IPage<Rsp>>`（不自建分页类、不返回实体类分页）、**Feign 接口**按先例返回 `Result<自定义Page<Rsp>>`、**字段转换走 `page.convert` 而不是新建 page 再逐个搬运**（理由：`convert` 在容器内部替换元素、分页元数据原样保留；新建时漏搬一项既不报错也不提示）、判定标准（四条）与存量随动迁移，依据行须如实写明"两侧各用哪种包装体 + 一律走 `convert`"是本集合的取舍。失效形态：同一项目并存两套分页模型、总页数被漏搬后翻页静默失效。只钉"判据是否仍在"——"某个分页接口算不算普通接口"属语义判断，交人/子 agent 复核
+| 72 | `check_persistence_access_guard` | 持久化访问防线——通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层
+| 73 | `check_conversion_guard` | 对象转换防线——多层嵌套对象的转换保持"首选声明式映射 + 手写须备注原因"的口径
+| 74 | `check_entity_dto_guard` | 数据契约的载体防线——数据库实体类不进对外契约（L1）、识别按表结构来源不看类名、边界（纯内部调用/持久化出口）、存量不管、用户声明可豁免
+| 75 | `check_lombok_constructor_guard` | 构造方法不手写、优先 lombok 防线——无参/必参/全参构造一律由 lombok 注解生成
+| 76 | `check_doc_type_notation_guard` | 文档类型指代（类名 + import）防线——文档里写类名、不写类全名
+| 77 | `check_dev_flow_guard` | 开发流程防线——先查现状/最佳方案/基线、大动先确认、不得另写一套、老用例不得改判，要点不得被删
+| 78 | `check_checklist_guard` | 清单逐项与文档-脚本一致性防线——把"可机械核对却被漏掉"的判定点补成抓手
+| 79 | `check_rename_split_guard` | 重命名与内容修改须分两个提交防线——用户提出的 P7 要求不得被删或降级
+| 80 | `check_criteria_not_axis_guard` | 防线的核对对象是判据本体、不是轴名——防线：本轮实测教训不得只活在代码注释里
+| 81 | `check_runtime_env_guard` | 运行环境须与项目声明一致——防线：用户提出的硬性要求不得被删或降级
+| 82 | `check_wiring_guard` | 防线接线完整性——定义了的防线必须会被执行（`CHECKS` 序列 + 闭包可达），防"定义了却不执行"
+| 83 | `check_guard_order_guard` | 防线次序与清单表一致——`CHECKS` 序列与本表逐一同序
+| 84 | `check_dispatcher_no_details_guard` | 调度器只登记不抄条目——两道核对：① 加载项里不得出现条目级细节词（`判定标准`/`任一命中`…）；② **加载项的说明段与被引文件正文逐字重合不得超阈值**（补①拦不住的"把**取值**成串抄进来"，由 `dispatcher_no_verbatim` 原语按最长公共子串判定，作用于「加载调度器」那一节、入口的「最高优先级铁律」摘要不误伤）
+| 85 | `check_ledger_source_paths_guard` | 台账来源列须指向真实存在的文件
+| 86 | `check_java_interface_accessor_guard` | Java 字段接口只加 get、不加 set 防线——**只约束接口**（类不适用）、下游可能加 `@Accessors(chain = true)` 的编译后果、判定标准、存量不管与主动声明豁免不得被删或降级到类上
+| 87 | `check_java_object_template_guard` | Java 数据对象模板防线——模板文件（`specs/stack/java-object.adoc`，**模板文件、非规范文件**：整段照抄的注解清单）与判据本体（`specs/stack/java.adoc`「编码」的「数据对象模板」条）两处都不得被删、被合并或降级；判据本体侧**按条目自己的正文核**（不是整份文件——同文件相邻条目含同样字样会兜住缺项），「五项齐备」另**只核清单句**（依据行里同样罗列那些名字，bullet 级核会被同一 bullet 的后半句兜住）；**模板侧只回指**、反向核对**不得**再抄一份判据本体内容（机制、判定标准、取舍声明、两档生效面取值皆在禁列）；加载门（调度器登记 + 识别特征）与 README 目录说明一并钉住；**判据本体侧的核对须落在条目正文与清单句上**——按整份文件核时，相邻条目的同样字样会兜住缺项（`@SuperBuilder` 被抽走仍全绿）
+| 88 | `check_maven_mirror_guard` | Maven「仓库与镜像」防线：指定仓库与两条前提条件不得被删改
+| 89 | `check_registry_mirror_guard` | 包源与镜像源防线——推荐的包源地址**已实测可用**、且**换源有次序与降级边界**
+| 90 | `check_throughput_guard` | 执行吞吐——防线：轮次纪律的判据、常驻层引用与调度器登记不得被删
+| 91 | `check_performance_guard` | 性能测试防线——测量与记录两半的要点不得被删或降级
+| 92 | `check_quality_guard` | 代码质量（新产出即高质）——防线：十项下限、判定标准与依据不得被删或降级
+| 93 | `check_generation_efficiency_guard` | 生成效率 / token 纪律——防线：两条判据、边界条与调度器登记不得被删或降级
+| 94 | `check_after_change_review_guard` | 改动后复核——防线：五件事的固定动作、干净子 agent 与三态台账不得被删或降级
+| 95 | `check_refinement_guard` | 精炼性（同一描述只写一处）——防线：判据本体与两处动作落点不得被删或降级
+| 96 | `check_duplicate_scan_guard` | 逐字重复扫描——「同一件事不得两处逐字重复」的**机械抓手**（此前只有语义复核）：把公共内容（入口 + `specs/` + `prompts/` + 维护方自查层 + 图书馆）切成语义实体、按 n-gram 粗筛后做全对最长公共子串检测，超阈值即报红；阈值与例外（历史留痕、逐字引文、片段引用、依据行）一律写在 `script/specs-rules/duplicate.toml` 并注明理由。**它是下界不是上界**——阈值以下、换了说法的重复仍交语义复核
+| 97 | `check_pointer_no_verbatim_guard` | 自称回指的行不得复述取值——「同一件事只在一处给真源」的**第二道机械抓手**（补 `check_duplicate_scan_guard` 的**下界**）：`duplicate_scan` 阈值 40 只报"长度极显著"的重合，而"回指句 + 顺手把取值抄一遍"的公共子串常只有二十几字（本轮实证：`library/mirrors.adoc` 自称"本文件只给实测记录、取舍本体见 `adoption.adoc`"，却仍逐字写下「每级先实测可用、不跳级、不覆盖既有配置」21 字），它**核不出来**。本道对**含回指标记的行**取其引用文件的正文做最长公共子串检测，超阈值即报红；标记词、落点与阈值一律写在 `script/specs-rules/duplicate.toml` 并注明理由。判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」
+| 98 | `check_info_density_guard` | 信息密度（每句须承载）——防线：判据本体、两处互引与依据行不得被删或降级
+| 99 | `check_java_serial_guard` | Java 序列化防线——已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、JDK 14+ 补 `@Serial`、不得为未实现者补字段或顺手加 `implements Serializable`、不得以抑制代替显式声明；另钉「优先 `val`、可变才 `var`」与「链式调用一律换行」两处判据本体
+| 100 | `check_maven_parallel_guard` | Maven「构建并行度」防线——默认值口径（没配过就默认开、按核心数取值）、既有配置优先（不覆盖 `.mvn/maven.config`）、并行只到模块粒度，及其三处落点（调度器识别特征、图书馆官方原文与本站取舍、提示词公共片段与两个提示词）不得被删改
+| 101 | `check_alter_merge_guard` | SQL 写法防线——真源 `specs/general/sql.adoc`「SQL 写法」（用户追加：SQL 是跨语言写法，独立成文件、不埋在技术栈文件里）：同表同类操作合并（**DDL 强制**、DML 优先且**用户主动写的除外、不告警**、该例外只适用于 DML）的判据本体（含「同类操作」定义、合并不了的例外、判定标准、依据行、存量边界）不得被删或降级；另钉**加载门**（调度器通用层登记 + 识别特征、Java 栈「跨语言执行脚本」的一跳引用、登记路径须能被取回脚本的 `specs/*.adoc` 清单解析命中）与图书馆依据落点。**同一事项只有一个真源**：另两条 SQL 写法（独立成文件、写库名）的判据本体**不在本条再钉一份**（前者由 `check_external_script_guard` 钉，后者在正文规则名与判定标准里已可核对）
+| 102 | `check_toolchain_present_guard` | 校验工具链齐备防线——校验手段依赖的工具须装齐、**缺工具不得静默跳过**（公共条文 + 本仓库落点 + CI **真的调用处理器**三处同口径；权威定义在公共条文、本仓库落点只登记「哪一道防线承载」）
+| 103 | `check_template_separation_guard` | 模板类内容的单独归类防线——「要么不读、要么读全部」的内容（代码模板）须**不与规则混放**、各自独立（例外：有关联性或内容不多暂不拆），含归类判据、不得混放与「各自独立」的判定标准、公共侧一跳引用与维护方入口登记，三处落点不得被删或降级 |
+| 104 | `check_asciidoctor_stub_guard` | AsciiDoc 语法段不得只剩壳——`check_asciidoctor_syntax` 的**函数体**须真的（探测处理器 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`），且 CI 须有一步**真的执行** `python3 script/check_specs.py`（判据按每步实际执行的命令取值、不看步骤名与注释）。实测失效：函数体换成 `phase(...); phase_done(); return 0` 后脚本仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个函数里）
+| 105 | `check_asciidoctor_syntax` | 对维护范围内全部 .adoc 做一次语法编译验证（收集规则与 `collect_adoc_files` 同源、覆盖根由 `ADOC_ROOTS` 给定）；处理器探测不到即**报错**（不得跳过），`asciidoctor` 带 `--failure-level=WARN`
 |===
 
 **由别的防线收尾调用、不直接进序列的两道**（可达性由 `check_wiring_guard` 的闭包口径裁定）：

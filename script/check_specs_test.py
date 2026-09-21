@@ -14680,3 +14680,140 @@ class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
         self._write(common="== 生成效率（同等质量下最少往返）\n\n* 略。\n")
         cm.check_template_separation_guard()
         self.assertIn("context.adoc", self.error_texts())
+
+
+
+
+class TestCheckPaginationGuard(CheckSpecsTestCase):
+    """钉住『分页查询返回类型与转换』防线（用户提出，Issue #180）。
+
+    用户原话："调整 mybatis plus 规范，如果是普通接口，分页查询时返回 `Result<IPage<Rsp>>`，
+    如果是 feign 接口（`Result<自定义Page<Rsp>>`），字段转换时，使用 `page.convert` 而不是
+    新建 page"。
+
+    该条要治的失效形态：同一项目并存两套分页模型；`Entity → Rsp` 转换时**新建一个 page 再
+    逐个搬运字段**——分页元数据（当前页/每页条数/总记录数/总页数）漏搬一项**既不报错也不提示**，
+    只在运行期表现为"总页数一直是 0、翻页失效"。
+
+    **夹具＝真文档逐字**：`self.JAVA` 由 `specs/stack/java.adoc` 现读（不是另抄一份说明文本），
+    再按「删掉哪一截」构造反例——换成手抄版时，锚点与规则数据在同义改写后会整体与真文档脱节
+    （锚点仍在、真文档已被改），防线照样报红却与本用例无关。
+
+    本组用例逐一覆盖各处要件被抽走时的形态（正例 / 普通接口侧返回类型 / Feign 侧返回类型 /
+    `convert` 的禁止面 / 元数据保留这一理由 / 判定标准 / 相邻条目分工 / 存量边界 / 依据行 /
+    整节被删）——只核"这一节在不在"属防线空转。
+    """
+
+    # 真文档里**逐字**存在的截取串（须与 `specs/stack/java.adoc` 逐字相同；
+    # 锚点或截取串对不上时下面的反例不会报红，`test_valid_passes` 会先一步报出来）。
+    GATE = "* **分页查询的返回类型与转换方式（L1，用户点名）**"
+    PLAIN = "`Result<IPage<Rsp>>`"
+    FEIGN = "`Result<自定义Page<Rsp>>`"
+    FORBIDDEN = "，**不得新建一个 page 再逐个搬运字段**"
+    REASON = "**当前页、每页条数、总记录数、总页数等分页元数据原样保留**"
+    CRITERIA_LINE = "** **判定标准（任一命中即违规）**：\u2460 普通接口的分页查询返回类型不是"
+    XREF = "与相邻条目的关系（防误读）"
+    MIGRATION = "随动迁移"
+
+    def _write_without_line(self, line_start: str) -> None:
+        """把真文档里**以 `line_start` 开头的那一整行**删掉后写进夹具。
+
+        判据按行取值（规则数据逐组核锚点），故"删哪一行"须精确到行——按子串替换时会
+        把同一行里的其它锚点一并带走或留下（本仓库实测：按行删 vs 按子串删，缺项报出与否不同）。
+        """
+        lines = self.JAVA.split("\n")
+        hit = [i for i, line in enumerate(lines) if line.startswith(line_start)]
+        self.assertEqual(1, len(hit),
+                         f"真文档里以 {line_start!r} 开头的行应恰有一行（找到 {len(hit)} 行）")
+        del lines[hit[0]]
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "\n".join(lines))
+    BASIS_LINE = "** **依据（标准名/编号）：ISO/IEC 25010（可维护性：分页元数据的单一来源、改一处不漏）"
+    # 依据行被删时，规则报出的是**该组锚点里唯一被抽走的那个**（其余锚点在相邻条目里有同义字样）
+    BASIS_ANCHOR = "本集合自己的判据化取舍"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        with open("specs/stack/java.adoc", encoding="utf-8") as fh:
+            self.JAVA = fh.read()
+
+    def tearDown(self) -> None:
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/stack/java.adoc", self.JAVA)
+
+    def _write_mutated(self, removed: str, replacement: str = "") -> None:
+        """把真文档里的 `removed` 换成 `replacement` 后写进夹具（真文档里没有即报错）。"""
+        self.assertIn(removed, self.JAVA)
+        self._write_valid()
+        self.write("specs/stack/java.adoc", self.JAVA.replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿（锚点与文档脱节时先在这一条暴露）
+        self._write_valid()
+        cm.check_pagination_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_plain_interface_return_type_removed_reports(self):
+        # 反例①：普通接口一侧的返回类型被抽走 -> 普通接口仍会自建分页类
+        self._write_mutated(self.PLAIN, "某个结果包装")
+        cm.check_pagination_guard()
+        self.assertIn("Result<IPage<Rsp>>", self.error_texts())
+
+    def test_feign_side_removed_reports(self):
+        # 反例②：Feign 一侧的返回类型被抽走 -> 该档无处可归
+        self._write_mutated(self.FEIGN, "某个结果包装")
+        cm.check_pagination_guard()
+        self.assertIn("Result<自定义Page<Rsp>>", self.error_texts())
+
+    def test_convert_forbidden_face_removed_reports(self):
+        # 反例③（靶心）：`convert` 的**禁止面**被删 -> "新建一个 page 更直观"重新成立
+        self._write_mutated(self.FORBIDDEN)
+        cm.check_pagination_guard()
+        self.assertIn("不得新建一个 page", self.error_texts())
+
+    def test_metadata_reason_removed_reports(self):
+        # 反例④：理由（元数据原样保留）被删 -> 本条的级别与处置会被降级
+        self._write_mutated(self.REASON, "结果一致")
+        cm.check_pagination_guard()
+        self.assertIn("原样保留", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被删 -> 本条自身不可判定，只剩一句口号
+        self._write_without_line(self.CRITERIA_LINE)
+        cm.check_pagination_guard()
+        self.assertIn("不得互改", self.error_texts())
+
+    def test_adjacent_entries_xref_removed_reports(self):
+        # 反例⑥：与相邻条目的分工被删 -> 三条互相拆台（读者以为本条允许实体类进分页）
+        self._write_mutated(self.XREF, "补充说明")
+        cm.check_pagination_guard()
+        self.assertIn("与相邻条目的关系（防误读）", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界被删 -> 等于要求立刻批量重写既有分页接口
+        self._write_mutated(self.MIGRATION)
+        cm.check_pagination_guard()
+        self.assertIn("随动迁移", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：依据行被整行删掉 -> 读者把本集合的取舍当成框架要求
+        self._write_without_line(self.BASIS_LINE)
+        cm.check_pagination_guard()
+        self.assertIn(self.BASIS_ANCHOR, self.error_texts())
+
+    def test_gate_line_removed_reports(self):
+        # 反例⑨：整条被摘掉（含 L1 标注）-> 该条被降级成建议，"分页怎么写都行"重新成立
+        self._write_mutated(self.GATE, "* **分页怎么写都行**")
+        cm.check_pagination_guard()
+        self.assertIn("分页查询的返回类型与转换方式", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑩：整节被删 -> 该条失去落点
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== 编码\n\n* 略。\n")
+        cm.check_pagination_guard()
+        self.assertIn("持久化访问（MyBatis-Plus / JPA 等）", self.error_texts())

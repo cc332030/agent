@@ -687,6 +687,19 @@
      且不在本仓库留痕时本条看不到——那一半靠"禁止 NPC 执行环境持有合并权限"（见 `AGENTS.adoc`），
      故本条只是**第二道**。
 
+ 71. 分页查询返回类型与转换防线（**用户提出，Issue #180**）：`specs/stack/java.adoc`
+     「持久化访问（MyBatis-Plus / JPA 等）」须有该条并标 L1——**普通接口**分页查询返回
+     `Result<IPage<Rsp>>`（不自建分页类、不返回实体类分页）、**Feign 接口**按先例返回
+     `Result<自定义Page<Rsp>>`、**字段转换走 `page.convert` 而不是新建 page 再逐个搬运**
+     （理由：`convert` 在容器内部替换元素、分页元数据原样保留；新建时漏搬一项既不报错
+     也不提示）、逐条可核对的判定标准、与相邻条目（数据契约的载体、对象转换）的分工、
+     存量随动迁移与依据行齐备，依据行须如实写明"两侧各用哪种包装体 + 一律走 `convert`"
+     是本集合的取舍。失效形态：同一项目并存两套分页模型；新建 page 时漏搬总页数后
+     翻页静默失效。**核对按"该条自己的段落"取值**——按整个二级节取值时，同节相邻条目的
+     同义字样会兜住缺项（本仓库实测：该条的依据行整行删掉，仍报绿）。
+     由 `check_pagination_guard` 钉住（接线数 104 → 105）；"某个分页接口算不算普通接口、
+     该处该不该用自定义 page"属语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -3974,7 +3987,7 @@ def check_install_repeat_update_guard():
 #   `check_specs.py`）。实测失效：把该函数体换成 `phase(...); phase_done(); return 0` 后
 #   `check_specs.py` 仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个
 #   函数里）、CI 里也没有任何步骤核对"这次到底编了几份"。
-GUARD_WIRING_BASELINE = 104
+GUARD_WIRING_BASELINE = 105
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4113,8 +4126,12 @@ GUARD_WIRING_BASELINE = 104
 #     有探测无报错 / 有探测不编译 / 不覆盖全部维护根 / 函数被删 / CI 不跑脚本 /
 #     步骤名不算执行 / 正例）。1266 + 11 = **1277**，同源实取数 `Ran 1288 tests ... OK`
 #     （`Ran` 数与本基线口径不同：`unittest` 按收集到的用例计，本基线按模块内的类路径
-#     限定名去重——当前 1288 与 1277 的差正是"同名跨类"那批，两者都不得减少）。
-GUARD_TEST_BASELINE = 1277
+#     限定名去重——两数之差正是"同名跨类"那批，两者都不得减少）。
+#   * **本轮（Issue #180）增补 8 条**：新防线 `check_pagination_guard` 的反例用例
+#     （正例 / 普通接口侧返回类型被抽走 / Feign 侧被抽走 / `convert` 的禁止面被删 /
+#     元数据保留这一理由被删 / 判定标准被删 / 相邻条目分工被删 / 整节被删），
+#     1277 + 8 = **1285**（同源实取数，`Ran` 数为 1296）。接线数 104 → **105**。
+GUARD_TEST_BASELINE = 1285
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -9505,6 +9522,35 @@ def check_entity_dto_guard():
                     rel_adoption)
     phase_done()
 
+def check_pagination_guard():
+    """『分页查询返回类型与转换』防线：判据本体不得被删或降级。
+
+    用户要求（Issue #180，原话）："调整 mybatis plus 规范，如果是普通接口，分页查询时返回
+    `Result<IPage<Rsp>>`，如果是 feign 接口（`Result<自定义Page<Rsp>>`），字段转换时，
+    使用 `page.convert` 而不是新建 page"。
+
+    落点：本条属**框架专名与禁止清单**（`IPage`/Feign 的分页容器/`convert` 都是具体框架与
+    声明式客户端的概念），故唯一落点为 `specs/stack/java.adoc`「持久化访问
+    （MyBatis-Plus / JPA 等）」——通用层不写框架专名（`specs/general/coding.adoc` 的
+    「持久化访问」只留跨语言抽象）。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一条"属防线空转——**两侧各自的返回类型**、`convert` 的**禁止面**
+    （新建 page 再逐个搬运）、**保留分页元数据**这一理由、判定标准与存量边界任一被抽走时
+    照样全绿。故逐组核 `script/specs-rules/coding.toml` 里的锚点。
+    「某个分页接口算不算普通接口 / 该处该不该用自定义 page」属语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("分页查询返回类型与转换防线检查")
+    rel = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel}——「分页查询的返回类型与转换方式」的判据无处承载"
+            "（该条是框架专名，落点只能在技术栈层）", rel)
+    else:
+        run_rule_guard("check_pagination_guard")
+    phase_done()
+
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -10462,6 +10508,7 @@ CHECKS = (
     check_prompts_index_guard,
     check_api_contract_reuse_guard,
     check_api_naming_guard,
+    check_pagination_guard,
     check_persistence_access_guard,
     check_conversion_guard,
     check_entity_dto_guard,
