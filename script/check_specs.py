@@ -9380,6 +9380,85 @@ def check_java_interface_accessor_guard():
     phase_done()
 
 
+# 枚举查找的空 `catch`（`specs/stack/java.adoc`「健壮性」 + 通用层判据本体）：
+# **用户点名**的规范调整——"java 下 `Enum.valueOf` 例外，这里的异常只有可能是值没匹配上，
+# 还有其他自己写的枚举工具，允许空 catch"。
+# 这是 L1「不得吞异常」的**唯一放宽口**，故失效形态不是"没写例外"，而是**例外被读宽**：
+#   ① 「允许空 `catch`」被抄成通用豁免，把 L1 的其余部分（不得吞异常、对外输入一律校验）顶掉；
+#   ② 准入条件（异常语义单一 + 取默认值即业务语义）与判定标准被压成一句口号——
+#      此后任何 `catch (Exception) {}` 都能自证"我这是枚举查询"；
+#   ③ **扩大的两个方向**没被排除：写成 `catch (Throwable)`/`catch (Exception)` 的**类级空
+#      `catch`**（把同一个 `try` 里其他语句的异常一并吞掉）、给"本身已返回默认值"的调用点
+#      再补一个空 `catch`。
+# 故防线钉**判据本体**（准入三条、判定标准、两类扩大的排除、仍须写理由注释），不钉轴名
+# （只核"「健壮性」这一节在不在"属防线空转）。锚点与分组见
+# `script/specs-rules/java.toml` 的 `check_java_enum_valueof_catch_guard`；接线处须写字面量
+# （`run_rule_guard("check_java_enum_valueof_catch_guard")`）——规则接线完整性由
+# `script/rules_engine_test.py` 按字面量核对，抽成常量时它核不到（本轮实测）。
+
+
+def check_java_enum_valueof_catch_guard():
+    """『Java 枚举查找空 catch 防线』：条件例外不得被删、被读宽或被压成口号。
+
+    用户口径：`Enum.valueOf` 的异常**只有可能是值没匹配上**，另有"自己写的枚举工具"，
+    故 Java 下允许空 `catch`——但要紧的是**例外只此一种形态**：判据本体（三条准入 +
+    判定标准 + 两类扩大方向的排除）落在通用层 `specs/general/coding.adoc`「代码质量
+    （新产出即高质）」的「显式处理失败与边界」，Java 侧只给落点与反面清单
+    （`specs/stack/java.adoc`「健壮性」）。两处**互为落点、不得各写一份判据**。
+
+    "某个 `catch` 块今天算不算命中例外"属**语义判断**（该 API 的异常是不是只有一种原因、
+    该调用点的失败是否另有出口），机械只能核对"判据本体在不在"——交人/子 agent 复核。
+    """
+    phase("Java 枚举查找空 catch 防线检查")
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——『枚举查找空 catch』的 Java 落点丢失"
+            "（`Enum.valueOf` 与自写枚举工具都是 Java 侧概念，须落在技术栈层）", rel_java)
+    else:
+        run_rule_guard("check_java_enum_valueof_catch_guard")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——『显式处理失败与边界』的通用层落点丢失"
+            "（条件例外的准入判据跨语言，须收在通用编码规范）", rel_coding)
+    else:
+        run_rule_guard("check_java_enum_valueof_catch_guard")
+    # 图书馆侧：本集合更严/更宽的取舍须登记（防读者把"允许空 catch"读成 JDK 或某标准的规定），
+    # 且依据段须如实标注外部材料**只给机制**、未规定准入条件。
+    for rel, keys, desc in (
+        ("library/adoption.adoc",
+         # 锚点只取"是本集合自己的判据化取舍"这一句**不带标记**的形态：真实文件里加粗标记的
+         # 位置在本条与邻居处**不一致**（本条写「...（条件例外，L2）是本集合的...」、邻居写
+         # 「...取舍**：」），带 `**` 的锚点会因"锚点与正文不同形"恒缺（本轮实测）。
+         ("Enum.valueOf", "是本集合自己的判据化取舍", "唯一放宽口"),
+         "图书馆取向登记：须写明这是本集合自己的取值、外部材料只给机制，"
+         "并点明它是「不得吞异常」这条 L1 的唯一放宽口——缺则该例外会被读成 JDK 或某标准的规定"),
+        ("library/sources.adoc",
+         ("Enum.valueOf", "同义性", "未逐字取回"),
+         "图书馆依据段：须有该主题段、机制要点与同义性标注（API 文档给的是"
+         "「什么条件下抛哪个异常」，不是「该不该吞」）——缺则依据只存名称、日后无从核对"),
+    ):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少 {rel}——本条取舍的依据无处核对", rel)
+            continue
+        ltext = open(path, encoding="utf-8").read()
+        missing = [k for k in keys if k not in ltext]
+        if missing:
+            err(f"Java 枚举查找空 catch 防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+    # 加载门：调度器的 Java 技术栈条须给出识别特征（缺则该条永远不会被加载——
+    # 写规则与登记是同一个动作，与 `check_java_object_template_guard` 同口径）。
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少 {rel_common}——『枚举查找空 catch』的加载门丢失"
+            "（识别特征不登记时本条永不被加载）", rel_common)
+    else:
+        if "枚举查找的失败处理" not in open(GENERIC_FILE, encoding="utf-8").read():
+            err(f"Java 枚举查找空 catch 防线被破坏：{rel_common} 未登记识别特征"
+                "（`Enum.valueOf` 一类查找式调用）——缺则写这类调用时该条永不被加载，"
+                "例外形同不存在", rel_common)
+    phase_done()
+
+
 def check_doc_type_notation_guard():
     """『文档类型指代（类名 + import）防线』：文档里写类名、不写类全名。
 
@@ -10679,6 +10758,7 @@ CHECKS = (
     check_prompts_index_guard,
     check_api_contract_reuse_guard,
     check_api_naming_guard,
+    check_java_enum_valueof_catch_guard,
     check_pagination_guard,
     check_persistence_access_guard,
     check_conversion_guard,
