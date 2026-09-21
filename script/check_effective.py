@@ -130,7 +130,14 @@ MECHANISMS = [
     ("校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（声明的校验手段不得『从未执行却报绿』）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_toolchain_present_guard",
-     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）"),
+     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）。"
+     "**本轮（Issue #173）补第二道**：`check_asciidoctor_stub_guard` 钉住『语法段不得只剩壳』"
+     "——上面这道钉的是探测代码与 CI 安装步骤的**文本**，而『真的编了每一份 .adoc』本身"
+     "没有 CI 级断言：实测把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); "
+     "phase_done(); return 0` 后脚本仍报 OK、本道照样全绿（探测代码不在那个函数里）。"
+     "新道把『函数体真的探测 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`』"
+     "与『CI 有一步真的执行 `check_specs.py`』变成可核对的；『某次 CI 里那 N 份 .adoc "
+     "真的都被编译了』仍属运行时事实，交人/子 agent 复核"),
     ("CI 触发路径须覆盖校验对象、上游依赖须实测可用、执行须有可判定超时", "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住「触发与作用范围」「依赖与外部资源可用性」「超时与资源」关键要点（实证：引用不存在的镜像在 Prepare 阶段失败、流水线长期 pending）；『具体取值是否合理』交人 review"),
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",

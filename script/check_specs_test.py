@@ -892,6 +892,107 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_asciidoctor_stub_guard（语法段不得只剩壳）
+# --------------------------------------------------------------------------- #
+class TestAsciidoctorStubGuard(CheckSpecsTestCase):
+    """钉住『AsciiDoc 语法段不得只剩壳』（**本轮 Issue #173 实测的绕过路径**）。
+
+    `check_toolchain_present_guard` 钉的是"探测不到处理器即报错"这段**代码**与 CI 的
+    安装步骤**文本**；但"真的编译过每一份 .adoc"这件事本身没有任何 CI 级断言。
+    实测：把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); phase_done(); return 0`
+    （既不探测、也不编译），`check_specs.py` **仍报 OK**、`check_toolchain_present_guard`
+    照样全绿（探测代码不在这个函数里）。故本条把"代码还在 + CI 真的跑它"变成可核对的。
+    """
+
+    _SRC = (
+        'def check_asciidoctor_syntax():\n'
+        '    """语法。"""\n'
+        '    phase("AsciiDoc 语法编译验证")\n'
+        '    proc, proc_path = _detect_asciidoc_processor()\n'
+        '    if proc is None:\n'
+        '        err("探测不到处理器", "script/check_specs.py")\n'
+        '        phase_done()\n'
+        '        return\n'
+        '    files = []\n'
+        '    for root in ADOC_ROOTS:\n'
+        '        files.extend(_collect_adoc_files(root))\n'
+        '    for rel in files:\n'
+        '        r = subprocess.run(_adoc_compile_cmd(proc, rel))\n'
+        '        if r.returncode != 0:\n'
+        '            err("语法/告警", rel)\n'
+        '    phase_done()\n'
+    )
+    _WF = ("name: check\n"
+           "steps:\n"
+           "  - name: Run deterministic spec checks (incl. AsciiDoc syntax)\n"
+           "    run: python3 script/check_specs.py\n")
+
+    def _write_all(self, src=None, wf=None):
+        self.write("script/check_specs.py", src if src is not None else self._SRC)
+        self.write(".github/workflows/check-specs.yml", wf if wf is not None else self._WF)
+
+    def test_valid_passes(self):
+        self._write_all()
+        cm.check_asciidoctor_stub_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_stubbed_body_reports(self):
+        # 反例①：整段换成空壳（既不探测、也不编译）→ 本轮实测的绕过形态
+        self._write_all(src=(
+            'def check_asciidoctor_syntax():\n'
+            '    """（壳）"""\n'
+            '    phase("AsciiDoc 语法编译验证")\n'
+            '    phase_done()\n'
+            '    return 0\n'))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("没有探测处理器", self.error_texts())
+
+    def test_probe_without_err_reports(self):
+        # 反例②：探测了、但缺处理器时不报错（只告警）→ 缺工具静默退回"绿"
+        self._write_all(src=self._SRC.replace(
+            '        err("探测不到处理器", "script/check_specs.py")\n',
+            '        log("跳过")\n').replace(
+            '            err("语法/告警", rel)\n', '            log("跳过")\n'))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("没有 `err(`", self.error_texts())
+
+    def test_probe_without_compiling_reports(self):
+        # 反例③：探测齐了、却没有真的逐个编译（少了收集或编译命令）
+        self._write_all(src=self._SRC.replace(
+            '        r = subprocess.run(_adoc_compile_cmd(proc, rel))\n', ''))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("没有真的逐个编译", self.error_texts())
+
+    def test_probe_without_adoc_roots_reports(self):
+        # 反例④：不按 `ADOC_ROOTS` 覆盖全部维护根（只编仓库根时子树一份都不会被编）
+        self._write_all(src=self._SRC.replace('    for root in ADOC_ROOTS:\n', ''))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("ADOC_ROOTS", self.error_texts())
+
+    def test_missing_function_reports(self):
+        # 反例⑤：整道语法段函数被删
+        self._write_all(src='def other_guard():\n    """别的。"""\n')
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("check_asciidoctor_syntax", self.error_texts())
+
+    def test_ci_does_not_run_check_specs_reports(self):
+        # 反例⑥：CI 里没有任何一步真的执行 `check_specs.py`（步骤名仍写着 AsciiDoc、命令换成了 echo）
+        self._write_all(wf=("name: check\nsteps:\n"
+                            "  - name: Run deterministic spec checks (incl. AsciiDoc syntax)\n"
+                            "    run: echo skip\n"))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("check_specs.py", self.error_texts())
+
+    def test_ci_step_name_not_counted_as_execution(self):
+        # 反例⑥b：只有**步骤名**里有 `check_specs.py`、真命令是别的
+        self._write_all(wf=("name: check\nsteps:\n"
+                            "  - name: python3 script/check_specs.py\n"
+                            "    run: echo skip\n"))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("没有任何一步真的执行", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
 # check_asciidoctor_syntax（--failure-level=WARN）
 # --------------------------------------------------------------------------- #
 class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
@@ -14310,14 +14411,17 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
                "     \"check_beta_guard\", \"备注乙\"),\n"
                "]\n")
 
-    def _write_valid(self, src=None, ledger=None, tests=4):
+    def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
         self.write("script/check_specs.py", src if src is not None else self._SRC)
         self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
-        body = "".join(f"    def test_case_{i}(self):\n        pass\n" for i in range(tests))
-        self.write("script/check_specs_test.py",
-                   "import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
+        if test_file is None:
+            body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
+                           for i in range(tests))
+            test_file = ("import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
+        self.write("script/check_specs_test.py", test_file)
         self.write("script/check_effective_test.py",
-                   "import unittest\n\n\nclass E(unittest.TestCase):\n    def test_x(self):\n        pass\n")
+                   "import unittest\n\n\nclass E(unittest.TestCase):\n"
+                   "    def test_x(self):\n        self.assertTrue(True)\n")
         cm.GUARD_WIRING_BASELINE = 2
         cm.GUARD_TEST_BASELINE = 5
 
@@ -14422,6 +14526,45 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "script", "check_specs.py"))
         cm.check_guard_manifest()
         self.assertIn("check_specs.py", self.error_texts())
+
+    def test_entry_block_in_middle_reports(self):
+        # 反例⑨（本轮 main 上实测的缺口）：测试文件的 `if __name__ == "__main__":` 落在
+        # **中段**，其后仍有缩进的 `def test_`（块内局部函数）——源码正则数得到、`unittest`
+        # 收集不到。本仓库祖先提交 `8802613` 的真实形态：`unittest.main` 在中段、其后 2 个
+        # 测试类从未执行，`Ran 897 tests` 而源码 899 个 `def test_`，脚本与基线全绿。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n        self.assertTrue(True)\n"
+            "\n\nif __name__ == \"__main__\":\n"
+            "    import unittest\n    unittest.main()\n"
+            "\n    def test_injected_never_collected(self):\n"
+            "        self.assertTrue(True)\n"))
+        cm.check_guard_manifest()
+        self.assertIn("中段", self.error_texts())
+
+    def test_emptied_test_case_reports(self):
+        # 反例⑩（本轮 main 上实测的缺口）：用例被**掏空成空壳**（这一节里一条断言都没有）
+        # ——总数基线只保证"数量不减少"，删一条加一条、或把用例掏空都能维持该数；
+        # 被抽空的反例仍会被收集、仍占着那个数，却什么都证不了。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n        pass\n"
+            "    def test_case_1(self):\n        self.assertTrue(True)\n"
+            "    def test_case_2(self):\n        self.assertTrue(True)\n"
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+        cm.check_guard_manifest()
+        self.assertIn("没有任何断言", self.error_texts())
+
+    def test_same_name_deleted_in_one_class_kept_in_another_passes_by_name(self):
+        # 反例⑪（本轮 main 上实测的缺口）：用例名**跨类复用**——类 A 的那条被删、类 B 的
+        # 同名用例仍留。只记"名字"的口径看不见这个动作（名字仍在集合里、计数也够），
+        # 故清单按 `类名.用例名` 限定；此处正例确认"同名分居两类"会被算成两条。
+        src = ("import unittest\n\n\nclass A(unittest.TestCase):\n"
+               "    def test_same(self):\n        self.assertTrue(True)\n"
+               "\n\nclass B(unittest.TestCase):\n"
+               "    def test_same(self):\n        self.assertTrue(True)\n")
+        names = cm._collectable_test_names("script/check_specs_test.py", src)
+        self.assertEqual({"A.test_same", "B.test_same"}, names)
 
 
 class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
