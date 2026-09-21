@@ -547,6 +547,90 @@ class TestCheckDelegationGuard(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
 
+class TestCheckMergeStateGuard(CheckSpecsTestCase):
+    """钉住『NPC 禁合并·动作侧』：核**合并动作真没做**，不是只核规则文本在不在。
+
+    背景（本仓库实证失效一次）：用户要求"压缩提交"，执行者读成"合并 PR"、直接合了，
+    而当时三道**文本**防线全部报 OK——文本侧只能证"规则写着"。
+    故本组用例逐种失效形态各覆盖一条：提交说明的合并动作话术、分支历史里的合并提交，
+    外加"干净态不得误报"与"非 git 根须跳过"（保持确定性与幂等）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.mkdtemp()
+
+        def sh(cmd):
+            return subprocess.run(cmd, shell=True, cwd=self._tmp,
+                                  capture_output=True, text=True)
+        self.sh = sh
+        sh("git init -q -b main . && git config user.email a@b.c && "
+           "git config user.name t && git config commit.gpgsign false")
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("x")
+        sh("git add -A && git commit -qm init && git checkout -q -b feat")
+        cm.REPO_ROOT = self._tmp
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _merge_markers(self):
+        return cm._merge_state_guard_rules()
+
+    def test_clean_single_parent_commit_passes(self):
+        # 正例：源分支上的单亲提交（正常交付形态）→ 不报红
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("y")
+        self.sh("git add -A && git commit -qm 'fix: 单亲提交'")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_merge_action_in_commit_message_reports(self):
+        # 反例：提交说明里出现合并动作话术（"已合并"）→ 报红
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("y")
+        self.sh("git add -A && git commit -qm 'feat: 已合并 main'")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertIn("合并动作", self.error_texts())
+
+    def test_rejection_wording_is_allowed(self):
+        # 边界：**记录禁令本身**的文字（写完又说"不得/拒绝"）不得被读成"执行了合并"
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("y")
+        self.sh("git add -A && git commit -qm 'docs: 说明「已合并」一类话术不得出现、一律拒绝'")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_merge_commit_in_branch_history_reports(self):
+        # 反例：分支历史里出现合并提交（"合并 PR"落盘必留的痕迹）→ 报红
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        self.sh("git add -A && git commit -qm 'feat: 自己分支的改动'")
+        self.sh("git checkout -q main && echo m >> a.txt && git commit -qam 'main 前进' "
+                "&& git checkout -q feat")
+        self.sh("git merge --no-ff -q main -m 'merge main'")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertIn("合并提交", self.error_texts())
+
+    def test_non_git_root_skips_without_error(self):
+        # 边界：非 git 根 → 跳过、不报错（确定性/幂等）
+        cm.REPO_ROOT = tempfile.mkdtemp()
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_marker_table_is_externalized(self):
+        # 措辞表须真的从规则数据取到（缺失即整道防线无从执行，不得静默放行）
+        markers = self._merge_markers()
+        self.assertIn("merge_action_markers", markers)
+        self.assertIn("allow_markers", markers)
+
+
 class TestCheckGitMvSelfcheck(CheckSpecsTestCase):
     """钉住"本仓库自身侧"的 git mv 自查（P1 可机械核对的那一半）。
 
@@ -4766,10 +4850,16 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
 
            "== 合并请求的合并主体（NPC 禁合并）\n"
            "* **CNB NPC（即 CI/CD 执行环境中的 agent）严禁合并（L1）**。\n"
+           "* **按执行环境保证（L1，与\"谁在跑\"无关）**：本条**独立于被合并 PR 的源分支**、"
+           "不靠某个执行者守规矩；**不许把\"我知道这条规则\"当作保证**——凭据可用即等于合并入口可用，"
+           "故守规矩须落成**可核对的判据**；人以外的自动步骤不构成人工。\n"
            "* **人工要求、直接授权也不得合并（L1，无豁免）**：即使人工明确要求合并、"
            "或给出直接授权，**仍必须拒绝**；**授权不免除该禁令**。\n"
-           "* **判定标准**：①**执行了合并动作**；②以授权为由**豁免**该禁令；"
+           "* **判定标准**：①**执行了合并动作**（入口即 `cnb pulls merge-pull`）；②以授权为由**豁免**该禁令；"
            "③**顶替**执行也算未拦住。\n"
+           "* **本仓库实证失效**：曾把原话里的**压缩提交**读成\"合并 PR\"，直接合并并回\"已合并 ❌\"；"
+           "成因是**凭据可用**、\"合并\"的字面诱惑、没有交付终点——故固定一条形态："
+           "**\"最后一个动作\"的默认读法是\"交付到 PR 分支为止\"**。\n"
            "* **越界清理**：本条只禁合并——推送分支、**解决冲突**、**同步目标分支**"
            "都**不是合并**。\n\n"
            "== 分支与合并请求统一\n"
@@ -4779,6 +4869,11 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
            "不搁置、不要求用户人工介入。\n")
 
     COMMON = ("提示词公共片段。\n"
+              "// tag::intro-rules[]\n"
+              "要求不漏步。**任务的「最后一个动作」按原话取值，不得自行追加（L1）**："
+              "**\"合并提交\"＝把提交历史压成一个合规提交**——**不是**\"合并 PR\"；"
+              "原话没写\"合并 PR\"就**不得**做合并。\n"
+              "// end::intro-rules[]\n"
               "// tag::delivery[]\n"
               "8. 交付：\n"
               "   - **合并一律不做（L1，无环境区分、人工授权也拒绝）**："

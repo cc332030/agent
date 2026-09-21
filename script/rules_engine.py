@@ -1007,8 +1007,22 @@ def _check_placeholders(name: str, guard: str, steps) -> None:
                         "写错的占位符会原样留在报错正文里，读者看不到缺失的是哪个文件")
 
 
+# `tokens` 里"不给规则引擎用、只给脚本读"的纯数据表名（提到顶层供脚本直取）。
+#
+# 为什么要这张名单：规则文件里的措辞必须"改措辞不动代码"，但**不是所有措辞都是锚点组**
+# ——例如『NPC 禁合并·动作侧』的措辞表（提交说明里哪些话术算"合并动作的痕迹"、哪些算
+# "记录禁令的放行标记"）是纯数据表，规则引擎不认它的结构。故允许它包在 `tokens` 里
+# 过纯度判据，再由本名单显式提到顶层。
+DATA_TABLE_KEYS = ("merge_state_guard",)
+
+
 def _merge_file(name: str, data, merged: dict) -> None:
-    """把一份规则文件并进汇总数据集；**同键冲突即报错**（不静默覆盖）。"""
+    """把一份规则文件并进汇总数据集；**同键冲突即报错**（不静默覆盖）。
+
+    `tokens` 段另允许承载**不给规则引擎用、只给脚本读的纯数据表**（如
+    『NPC 禁合并·动作侧』的措辞表 `merge_state_guard`）：它们同样是"改措辞不动代码"
+    的落点，包一层 `tokens` 只是为过"规则文件只承载 guards/tokens 两键"的纯度判据。
+    """
     if not isinstance(data, dict):
         raise RulesError(f"规则文件 {name} 不是对象（顶层须为 `guards` / `tokens` 两张表）")
     for key, value in data.get("guards", {}).items():
@@ -1023,6 +1037,15 @@ def _merge_file(name: str, data, merged: dict) -> None:
             raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了名单/锚点 `{key}`——"
                              "同一份名单只能有一处落点（两处会各写一半、彼此漂移）")
         merged["tokens"][key] = value
+    # tokens 里的纯数据表（非锚点组）**提到顶层**：脚本按表名直取，不必知道它包在 tokens 里。
+    # 注意：**检测重复用的是 `is not None`**——合并容器在开头就把这些键预置成了 None，
+    # 用 `in` 判会一律命中"重复定义"（实测踩过）。
+    for key, value in data.get("tokens", {}).items():
+        if key in DATA_TABLE_KEYS:
+            if merged[key] is not None:
+                raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了数据表 `{key}`——"
+                                 "同一份数据表只能有一处落点")
+            merged[key] = value
 
 
 def load_rule_specs(spec) -> dict:
@@ -1059,12 +1082,15 @@ def load_rule_files(spec) -> dict:
     合并不是"后一份覆盖前一份"：重复防线名/名单名一律抛 `RulesError`——两条规则同名时，
     读者会以为新的一条生效，而实际生效的可能是另一份文件里的那一条。
     """
-    merged = {"guards": {}, "tokens": {}}
+    merged = {"guards": {}, "tokens": {}, **{k: None for k in DATA_TABLE_KEYS}}
     for path in load_rule_specs(spec):
         if not os.path.isfile(path):
             raise RulesError(f"缺少规则文件 {path}——规则数据与脚本隔离后，"
                              "规则文件是规则措辞的唯一来源，缺失即整批规则静默失效")
         _merge_file(os.path.basename(path), _load_toml(path), merged)
+    for key in DATA_TABLE_KEYS:
+        if merged[key] is None:
+            del merged[key]
     if not merged["guards"]:
         raise RulesError("规则文件里一道防线的规则都没有——规则数据整体缺失，"
                          "所有防线会静默空转（不得当成'没有规则就是通过'）")
