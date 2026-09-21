@@ -481,6 +481,19 @@ MECHANISMS = [
      "『某台机器上到底有没有解释器、装了哪一个』运行时事实（见 GUARD_CHECK_LIMITS）"),
     ("对外接口命名带所属域/项目前缀（Feign 接口的 `Api` 前须带该域固定前缀，先例优先、无先例取项目名词首组合）", "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_api_naming_guard", "check_api_naming_guard 钉住通用层条文与 L1、先例优先、无先例取词规则与实例（`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`）、可逐条核对的判定标准与存量口径，以及 Java 栈落点（Feign、指向通用条）、加载调度器两处识别特征、README 目录说明与图书馆依据落点（含如实取样标注）；语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("分页查询的返回类型与转换（普通接口 `Result<IPage<Rsp>>`、Feign 接口 `Result<自定义Page<Rsp>>`、字段转换走 `page.convert` 而不是新建 page）",
+     "specs/stack/java.adoc", "script/check_specs.py",
+     "check_pagination_guard",
+     "check_pagination_guard 钉住**判据本体**（不是轴名——只核『有没有这一条』属防线空转）："
+     "`specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」里该条的两侧返回类型"
+     "（普通接口 `Result<IPage<Rsp>>` / Feign 接口 `Result<自定义Page<Rsp>>` 并跟随先例）、"
+     "`convert` 的**禁止面**（不得新建 page 再逐个搬运字段）、保留分页元数据这一理由"
+     "（当前页/每页条数/总记录数/总页数——缺理由则本条的级别与处置被降级）、"
+     "可逐条核对的判定标准（普通接口侧不合格 / Feign 侧 `new` page / 两侧先例互改 / 自我豁免）、"
+     "与相邻条目的分工（元素不得是实体类、字段转换优先声明式映射）与存量随动迁移、"
+     "依据行须如实写明这是本集合的取舍。失效形态：同一项目并存两套分页模型；"
+     "**新建 page 时漏搬总页数既不报错也不提示、只在运行期表现为翻页失效**。"
+     "『某个分页接口算不算普通接口、该处该不该用自定义 page』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("请求/响应类优先移动复用（给已有接口加内部调用接口时不新建一套，例外只有数据库实体类与含三方类型的类，本项目自身的依赖不算三方依赖）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住通用层条文与 L1、两种例外（数据库实体类除声明外不移动 / 类里引用了第三方类型）、边界（**本项目自身的依赖不算三方依赖**——该字句缺位等于给出一个随时可套用的豁免口）、「移动而非复制、同步更新原引用」的动作、可逐条核对的判定标准（另建同构类 / 同名或仅差包名 / 复制不改原引用 / 以「依赖本项目其他模块」为由拒绝移动 / 移动数据库实体类而无声明）、存量随动迁移与依据行，以及调度器识别特征与 README 同步；『某次是否真的移动了类、是否真的跟随了项目先例』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("HTTP 接口路径优先用中划线（kebab-case）（不得用下划线或驼峰；服务路由/网关前缀与已发布对外路径照旧）", "specs/stack/spring.adoc", "script/check_specs.py",
