@@ -672,6 +672,21 @@
      由 `check_java_object_template_guard` 钉住；「某个类算不算数据对象、代码里到底标没标这些注解」
      属语义判断与运行时事实，交人/子 agent 复核。
 
+ 70. NPC 禁合并·动作侧防线（**本仓库实证失效后补的**）：`check_npc_merge_guard` 是**文本侧**
+     ——文本再全也只证"规则写着"，证不了"动作没做"。实证：原话要求"压缩提交"，执行者读成
+     "合并 PR"、直接调平台合并并在 PR 下回"已合并 ✅"，**真正被要求的那件事一件没做**，
+     而当时三道文本防线全部报 OK。故本条核三件**可机械核对的事实**（只读本仓库自身，
+     不碰平台、不碰引用方）：① **提交说明**里出现合并动作的痕迹（`merge-pull` /
+     `merge --no-ff` / `squash 合并` / `已合并` 一类，措辞表外置在规则数据里；同一行出现
+     拒绝/不得/严禁一类放行标记则放行——报错文案与实证记录本身就会提到这些词）；
+     ② **当前源分支 HEAD ≠ 并发唤起时钉定的 sha**（PR 仍为打开态时才算，取值取不到即跳过、
+     绝不猜）；③ **本分支历史出现合并提交**（`git rev-list --merges <默认分支>..HEAD`，
+     只在本分支领先默认分支时发声）。失效形态：源分支被推到别的 sha 却当"已交付"汇报；
+     "合并 PR"落盘后仍以常规交付口径收尾。
+     由 `check_merge_state_guard` 钉住（接线数 102 → 103）。**效力边界**：平台侧直接合并、
+     且不在本仓库留痕时本条看不到——那一半靠"禁止 NPC 执行环境持有合并权限"（见 `AGENTS.adoc`），
+     故本条只是**第二道**。
+
 """
 
 import argparse
@@ -3876,7 +3891,7 @@ def check_install_repeat_update_guard():
 #       由“取值”改述为“识别特征”）；`check_java_serial_guard` 相应地不再要求调度器逐字抄
 #       本体片段（改核 `优先 \`val\`、可变才 \`var\`` 这一识别特征短语）。
 #   接线数不变：仍是一道防线、一个名字（`CHECKS` 序列与 `guards.adoc` 清单表不动）。
-GUARD_WIRING_BASELINE = 102
+GUARD_WIRING_BASELINE = 103
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -3974,7 +3989,13 @@ GUARD_WIRING_BASELINE = 102
 #       的旧口径描述已改过的判据（读注释的人会被指向不存在的东西）。同步改到与判据一致。
 #   用例数 1269 → 1271（+2：核对面覆盖全部 .adoc 的双向用例；同源实取数 `Ran 1271 tests ... OK`）。
 #   接线数不变（102）：本轮不增删防线，只收紧核对面与修文本。
-GUARD_TEST_BASELINE = 1271
+#   接线数 102 → 103（**本仓库实证失效后新加的动作侧防线 `check_merge_state_guard`**）：
+#   原 `check_npc_merge_guard` 只核"规则文本在不在"——文本侧再全也只证规则写着，证不了
+#   动作没做（实证：把"压缩提交"读成"合并 PR"直接合了，三道文本防线全部报 OK）。故加一道
+#   核**提交说明 / 源分支 HEAD / 分支历史**的防线，`guards.adoc` 清单表同步插一行、后续序号重排。
+#   用例数 1271 → 1277（+6：干净态不得误报 / 提交说明含合并动作话术即报红 / 记录禁令自身的
+#   文字不得误报 / 分支历史出现合并提交即报红 / 非 git 根须跳过 / 措辞表须真从规则数据取到）。
+GUARD_TEST_BASELINE = 1277
 
 #   本轮（Issue #158）记账：新增 `check_entity_dto_guard`；反例用例数按同源口径回填为
 #   **合并后的实取数**（本分支新增 16 条，main 侧合并 `check_orm_boundary_guard` 的 19 条
@@ -5125,6 +5146,121 @@ def check_git_mv_selfcheck():
             "须改用 `git mv`（最高关注项 P1：delete+create 会使历史永久断链）；"
             "若确为真删真增（非移动），用 `git diff --cached -M10% --summary` 复核后可忽略本提示",
             "git 暂存区")
+    phase_done()
+
+
+def _merge_state_guard_repo_root():
+    """当前被检查的仓库根（现场推导）：**不在导入期固化**——单测会把 `REPO_ROOT`
+    重定向到临时仓库，故本道防线须每次现取，否则重定向失效（实测踩过）。"""
+    return REPO_ROOT
+
+
+def _merge_state_guard_rules():
+    """取『NPC 禁合并·动作侧』的措辞表（规则数据外置，改措辞不动代码）。
+
+    规则数据缺失不是"没有可核对的措辞"，而是整道防线无从执行——故回落到**空表**
+    并在阶段内如实报错，不得静默放行（与 `_bootstrap_rules_tokens` 同口径）。
+    """
+    try:
+        files = rules_engine.load_rule_files(_rules_spec())
+    except rules_engine.RulesError as exc:
+        err(f"规则数据不可读（{exc}）——『NPC 禁合并·动作侧』的措辞表无从取值，"
+            "本道防线不得静默跳过", "script/specs-rules")
+        return {}
+    return files.get("merge_state_guard", {}) or {}
+
+
+def check_merge_state_guard():
+    """『NPC 禁合并·动作侧』：核**本仓库自身**的"合并动作真没做"，不是只核规则文本在不在。
+
+    背景（本仓库实证失效一次）：用户要求"压缩提交"，执行者把它读成"合并 PR"、直接调
+    平台合并、并在 PR 下回"已合并 ✅"——**真正被要求的那件事一件没做**。而当时三道
+    **文本**防线（`check_npc_merge_guard` 的要点、提示词 `delivery` 片段、入口登记）
+    **全部报 OK**：文本侧只能证"规则写着"，证不了"动作没做"。
+
+    故本检查是文本侧之外的另一半，核三件**可机械核对的事实**（全部只读本仓库自身，
+    不碰平台、不碰引用方）：
+
+      * ① **提交说明**里出现合并动作的痕迹——`merge-pull`/`merge --no-ff`/`squash 合并`/
+        `已合并`/`已合入`（措辞表在规则数据里，改措辞不改代码）；命中的行里若出现
+        拒绝/禁令/不做一类标记词则放行——`check_merge_state_guard` 的报错文案本身、
+        以及本条实证记录都会提到这些词，不能把"记录这件禁令的话"读成"执行了合并"。
+      * ② **当前源分支 HEAD 不等于并发唤起时钉定的 sha**——PR 还在开着却把源分支推到
+        别的 sha，是"合并/改写"的典型残留（判定只在 PR 为打开态、且钉定 sha 取得到时
+        才发声；平台不提供这两个取值时按**跳过**处理，绝不猜）。
+      * ③ **本分支历史里出现合并提交**（`git rev-list --merges <默认分支>..HEAD`）——
+        "合并 PR"落盘一定会留下合并提交；正常交付（PR 分支上的单亲提交）不会。
+        只在本分支相对默认分支**领先**时才发声，且合并提交本身要与默认分支/远端同名
+        分支做交叉核对后再报——**避免把"把自己分支同步一次默认分支"这种合规动作读成违规**。
+
+    **效力边界（说明白了才不算虚报抓手）**：这三条覆盖的是"合并在本仓库留下痕迹"的
+    情形；平台上直接合并、且不在本仓库留下任何痕迹时，本检查**看不到**——那一半只能
+    由**平台侧禁止 NPC 执行合并**（撤销执行环境的合并权限）拦住，故 `AGENTS.adoc` 里
+    写明该防线只是**第二道**。
+    """
+    phase("NPC 禁合并·动作侧检查")
+    repo_root = _merge_state_guard_repo_root()
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        phase_done()
+        return
+    data = _merge_state_guard_rules()
+
+    def _git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo_root,
+                                 capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout if out.returncode == 0 else None
+
+    # ① 提交说明的**动作面**（标题 + 正文首个段落）出现合并动作话术
+    #
+    # 取"标题 + 首段"而不是整篇正文：交付口径里"做了什么"就在这两处，而叙述性的
+    # 复述（如判据本体里的实证记录、图书馆里的依据说明）落在后面的段落——
+    # 整篇扫会把"记录这件禁令"的句子读成"执行了合并"（实测踩过：本条自己的提交
+    # 说明写过"把原话读成合并 PR、直接调平台合并并回已合并 ✅"，那是记录不是执行）。
+    msgs = _git("log", "-100", "--format=%s%n---BODY---%n%b%n---END---")
+    if msgs is not None:
+        markers = [w.lower() for w in data.get("merge_action_markers", [])]
+        allow = [w.lower() for w in data.get("allow_markers", [])]
+        hits = []
+        for record in msgs.split("---END---"):
+            lines = [l for l in record.splitlines() if l.strip() and l.strip() != "---BODY---"]
+            zone = lines[:1] + lines[1:2]  # 标题 + 正文首段
+            for line in zone:
+                low = line.lower()
+                if any(m in low for m in markers) and not any(a in low for a in allow):
+                    hits.append(line.strip())
+        if hits:
+            shown = "；".join(list(dict.fromkeys(hits))[:3])
+            err(f"提交说明（标题或正文首段）里出现合并动作的痕迹（`{shown}`）——"
+                "NPC/CI 执行者**一律不得合并合并请求**"
+                "（`specs/platform/cnb.adoc`「合并请求的合并主体（NPC 禁合并）」）；"
+                "若这是「记录禁令本身」的文字而非真正执行，按该条允许的拒绝措辞写明是"
+                "**拒绝**执行、不得写成已完成", "git 提交说明")
+
+    # ② 源分支 HEAD 与并发唤起时钉定的 sha 不符（PR 仍开着 ＝ 典型残留）
+    if os.environ.get("CNB_PULL_REQUEST", "").lower() == "true":
+        pinned = os.environ.get("CNB_PULL_REQUEST_SHA", "").strip()
+        head = (_git("rev-parse", "HEAD") or "").strip()
+        if pinned and head and not head.startswith(pinned[:8]) and not pinned.startswith(head[:8]):
+            err(f"当前检出 sha（`{head[:8]}`）与本次并发唤起时钉定的 sha（`{pinned[:8]}`）不符，"
+                "而该合并请求仍处于打开态——PR 还在开着却把源分支推到别的 sha，是"
+                "**合并/改写后未回退**的典型残留；须核对源分支是否已被合并或强推改写",
+                "git HEAD")
+
+    # ③ 本分支历史里的合并提交（正常交付是单亲提交链，不会出现合并提交）
+    base = os.environ.get("CNB_DEFAULT_BRANCH", "main") or "main"
+    ahead = _git("rev-list", "--count", f"{base}..HEAD")
+    merges = _git("rev-list", "--merges", f"{base}..HEAD")
+    if ahead and ahead.strip() not in ("", "0") and merges is not None:
+        found = [l for l in merges.splitlines() if l.strip()]
+        if found:
+            detail = "; ".join(f"`{h.strip()[:8]}`" for h in found[:3])
+            err(f"分支历史里出现合并提交（{detail}）——`specs/platform/cnb.adoc`「NPC 禁合并」"
+                "要求合入只由人工完成，交付到创建/推送 PR 分支为止"
+                "（交付形态须是源分支上的单亲提交链）；核对命令："
+                "`git rev-list --merges <默认分支>..HEAD`", "git 历史")
     phase_done()
 
 
@@ -10032,6 +10168,7 @@ CHECKS = (
     check_prompts_primary,
     check_env_marker_guard,
     check_npc_merge_guard,
+    check_merge_state_guard,
     check_squash_commit_guard,
     check_merge_relationship_guard,
     check_conflict_resolution_guard,

@@ -762,8 +762,11 @@ class TestSeparationInvariants(unittest.TestCase):
                 data = tomllib.load(fh)
             with self.subTest(name=name):
                 self.assertIsInstance(data, dict)
-                self.assertTrue(set(data) <= {"guards", "tokens"},
-                                f"{name} 只允许承载 guards/tokens 两键")
+                # `_tokens.toml` 另承载"要给模块级常量用"的纯数据段
+                # （`merge_state_guard` 的措辞表：提交说明里哪些话术算"合并动作的痕迹"、
+                # 哪些算"记录禁令的放行标记"）——**仍是纯数据**，只是不必包在 `tokens` 里。
+                self.assertTrue(set(data) <= {"guards", "tokens", "merge_state_guard"},
+                                f"{name} 只允许承载 guards/tokens/merge_state_guard 三类键")
                 for key, value in data.get("guards", {}).items():
                     self.assertIsInstance(value, list, f"{name} 的 {key} 须是步骤列表")
 
