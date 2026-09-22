@@ -45,6 +45,7 @@ import importlib.util
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -14989,6 +14990,746 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    self.SCRIPT_PY.replace("不得把本地副本删掉", "落盘前先清空本地"))
         cm.check_spec_fetch_guard()
         self.assertIn("把本地副本删掉", self.error_texts())
+
+
+class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
+    """端到端实测『落点取完即只读』（用户口径：文件本身下载后要变成只读）。
+
+    静态判据（`TestCheckReadonlyLandingGuard`）只证"脚本里写了这件事"；本类证**它真的生效**：
+      * 取完后落点里的**目录没有写位、文件没有写位**；
+      * 用户再跑一次（远端改了）**照旧能更新**——只读不挡"默认以远程为准"；
+      * 落点里的入口脚本**仍能直接执行**（只读的例外是执行位）；
+      * **非特权调用方**改不动落点里的任何文件（本条要拦的正是"项目把副本就地改掉"，故实测
+        用的是"换一个用户去改"这条路：root 自己不受权限位约束，用 root 复核实测不出本条）；
+      * 落点里入口的执行位**每轮都补**（`--no-scripts`、"内容一致"的那一轮同样补——
+        见 `test_entry_exec_bit_restored_even_with_no_scripts`）。
+
+    非特权那一档在没有第二个用户的机器上跳过（Windows/容器常如此）——**跳过时显式说明**，
+    不得把"没实测"静默当成"通过"。同理，**Windows 上只实测得到『文件已置只读』那一半**：
+    目录的只读位在 Windows 上拦不住增删改名，那一半靠规范约束（判据与边界见
+    `script/fetch-specs.py` 头部「已知限制」）——用例在 win32 上**显式跳过并说明**，
+    不把"没实测的那一半"算成通过。
+    """
+
+    ENTRY = b"= test\n\nspecs/core/execution.adoc\n"
+    SPEC = "= 执行原则\n\n* 甲\n".encode("utf-8")
+
+    def _install_scripts_served(self):
+        """服务端要供给的安装脚本（脚本会随规范一起取它们，缺则 404、退出码非 0）。
+
+        名单从**真实仓库**的 `fetch-specs.py` 里读，与脚本本身同源——手工再抄一份名单会在
+        加了第三份安装脚本时静默漏供（那时用例报的是 404、看起来像网络问题）。
+        """
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(real_root, "script", "fetch-specs.py"),
+                  encoding="utf-8") as fh:
+            src = fh.read()
+        return {"script/" + rel: src.encode("utf-8")
+                for rel in re.findall(r'"script/([\w.-]+)"', src)}
+
+    def _serve(self, served):
+        import http.server
+        import socketserver
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                body = served.get(self.path.lstrip("/"))
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        return socketserver.TCPServer(("127.0.0.1", 0), Handler)
+
+    def _run_fetch(self, base, extra=(), home=None):
+        """按仓库真实的抓取脚本跑一次（spawn 子进程、按 stdout/stderr 断言）。"""
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        env = None
+        if home:
+            env = dict(os.environ, HOME=home, USERPROFILE=home)
+        return subprocess.run([sys.executable, script, "--base", base, *extra],
+                              cwd=real_root, capture_output=True, text=True,
+                              timeout=120, env=env)
+
+    def test_landing_is_read_only_and_still_updatable(self):
+        import threading
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+        home = tempfile.mkdtemp(prefix="readonly-home-")
+        try:
+            with self._serve(served) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                base = f"http://127.0.0.1:{port}"
+                slot = os.path.join(home, ".cache", "agent-specs",
+                                    re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                           f"127.0.0.1:{port}").strip("_"))
+
+                proc = self._run_fetch(base, home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+
+                # ① 落点里的目录没有写位、文件没有写位（只读真的生效，不只是一句注释）
+                if os.name == "posix":
+                    for dirpath, dirnames, filenames in os.walk(slot):
+                        self.assertFalse(os.stat(dirpath).st_mode & stat.S_IWUSR,
+                                         f"目录仍有写位: {dirpath}")
+                        for name in filenames:
+                            self.assertFalse(
+                                os.stat(os.path.join(dirpath, name)).st_mode & stat.S_IWUSR,
+                                f"文件仍有写位: {os.path.join(dirpath, name)}")
+                    root = os.path.join(home, ".cache", "agent-specs")
+                    self.assertFalse(os.stat(root).st_mode & stat.S_IWUSR)
+                else:
+                    # **win32 上不静默算通过**（本仓库口径：跳过不等于通过）。已按 CPython
+                    # `win32_chmod` 语义核对过：`os.chmod` 只认 `stat.S_IWRITE`，其效果是给
+                    # **文件**打 `FILE_ATTRIBUTE_READONLY`（文件那一半成立）；**目录的增删改名
+                    # 拦不住**（删除权来自父目录的 `DELETE_CHILD`，与目标目录属性无关）。
+                    # 故此处只核"文件已置只读"这一半，另一半靠规范约束——
+                    # 边界写在 `script/fetch-specs.py` 头部「已知限制」与本用例说明里。
+                    self.skipTest("Windows 上目录的只读位拦不住增删改名（READONLY 属性对目录不阻止 "
+                                  "DeleteFile/CreateFile）；本机只实测得到『文件已置只读』那一半，"
+                                  "『目录不可增删改名』在 Windows 上未实测（跳过不等于通过，"
+                                  "判据与边界见 fetch-specs.py 头部「已知限制」）")
+
+                # ② 只读的例外是执行位：落点里的入口仍能直接执行（"下次重装直接跑它"）
+                if os.name == "posix":
+                    entry = os.path.join(home, ".cache", "agent-specs", "fetch-specs.sh")
+                    self.assertTrue(os.stat(entry).st_mode & stat.S_IXUSR,
+                                    "落点里的入口丢了执行位（只读把'能直接跑'一并否掉了）")
+
+                # ③ 只读**不挡更新**：远端改了，重跑一次必须刷新（"默认以远程为准"仍成立）
+                served["AGENTS_COMMON.adoc"] = self.ENTRY.replace(b"= test", b"= v2")
+                proc = self._run_fetch(base, home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                self.assertIn("刷新", proc.stdout)
+                with open(os.path.join(slot, "AGENTS_COMMON.adoc"), "rb") as fh:
+                    self.assertEqual(self.ENTRY.replace(b"= test", b"= v2"), fh.read())
+                # 更新之后仍须是只读的（收紧动作在每一次落盘后都做）
+                if os.name == "posix":
+                    self.assertFalse(
+                        os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode & stat.S_IWUSR)
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_entry_exec_bit_restored_even_with_no_scripts(self):
+        """端到端实测（**本轮补，PR 返工**）：落点里入口的执行位**每轮都补**，
+        与"这一轮落了几个盘"解耦。
+
+        失效形态（本 PR 原实现，实测复现）：补执行位原先只挂在 `fetch_install_scripts` 里、
+        只在 `download_one` 走 `new`/`updated` 分支时被调用。于是：
+          * `--no-scripts` 整组跳过 → 没人补；
+          * "内容一致（`same`）"的那一轮 → 没人补。
+        结果是一旦落点里入口的执行位不是 555（下载回来的是字节、HTTP 不带文件模式；
+        也含用户手动降级、或旧版本留下的落点），它就一直停在 444，而 `444` 与"入口也在
+        只读树里"看起来一模一样、无从发现——"下次重装直接跑落点里的入口"就此失效。
+
+        本条按**用户会遇到的那条路**实测：先正常取一次、再把**入口**（取值面见脚本的
+        `ENTRY_SCRIPTS`，即各平台薄壳）降级成 `444`，然后跑 `--no-scripts`
+        （这一步没人落盘任何文件）——执行位必须回到能跑，且**写位不得被放开**。
+        逻辑代码（`.py`）不在入口名单里（它不是给人直接敲的命令），故也不应当被补位。
+        Windows 上无 POSIX 执行位语义，故本条跳过并**显式说明**（不把"没实测"当"通过"）。
+        """
+        if os.name != "posix":
+            self.skipTest("Windows 上无 POSIX 执行位语义（os.chmod 只切只读属性），"
+                          "故未实测『--no-scripts 下入口执行位恢复』（跳过不等于通过）")
+        import threading
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+        home = tempfile.mkdtemp(prefix="readonly-execc-")
+        try:
+            with self._serve(served) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                base = f"http://127.0.0.1:{port}"
+                root = os.path.join(home, ".cache", "agent-specs")
+                proc = self._run_fetch(base, home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                # 入口名单与脚本同源（`ENTRY_SCRIPTS`）：手工再抄一份会在加了第三份入口时静默漏测
+                with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                       "script", "fetch-specs.py"), encoding="utf-8") as fh:
+                    src = fh.read()
+                entry_rels = re.findall(r'ENTRY_SCRIPTS = \(([^)]*)\)', src)[0]
+                entry_names = re.findall(r'"script/([\w.-]+)"', entry_rels)
+                entries = [os.path.join(root, n) for n in entry_names
+                           if n.endswith(".sh")]      # .bat 在 POSIX 上无执行位语义
+                self.assertTrue(all(os.path.isfile(p) for p in entries), root)
+                # 模拟"执行位没被恢复"的落点：入口只剩只读位（444）
+                for path in entries:
+                    os.chmod(path, 0o444)
+                # `--no-scripts`：整组不落盘、也没人碰权限位——执行位仍须被补回来
+                proc = self._run_fetch(base, ("--no-scripts",), home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                for path in entries:
+                    self.assertTrue(os.stat(path).st_mode & stat.S_IXUSR,
+                                    f"落点里的入口丢了执行位: {path}（--no-scripts 下没人补位）")
+                    self.assertFalse(os.stat(path).st_mode & stat.S_IWUSR,
+                                     f"补执行位时把写位也放开了（落点须仍只读）: {path}")
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_non_root_cannot_touch_landing(self):
+        """非特权调用方改不动落点（本条要拦的正是"项目把副本就地改掉"）。
+
+        root 不受权限位约束，故本条**必须换一个非特权身份**实测——用 root 跑"能不能写"
+        永远得到"能写"、看不出只读有没有生效（本仓库实测口径：判据要能被坏形态触发）。
+        机器上没有可用的非特权用户时**跳过并显式说明**（不把"没实测"当"通过"）。
+        """
+        if os.name != "posix" or os.geteuid() != 0:
+            self.skipTest("需要 POSIX 且以 root 运行才能切到非特权用户实测；"
+                          "本机不满足，故未实测『非特权调用方改不动落点』"
+                          "（跳过不等于通过）")
+        nobody = next((u for u in ("nobody", "node", "daemon")
+                       if subprocess.run(["id", u], capture_output=True).returncode == 0), None)
+        if nobody is None:
+            self.skipTest("本机没有可用的非特权用户，故未实测『非特权调用方改不动落点』"
+                          "（跳过不等于通过）")
+        import threading
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+        home = tempfile.mkdtemp(prefix="readonly-home-")
+        try:
+            with self._serve(served) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                base = f"http://127.0.0.1:{port}"
+                proc = self._run_fetch(base, home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                root = os.path.join(home, ".cache", "agent-specs")
+                slot = os.path.join(root, re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                                 f"127.0.0.1:{port}").strip("_"))
+                os.chmod(home, 0o755)          # 让非特权用户能走到落点（家目录本身要能进）
+                for path in (root, slot, os.path.join(slot, "specs"),
+                             os.path.join(slot, "specs", "core")):
+                    os.chmod(path, 0o555 if os.path.isdir(path) else 0o444)
+                target = os.path.join(slot, "AGENTS_COMMON.adoc")
+                # 就地改：非特权用户必须写不进去
+                r = subprocess.run(["su", nobody, "-c",
+                                    f'printf x >> "{target}"'], capture_output=True, text=True)
+                self.assertNotEqual(0, r.returncode,
+                                    f"非特权用户改动了落点里的规范副本:\n{r.stdout}{r.stderr}")
+                with open(target, "rb") as fh:
+                    self.assertEqual(self.ENTRY, fh.read())     # 内容逐字节未变
+                # 往落点里新增文件：目录没有写位，同样必须失败
+                r = subprocess.run(["su", nobody, "-c",
+                                    f'touch "{slot}/injected"'], capture_output=True, text=True)
+                self.assertNotEqual(0, r.returncode,
+                                    "非特权用户往落点里新增了文件（目录写位没收紧）")
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_keep_still_hardens_landing(self):
+        """`--keep` 下**同样收紧**：放开过权限的落点，加 `--keep` 再跑一次必须回到只读。
+
+        "不动本地那一份"（不核内容、不覆盖）与"它还是只读的"是两件事——只在前一路收紧时，
+        最需要它的一路（有人 `chmod -R u+w` 改过副本、又按安装流程加了 `--keep`）恰恰漏掉。
+        """
+        import threading
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+        home = tempfile.mkdtemp(prefix="readonly-keep-home-")
+        try:
+            with self._serve(served) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                base = f"http://127.0.0.1:{port}"
+                proc = self._run_fetch(base, home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                root = os.path.join(home, ".cache", "agent-specs")
+                slot = os.path.join(root, re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                                 f"127.0.0.1:{port}").strip("_"))
+                if os.name != "posix":
+                    self.skipTest("Windows 上 chmod 只切只读位，权限位实测不适用（跳过不等于通过）")
+                # 放开权限（模拟"有人就地改了副本"，也模拟只读位被外部改动）
+                for dirpath, dirnames, filenames in os.walk(root):
+                    os.chmod(dirpath, 0o755)
+                    for name in filenames:
+                        os.chmod(os.path.join(dirpath, name), 0o644)
+                self.assertTrue(os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode
+                                & stat.S_IWUSR, "夹具没生效：目标文件仍是只读的")
+                proc = self._run_fetch(base, extra=("--keep",), home=home)
+                self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
+                self.assertFalse(os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode
+                                 & stat.S_IWUSR,
+                                 "--keep 没把放开过权限的落点收回只读")
+                self.assertFalse(os.stat(slot).st_mode & stat.S_IWUSR)
+                self.assertNotIn("没能收紧", proc.stdout + proc.stderr)
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_unhardened_landing_is_reported(self):
+        """收紧失败**不得静默**：改不动权限位时须如实警告，不得照旧打「落点已设为只读」。
+
+        以特权身份（root）跑时权限位改得动、看不出这条；故换一个**非特权身份**复现，
+        夹具是**真实存在的形态**：落点所在的那一层**对调用方只读**（如别处移交/以只读
+        方式挂上来的目录）——`chmod` 拒改（收不紧），而在其中**新建**文件另要写位、
+        同样被拒（故取文件失败），退出码 1。本条要的正是这一路：**"没能收紧"必须说出来**，
+        读到的必须不是那句「落点已设为只读」。
+        """
+        if os.name != "posix" or os.geteuid() != 0:
+            self.skipTest("需要 POSIX 且以 root 运行才能用别的属主复现『收紧失败』；"
+                          "本机不满足，故未实测『收紧失败会被如实警告』（跳过不等于通过）")
+
+        def _has_shell(u):
+            """要能 `su -c` 过去跑命令：登录 shell 为 nologin 的账号（nobody/daemon 常见）会被拒。"""
+            pwd = subprocess.run(["getent", "passwd", u], capture_output=True, text=True)
+            return pwd.returncode == 0 and not pwd.stdout.rstrip().endswith("nologin")
+
+        nobody = next((u for u in ("node", "nobody", "daemon") if _has_shell(u)), None)
+        if nobody is None:
+            self.skipTest("本机没有可 `su -c` 的非特权用户，故未实测"
+                          "『收紧失败会被如实警告』（跳过不等于通过）")
+        import threading
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+        home = tempfile.mkdtemp(prefix="readonly-unhardened-home-")
+        try:
+            with self._serve(served) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                os.chmod(home, 0o755)
+                root = os.path.join(home, ".cache", "agent-specs")
+                os.makedirs(root)
+                os.chown(root, 0, 0)
+                os.chmod(root, 0o555)       # 落点根：调用方能进、但**改不动也建不了**
+                script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                      "script", "fetch-specs.py")
+                proc = subprocess.run(
+                    ["su", nobody, "-c",
+                     f"HOME={home} {sys.executable} {script} --base http://127.0.0.1:{port}"],
+                    capture_output=True, text=True, timeout=120)
+                out = proc.stdout + proc.stderr
+                self.assertIn("没能收紧", out)                  # 只读没落下 → 须如实说
+                self.assertNotIn("落点已设为只读", out)         # 不得照旧宣称已只读
+                # 收不紧的落点在输出里仍算"文件取到过哪些"这一栏、不说成"权限已就绪"
+                self.assertIn("警告:", out)
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+class TestFetchSpecsPathBoundary(CheckSpecsTestCase):
+    """钉住 `_ensure_writable` 的**路径边界判据**（PR 返工补）。
+
+    失效形态（本 PR 原实现，实测复现）：原先的判据是字符串前缀
+    `node.startswith(stop)`，不做路径分段边界——`~/.cache/agent-specs-backup`
+    与落点只是**名字前面重合**，却会被判成"在落点之内"。后果不是报错而是
+    **静默放权**：给落点旁边的兄弟目录补回写位，而"落点只读"这句话没人再核对。
+    当前调用点拼出的 `dest` 必在落点内（暂不可达），但判据本身不严。
+
+    故这里直接按**真脚本**的函数实测（不复制一份实现，否则测的是副本）：
+      * 同名邻居 `/a/agent-specs-backup`、同前缀邻居 `/a/agent-specs2` 都**不在**落点内；
+      * 落点自己、以及落点下的任意层级**在**落点内；
+      * 不同盘符（Windows `C:` 与 `D:`）比较时 `commonpath` 抛错 → 按"不在内"处理
+        （保守的一侧：少补一处写位最多落盘失败并如实报错，多补一处才是越界）。
+    """
+
+    def _load_fetch_specs(self):
+        """按路径导入真脚本（文件名带 `-`，故不能用普通 `import`）。"""
+        import importlib.util
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(real_root, "script", "fetch-specs.py")
+        spec = importlib.util.spec_from_file_location("fetch_specs_under_test", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_path_boundary_not_string_prefix(self):
+        mod = self._load_fetch_specs()
+        stop = os.path.join(tempfile.mkdtemp(prefix="boundary-stop-"), "agent-specs")
+        os.makedirs(stop)
+        try:
+            # 落点自己与落点之下 → 在内
+            self.assertTrue(mod._is_within(stop, stop))
+            self.assertTrue(mod._is_within(os.path.join(stop, "specs", "core"), stop))
+            # **同名邻居 / 同前缀邻居 → 不在内**（字符串前缀会误判为在内）
+            self.assertFalse(mod._is_within(stop + "-backup", stop))
+            self.assertFalse(mod._is_within(stop + "2", stop))
+            self.assertFalse(mod._is_within(os.path.join(os.path.dirname(stop), "other"), stop))
+            # 父目录 → 不在内（补位只往上补到落点为止，不该再往上出界）
+            self.assertFalse(mod._is_within(os.path.dirname(stop), stop))
+        finally:
+            shutil.rmtree(os.path.dirname(stop), ignore_errors=True)
+
+    def test_ensure_writable_leaves_sibling_untouched(self):
+        """同名邻居的权限位**不得**被 `_ensure_writable` 动过（本函数要防的那件事）。"""
+        if os.name != "posix":
+            self.skipTest("Windows 上无 POSIX 权限位语义（os.chmod 只切只读属性），"
+                          "故未实测『同名邻居未被改权限』（跳过不等于通过）")
+        import stat as _stat
+        mod = self._load_fetch_specs()
+        root = tempfile.mkdtemp(prefix="boundary-sib-")
+        stop = os.path.join(root, "agent-specs")
+        sibling = os.path.join(root, "agent-specs-backup")
+        os.makedirs(os.path.join(stop, "specs"))
+        os.makedirs(sibling)
+        try:
+            os.chmod(sibling, 0o555)          # 邻居先收紧成只读
+            before = _stat.S_IMODE(os.stat(sibling).st_mode)
+            # ① 目标在落点内：邻居不得被碰
+            mod._ensure_writable(stop, os.path.join(stop, "specs", "x.adoc"))
+            after = _stat.S_IMODE(os.stat(sibling).st_mode)
+            self.assertEqual(before, after,
+                             f"同名邻居的权限被改了: {oct(before)} → {oct(after)}")
+            # ② 判据取**路径分段边界**：把"目标"放在同名邻居里时，邻居目录**仍须**被判为
+            # "不在落点内"，故它不得被补回写位——字符串前缀判据在这一档会误判为在内
+            # （`/root/agent-specs-backup`.startswith(`/root/agent-specs`) 为真），
+            # 于是给邻居补上写位；本函数要防的正是这次**静默放权**。
+            os.makedirs(os.path.join(sibling, "specs"), exist_ok=True)
+            os.chmod(os.path.join(sibling, "specs"), 0o555)
+            mod._ensure_writable(stop, os.path.join(sibling, "specs", "x.adoc"))
+            self.assertEqual(before, _stat.S_IMODE(os.stat(sibling).st_mode),
+                             "同名邻居被当成落点、写位被补回（路径边界判据退化成字符串前缀）")
+            self.assertEqual(0o555, _stat.S_IMODE(os.stat(os.path.join(sibling, "specs")).st_mode),
+                             "同名邻居的下级目录写位被补回（路径边界判据退化成字符串前缀）")
+        finally:
+            os.chmod(sibling, 0o755)
+            shutil.rmtree(root, ignore_errors=True)
+
+
+class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
+    """端到端实测：**响应被截断时，脚本不得崩、落点仍须被收紧成只读**（PR 返工补）。
+
+    失效形态（本 PR 原实现，实测复现）：`fetch_text` 的注释写着"失败抛 OSError"，但
+    `http.client` 的 `HTTPException` 家族**不是** `OSError` 的子类——
+    `IncompleteRead`（对端在 `Content-Length` 之外提前断连）、`BadStatusLine`
+    （中间设备回非 HTTP 响应）都直接继承 `HTTPException`。而 `download_one` 只
+    `except OSError`，于是它们**穿过 `download_one` 逃逸到 `fut.result()`**，把 `main` 掀掉：
+
+      * 退出码不是约定的 0/1/2，而是一个 traceback；
+      * 后面那条"整棵树收紧成只读"的收尾**一次都不跑**——落点留在 `755`/`644` 的**可写**态，
+        而 stderr 里也没有任何"没收紧"的提示，无人察觉。
+
+    这正是本 PR 要买的那条保证在**最需要它的一轮里**静默丢掉：一次网络抖动就让它失效。
+
+    故本条按**用户会遇到的那条路**实测：
+      * 用真实抓取脚本跑子进程（不复制一份实现），服务端对某一份**发一半就断连**；
+      * 断言退出码落在约定集合里（**不是** traceback 崩掉）；
+      * 断言 stderr 里有"失败"、且**没有** `Traceback`；
+      * 断言落点里的目录与文件**确实没有写位**（收尾没有被跳过）；
+      * 断言成功取到的那几份仍然在（失败不牵连别的文件）。
+    Windows 上无 POSIX 写位语义（那一半靠规范约束），故本条跳过并**显式说明**。
+    """
+
+    ENTRY = b"= test\n\nspecs/core/execution.adoc\n"
+    SPEC = "= 执行原则\n\n* 甲\n".encode("utf-8")
+
+    def _install_scripts_served(self):
+        """服务端要供给的安装脚本（名单从真实脚本里读，与它同源，避免手工抄漏）。"""
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(real_root, "script", "fetch-specs.py"),
+                  encoding="utf-8") as fh:
+            src = fh.read()
+        return {"script/" + rel: src.encode("utf-8")
+                for rel in re.findall(r'"script/([\w.-]+)"', src)}
+
+    def _run_fetch(self, base, extra=(), home=None):
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        env = None
+        if home:
+            env = dict(os.environ, HOME=home, USERPROFILE=home)
+        return subprocess.run([sys.executable, script, "--base", base, *extra],
+                              cwd=real_root, capture_output=True, text=True,
+                              timeout=120, env=env)
+
+    def test_truncated_response_does_not_crash_and_still_hardens(self):
+        if os.name != "posix":
+            self.skipTest("Windows 上无 POSIX 写位语义，『截断后落点仍被收紧』未实测"
+                          "（跳过不等于通过）")
+        import http.server
+        import socketserver
+        import threading
+
+        served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                rel = self.path.lstrip("/")
+                body = served.get(rel)
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                if rel == "specs/core/execution.adoc":
+                    # **截断**：声明 Content-Length 远大于实际发出的字节，然后断连
+                    # → 客户端 `resp.read()` 抛 `http.client.IncompleteRead`
+                    # （截断**入口**时连清单都拿不到、走的是更早的"取入口清单失败"出口，
+                    # 测不到"单份文件失败却掀掉整批"这条，故截断一份普通规范）
+                    self.send_header("Content-Length", str(len(body) + 1000))
+                    self.end_headers()
+                    self.wfile.write(body[:5])
+                    self.wfile.flush()
+                    self.connection.close()
+                    return
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        home = tempfile.mkdtemp(prefix="truncated-home-")
+        try:
+            with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+                port = httpd.server_address[1]
+                threading.Thread(target=httpd.serve_forever, daemon=True).start()
+                base = f"http://127.0.0.1:{port}"
+                root = os.path.join(home, ".cache", "agent-specs")
+
+                proc = self._run_fetch(base, home=home)
+
+                # ① 不得崩：退出码是约定的 0/1/2，stderr 里不得有 traceback
+                #    （原实现抛 `IncompleteRead` → traceback + 非约定退出码）
+                self.assertIn(proc.returncode, (0, 1, 2),
+                              f"退出码不在约定集合里（脚本崩了）:\n{proc.stderr}")
+                self.assertNotIn("Traceback", proc.stderr,
+                                 f"截断响应把脚本掀掉了:\n{proc.stderr}")
+                self.assertNotEqual(0, proc.returncode,
+                                    "有文件没取到却报了成功（退出码应非 0）")
+
+                # ② 失败须如实报出、且不牵连别的文件（成功的那几份仍在）
+                self.assertIn("失败", proc.stdout + proc.stderr)
+                slot = os.path.join(home, ".cache", "agent-specs",
+                                    re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                           f"127.0.0.1:{port}").strip("_"))
+                self.assertFalse(os.path.exists(os.path.join(slot, "specs", "core",
+                                                             "execution.adoc")),
+                                 "被截断的那一份不该出现在落点里")
+                with open(os.path.join(slot, "AGENTS_COMMON.adoc"), "rb") as fh:
+                    self.assertEqual(self.ENTRY, fh.read())   # 别的文件照旧取到
+
+                # ③ **收尾没被跳过**：落点里的目录与文件确实没有写位
+                #    （原实现在这里留下 `755`/`644` 的可写落点，且无任何提示）
+                self.assertTrue(os.path.isdir(root))
+                for dirpath, dirnames, filenames in os.walk(root):
+                    self.assertFalse(os.stat(dirpath).st_mode & stat.S_IWUSR,
+                                     f"截断响应后目录仍有写位（收尾被跳过）: {dirpath}")
+                    for name in filenames:
+                        one = os.path.join(dirpath, name)
+                        self.assertFalse(os.stat(one).st_mode & stat.S_IWUSR,
+                                         f"截断响应后文件仍有写位（收尾被跳过）: {one}")
+
+                # ④ 不留 `.part` 残渣（失败项的半成品不该留在只读树里）
+                leftovers = [os.path.join(dp, n)
+                             for dp, _, ns in os.walk(root) for n in ns
+                             if n.endswith(".part")]
+                self.assertEqual([], leftovers, f"落点里留下半成品: {leftovers}")
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+
+class TestCheckReadonlyLandingGuard(CheckSpecsTestCase):
+    """钉住『落点只读防线』（本 PR 新增）。
+
+    用户口径原文："~/.cache/agent-specs 里的内容应该设置为只读，**不仅仅是规范里定义，
+    文件本身下载后要变成只读**，并严禁项目修改此文件夹内容"。
+
+    本条要拦的两种半成品形态：
+      * **只写了规范、脚本没真的收紧**——落点仍可写，项目照旧能就地改规范副本
+        （用户点名的那一句"不仅仅是规范里定义"正是指它）；
+      * **只收紧、规范没说**——新实例从复制到项目里的入口文档读到时，只看到"下载的文件
+        落在哪"，仍会把落点当成可写的便利目录。
+
+    故用例两侧都覆盖：脚本侧的权限位取值 / 真的调 `chmod` / 落盘前恢复写位 / 入口保执行位 /
+    收紧动作覆盖整棵树 / **`--keep` 下同样收紧** / **收紧失败不得静默**；规范侧的只读与
+    "严禁项目改动"、以及**只读由本机文件系统保证**（"不止是规范里一条"）。另在
+    `TestFetchSpecsReadOnlyLanding` 里做**端到端实测**：
+    只读树上的更新照旧生效、非特权调用方的写入被拒。
+    """
+
+    SCRIPT_PY = (
+        '#!/usr/bin/env python3\n'
+        '"""fetch 脚本：落点取完即只读（目录去掉写位、文件只留读位）。\n'
+        '落盘前用 _ensure_writable 只恢复本脚本所需的最小写位——只读不挡更新。\n'
+        '已知限制：Windows 上只有文件那一半成立（目录的增删改名拦不住）。\n'
+        '`FILE_ATTRIBUTE_READONLY` 只对文件生效，目录的增删改名拦不住。\n'
+        '"""\n'
+        '_READ_ONLY_FILE_MODE = 0o444\n'
+        '_READ_ONLY_DIR_MODE = 0o555\n'
+        'def _make_read_only(path, is_dir=False):\n'
+        '    """收紧为只读；入口脚本保留执行位。\n'
+        '    Windows 上只有文件那一半成立：目录的增删改名拦不住（见头部「已知限制」）。\n'
+        '    没有写位就不能在其中增删改名（POSIX）；不得把这句话读成全平台成立。"""\n'
+        '    import os\n'
+        '    os.chmod(path, _READ_ONLY_FILE_MODE)\n'
+        'def _ensure_writable(out_dir, dest):\n'
+        '    """落盘前只恢复本脚本所需的最小写位。"""\n'
+        'def main():\n'
+        '    """落点一次性收紧（--keep 下同样收紧：收紧的是只读状态）。"""\n'
+        '    unhardened = _make_read_only(install_scripts_dir(), is_dir=True)\n'
+        '    if unhardened:\n'
+        '        print("警告: 落点有 N 处没能收紧")\n'
+        'def fetch_text(base, path):\n'
+        '    """取一份远端文本；失败一律抛 OSError（本函数是这条契约的守门人）。\n'
+        '    http.client 的 HTTPException 家族**不是** OSError 的子类——\n'
+        '    IncompleteRead（响应被截断）、BadStatusLine 会穿过 download_one 的 except\n'
+        '    把 main 掀掉，收尾那条收紧一次都不跑。\n'
+        '    """\n'
+        '    try:\n'
+        '        import http.client\n'
+        '        resp = None\n'
+        '    except http.client.HTTPException as e:\n'
+        '        raise OSError("取回失败") from e\n'
+        'def download_one(base, rel, out_dir, keep):\n'
+        '    """单个文件任何异常都不得掀掉整批（兜底后照旧去收紧落点）。"""\n'
+    )
+
+    COMMON = (
+        "= AGENT 执行规范（公共入口）\n\n"
+        "== 取规范到本地副本\n\n"
+        "* 落点只有一处：**用户家目录**下的 `.cache/agent-specs`。\n"
+        "* **落点取完即只读、严禁项目改动它（L1）**：取完即把该文件夹收紧为**只读**，"
+        "**任何项目都不得改动落点里的内容**——不得就地编辑、新增、删除或改名其中的任何文件。"
+        "**这不止是规范里定义的一条**：只读由**本机文件系统**保证。"
+        "**平台边界**：Windows 上只有「文件只读」那一半由本机强制（目录的增删改名拦不住）。"
+        "**项目要留自己的东西，写进项目自己**。\n"
+        "\n"
+        "该文件夹是**只读的**：取完即收紧为只读，**严禁任何项目改动它**。\n"
+    )
+
+    TEMPLATE_ONLY = (
+        "= AGENT 执行规范（公共入口）\n\n"
+        "== 取规范到本地副本\n\n"
+        "* 落点只有一处：**用户家目录**下的 `.cache/agent-specs`。\n"
+    )
+
+    def _write(self, script=None, common=None) -> None:
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+        self.write("script/fetch-specs.py",
+                   script if script is not None else self.SCRIPT_PY)
+        self.write("AGENTS_COMMON.adoc",
+                   common if common is not None else self.COMMON)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_readonly_landing_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_script_missing_reports(self):
+        # 反例：抓手被删 → 只读这条只剩规范里一句话（本机侧无从强制）
+        self._write()
+        os.remove(os.path.join(self.root, "script", "fetch-specs.py"))
+        cm.check_readonly_landing_guard()
+        self.assertIn("fetch-specs.py", self.error_texts())
+
+    def test_mode_constants_removed_reports(self):
+        # 反例：只读权限位的取值被抽走 → "只读"只剩一句注释，落点实际权限仍是下载时的默认位
+        self._write(script=self.SCRIPT_PY.replace(
+            "_READ_ONLY_FILE_MODE = 0o444\n_READ_ONLY_DIR_MODE = 0o555\n", ""))
+        cm.check_readonly_landing_guard()
+        # 报错按"缺失的那几个锚点"列出，两个常量一并被抽走时列表里两个都在
+        self.assertIn("_READ_ONLY_FILE_MODE", self.error_texts())
+        self.assertIn("_READ_ONLY_DIR_MODE", self.error_texts())
+
+    def test_chmod_call_removed_reports(self):
+        # 反例（**用户点名的那一半**）：只写常量与一句"落点是只读的"、真的不调 chmod
+        # → 落点仍可写，项目照旧能就地改规范副本（"不仅仅是规范里定义"被违反）
+        self._write(script=self.SCRIPT_PY.replace(
+            "    os.chmod(path, _READ_ONLY_FILE_MODE)\n", ""))
+        cm.check_readonly_landing_guard()
+        self.assertIn("os.chmod", self.error_texts())
+
+    def test_ensure_writable_removed_reports(self):
+        # 反例：不给落盘留写位 → "默认以远程为准"被只读挡住（远端改了写不进去，重跑拿不到最新）
+        self._write(script=self.SCRIPT_PY.replace("_ensure_writable", "__gone__"))
+        cm.check_readonly_landing_guard()
+        self.assertIn("_ensure_writable", self.error_texts())
+
+    def test_executable_exception_removed_reports(self):
+        # 反例：没写明"入口保留执行位" → 收紧把入口的可执行位一并抹掉，
+        # "下次重装直接跑落点里的入口"随之失效（只读与可执行必须同时成立）
+        self._write(script=self.SCRIPT_PY.replace("入口脚本保留执行位", "入口脚本一并处理"))
+        cm.check_readonly_landing_guard()
+        self.assertIn("保留执行位", self.error_texts())
+
+    def test_tree_wide_call_removed_reports(self):
+        # 反例：收紧只覆盖一部分（或没落在汇总之前）→ 另一半仍是可写的，
+        # 而"落点是只读的"这句话对读者无法核对
+        self._write(script=self.SCRIPT_PY.replace(
+            "    unhardened = _make_read_only(install_scripts_dir(), is_dir=True)\n", ""))
+        cm.check_readonly_landing_guard()
+        self.assertIn("unhardened = _make_read_only(install_scripts_dir(), is_dir=True)",
+                      self.error_texts())
+
+    def test_http_exception_not_normalized_reports(self):
+        # 反例（**本轮补，PR 返工**）：`fetch_text` 不再把 `http.client.HTTPException`
+        # （`IncompleteRead`/`BadStatusLine`）归一成 `OSError` → 它穿过 `download_one`
+        # 的 `except OSError` 逃逸到 `fut.result()`，把 `main` 掀掉：调用方拿到 traceback
+        # 而不是约定的 0/1/2，后面那条"整棵树收紧成只读"的收尾**一次都不跑**，
+        # 落点留在可写态且毫无提示——一次网络抖动就让本防线的收益归零
+        self._write(script=self.SCRIPT_PY.replace("HTTPException", "PassthroughError"))
+        cm.check_readonly_landing_guard()
+        self.assertIn("HTTPException", self.error_texts())
+
+    def test_batch_bailout_removed_reports(self):
+        # 反例：取文件那一段没有兜底 → 单个文件的任何异常都会掀掉整批，
+        # 收尾（收紧落点）随之被跳过，落点留在可写态
+        self._write(script=self.SCRIPT_PY.replace(
+            "单个文件任何异常都不得掀掉整批（兜底后照旧去收紧落点）。", ""))
+        cm.check_readonly_landing_guard()
+        self.assertIn("单个文件任何异常都不得掀掉整批", self.error_texts())
+
+    def test_windows_boundary_removed_reports(self):
+        # 反例（**本轮补，平台限定**）：脚本头部不写 Windows 的效力边界 →
+        # 「目录去掉写位＝不能在其中增删改名」被当成全平台成立，
+        # Windows 读者据此以为落点真被强制（实际只做到文件那一半、目录那一半靠规范约束）
+        self._write(script=self.SCRIPT_PY.replace(
+            '已知限制：Windows 上只有文件那一半成立（目录的增删改名拦不住）。\n'
+            '`FILE_ATTRIBUTE_READONLY` 只对文件生效，目录的增删改名拦不住。\n', ''))
+        cm.check_readonly_landing_guard()
+        self.assertIn("Windows", self.error_texts())
+        self.assertIn("已知限制", self.error_texts())
+
+    def test_platform_limit_missing_in_executor_reports(self):
+        # 反例：头部写了 Windows 边界、**执行体那句断言照旧无平台限定** →
+        # 读执行体的人多半不看头部「已知限制」，而那正是对权限位下断言的地方
+        # （判据取"两处都要有"，故 ① 过了、② 仍要报）
+        self._write(script=self.SCRIPT_PY.replace(
+            '    Windows 上只有文件那一半成立：目录的增删改名拦不住'
+            '（见头部「已知限制」）。\n'
+            '    没有写位就不能在其中增删改名（POSIX）；'
+            '不得把这句话读成全平台成立。', ''))
+        cm.check_readonly_landing_guard()
+        self.assertIn("不能在其中增删改名", self.error_texts())
+
+    def test_spec_platform_boundary_removed_reports(self):
+        # 反例：规范侧只写"只读由本机文件系统保证"、不加平台限定 →
+        # Windows 读者会以为落点真被强制（判据断言了一句拿不到的事实）
+        self._write(common=self.COMMON.replace(
+            '**平台边界**：Windows 上只有「文件只读」那一半由本机强制'
+            '（目录的增删改名拦不住）。', ''))
+        cm.check_readonly_landing_guard()
+        self.assertIn("平台边界", self.error_texts())
+
+    def test_spec_readonly_removed_reports(self):
+        # 反例：规范侧只写"落点在哪"，不写"只读"与"严禁项目改动" → 读者把落点当可写目录
+        self._write(common=self.TEMPLATE_ONLY)
+        cm.check_readonly_landing_guard()
+        self.assertIn("只读", self.error_texts())
+
+    def test_filesystem_guarantee_removed_reports(self):
+        # 反例：删掉"只读由本机文件系统保证"这句 → 又退回"规范里定义一条、靠自觉遵守"
+        # （用户口径点名的正是这一层）
+        self._write(common=self.COMMON.replace("**本机文件系统**", "**约定**"))
+        cm.check_readonly_landing_guard()
+        self.assertIn("文件系统", self.error_texts())
+
+    def test_project_own_place_removed_reports(self):
+        # 反例：只说"严禁改动落点"、不给正当去路 → 执行者会把它读成"没地方放临时文件"，
+        # 转而先把权限放开（等于本条失效）
+        self._write(common=self.COMMON.replace("**项目要留自己的东西，写进项目自己**。", ""))
+        cm.check_readonly_landing_guard()
+        self.assertIn("写进项目自己", self.error_texts())
 
 
 class TestCheckGuardOrderGuard(CheckSpecsTestCase):
