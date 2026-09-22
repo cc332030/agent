@@ -23,5 +23,5 @@
 
 * **编码（L1）**：`.ps1` 一律 UTF-8 编码；含中文等非 ASCII 字符时，必要时文件头部加 UTF-8 BOM（**BOM 是唯一允许出现在首行之前的东西**——此前不得有空行或注释，否则 `#Requires`/首行注释一类首行声明失效（`.bat` 侧的 `@echo off` 同此）），避免 Windows PowerShell（5.1 及更早默认按 ANSI 解析无 BOM 的 UTF-8）解析乱码。
 * **行尾（L1）**：`.ps1` **落盘 CRLF**（与同名 `.bat` 一致）——PowerShell 虽能解析 LF，但带 BOM 的脚本改用 BOM 字符集、CRLF 是 Windows 工具链与编辑器的一致预期；不得为"统一成 LF"把 `.ps1`/`.bat` 改成 LF（`.bat` 改成 LF 会直接失效）。行尾由 `.gitattributes` 的 `*.ps1 text eol=crlf` 与 `*.bat text eol=crlf` 声明，不靠人工逐个文件手动调整。
-* **编码与行尾核对**：`file <脚本>`——`.bat` 应显示 `ASCII` 文本（显示 `UTF-8`/`UTF-8(BOM)` 即说明它含非 ASCII 或 BOM、属待改存量）、`.ps1` 应显示 `UTF-8(BOM)`；二者均须 `with CRLF line terminators`；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
+* **编码与行尾核对（取值形态）**：`.bat` 的取值同 `specs/stack/batch.adoc`「行尾」（纯 ASCII + CRLF）；`.ps1` 的编码取值＝UTF-8(BOM)，行尾同为 CRLF、不得混用。**怎么核对属执行动作，不写进规范**。
 * **执行策略**：`.ps1` 的启动统一由同名 `.bat` 以 `-ExecutionPolicy Bypass` 调用，不要求用户手动修改系统执行策略。

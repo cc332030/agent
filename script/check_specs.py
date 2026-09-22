@@ -358,7 +358,9 @@
      **唯一落点**是 `specs/stack/java.adoc`（同一 Java 栈文件就地承载，不新开 `mybatis.adoc`），
      须点名 **`IService` 的 `lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`** 四个
      成员方法、**禁止 `new QueryWrapper` 及其子类（含 `new LambdaQueryWrapper`）**、
-     `IService` 之外的落点（`Wrappers` 的 lambda 静态方法、mapper 注解/`*.xml`）与 L2 例外
+     **`Wrappers` 一族静态构造方法同在禁止面**（`Wrappers.lambdaQuery()` 一类同样是"绕过
+     统一入口"、统一入口落在本实体自己的 Service 成员方法上）、`IService` 之外的落点只在
+     mapper 注解/`*.xml` 与 Mapper 默认方法，与 L2 例外
      口径；加载调度器通用层条目**去框架专名**（识别特征要触发的是"写持久化访问代码"而不是
      "Java 项目"）、Java 栈条目含四个成员方法与禁止面，`README.adoc` 两处目录说明同步
      ——防"业务代码里随手 `new` 查询构造器、并用字符串写列名"重回默认做法，也防通用层被
@@ -989,6 +991,10 @@ LINE_ENDING_STACK_FILES = (
 # （依据：Spring Boot 官方文档 Externalized Configuration；Google Java Style Guide 3.4.2
 # 对 POJO 的定义；阿里巴巴 Java 开发手册的 POJO 类约定。）
 CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
+# 弃用类/API 迁移（`specs/general/coding.adoc`「警告与弃用」+ `specs/general/dependency.adoc`
+# 「升级与废弃」）：不得使用被弃用的类/API、改用替代者（优先升级类/同名新类），**默认不调整依赖、
+# 也不动依赖版本**。两处同向：代码侧给禁止面与替代者取向、依赖侧给「不动依赖面」的落点。
+DEPENDENCY_FILE = os.path.join(SPECS_DIR, "general", "dependency.adoc")
 # 接入成本（`specs/general/coding.adoc`「抽象与接入成本」）：对外提供能力时的**接入成本判据**——
 # 可替换点须有唯一装配点（同一实现/配置不得按使用点各写一遍）、须有可用默认或显式必填声明。
 # 该条来自用户的真实设计失效报告："要求都实现了、功能都实现了，却很难用"（某接口在 N 个使用点
@@ -4103,12 +4109,13 @@ def check_install_repeat_update_guard():
 #       由“取值”改述为“识别特征”）；`check_java_serial_guard` 相应地不再要求调度器逐字抄
 #       本体片段（改核 `优先 \`val\`、可变才 \`var\`` 这一识别特征短语）。
 #   接线数不变：仍是一道防线、一个名字（`CHECKS` 序列与 `guards.adoc` 清单表不动）。
-# **本轮（Issue #173）**：103 → 104。新增一道防线 `check_asciidoctor_stub_guard`
-#   （防"AsciiDoc 语法段只剩壳"：函数体须真的探测+缺工具即报错+逐个编译，且 CI 须真的跑
-#   `check_specs.py`）。实测失效：把该函数体换成 `phase(...); phase_done(); return 0` 后
-#   `check_specs.py` 仍报 OK、`check_toolchain_present_guard` 照样全绿（探测代码不在这个
-#   函数里）、CI 里也没有任何步骤核对"这次到底编了几份"。
-GUARD_WIRING_BASELINE = 108
+# **接线数现值以常量 `GUARD_WIRING_BASELINE` 为唯一真源**（＝ `CHECKS` 序列里**唯一防线**
+#   的条数，也是 `guards.adoc` 清单表的行数）。口径与逐轮沿革见 `CHANGELOG.adoc`——
+#   本处只留现值与口径定义，不再逐轮记账（同一数值写两遍即两处真源，极易互相漂移：
+#   此前这里一度写 108 而常量已是 109）。
+#   **重复登记不计入**：同一道防线在序列里出现两次以上时，`_guard_wiring_count` 按唯一名
+#   计数——重复项不承载任何新判据，若能凑够条数，"删一道真防线 + 重复顶上一道"就无从发现。
+GUARD_WIRING_BASELINE = 109
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4260,7 +4267,42 @@ GUARD_WIRING_BASELINE = 108
 #     * **用例数 1285 → 1314**：按**合并后同源实测**回填（两侧新增的 10 + 8 条反例都保留），
 #       数字一律按**真实收集**口径（`类名.用例名` 限定名去重）同源实取，不按两侧各自数目相加，
 #       避免基线虚高后"删用例不报红"。
-GUARD_TEST_BASELINE = 1314
+#   本轮（Issue #182）记账：`check_dev_flow_guard` 内**加组**（非新增防线，接线数不变）——
+#     在 planning 侧新增「基线的适用边界」组、在 execution 与 `baseline-and-compat` 组内加分档锚点；
+#     配套新增 2 条反例用例（适用边界被删 / 必加载层基线条丢分档），
+#     用例数 1314 → 1328（按**唯一限定名去重**的同源实取数回填；`Ran 1339 tests ... OK`
+#     是 `unittest` 的收集数，两者口径不同，本条基线取前者）。
+#   本轮（PR #183，本轮 review 修复）：**1328 → 1329**——新增 1 条反例
+#     `test_wiring_duplicate_registration_reports`（钉住"同一道防线在 `CHECKS` 里登记两次"：
+#     重复项会把接线数凑够、掩盖"真防线被删掉一道"）；同时把 `GUARD_WIRING_BASELINE`
+#     由 109 改回 **108**（成因是 `check_pagination_guard` 的**重复登记**，不是"漏回填"——
+#     详见 `GUARD_WIRING_BASELINE` 处的注释）。
+#   **接线数 108 → 109**（本轮 review 修复）：`main` 合入 PR #179 时
+#     `check_pagination_guard` / `check_declarative_rule_guard` 已各占一位，那次**漏了回填**，
+#     留下一处**虚低的基线 108**——它把"再新增一道防线后又删掉"这条路径整个放行
+#     （新增时 109 ≥ 108 不报红，删回 108 也不低于 108）。本 PR 据实回填为 109。
+#   **本轮（PR #183，用户口径「给方向、给定义、定规则，不是说明书」）记账**：
+#     * **接线数不变（108）**——本轮**不增删防线**：新口径挂在既有 `check_declarative_rule_guard`
+#       上（同一道防线、新增一个判据对象的子节「给方向、给定义、定规则——不是说明书」），
+#       与上一步同理（情形同第 105 条自述的"加组、未增防线"）。
+#     * **用例数 1329 → 1334**（按**同源实取**回填，口径＝`_count_collectable_tests` 的
+#       `类名.用例名` 限定名去重）：本轮新增 5 条反例——3 条维护方侧（「不是说明书」小节被
+#       整条抽掉 / 判定标准被抹成一句"要求" / 生效面被抽成三类、重构不受本条约束）、
+#       2 条性能测试侧（方案组合取值被抹 / 优化过程条被抽）。`unittest` 收集数为 1345，
+#       两者口径不同（收集面含同名用例的多次出现，见 `_count_collectable_tests` 的说明）。
+#     * 另：公共层本轮把「声明落点清单」「行尾核对命令」「C 档取值形态」「选源清单」
+#       「组合矩阵列表」等**取法／说明书式正文**收敛为取值形态，锚点随措辞同步，
+#       两处重复登记的清单（ci-cd 声明落点）按「同一事项只有一个真源」收成一处。
+#   **本轮（PR #183）**：用例数 **1328 → 1344**（按**同源实取**回填，口径＝
+#   `_count_collectable_tests` 的 `类名.用例名` 限定名去重），逐轮明细见 `CHANGELOG.adoc`：
+#     * `check_deprecated_api_guard` 的 7 条（正例 1 + 反例 6）；
+#     * `check_effective_test.py` 的 `test_deprecated_api_has_mechanical_grip` 1 条；
+#     * `check_persistence_access_guard` 的反例由 1 条改为 2 条（净增 1）；
+#     * `check_guard_manifest` 的「重复登记」正反例 2 条（含**判据自身的绕过路径**）；
+#     * `check_declarative_rule_guard` 与 `check_performance_guard` 侧新增 5 条。
+#   `unittest` 收集数与 `_count_collectable_tests` 的口径不同（收集面含同名用例的
+#   多次出现），故**不以 `Ran` 数为基线**——两个数并存会让读者不知该信哪个。
+GUARD_TEST_BASELINE = 1344
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -4407,16 +4449,28 @@ def _checks_block(src: str) -> str:
     return m.group(1) if m else ""
 
 
-def _guard_wiring_count(src: str) -> int:
-    """数 `CHECKS` 序列里的防线个数（**唯一来源是序列，不是 `main()` 的正文**）。
+def _guard_wiring_names(src: str) -> list:
+    """取 `CHECKS` 序列里的防线名（**唯一来源是序列，不是 `main()` 的正文**）。
 
     口径刻意取窄：只认序列里以 `check_xxx,` 起行的元素——嵌套调用（如
     `check_adoption_guard` 内部再调的公共内容自足两道）属同一道防线链，不重复计数。
     为什么不再按 `main()` 正文数：那里一旦改成 `for check in CHECKS()` 就文本上数不到，
     而把接线判据绑在"`main()` 里怎么写的"上，等于让改一次编排写法就把全部防线误报成
     "没人调用"。序列是数据：数它与 `main()` 怎么执行它无关。
+
+    **保留重复项**（不去重）：重复登记本身要被报出来，调用方按需 `set(...)` 取唯一数。
     """
-    return len(re.findall(r"(?m)^ {4}(check_[a-z0-9_]+),$", _checks_block(src)))
+    return re.findall(r"(?m)^ {4}(check_[a-z0-9_]+),$", _checks_block(src))
+
+
+def _guard_wiring_count(src: str) -> int:
+    """数 `CHECKS` 序列里**唯一**的防线个数（重复登记不得用来凑够条数）。
+
+    重复项不承载任何新判据（同一道防线跑两遍，`run_rule_guard` 还按阶段去重、第二次
+    直接跳过），故它**不得**被计入接线数——否则"删掉一道真防线 + 把另一道重复登记一遍"
+    能让条数不动、把删除掩盖过去（本仓库实证形态，见 `check_guard_manifest`）。
+    """
+    return len(set(_guard_wiring_names(src)))
 
 
 def _module_level_fn_body(src: str, name: str) -> str:
@@ -4644,6 +4698,24 @@ def check_guard_manifest():
             f"记账**：说明「删的是哪一道、为什么删、由谁承接」，并把 `GUARD_WIRING_BASELINE` "
             "改成新值（改基线这个动作让删除在 diff 里可见）。不记账就减数＝防线静默消失"
             "（本仓库实测：一道防线被摘出执行序列后，脚本与全部单测仍全绿）",
+            "script/check_specs.py")
+
+    # **重复登记**：同一道防线在序列里出现两次以上——重复项不承载任何新判据，
+    # 却能把接线数凑够、掩盖"真防线被删掉一道"（删掉的那道由重复项顶上，条数不掉）。
+    # 本仓库实证形态：`check_pagination_guard` 在序列里一次、末尾又追加一次。
+    # 防法是**两道**：① `_guard_wiring_count` 按唯一名计数（重复项不计入），
+    # 故"重复 + 少一道"必然低于基线、被上面的核对拦下；② 这里再把重复本身报出来，
+    # 让"手滑写重了"这个动作在 diff 之外也有一处可核对的报错。
+    seq_names = _guard_wiring_names(src)
+    dup_names = sorted({n for n in seq_names if seq_names.count(n) > 1})
+    if dup_names:
+        err(f"`CHECKS` 序列里出现**重复登记的防线** {dup_names}——重复项不承载任何新判据"
+            "（同一道防线跑两遍，规则还按阶段去重、第二次直接跳过），**不计入唯一防线数**；"
+            "它会把条数凑够、掩盖\u201c真防线被删掉一道\u201d。"
+            "**改基线不算记账**——重复项不构成一道防线，把 `GUARD_WIRING_BASELINE` 改成"
+            "含重复项的值只会把这条掩盖固化下来。请删掉重复项本身，并在 "
+            "`specs-project-maintainer/guards.adoc` 清单表里同步删掉对应的重复行"
+            "（清单表的重复行由 `check_guard_order_guard` 的逐一同序核对报出）",
             "script/check_specs.py")
 
     # "定义了但没人调"的防线：看起来还在（函数体完好、台账也点了名），但永远不会执行。
@@ -6001,7 +6073,7 @@ def check_ci_cd_guard():
         for key, desc in (
                 ("派发与复核须钉定 commit sha", "分支名不是稳定标识，须钉 sha"),
                 ("压缩提交/强推会替换对象", "旧 sha 作废、结论须在新 sha 上重核"),
-                ("git fetch -f", "取对象前须强刷 ref，防本地缓存旧 sha"),
+                ("先取得该分支当前指向的 sha", "取对象须取分支当前 sha，防本地缓存旧 sha（不写取法）"),
                 ("派发前确认执行者实际可用", "镜像/制品 not found 时任务从未真正开始"),
                 ("流水线不无界挂起", "平台 job/step 须可判定超时")):
             if key not in text:
@@ -9800,6 +9872,45 @@ def check_pagination_guard():
     phase_done()
 
 
+def check_deprecated_api_guard():
+    """『弃用类/API 防线』：不得使用被弃用的类/API、改用替代者；默认不动依赖与版本。
+
+    用户点名的口径（本 PR 内）：**不用被弃用的类，使用其他类代替（升级类/同名新类最好），
+    默认不调整依赖，也不动依赖版本**。要治的失效是「旧写法也能跑」「新写法不熟」留下的裁量点——
+    裁量点一留，同一项目里就并存弃用者与其替代者两条路径，读代码的人无法预期。
+    故本条钉**判据本体**（禁止面 + 替代者取向 + 默认不动依赖面），不钉轴名：只核
+    「警告与弃用」这一节在不在属防线空转——把「替代者优先取升级后的新类/同名新类」
+    「不得顺带改依赖清单或依赖版本」「存量条不构成对新代码的豁免」这几句可核对的话抽走时照样全绿。
+    依赖侧落点在 `specs/general/dependency.adoc`「升级与废弃」，同向、须同步。
+    「某个类算不算被弃用」「替代者是否等价」属语义判断，交人/子 agent 复核。
+    """
+    phase("弃用类/API 防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    rel_dep = os.path.relpath(DEPENDENCY_FILE, REPO_ROOT).replace("\\", "/")
+    # 两处落点各自只做"文件在不在"的核对；规则（两处落点的判据本体）**跑一次**
+    # ——`run_rule_guard` 按阶段去重，分开调用只会让第二次成为死代码，且任一侧文件
+    # 缺失时会连另一侧的判据一起跳过（规则步骤自带"文件缺失"的报错，无需在调用侧再判）。
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「警告与弃用」的通用层落点丢失"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    if not os.path.isfile(DEPENDENCY_FILE):
+        err(f"缺少文件 {rel_dep}——「升级与废弃」的通用层落点丢失"
+            "（弃用迁移默认不动依赖面这条须与 `coding.adoc` 同向）", rel_dep)
+    run_rule_guard("check_deprecated_api_guard")
+    # 防误读（替换主语测试的邻接）：存量条（内部弃用不迁移）与新代码禁止面同处一节，
+    # 后条极易被读成覆盖前条——若存量条没有「不构成对新代码的豁免」这一句即报红。
+    if os.path.isfile(CODING_FILE):
+        ctext = open(CODING_FILE, encoding="utf-8").read()
+        section = _section_text(ctext, "警告与弃用")
+        if section:
+            if "不构成" not in section or "豁免" not in section:
+                err(f"弃用类/API 防线被破坏：{rel_coding}「警告与弃用」的存量条未写明"
+                    "「本条只管既有调用点、不构成对新代码的豁免」——两条同处一节，"
+                    "缺这句话会把新代码的禁止面整段抵消（读者会以为新代码也照存量写）",
+                    rel_coding)
+    phase_done()
+
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -10761,6 +10872,7 @@ CHECKS = (
     check_java_enum_valueof_catch_guard,
     check_pagination_guard,
     check_persistence_access_guard,
+    check_deprecated_api_guard,
     check_conversion_guard,
     check_entity_dto_guard,
     check_lombok_constructor_guard,
@@ -10794,7 +10906,6 @@ CHECKS = (
     check_template_separation_guard,
     check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
-    check_pagination_guard,
     check_declarative_rule_guard,
 )
 
