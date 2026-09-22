@@ -633,6 +633,95 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         self.assertIn("allow_markers", markers)
 
 
+class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
+    """钉住『返工基点防线（动作侧）』：本分支的返工基点须是 HEAD 的祖先。
+
+    背景（本 PR 实证失效一次，用户点名"靠 AI 自觉是不现实"）：解冲突+压缩时把分支重建在
+    **更早的基点**上，基点之后合入的一整批改动被静默回退，而全部文本防线与单测仍全绿
+    ——所有防线都只读"工作区内容对不对"，没有一条读"基点对不对"。
+    本组用例覆盖：正例（基点仍是祖先）、反例（分支被重建成不含基点的线）、
+    以及三条"不得猜"的边界（无参照 sha / 参照 sha 不在本仓库 / 非 git 根）须跳过不报错。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.mkdtemp()
+        self._env_backup = os.environ.get("CNB_PULL_REQUEST_TARGET_SHA")
+        os.environ.pop("CNB_PULL_REQUEST_TARGET_SHA", None)
+
+        def sh(cmd):
+            return subprocess.run(cmd, shell=True, cwd=self._tmp,
+                                  capture_output=True, text=True)
+        self.sh = sh
+        sh("git init -q -b main . && git config user.email a@b.c && "
+           "git config user.name t && git config commit.gpgsign false")
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("x")
+        sh("git add -A && git commit -qm base")
+        self.base = sh("git rev-parse HEAD").stdout.strip()
+        sh("git checkout -q -b feat")
+        cm.REPO_ROOT = self._tmp
+
+    def tearDown(self) -> None:
+        if self._env_backup is None:
+            os.environ.pop("CNB_PULL_REQUEST_TARGET_SHA", None)
+        else:
+            os.environ["CNB_PULL_REQUEST_TARGET_SHA"] = self._env_backup
+        shutil.rmtree(self._tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _run(self, ref):
+        os.environ["CNB_PULL_REQUEST_TARGET_SHA"] = ref
+        cm.errors.clear()
+        cm.check_base_ancestor_guard()
+        return self.error_texts()
+
+    def test_base_is_ancestor_passes(self):
+        # 正例：在基点之上继续提交（正常返工形态）→ 不报红
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("y")
+        self.sh("git add -A && git commit -qm 'feat: 在基点之上继续'")
+        self.assertEqual(self._run(self.base), "")
+
+    def test_branch_rebuilt_on_older_base_reports(self):
+        # 反例：分支被重建成一条**不再包含基点**的线（正是回退别人改动的机械特征）
+        self.sh("git checkout -q -b other HEAD~0 2>/dev/null; git checkout -q main")
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        self.sh("git add -A && git commit -qm '基点之后合入的一批改动'")
+        newer = self.sh("git rev-parse HEAD").stdout.strip()
+        # 把 feat 重建在**更早**的分叉点（不再包含 newer）
+        self.sh("git checkout -q -B feat " + self.base)
+        with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
+            fh.write("c")
+        self.sh("git add -A && git commit -qm 'feat: 重建在新基点上（回退了上面那批）'")
+        texts = self._run(newer)
+        self.assertIn("返工基点", texts)
+        self.assertIn("不是", texts)
+
+    def test_missing_base_env_skips(self):
+        # 边界：非 CNB 环境/平台未给参照 sha → 跳过、不报错（确定性/幂等）
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("y")
+        self.sh("git add -A && git commit -qm 'feat: 改动'")
+        os.environ.pop("CNB_PULL_REQUEST_TARGET_SHA", None)
+        cm.errors.clear()
+        cm.check_base_ancestor_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_unknown_base_sha_skips(self):
+        # 边界：参照 sha 不在本仓库（未取回/别的仓）→ 跳过、不猜
+        self.assertEqual(self._run("0" * 40), "")
+
+    def test_non_git_root_skips(self):
+        # 边界：非 git 根 → 跳过、不报错
+        cm.REPO_ROOT = tempfile.mkdtemp()
+        os.environ["CNB_PULL_REQUEST_TARGET_SHA"] = self.base
+        cm.errors.clear()
+        cm.check_base_ancestor_guard()
+        self.assertEqual(cm.errors, [])
+
+
 class TestCheckGitMvSelfcheck(CheckSpecsTestCase):
     """钉住"本仓库自身侧"的 git mv 自查（P1 可机械核对的那一半）。
 
@@ -15127,6 +15216,621 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("把本地副本删掉", self.error_texts())
 
 
+class TestCheckGuardOrderGuard(CheckSpecsTestCase):
+    """钉住『防线次序与清单表一致』（本轮新增，承接「次序提成数据」这次重构）。
+
+    背景（本仓库实测）：次序此前只存在于 `main()` 正文的行序里——把某道防线从编排中段
+    移到末尾，`check_specs.py` 报 OK、985 条单测全绿，**没有任何判据**。本轮把次序提成
+    显式的 `CHECKS` 序列，并由本防线与 `specs-project-maintainer/guards.adoc` 的清单表
+    逐行对账。用例覆盖：正例（两处同序）、反例①（集合相同但次序对调——最难发现的一种）、
+    反例②（只在序列里）、反例③（只在清单表里）、反例④（清单表序号断开）、
+    反例⑤（序列缺失）、反例⑥（清单表缺失）。
+    """
+
+    def _guard(self, name: str) -> str:
+        return (f"def {name}():\n"
+                f"    \"\"\"{name}。\"\"\"\n"
+                f"    pass\n\n\n")
+
+    def _write_valid(self, seq=("alpha", "beta"), rows=("alpha", "beta"), nums=None):
+        src = "".join(self._guard("check_" + n) for n in seq) + \
+            "CHECKS = (\n" + "".join(f"    check_{n},\n" for n in seq) + ")\n"
+        if nums is None:
+            nums = list(range(1, len(rows) + 1))
+        table = "== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n" + "".join(
+            f"| {i} | `check_{n}` | 用途 |\n" for i, n in zip(nums, rows))
+        self.write("script/check_specs.py", src)
+        self.write("specs-project-maintainer/guards.adoc", table)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_guard_order_guard()
+        self.assertEqual(self.error_texts(), "")
+
+    def test_reordered_sequence_reports(self):
+        # 反例①：集合相同、次序对调（实测形态：移动一道防线的位置无人发现）
+        self._write_valid(seq=("beta", "alpha"), rows=("alpha", "beta"))
+        cm.check_guard_order_guard()
+        self.assertIn("次序不一致", self.error_texts())
+
+    def test_extra_in_sequence_reports(self):
+        # 反例②：序列里多一道（清单表没登记）→ 读者按表核对会漏掉它
+        self._write_valid(seq=("alpha", "beta", "gamma"))
+        cm.check_guard_order_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_extra_in_manifest_reports(self):
+        # 反例③：清单表多一行（序列里没有）→ 表在描述一道不存在的防线
+        self._write_valid(rows=("alpha", "beta", "gamma"))
+        cm.check_guard_order_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_broken_numbering_reports(self):
+        # 反例④：清单表序号断开（有条目被整条删掉）
+        self._write_valid(rows=("alpha", "beta"), nums=(1, 3))
+        cm.check_guard_order_guard()
+        self.assertIn("序号不连续", self.error_texts())
+
+    def test_missing_checks_reports(self):
+        # 反例⑤：序列缺失 → 次序失去唯一来源
+        self.write("script/check_specs.py", self._guard("check_alpha"))
+        self.write("specs-project-maintainer/guards.adoc", "== x\n")
+        cm.check_guard_order_guard()
+        self.assertIn("CHECKS", self.error_texts())
+
+    def test_missing_manifest_reports(self):
+        # 反例⑥：清单表缺失 → 次序没有任何可读处
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
+        cm.check_guard_order_guard()
+        self.assertIn("guards.adoc", self.error_texts())
+
+
+class TestLedgerSourceEntries(CheckSpecsTestCase):
+    """钉住台账来源列的**解析口径**：含裸 `"` 的条目名不得让该条被整条跳过。
+
+    本仓库实测：旧判据按"行首 4 空格 + 两个双引号串"直接匹配，121 条台账只命中 118 条
+    ——`落点口径须写对：…写成"私有/不对外发布"` 这类**名字里带裸引号**的条目被静默漏掉，
+    把它的来源改成不存在的路径，`check_ledger_source_paths_guard` 照样全绿
+    （"看着核对过、其实漏了三条"）。故解析改为按字符串字面量逐字段取。
+    """
+
+    _LEDGER = (
+        'MECHANISMS = [\n'
+        '    ("名字里带\\"裸引号\\"的条目", "NOPE/missing.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        '    ("普通条目", "specs/general/doc.adoc", "script/check_specs.py",\n'
+        '     "check_alpha_guard", "备注"),\n'
+        ']\n')
+
+    def test_entries_with_quote_are_parsed(self):
+        # 名字里带裸引号的条目**必须**被解析到（旧正则下它整条不见）
+        entries = cm._ledger_source_entries(self._LEDGER)
+        self.assertEqual(len(entries), 2)
+        self.assertIn("NOPE/missing.adoc", [s for _, s in entries])
+
+    def test_guard_checks_quote_entry_source(self):
+        # 该条目的来源不存在时必须报红——不报说明它又被跳过了
+        self.write("script/check_effective.py", self._LEDGER)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("不存在", self.error_texts())
+
+    def test_guard_checks_normal_entry_source(self):
+        # 普通条目的来源同样逐条核对（防"修了一处、漏了另一处"）
+        ledger = self._LEDGER.replace("specs/general/doc.adoc", "NOPE/also-missing.adoc")
+        self.write("script/check_effective.py", ledger)
+        cm.check_ledger_source_paths_guard()
+        self.assertIn("also-missing.adoc", self.error_texts())
+
+
+class TestCheckGuardManifest(CheckSpecsTestCase):
+    """钉住『防线清单与删除记账』（防"删了却全绿"）。
+
+    本仓库实测的三条失效路径：①一道防线被从 `main()` 摘掉（代码并进别的防线）、它的
+    反例用例一并被删，脚本报 OK、单测全通过、台账上的"抓手数"也没变；②台账里点名的
+    防线名改成不存在的名字仍报"有抓手"；③脚本头部清单条目被整条删掉时编号断开、
+    而清单描述不参与一致性核对。故本条把三件事变成可核对的：接线数、反例用例数、
+    台账点名的防线名。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_baseline = (cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE)
+        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
+
+    def tearDown(self) -> None:
+        cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
+        super().tearDown()
+
+    # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
+    # 判据本身没有被放宽——接线数、用例数、台账点名三件事一条不少，只是喂给它的脚本
+    # 换成当前的编排形态（旧夹具写的是 `main()` 里逐行调用，重构后自然不再命中）。
+    _SRC = (
+        'def check_alpha_guard():\n'
+        '    """甲。"""\n'
+        '\n'
+        '\n'
+        'def check_beta_guard():\n'
+        '    """乙。"""\n'
+        '\n'
+        '\n'
+        'CHECKS = (\n'
+        '    check_alpha_guard,\n'
+        '    check_beta_guard,\n'
+        ')\n'
+        '\n'
+        '\n'
+        'def main(argv=None):\n'
+        '    """入口。"""\n'
+        '    for check in CHECKS:\n'
+        '        check()\n'
+        '    return 0\n'
+        '\n'
+        '\n'
+        'if __name__ == "__main__":\n'
+        '    main()\n'
+    )
+    # 台账逐条声明：`(条款名, 来源, 抓手路径, 声明的抓手, 备注)`——第 4 段是**必填**的
+    # 「这条规范由哪一道钉住」（有抓手＝防线名、无抓手＝`NO_GRIP_DECLARED`）。
+    _LEDGER = ("MECHANISMS = [\n"
+               "    (\"甲\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_alpha_guard\", \"备注甲\"),\n"
+               "    (\"乙\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_beta_guard\", \"备注乙\"),\n"
+               "]\n")
+
+    def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
+        self.write("script/check_specs.py", src if src is not None else self._SRC)
+        self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
+        if test_file is None:
+            body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
+                           for i in range(tests))
+            test_file = ("import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
+        self.write("script/check_specs_test.py", test_file)
+        self.write("script/check_effective_test.py",
+                   "import unittest\n\n\nclass E(unittest.TestCase):\n"
+                   "    def test_x(self):\n        self.assertTrue(True)\n")
+        cm.GUARD_WIRING_BASELINE = 2
+        cm.GUARD_TEST_BASELINE = 5
+
+    def test_valid_passes(self):
+        # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
+        self._write_valid()
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_wiring_duplicate_registration_reports(self):
+        # 反例⑤（本轮实测失效）：同一道防线在 `CHECKS` 序列里**登记两次**——
+        # 条数被重复项凑够，掩盖了"真防线被删掉一道"（删掉的那道由重复项顶上，
+        # 接线数不掉、`check_guard_manifest` 与 `check_guard_order_guard` 都全绿）。
+        # 本轮 `check_pagination_guard` 正是这种形态：序列里一次、末尾又追加一次。
+        self._write_valid(src=self._SRC.replace(
+            "    check_beta_guard,\n",
+            "    check_beta_guard,\n    check_alpha_guard,\n"))
+        cm.check_guard_manifest()
+        self.assertIn("重复", self.error_texts())
+
+    def test_wiring_duplicate_hiding_removal_reports(self):
+        # 反例⑥（**重复登记判据自身的绕过路径**，本轮 review 复现）：把一道真防线连同
+        # 它的函数体、用例、台账声明一并删掉，再把**另一道仍存在的**防线重复登记一次，
+        # 使序列元素个数仍等于基线——此时"定义了却没被调用"那条报不出来（函数体已删）、
+        # "重复"那条又只说"写重了"，没有任何一条能指出"少了一道真防线"。
+        # 判据须让重复项**不计入**唯一防线数，故删一道 + 重复顶一道必然低于基线。
+        self._write_valid(src=self._SRC
+                          .replace("    check_alpha_guard,\n", "")
+                          .replace("def check_alpha_guard():\n"
+                                   '    """甲。"""\n'
+                                   '\n'
+                                   '\n', "")
+                          .replace("    check_beta_guard,\n",
+                                   "    check_beta_guard,\n    check_beta_guard,\n"))
+        cm.check_guard_manifest()
+        # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
+        self.assertIn("防线接线数从基线", self.error_texts())
+
+    def test_guard_unwired_reports(self):
+        # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
+        # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
+        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
+        cm.check_guard_manifest()
+        self.assertIn("防线接线数", self.error_texts())
+
+    def test_guard_defined_but_never_called_reports(self):
+        # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
+        # → 看起来还在、却永远不会执行
+        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
+        cm.check_guard_manifest()
+        self.assertIn("check_beta_guard", self.error_texts())
+
+    def test_tests_removed_without_note_reports(self):
+        # 反例②：反例用例被整批删掉（防线随之失效力）→ 用例数减少必须报红
+        self._write_valid(tests=1)
+        cm.check_guard_manifest()
+        self.assertIn("反例用例数", self.error_texts())
+
+    def test_ledger_names_missing_guard_reports(self):
+        # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
+        self._write_valid(ledger=self._LEDGER.replace("check_beta_guard",
+                                                      "check_gone_guard"))
+        cm.check_guard_manifest()
+        self.assertIn("check_gone_guard", self.error_texts())
+
+    def test_checklist_gap_reports(self):
+        # 反例④：脚本头部清单出现断号（条目被整条删掉）→ 清单描述不参与一致性核对、
+        # 写死不报红（本仓库实测），故按编号连续性核对
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 2. 乙\n 4. 丙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("断号", self.error_texts())
+
+    def test_checklist_duplicate_number_reports(self):
+        # 反例⑤：清单编号出现**重号**（重排时把两条并成同一个号）→ 只核"有没有断号"时
+        # 两种写法都能过：编号仍是连通的 1..N，而"第 3 项"同时指向两条条目——本仓库实测
+        # （新增「防线清单与删除记账」时把原有的「性能测试防线」也编成 27，此后编号所指的
+        # 那一项随重排静默错位）。故按**严格递增**核对。
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 2. 乙\n 2. 丙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("重号", self.error_texts())
+
+    def test_checklist_out_of_order_number_reports(self):
+        # 反例⑤b：编号**乱序**（既无断号也无重号，但文件里的出现次序不是递增的）——
+        # 新条目被插到了编号更小的条目之前。这是断号与重号两条判据都拦不住的形态：集合仍是
+        # 1..N 齐备，只是次序错了。本仓库实测（PR #156）：新增的第 63 条被插在第 60 条之前，
+        # 清单次序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`，当时全绿。
+        src = self._SRC.replace(
+            'def check_alpha_guard():',
+            '"""清单：\n 1. 甲\n 3. 丙\n 4. 丁\n 2. 乙\n"""\n\n\ndef check_alpha_guard():')
+        self._write_valid(src=src)
+        cm.check_guard_manifest()
+        self.assertIn("乱序", self.error_texts())
+
+    def test_ledger_without_declaration_reports(self):
+        # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字
+        # 可以靠把备注里的防线名删掉来维持（删名字比删防线容易得多），读者却以为还有抓手。
+        # 故声明为必填：缺了即报红（旧实现只核"点名的名字存在"，没点名就没核对）。
+        self._write_valid(
+            ledger=self._LEDGER.replace(
+                '     "check_beta_guard", "备注乙"),\n', '     "check_beta_guard"),\n'))
+        cm.check_guard_manifest()
+        self.assertIn("未声明抓手", self.error_texts())
+
+    def test_ledger_declares_no_grip_but_has_path_reports(self):
+        # 反例⑦：条目声明为「无机械抓手」、却填了抓手路径 → 声明与实现不一致
+        self._write_valid(
+            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
+                                        '"%s", "备注乙"' % cm.NO_GRIP_DECLARED))
+        cm.check_guard_manifest()
+        self.assertIn("声明与实现不一致", self.error_texts())
+
+    def test_ledger_declares_guard_but_unwired_reports(self):
+        # 反例⑧：台账声明的防线**定义了却没人调用** → 它看起来还在、却永远不会执行；
+        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出执行序列"形态）
+        self._write_valid(
+            src=self._SRC.replace("    check_beta_guard,\n", ""),
+            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
+                                        '"check_beta_guard", "备注乙"'))
+        cm.check_guard_manifest()
+        self.assertIn("check_beta_guard", self.error_texts())
+
+    def test_missing_script_reports(self):
+        # 反例⑤：防线清单本体被删 → 无从核对
+        self._write_valid()
+        os.remove(os.path.join(self.root, "script", "check_specs.py"))
+        cm.check_guard_manifest()
+        self.assertIn("check_specs.py", self.error_texts())
+
+    def test_entry_block_in_middle_reports(self):
+        # 反例⑨（本轮 main 上实测的缺口）：测试文件的 `if __name__ == "__main__":` 落在
+        # **中段**，其后仍有缩进的 `def test_`（块内局部函数）——源码正则数得到、`unittest`
+        # 收集不到。本仓库祖先提交 `8802613` 的真实形态：`unittest.main` 在中段、其后 2 个
+        # 测试类从未执行，`Ran 897 tests` 而源码 899 个 `def test_`，脚本与基线全绿。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n        self.assertTrue(True)\n"
+            "\n\nif __name__ == \"__main__\":\n"
+            "    import unittest\n    unittest.main()\n"
+            "\n    def test_injected_never_collected(self):\n"
+            "        self.assertTrue(True)\n"))
+        cm.check_guard_manifest()
+        self.assertIn("中段", self.error_texts())
+
+    def test_emptied_test_case_reports(self):
+        # 反例⑩（本轮 main 上实测的缺口）：用例被**掏空成空壳**（这一节里一条断言都没有）
+        # ——总数基线只保证"数量不减少"，删一条加一条、或把用例掏空都能维持该数；
+        # 被抽空的反例仍会被收集、仍占着那个数，却什么都证不了。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n        pass\n"
+            "    def test_case_1(self):\n        self.assertTrue(True)\n"
+            "    def test_case_2(self):\n        self.assertTrue(True)\n"
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+        cm.check_guard_manifest()
+        self.assertIn("没有任何断言", self.error_texts())
+
+    def test_same_name_deleted_in_one_class_kept_in_another_passes_by_name(self):
+        # 反例⑪（本轮 main 上实测的缺口）：用例名**跨类复用**——类 A 的那条被删、类 B 的
+        # 同名用例仍留。只记"名字"的口径看不见这个动作（名字仍在集合里、计数也够），
+        # 故清单按 `类名.用例名` 限定；此处正例确认"同名分居两类"会被算成两条。
+        src = ("import unittest\n\n\nclass A(unittest.TestCase):\n"
+               "    def test_same(self):\n        self.assertTrue(True)\n"
+               "\n\nclass B(unittest.TestCase):\n"
+               "    def test_same(self):\n        self.assertTrue(True)\n")
+        names = cm._collectable_test_names("script/check_specs_test.py", src)
+        self.assertEqual({"A.test_same", "B.test_same"}, names)
+
+
+class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
+    """钉住『模板类内容的单独归类』防线：判据本体 + 两处登记/引用不得被删或降级。
+
+    用户要求（Issue #169）："有一些规范，属于要么不读、要么读全部的，比如代码模板……
+    不要和其他内容放一起，放一起浪费上下文……大部分情况下需要的时候读一下就行，甚至可以不读，
+    直接 copy 就行；这些代码模板最好各自也独立（除非有关联性或者内容不多拆开反而麻烦）"。
+
+    **落点分三层**（判据本体在**维护方自查层**——它描述"规范集合自己怎么组织"，对引用方
+    项目不成立）：① `specs-project-maintainer/spec-lifecycle.adoc` 承载归类判据、不得混放、
+    「各自独立 + 例外」与判定标准；② `AGENTS.adoc` 登记该落点（维护方入口是加载点，缺则
+    执行者读不到这套判据）；③ `specs/general/context.adoc`「生成效率」留公共侧一跳引用。
+
+    **重点拦两种形态**：① 只核"这一节在不在"（轴名齐全、判据被抽走——「什么算模板类内容」
+    的判定标准、不得混放的判定标准、「各自独立」的例外任一被抽掉必须报红）；② **把判据本体
+    抄进公共内容**（那是维护方的组织口径，写进 `specs/` 即同一条规则两处真源）。
+    """
+
+    MAINT = (
+        "= 规范集合的维护（维护方自查）\n\n"
+        "== 要么不读、要么读全部的规范（模板类内容的单独归类）\n\n"
+        "**归类判据（L1，先判再动手）**：一条内容若「要用就得整份取用、平时不必常备」，"
+        "它属本节所指的**模板类内容**——典型是**代码模板**。"
+        "**判定标准（任一命中即属模板类内容）**：① 取用形态是**复制**；"
+        "② 判据**要么不读、要么读全部**；③ 取值**独立于上下文**。"
+        "三条都不命中即普通规范条目。\n\n"
+        "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
+        "同一个落点、也不与**常驻层**放在一起。\n"
+        "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；② 落在**常驻层**；"
+        "③ 加载触发方式与规则条目共用。\n"
+        "* **模板最好各自独立（L2）**：例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。\n"
+        "* **依据（标准名/编号）**：Agent Skills 开放规范（渐进披露）、"
+        "ISO/IEC Directives Part 2（文件须便于按现行版本取用）。\n")
+
+    ENTRY = (
+        "* **分类、分层与准入**：……用户提新增规范时的提案校验，以及**模板类内容的归类与单独落点**"
+        "（「要么不读、要么读全部」的内容不与规则混放）见 "
+        "`specs-project-maintainer/spec-lifecycle.adoc`。\n")
+
+    COMMON = (
+        "== 生成效率（同等质量下最少往返）\n\n"
+        "* **按需加载按文件切分、单文件别太大（L2）**：……**模板类内容（要用就得整份取用、"
+        "平时不必常备）另按「要么不读、要么读全部」单独归类**：不与「每次会话要遵守的规则」混放、"
+        "各自独立成篇（判据与例外属维护方自查层，本处不重复）。\n")
+
+    def _write(self, maint=None, entry=None, common=None) -> None:
+        self.write("specs-project-maintainer/spec-lifecycle.adoc",
+                   maint if maint is not None else self.MAINT)
+        self.write("AGENTS.adoc", entry if entry is not None else self.ENTRY)
+        self.write("specs/general/context.adoc",
+                   common if common is not None else self.COMMON)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_template_separation_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_spec_file_removed_reports(self):
+        # 反例①：判据真源文件被删 -> 该条无处承载
+        self.write("AGENTS.adoc", self.ENTRY)
+        self.write("specs/general/context.adoc", self.COMMON)
+        cm.check_template_separation_guard()
+        self.assertIn("spec-lifecycle.adoc", self.error_texts())
+
+    def test_section_removed_reports(self):
+        # 反例②：该节被整节删掉 -> 判据失去落点
+        self._write(maint="= 规范集合的维护（维护方自查）\n\n== 准入判定\n\n* 略。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("要么不读、要么读全部", self.error_texts())
+
+    def test_criteria_stripped_but_axis_present_reports(self):
+        # 反例③（**轴名齐全、判据被抽走**的反例本体）：小节名与"归类判据"字样都在，
+        # 但"什么算模板类内容"的**三条判定标准**被抽走 —— 只核轴名会全绿，
+        # 执行者于是把任意内容按自己方便归类。
+        self._write(maint=self.MAINT.replace(
+            "**判定标准（任一命中即属模板类内容）**", "**说明**"))
+        cm.check_template_separation_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_mixing_rule_removed_reports(self):
+        # 反例④：把"不得与其他规则混放"删掉（用户口径的正题）-> 模板会继续被塞进主题文件
+        self._write(maint=self.MAINT.replace(
+            "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
+            "同一个落点、也不与**常驻层**放在一起。\n", ""))
+        cm.check_template_separation_guard()
+        self.assertIn("混放", self.error_texts())
+
+    def test_mixing_criteria_removed_reports(self):
+        # 反例⑤：混放的三条判定标准被抽走 -> "混没混放"回到评判者手里
+        self._write(maint=self.MAINT.replace(
+            "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；"
+            "② 落在**常驻层**；③ 加载触发方式与规则条目共用。\n", ""))
+        cm.check_template_separation_guard()
+        self.assertIn("混放", self.error_texts())
+
+    def test_independence_exception_removed_reports(self):
+        # 反例⑥：把「各自独立」的**例外**删掉（用户原话即带这个例外）-> 会把"独立"读成
+        # 硬性要求、逼出为达标而拆的空壳（与"默认不拆"取向相反）
+        self._write(maint=self.MAINT.replace(
+            "例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。", "。"))
+        cm.check_template_separation_guard()
+        self.assertIn("关联性", self.error_texts())
+
+    def test_entry_registration_removed_reports(self):
+        # 反例⑦：维护方入口没登记该落点 -> 判据齐备但没有入口（执行者读不到）
+        self._write(entry="* **分类、分层与准入**：见 spec-lifecycle.adoc。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("AGENTS.adoc", self.error_texts())
+
+    def test_common_xref_removed_reports(self):
+        # 反例⑧：公共侧一跳引用被删 -> 引用方项目只看到"按文件切分"、无从知道模板另有归类
+        self._write(common="== 生成效率（同等质量下最少往返）\n\n* 略。\n")
+        cm.check_template_separation_guard()
+        self.assertIn("context.adoc", self.error_texts())
+
+
+
+
+class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
+    """钉住『方法名与逻辑删除的对应』防线（用户提出，Issue #184）。
+
+    用户原话："未使用 mybatis plus 逻辑删除时，没有前缀后缀的方法名默认查询且不带删除标志，
+    如果要查询已删除/未删除（带了删除标志的条件）的数据时，要带特征；使用 mybatis plus
+    逻辑删除时（因为会默认带删除标志），没有前缀后缀的方法名默认查询逻辑删除数据，如果要查询
+    已删除和忽略删除标志的数据时，要带特征。不仅限 mybatis plus，其他类似的也生效（自己实现
+    的逻辑删除逻辑和框架也算），适用所有语言"。
+
+    反例逐组覆盖：默认面怎么定被抽 / 非默认面特征词被抽 / 判定标准被抽 / 理由被抽 /
+    默认面例外被抽 / 边界被抽 / 存量边界被抽 / 依据行被整行删 / Java 落点缺框架专名 /
+    图书馆未登记取舍。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    ADOPTION = "library/adoption.adoc"
+    SECTION = "持久化访问（数据库/缓存等）"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        with open(self.CODING, encoding="utf-8") as fh:
+            self.CODING_TEXT = fh.read()
+        with open(self.JAVA, encoding="utf-8") as fh:
+            self.JAVA_TEXT = fh.read()
+        with open(self.ADOPTION, encoding="utf-8") as fh:
+            self.ADOPTION_TEXT = fh.read()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_coding(self, text: str) -> None:
+        self.write(self.CODING, text)
+
+    def _write_all_valid(self) -> None:
+        self._write_coding(self.CODING_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT)
+        # `run_rule_guard` 按**阶段**去重（同一阶段内同名防线只跑一遍），而每个用例都
+        # 自成一个阶段（`phase()` 会清空去重集）——这里显式清一次只是让"同一用例里重复
+        # 调用防线"也按最新夹具核对（防御性，与 `REPO_SCRIPT_SRC_CACHE` 同理）。
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard(self) -> None:
+        """只跑本道防线（`run_rule_guard` 有阶段内去重，故先清去重集合）。"""
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_chain_assignment_order_guard()
+
+    def _mutated_coding(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.CODING_TEXT)
+        self._write_all_valid()
+        self._write_coding(self.CODING_TEXT.replace(removed, replacement))
+
+    def _write_coding_without_line(self, anchor: str) -> None:
+        """删掉含 `anchor` 的那一行（依据行一类"整行"判据）。"""
+        lines = self.CODING_TEXT.split("\n")
+        hit = [i for i, ln in enumerate(lines) if anchor in ln]
+        self.assertEqual(1, len(hit))
+        del lines[hit[0]]
+        self._write_all_valid()
+        self._write_coding("\n".join(lines))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿（锚点与文档脱节时先在这一条暴露）
+        self._write_all_valid()
+        cm.check_logical_delete_naming_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_default_face_rule_removed_reports(self):
+        # 反例①：默认面"取该技术是否自动附加"被抽 -> 默认面退回"约定俗成的那一面"
+        self._mutated_coding("**默认面取该技术是否自动附加删除标志条件**", "默认面即习惯用法")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("默认面取该技术是否自动附加删除标志条件", self.error_texts())
+
+    def test_feature_word_removed_reports(self):
+        # 反例②：非默认面须带特征词被抽 -> "查已删也顺手叫 list()"重新成立
+        self._mutated_coding("**方法名须带该面的特征词**", "注意区分")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("方法名须带该面的特征词", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_all_valid()
+        text = self.CODING_TEXT.replace("**判定标准（任一命中即违规）**：① 不带删隐面特征词的方法名查询了", "补充说明：")
+        self.assertNotEqual(self.CODING_TEXT, text)
+        self._write_coding(text)
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("判定标准（任一命中即违规）", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例④：理由（删隐面只能从技术配置反推）被抽 -> 本条的级别与处置会被降级
+        self._mutated_coding("**删隐面只能从技术配置反推、读代码的人与评审者都无从预期**", "不太直观")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("无从预期", self.error_texts())
+
+    def test_project_default_exception_removed_reports(self):
+        # 反例⑤：默认面的唯一例外被抽 -> 同一项目里按各实体配置各算一套
+        self._mutated_coding("项目自身规范或该项目既有先例已明确", "另有规定时")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("先例", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑥：边界被抽 -> 本条被读成"所有方法名都要加后缀"
+        self._mutated_coding("**只**约束**按实体/表做查询的方法名**", "适用于所有方法名")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("按实体/表做查询的方法名", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界（不得全库改名）被抽 -> 等于要求立刻批量重写既有方法名
+        self._mutated_coding("**且不得据本条做全库改名**", "")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("不得据本条做全库改名", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：依据行被整行删掉 -> 读者把本集合的取舍当成标准要求；
+        #          按整个二级节取值时相邻条目的同义字样会兜住缺项，故须按小节取值
+        self._write_coding_without_line("**\"默认面随技术是否自动附加删除标志条件而变")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑨：Java 落点缺框架专名 -> MyBatis-Plus 侧的默认面无从判定
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT.replace("@TableLogic", "某个注解"))
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("TableLogic", self.error_texts())
+
+    def test_adoption_not_registered_reports(self):
+        # 反例⑩：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT.replace("方法名与逻辑删除的对应", "某条规则"))
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_subsection_missing_reports(self):
+        # 反例⑪：整个三级小节被删 -> 该条失去落点
+        self._write_all_valid()
+        self._write_coding(self.CODING_TEXT.split("=== 方法名与逻辑删除的对应")[0])
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("方法名与逻辑删除的对应", self.error_texts())
+
+
 class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
     """端到端实测『落点取完即只读』（用户口径：文件本身下载后要变成只读）。
 
@@ -15867,489 +16571,28 @@ class TestCheckReadonlyLandingGuard(CheckSpecsTestCase):
         self.assertIn("写进项目自己", self.error_texts())
 
 
-class TestCheckGuardOrderGuard(CheckSpecsTestCase):
-    """钉住『防线次序与清单表一致』（本轮新增，承接「次序提成数据」这次重构）。
-
-    背景（本仓库实测）：次序此前只存在于 `main()` 正文的行序里——把某道防线从编排中段
-    移到末尾，`check_specs.py` 报 OK、985 条单测全绿，**没有任何判据**。本轮把次序提成
-    显式的 `CHECKS` 序列，并由本防线与 `specs-project-maintainer/guards.adoc` 的清单表
-    逐行对账。用例覆盖：正例（两处同序）、反例①（集合相同但次序对调——最难发现的一种）、
-    反例②（只在序列里）、反例③（只在清单表里）、反例④（清单表序号断开）、
-    反例⑤（序列缺失）、反例⑥（清单表缺失）。
-    """
-
-    def _guard(self, name: str) -> str:
-        return (f"def {name}():\n"
-                f"    \"\"\"{name}。\"\"\"\n"
-                f"    pass\n\n\n")
-
-    def _write_valid(self, seq=("alpha", "beta"), rows=("alpha", "beta"), nums=None):
-        src = "".join(self._guard("check_" + n) for n in seq) + \
-            "CHECKS = (\n" + "".join(f"    check_{n},\n" for n in seq) + ")\n"
-        if nums is None:
-            nums = list(range(1, len(rows) + 1))
-        table = "== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n" + "".join(
-            f"| {i} | `check_{n}` | 用途 |\n" for i, n in zip(nums, rows))
-        self.write("script/check_specs.py", src)
-        self.write("specs-project-maintainer/guards.adoc", table)
-
-    def test_valid_passes(self):
-        self._write_valid()
-        cm.check_guard_order_guard()
-        self.assertEqual(self.error_texts(), "")
-
-    def test_reordered_sequence_reports(self):
-        # 反例①：集合相同、次序对调（实测形态：移动一道防线的位置无人发现）
-        self._write_valid(seq=("beta", "alpha"), rows=("alpha", "beta"))
-        cm.check_guard_order_guard()
-        self.assertIn("次序不一致", self.error_texts())
-
-    def test_extra_in_sequence_reports(self):
-        # 反例②：序列里多一道（清单表没登记）→ 读者按表核对会漏掉它
-        self._write_valid(seq=("alpha", "beta", "gamma"))
-        cm.check_guard_order_guard()
-        self.assertIn("check_gamma", self.error_texts())
-
-    def test_extra_in_manifest_reports(self):
-        # 反例③：清单表多一行（序列里没有）→ 表在描述一道不存在的防线
-        self._write_valid(rows=("alpha", "beta", "gamma"))
-        cm.check_guard_order_guard()
-        self.assertIn("check_gamma", self.error_texts())
-
-    def test_broken_numbering_reports(self):
-        # 反例④：清单表序号断开（有条目被整条删掉）
-        self._write_valid(rows=("alpha", "beta"), nums=(1, 3))
-        cm.check_guard_order_guard()
-        self.assertIn("序号不连续", self.error_texts())
-
-    def test_missing_checks_reports(self):
-        # 反例⑤：序列缺失 → 次序失去唯一来源
-        self.write("script/check_specs.py", self._guard("check_alpha"))
-        self.write("specs-project-maintainer/guards.adoc", "== x\n")
-        cm.check_guard_order_guard()
-        self.assertIn("CHECKS", self.error_texts())
-
-    def test_missing_manifest_reports(self):
-        # 反例⑥：清单表缺失 → 次序没有任何可读处
-        self._write_valid()
-        os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
-        cm.check_guard_order_guard()
-        self.assertIn("guards.adoc", self.error_texts())
-
-
-class TestLedgerSourceEntries(CheckSpecsTestCase):
-    """钉住台账来源列的**解析口径**：含裸 `"` 的条目名不得让该条被整条跳过。
-
-    本仓库实测：旧判据按"行首 4 空格 + 两个双引号串"直接匹配，121 条台账只命中 118 条
-    ——`落点口径须写对：…写成"私有/不对外发布"` 这类**名字里带裸引号**的条目被静默漏掉，
-    把它的来源改成不存在的路径，`check_ledger_source_paths_guard` 照样全绿
-    （"看着核对过、其实漏了三条"）。故解析改为按字符串字面量逐字段取。
-    """
-
-    _LEDGER = (
-        'MECHANISMS = [\n'
-        '    ("名字里带\\"裸引号\\"的条目", "NOPE/missing.adoc", "script/check_specs.py",\n'
-        '     "check_alpha_guard", "备注"),\n'
-        '    ("普通条目", "specs/general/doc.adoc", "script/check_specs.py",\n'
-        '     "check_alpha_guard", "备注"),\n'
-        ']\n')
-
-    def test_entries_with_quote_are_parsed(self):
-        # 名字里带裸引号的条目**必须**被解析到（旧正则下它整条不见）
-        entries = cm._ledger_source_entries(self._LEDGER)
-        self.assertEqual(len(entries), 2)
-        self.assertIn("NOPE/missing.adoc", [s for _, s in entries])
-
-    def test_guard_checks_quote_entry_source(self):
-        # 该条目的来源不存在时必须报红——不报说明它又被跳过了
-        self.write("script/check_effective.py", self._LEDGER)
-        cm.check_ledger_source_paths_guard()
-        self.assertIn("不存在", self.error_texts())
-
-    def test_guard_checks_normal_entry_source(self):
-        # 普通条目的来源同样逐条核对（防"修了一处、漏了另一处"）
-        ledger = self._LEDGER.replace("specs/general/doc.adoc", "NOPE/also-missing.adoc")
-        self.write("script/check_effective.py", ledger)
-        cm.check_ledger_source_paths_guard()
-        self.assertIn("also-missing.adoc", self.error_texts())
-
-
-class TestCheckGuardManifest(CheckSpecsTestCase):
-    """钉住『防线清单与删除记账』（防"删了却全绿"）。
-
-    本仓库实测的三条失效路径：①一道防线被从 `main()` 摘掉（代码并进别的防线）、它的
-    反例用例一并被删，脚本报 OK、单测全通过、台账上的"抓手数"也没变；②台账里点名的
-    防线名改成不存在的名字仍报"有抓手"；③脚本头部清单条目被整条删掉时编号断开、
-    而清单描述不参与一致性核对。故本条把三件事变成可核对的：接线数、反例用例数、
-    台账点名的防线名。
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        self._orig_baseline = (cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE)
-        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
-
-    def tearDown(self) -> None:
-        cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
-        super().tearDown()
-
-    # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
-    # 判据本身没有被放宽——接线数、用例数、台账点名三件事一条不少，只是喂给它的脚本
-    # 换成当前的编排形态（旧夹具写的是 `main()` 里逐行调用，重构后自然不再命中）。
-    _SRC = (
-        'def check_alpha_guard():\n'
-        '    """甲。"""\n'
-        '\n'
-        '\n'
-        'def check_beta_guard():\n'
-        '    """乙。"""\n'
-        '\n'
-        '\n'
-        'CHECKS = (\n'
-        '    check_alpha_guard,\n'
-        '    check_beta_guard,\n'
-        ')\n'
-        '\n'
-        '\n'
-        'def main(argv=None):\n'
-        '    """入口。"""\n'
-        '    for check in CHECKS:\n'
-        '        check()\n'
-        '    return 0\n'
-        '\n'
-        '\n'
-        'if __name__ == "__main__":\n'
-        '    main()\n'
-    )
-    # 台账逐条声明：`(条款名, 来源, 抓手路径, 声明的抓手, 备注)`——第 4 段是**必填**的
-    # 「这条规范由哪一道钉住」（有抓手＝防线名、无抓手＝`NO_GRIP_DECLARED`）。
-    _LEDGER = ("MECHANISMS = [\n"
-               "    (\"甲\", \"X.adoc\", \"script/check_specs.py\",\n"
-               "     \"check_alpha_guard\", \"备注甲\"),\n"
-               "    (\"乙\", \"X.adoc\", \"script/check_specs.py\",\n"
-               "     \"check_beta_guard\", \"备注乙\"),\n"
-               "]\n")
-
-    def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
-        self.write("script/check_specs.py", src if src is not None else self._SRC)
-        self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
-        if test_file is None:
-            body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
-                           for i in range(tests))
-            test_file = ("import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
-        self.write("script/check_specs_test.py", test_file)
-        self.write("script/check_effective_test.py",
-                   "import unittest\n\n\nclass E(unittest.TestCase):\n"
-                   "    def test_x(self):\n        self.assertTrue(True)\n")
-        cm.GUARD_WIRING_BASELINE = 2
-        cm.GUARD_TEST_BASELINE = 5
-
-    def test_valid_passes(self):
-        # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
-        self._write_valid()
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_wiring_duplicate_registration_reports(self):
-        # 反例⑤（本轮实测失效）：同一道防线在 `CHECKS` 序列里**登记两次**——
-        # 条数被重复项凑够，掩盖了"真防线被删掉一道"（删掉的那道由重复项顶上，
-        # 接线数不掉、`check_guard_manifest` 与 `check_guard_order_guard` 都全绿）。
-        # 本轮 `check_pagination_guard` 正是这种形态：序列里一次、末尾又追加一次。
-        self._write_valid(src=self._SRC.replace(
-            "    check_beta_guard,\n",
-            "    check_beta_guard,\n    check_alpha_guard,\n"))
-        cm.check_guard_manifest()
-        self.assertIn("重复", self.error_texts())
-
-    def test_wiring_duplicate_hiding_removal_reports(self):
-        # 反例⑥（**重复登记判据自身的绕过路径**，本轮 review 复现）：把一道真防线连同
-        # 它的函数体、用例、台账声明一并删掉，再把**另一道仍存在的**防线重复登记一次，
-        # 使序列元素个数仍等于基线——此时"定义了却没被调用"那条报不出来（函数体已删）、
-        # "重复"那条又只说"写重了"，没有任何一条能指出"少了一道真防线"。
-        # 判据须让重复项**不计入**唯一防线数，故删一道 + 重复顶一道必然低于基线。
-        self._write_valid(src=self._SRC
-                          .replace("    check_alpha_guard,\n", "")
-                          .replace("def check_alpha_guard():\n"
-                                   '    """甲。"""\n'
-                                   '\n'
-                                   '\n', "")
-                          .replace("    check_beta_guard,\n",
-                                   "    check_beta_guard,\n    check_beta_guard,\n"))
-        cm.check_guard_manifest()
-        # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
-        self.assertIn("防线接线数从基线", self.error_texts())
-
-    def test_guard_unwired_reports(self):
-        # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
-        # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
-        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
-        cm.check_guard_manifest()
-        self.assertIn("防线接线数", self.error_texts())
-
-    def test_guard_defined_but_never_called_reports(self):
-        # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
-        # → 看起来还在、却永远不会执行
-        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
-        cm.check_guard_manifest()
-        self.assertIn("check_beta_guard", self.error_texts())
-
-    def test_tests_removed_without_note_reports(self):
-        # 反例②：反例用例被整批删掉（防线随之失效力）→ 用例数减少必须报红
-        self._write_valid(tests=1)
-        cm.check_guard_manifest()
-        self.assertIn("反例用例数", self.error_texts())
-
-    def test_ledger_names_missing_guard_reports(self):
-        # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
-        self._write_valid(ledger=self._LEDGER.replace("check_beta_guard",
-                                                      "check_gone_guard"))
-        cm.check_guard_manifest()
-        self.assertIn("check_gone_guard", self.error_texts())
-
-    def test_checklist_gap_reports(self):
-        # 反例④：脚本头部清单出现断号（条目被整条删掉）→ 清单描述不参与一致性核对、
-        # 写死不报红（本仓库实测），故按编号连续性核对
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 2. 乙\n 4. 丙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("断号", self.error_texts())
-
-    def test_checklist_duplicate_number_reports(self):
-        # 反例⑤：清单编号出现**重号**（重排时把两条并成同一个号）→ 只核"有没有断号"时
-        # 两种写法都能过：编号仍是连通的 1..N，而"第 3 项"同时指向两条条目——本仓库实测
-        # （新增「防线清单与删除记账」时把原有的「性能测试防线」也编成 27，此后编号所指的
-        # 那一项随重排静默错位）。故按**严格递增**核对。
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 2. 乙\n 2. 丙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("重号", self.error_texts())
-
-    def test_checklist_out_of_order_number_reports(self):
-        # 反例⑤b：编号**乱序**（既无断号也无重号，但文件里的出现次序不是递增的）——
-        # 新条目被插到了编号更小的条目之前。这是断号与重号两条判据都拦不住的形态：集合仍是
-        # 1..N 齐备，只是次序错了。本仓库实测（PR #156）：新增的第 63 条被插在第 60 条之前，
-        # 清单次序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`，当时全绿。
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 3. 丙\n 4. 丁\n 2. 乙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("乱序", self.error_texts())
-
-    def test_ledger_without_declaration_reports(self):
-        # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字
-        # 可以靠把备注里的防线名删掉来维持（删名字比删防线容易得多），读者却以为还有抓手。
-        # 故声明为必填：缺了即报红（旧实现只核"点名的名字存在"，没点名就没核对）。
-        self._write_valid(
-            ledger=self._LEDGER.replace(
-                '     "check_beta_guard", "备注乙"),\n', '     "check_beta_guard"),\n'))
-        cm.check_guard_manifest()
-        self.assertIn("未声明抓手", self.error_texts())
-
-    def test_ledger_declares_no_grip_but_has_path_reports(self):
-        # 反例⑦：条目声明为「无机械抓手」、却填了抓手路径 → 声明与实现不一致
-        self._write_valid(
-            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
-                                        '"%s", "备注乙"' % cm.NO_GRIP_DECLARED))
-        cm.check_guard_manifest()
-        self.assertIn("声明与实现不一致", self.error_texts())
-
-    def test_ledger_declares_guard_but_unwired_reports(self):
-        # 反例⑧：台账声明的防线**定义了却没人调用** → 它看起来还在、却永远不会执行；
-        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出执行序列"形态）
-        self._write_valid(
-            src=self._SRC.replace("    check_beta_guard,\n", ""),
-            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
-                                        '"check_beta_guard", "备注乙"'))
-        cm.check_guard_manifest()
-        self.assertIn("check_beta_guard", self.error_texts())
-
-    def test_missing_script_reports(self):
-        # 反例⑤：防线清单本体被删 → 无从核对
-        self._write_valid()
-        os.remove(os.path.join(self.root, "script", "check_specs.py"))
-        cm.check_guard_manifest()
-        self.assertIn("check_specs.py", self.error_texts())
-
-    def test_entry_block_in_middle_reports(self):
-        # 反例⑨（本轮 main 上实测的缺口）：测试文件的 `if __name__ == "__main__":` 落在
-        # **中段**，其后仍有缩进的 `def test_`（块内局部函数）——源码正则数得到、`unittest`
-        # 收集不到。本仓库祖先提交 `8802613` 的真实形态：`unittest.main` 在中段、其后 2 个
-        # 测试类从未执行，`Ran 897 tests` 而源码 899 个 `def test_`，脚本与基线全绿。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n        self.assertTrue(True)\n"
-            "\n\nif __name__ == \"__main__\":\n"
-            "    import unittest\n    unittest.main()\n"
-            "\n    def test_injected_never_collected(self):\n"
-            "        self.assertTrue(True)\n"))
-        cm.check_guard_manifest()
-        self.assertIn("中段", self.error_texts())
-
-    def test_emptied_test_case_reports(self):
-        # 反例⑩（本轮 main 上实测的缺口）：用例被**掏空成空壳**（这一节里一条断言都没有）
-        # ——总数基线只保证"数量不减少"，删一条加一条、或把用例掏空都能维持该数；
-        # 被抽空的反例仍会被收集、仍占着那个数，却什么都证不了。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n        pass\n"
-            "    def test_case_1(self):\n        self.assertTrue(True)\n"
-            "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
-        cm.check_guard_manifest()
-        self.assertIn("没有任何断言", self.error_texts())
-
-    def test_same_name_deleted_in_one_class_kept_in_another_passes_by_name(self):
-        # 反例⑪（本轮 main 上实测的缺口）：用例名**跨类复用**——类 A 的那条被删、类 B 的
-        # 同名用例仍留。只记"名字"的口径看不见这个动作（名字仍在集合里、计数也够），
-        # 故清单按 `类名.用例名` 限定；此处正例确认"同名分居两类"会被算成两条。
-        src = ("import unittest\n\n\nclass A(unittest.TestCase):\n"
-               "    def test_same(self):\n        self.assertTrue(True)\n"
-               "\n\nclass B(unittest.TestCase):\n"
-               "    def test_same(self):\n        self.assertTrue(True)\n")
-        names = cm._collectable_test_names("script/check_specs_test.py", src)
-        self.assertEqual({"A.test_same", "B.test_same"}, names)
-
-
-class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
-    """钉住『模板类内容的单独归类』防线：判据本体 + 两处登记/引用不得被删或降级。
-
-    用户要求（Issue #169）："有一些规范，属于要么不读、要么读全部的，比如代码模板……
-    不要和其他内容放一起，放一起浪费上下文……大部分情况下需要的时候读一下就行，甚至可以不读，
-    直接 copy 就行；这些代码模板最好各自也独立（除非有关联性或者内容不多拆开反而麻烦）"。
-
-    **落点分三层**（判据本体在**维护方自查层**——它描述"规范集合自己怎么组织"，对引用方
-    项目不成立）：① `specs-project-maintainer/spec-lifecycle.adoc` 承载归类判据、不得混放、
-    「各自独立 + 例外」与判定标准；② `AGENTS.adoc` 登记该落点（维护方入口是加载点，缺则
-    执行者读不到这套判据）；③ `specs/general/context.adoc`「生成效率」留公共侧一跳引用。
-
-    **重点拦两种形态**：① 只核"这一节在不在"（轴名齐全、判据被抽走——「什么算模板类内容」
-    的判定标准、不得混放的判定标准、「各自独立」的例外任一被抽掉必须报红）；② **把判据本体
-    抄进公共内容**（那是维护方的组织口径，写进 `specs/` 即同一条规则两处真源）。
-    """
-
-    MAINT = (
-        "= 规范集合的维护（维护方自查）\n\n"
-        "== 要么不读、要么读全部的规范（模板类内容的单独归类）\n\n"
-        "**归类判据（L1，先判再动手）**：一条内容若「要用就得整份取用、平时不必常备」，"
-        "它属本节所指的**模板类内容**——典型是**代码模板**。"
-        "**判定标准（任一命中即属模板类内容）**：① 取用形态是**复制**；"
-        "② 判据**要么不读、要么读全部**；③ 取值**独立于上下文**。"
-        "三条都不命中即普通规范条目。\n\n"
-        "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
-        "同一个落点、也不与**常驻层**放在一起。\n"
-        "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；② 落在**常驻层**；"
-        "③ 加载触发方式与规则条目共用。\n"
-        "* **模板最好各自独立（L2）**：例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。\n"
-        "* **依据（标准名/编号）**：Agent Skills 开放规范（渐进披露）、"
-        "ISO/IEC Directives Part 2（文件须便于按现行版本取用）。\n")
-
-    ENTRY = (
-        "* **分类、分层与准入**：……用户提新增规范时的提案校验，以及**模板类内容的归类与单独落点**"
-        "（「要么不读、要么读全部」的内容不与规则混放）见 "
-        "`specs-project-maintainer/spec-lifecycle.adoc`。\n")
-
-    COMMON = (
-        "== 生成效率（同等质量下最少往返）\n\n"
-        "* **按需加载按文件切分、单文件别太大（L2）**：……**模板类内容（要用就得整份取用、"
-        "平时不必常备）另按「要么不读、要么读全部」单独归类**：不与「每次会话要遵守的规则」混放、"
-        "各自独立成篇（判据与例外属维护方自查层，本处不重复）。\n")
-
-    def _write(self, maint=None, entry=None, common=None) -> None:
-        self.write("specs-project-maintainer/spec-lifecycle.adoc",
-                   maint if maint is not None else self.MAINT)
-        self.write("AGENTS.adoc", entry if entry is not None else self.ENTRY)
-        self.write("specs/general/context.adoc",
-                   common if common is not None else self.COMMON)
-
-    def test_valid_passes(self):
-        self._write()
-        cm.check_template_separation_guard()
-        self.assertEqual([], cm.errors)
-
-    def test_spec_file_removed_reports(self):
-        # 反例①：判据真源文件被删 -> 该条无处承载
-        self.write("AGENTS.adoc", self.ENTRY)
-        self.write("specs/general/context.adoc", self.COMMON)
-        cm.check_template_separation_guard()
-        self.assertIn("spec-lifecycle.adoc", self.error_texts())
-
-    def test_section_removed_reports(self):
-        # 反例②：该节被整节删掉 -> 判据失去落点
-        self._write(maint="= 规范集合的维护（维护方自查）\n\n== 准入判定\n\n* 略。\n")
-        cm.check_template_separation_guard()
-        self.assertIn("要么不读、要么读全部", self.error_texts())
-
-    def test_criteria_stripped_but_axis_present_reports(self):
-        # 反例③（**轴名齐全、判据被抽走**的反例本体）：小节名与"归类判据"字样都在，
-        # 但"什么算模板类内容"的**三条判定标准**被抽走 —— 只核轴名会全绿，
-        # 执行者于是把任意内容按自己方便归类。
-        self._write(maint=self.MAINT.replace(
-            "**判定标准（任一命中即属模板类内容）**", "**说明**"))
-        cm.check_template_separation_guard()
-        self.assertIn("判定标准", self.error_texts())
-
-    def test_mixing_rule_removed_reports(self):
-        # 反例④：把"不得与其他规则混放"删掉（用户口径的正题）-> 模板会继续被塞进主题文件
-        self._write(maint=self.MAINT.replace(
-            "* **代码模板不与其他规则混放（L1）**：不得与「每次会话要遵守的规则」写在"
-            "同一个落点、也不与**常驻层**放在一起。\n", ""))
-        cm.check_template_separation_guard()
-        self.assertIn("混放", self.error_texts())
-
-    def test_mixing_criteria_removed_reports(self):
-        # 反例⑤：混放的三条判定标准被抽走 -> "混没混放"回到评判者手里
-        self._write(maint=self.MAINT.replace(
-            "* **判定标准（任一命中即违规）**：① 写在**同一节或同一文件**里；"
-            "② 落在**常驻层**；③ 加载触发方式与规则条目共用。\n", ""))
-        cm.check_template_separation_guard()
-        self.assertIn("混放", self.error_texts())
-
-    def test_independence_exception_removed_reports(self):
-        # 反例⑥：把「各自独立」的**例外**删掉（用户原话即带这个例外）-> 会把"独立"读成
-        # 硬性要求、逼出为达标而拆的空壳（与"默认不拆"取向相反）
-        self._write(maint=self.MAINT.replace(
-            "例外：**有关联性**、**内容不多**拆开反而麻烦时可不拆。", "。"))
-        cm.check_template_separation_guard()
-        self.assertIn("关联性", self.error_texts())
-
-    def test_entry_registration_removed_reports(self):
-        # 反例⑦：维护方入口没登记该落点 -> 判据齐备但没有入口（执行者读不到）
-        self._write(entry="* **分类、分层与准入**：见 spec-lifecycle.adoc。\n")
-        cm.check_template_separation_guard()
-        self.assertIn("AGENTS.adoc", self.error_texts())
-
-    def test_common_xref_removed_reports(self):
-        # 反例⑧：公共侧一跳引用被删 -> 引用方项目只看到"按文件切分"、无从知道模板另有归类
-        self._write(common="== 生成效率（同等质量下最少往返）\n\n* 略。\n")
-        cm.check_template_separation_guard()
-        self.assertIn("context.adoc", self.error_texts())
-
-
-
-
-class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
-    """钉住『方法名与逻辑删除的对应』防线（用户提出，Issue #184）。
-
-    用户原话："未使用 mybatis plus 逻辑删除时，没有前缀后缀的方法名默认查询且不带删除标志，
-    如果要查询已删除/未删除（带了删除标志的条件）的数据时，要带特征；使用 mybatis plus
-    逻辑删除时（因为会默认带删除标志），没有前缀后缀的方法名默认查询逻辑删除数据，如果要查询
-    已删除和忽略删除标志的数据时，要带特征。不仅限 mybatis plus，其他类似的也生效（自己实现
-    的逻辑删除逻辑和框架也算），适用所有语言"。
-
-    反例逐组覆盖：默认面怎么定被抽 / 非默认面特征词被抽 / 判定标准被抽 / 理由被抽 /
-    默认面例外被抽 / 边界被抽 / 存量边界被抽 / 依据行被整行删 / Java 落点缺框架专名 /
-    图书馆未登记取舍。
+class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
+    """钉住『链式赋值顺序随字段顺序』防线（用户提出，Issue #190）。
+
+    用户原话："链式调用时，比如赋值，顺序 和字段、数据库顺序保持一致"。
+
+    核对对象一律是**条目/行自己的正文**（`bullet_tokens` / `line_tokens`）：本道防线的
+    三个判定点（依据行、判定标准、例外、存量边界）在**同一节/同一文件的相邻条目**里
+    都有同样字样，按整节或整份文件核时它们会把缺项兜住。故用例分两类：
+
+    * 抽掉要点（`test_*_removed_reports`）——逐项核锚点仍在；
+    * **要求被反向/条目被掏空/整条移出该节**（`test_*_reversed_reports`、
+      `test_bullet_present_but_hollow_reports`、`test_rule_moved_out_of_section_reports`）
+      ——这三个形态是旧写法（`section_groups` / `file_groups`）实际漏放的，是本轮返工的
+      立项依据，任一回归即报红。
     """
 
     CODING = "specs/general/coding.adoc"
     JAVA = "specs/stack/java.adoc"
+    TEMPLATE = "specs/stack/java-object.adoc"
     ADOPTION = "library/adoption.adoc"
-    SECTION = "持久化访问（数据库/缓存等）"
+    COMMON = "AGENTS_COMMON.adoc"
+    SECTION = "命名与代码质量"
 
     def setUp(self) -> None:
         super().setUp()
@@ -16361,120 +16604,190 @@ class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
             self.CODING_TEXT = fh.read()
         with open(self.JAVA, encoding="utf-8") as fh:
             self.JAVA_TEXT = fh.read()
+        with open(self.TEMPLATE, encoding="utf-8") as fh:
+            self.TEMPLATE_TEXT = fh.read()
         with open(self.ADOPTION, encoding="utf-8") as fh:
             self.ADOPTION_TEXT = fh.read()
+        with open(self.COMMON, encoding="utf-8") as fh:
+            self.COMMON_TEXT = fh.read()
+        # 调度器落点取模块常量（每个用例的临时根不同），不硬编码仓库根相对路径
+        self.COMMON = os.path.relpath(cm.GENERIC_FILE, self.root)
 
     def tearDown(self) -> None:
         cm.CODING_FILE = self._orig_coding
         cm.JAVA_STACK_FILE = self._orig_java
         super().tearDown()
 
-    def _write_coding(self, text: str) -> None:
-        self.write(self.CODING, text)
-
     def _write_all_valid(self) -> None:
-        self._write_coding(self.CODING_TEXT)
+        self.write(self.CODING, self.CODING_TEXT)
         self.write(self.JAVA, self.JAVA_TEXT)
+        self.write(self.TEMPLATE, self.TEMPLATE_TEXT)
         self.write(self.ADOPTION, self.ADOPTION_TEXT)
-        # `run_rule_guard` 按**阶段**去重（同一阶段内同名防线只跑一遍），而每个用例都
-        # 自成一个阶段（`phase()` 会清空去重集）——这里显式清一次只是让"同一用例里重复
-        # 调用防线"也按最新夹具核对（防御性，与 `REPO_SCRIPT_SRC_CACHE` 同理）。
+        self.write(self.COMMON, self.COMMON_TEXT)
         cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard(self) -> None:
+        """只跑本道防线（`run_rule_guard` 有阶段内去重，故先清去重集合）。"""
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_chain_assignment_order_guard()
 
     def _mutated_coding(self, removed: str, replacement: str = "") -> None:
         self.assertIn(removed, self.CODING_TEXT)
         self._write_all_valid()
-        self._write_coding(self.CODING_TEXT.replace(removed, replacement))
+        self.write(self.CODING, self.CODING_TEXT.replace(removed, replacement))
 
-    def _write_coding_without_line(self, anchor: str) -> None:
-        """删掉含 `anchor` 的那一行（依据行一类"整行"判据）。"""
-        lines = self.CODING_TEXT.split("\n")
-        hit = [i for i, ln in enumerate(lines) if anchor in ln]
-        self.assertEqual(1, len(hit))
-        del lines[hit[0]]
-        self._write_all_valid()
-        self._write_coding("\n".join(lines))
+    def _bullet_lines(self, start: str, end: str) -> tuple:
+        """切出临时文档里 `start` 打头的那一条正文（到 `end` 打头的下一条为止）。"""
+        i = self.CODING_TEXT.index(start)
+        j = self.CODING_TEXT.index(end, i)
+        return i, j
 
     def test_valid_passes(self):
         # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿（锚点与文档脱节时先在这一条暴露）
         self._write_all_valid()
-        cm.check_logical_delete_naming_guard()
+        cm.check_chain_assignment_order_guard()
         self.assertEqual("", self.error_texts())
 
-    def test_default_face_rule_removed_reports(self):
-        # 反例①：默认面"取该技术是否自动附加"被抽 -> 默认面退回"约定俗成的那一面"
-        self._mutated_coding("**默认面取该技术是否自动附加删除标志条件**", "默认面即习惯用法")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("默认面取该技术是否自动附加删除标志条件", self.error_texts())
+    def test_rule_removed_reports(self):
+        # 反例①：条文（含 L1 标注）被抽 -> 「顺序怎么写都行」重新成立
+        self._mutated_coding("链式赋值顺序随字段顺序（L1，任何语言）", "关于顺序的说明")
+        self._run_guard()
+        # 条文名被改后连 bullet 锚点都取不到，报错形态是"条目丢失"（与条款被删等价）
+        self.assertIn("链式赋值顺序随字段顺序", self.error_texts())
 
-    def test_feature_word_removed_reports(self):
-        # 反例②：非默认面须带特征词被抽 -> "查已删也顺手叫 list()"重新成立
-        self._mutated_coding("**方法名须带该面的特征词**", "注意区分")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("方法名须带该面的特征词", self.error_texts())
+    def test_requirement_inverted_reports(self):
+        # 反例②：条文还在、**要求被反向**（写成「书写顺序与字段顺序无关」）-> 须报
+        self._mutated_coding("**书写顺序须与字段顺序一致**", "**书写顺序不作要求**")
+        self._run_guard()
+        self.assertIn("**书写顺序须与字段顺序一致**", self.error_texts())
 
-    def test_criteria_removed_reports(self):
-        # 反例③：判定标准被抽 -> 本条自身不可判定，只剩一句口号
-        self._write_all_valid()
-        text = self.CODING_TEXT.replace("**判定标准（任一命中即违规）**：① 不带删隐面特征词的方法名查询了", "补充说明：")
-        self.assertNotEqual(self.CODING_TEXT, text)
-        self._write_coding(text)
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("判定标准（任一命中即违规）", self.error_texts())
+    def test_field_order_xref_removed_reports(self):
+        # 反例③：字段顺序的回指被抽 -> 本条自成第二个次序来源，两条规则各自漂移
+        self._mutated_coding("其他类**按「接口/类/注解成员排序」取该类的成员次序", "其他类按本条的次序")
+        self._run_guard()
+        self.assertIn("接口/类/注解成员排序", self.error_texts())
 
     def test_reason_removed_reports(self):
-        # 反例④：理由（删隐面只能从技术配置反推）被抽 -> 本条的级别与处置会被降级
-        self._mutated_coding("**删隐面只能从技术配置反推、读代码的人与评审者都无从预期**", "不太直观")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("无从预期", self.error_texts())
+        # 反例④：理由（赋值再排一次序即第二真源、次序漂移不报错）被抽 -> 级别与处置会被降级
+        self._mutated_coding("同一份字段清单的第二个来源", "多写一遍更清楚")
+        self._run_guard()
+        self.assertIn("同一份字段清单的第二个来源", self.error_texts())
 
-    def test_project_default_exception_removed_reports(self):
-        # 反例⑤：默认面的唯一例外被抽 -> 同一项目里按各实体配置各算一套
-        self._mutated_coding("项目自身规范或该项目既有先例已明确", "另有规定时")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("先例", self.error_texts())
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._mutated_coding("**判定标准（任一命中即违规）**：① 同一处构建的赋值环节次序与字段顺序不一致",
+                             "补充说明：① 尽量保持一致")
+        self._run_guard()
+        self.assertIn("**判定标准（任一命中即违规）**", self.error_texts())
+
+    def test_exception_removed_reports(self):
+        # 反例⑥：语义例外被抽 -> 覆盖赋值/依赖前值的写法被误判成违规
+        self._mutated_coding("**执行次序决定语义**", "特殊情况下")
+        self._run_guard()
+        self.assertIn("**执行次序决定语义**", self.error_texts())
 
     def test_boundary_removed_reports(self):
-        # 反例⑥：边界被抽 -> 本条被读成"所有方法名都要加后缀"
-        self._mutated_coding("**只**约束**按实体/表做查询的方法名**", "适用于所有方法名")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("按实体/表做查询的方法名", self.error_texts())
+        # 反例⑦：边界被抽 -> 被读成「必须补全所有字段」「必须拆成中间变量」
+        self._mutated_coding("不要求为满足本条的次序而多写一次赋值", "视情况处理")
+        self._run_guard()
+        self.assertIn("不要求为满足本条的次序而多写一次赋值", self.error_texts())
 
     def test_migration_boundary_removed_reports(self):
-        # 反例⑦：存量边界（不得全库改名）被抽 -> 等于要求立刻批量重写既有方法名
-        self._mutated_coding("**且不得据本条做全库改名**", "")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("不得据本条做全库改名", self.error_texts())
+        # 反例⑧：存量边界（不发动全库重排）被抽 -> 等于要求立刻批量重排既有构建语句
+        self._mutated_coding("改到哪处才顺带调整该处的次序", "")
+        self._run_guard()
+        self.assertIn("改到哪处才顺带调整该处的次序", self.error_texts())
 
     def test_basis_line_removed_reports(self):
-        # 反例⑧：依据行被整行删掉 -> 读者把本集合的取舍当成标准要求；
-        #          按整个二级节取值时相邻条目的同义字样会兜住缺项，故须按小节取值
-        self._write_coding_without_line("**\"默认面随技术是否自动附加删除标志条件而变")
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("本集合的判据化取舍", self.error_texts())
+        # 反例⑨：依据行/取舍声明被抽 -> 读者把本集合的取舍当成标准要求
+        self._mutated_coding("**「赋值顺序随字段顺序」是本集合的判据化取值**", "通行做法")
+        self._run_guard()
+        self.assertIn("本集合的判据化取值", self.error_texts())
+
+    def test_rule_moved_out_of_section_reports(self):
+        """反例⑩：整条移出「命名与代码质量」节 -> 须报。
+
+        旧写法（`section_groups`）把核对对象取成**整个二级节**，本条移出该节后
+        依据行/判定标准/例外/存量边界等字样仍在同节相邻条目里命中，实测**多项一条不报**。
+        """
+        self._write_all_valid()
+        lines = self.CODING_TEXT.splitlines(keepends=True)
+        idx = next(i for i, ln in enumerate(lines)
+                   if ln.startswith("* **链式赋值顺序随字段顺序（L1，任何语言）**"))
+        self.write(self.CODING, "".join(lines[:idx] + lines[idx + 1:] + [lines[idx]]))
+        self._run_guard()
+        self.assertIn("链式赋值顺序随字段顺序", self.error_texts())
+
+    def test_bullet_present_but_hollow_reports(self):
+        """反例⑪：条目还在、要点被抽空成一句空话 -> 须报。"""
+        self._write_all_valid()
+        keep = ("* **链式赋值顺序随字段顺序（L1，任何语言）**：链式调用里的**赋值环节**"
+                "按**字段顺序**书写，顺序怎么写都行。\n")
+        lines = self.CODING_TEXT.splitlines(keepends=True)
+        idx = next(i for i, ln in enumerate(lines)
+                   if ln.startswith("* **链式赋值顺序随字段顺序（L1，任何语言）**"))
+        self.write(self.CODING, "".join(lines[:idx] + [keep] + lines[idx + 1:]))
+        self._run_guard()
+        self.assertIn("本集合的判据化取值", self.error_texts())
 
     def test_java_landing_removed_reports(self):
-        # 反例⑨：Java 落点缺框架专名 -> MyBatis-Plus 侧的默认面无从判定
-        self.write(self.CODING, self.CODING_TEXT)
-        self.write(self.ADOPTION, self.ADOPTION_TEXT)
-        self.write(self.JAVA, self.JAVA_TEXT.replace("@TableLogic", "某个注解"))
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("TableLogic", self.error_texts())
+        # 反例⑫：Java 落点被抽 -> Java 执行者按栈文件学时仍会随手排
+        self._write_all_valid()
+        self.write(self.JAVA, self.JAVA_TEXT.replace("链式赋值顺序随字段顺序（L1）", "关于赋值顺序"))
+        self._run_guard()
+        self.assertIn("链式赋值顺序随字段顺序（L1）", self.error_texts())
+
+    def test_landing_rule_reversed_reports(self):
+        """反例⑬：Java 落点条文被**反向**（要求反转、载体名仍在）-> 须报。
+
+        旧写法（`section_groups`）按「编码」整节核：`@Accessors(chain = true)`/
+        `@SuperBuilder`/`字段声明次序` 在相邻条目（「成员与注解排序」「数据对象模板」）
+        里照样命中，实测本形态 **0 条报红**。
+        """
+        self._write_all_valid()
+        self.write(self.JAVA, self.JAVA_TEXT.replace(
+            "**赋值环节的书写顺序按字段声明次序**",
+            "赋值环节按**书写者顺手的次序**排列，**不要求**按字段声明次序"))
+        self._run_guard()
+        self.assertIn("**赋值环节的书写顺序按字段声明次序**", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例⑭：调度器识别特征被抽 -> 写链式赋值不会触发加载该条
+        self._write_all_valid()
+        self.write(self.COMMON, self.COMMON_TEXT.replace(
+            "链式调用**（含链式赋值、builder 链的赋值环节）", "链式调用**"))
+        self._run_guard()
+        self.assertIn("链式调用**（含链式赋值、builder 链的赋值环节）", self.error_texts())
+
+    def test_template_convention_removed_reports(self):
+        # 反例⑮：模板侧照抄约定被抽 -> 新建对象时真正被读的那一份里丢掉该约定
+        self._write_all_valid()
+        self.write(self.TEMPLATE, self.TEMPLATE_TEXT.replace("赋值环节按字段声明次序", "注意顺序"))
+        self._run_guard()
+        self.assertIn("赋值环节按字段声明次序", self.error_texts())
 
     def test_adoption_not_registered_reports(self):
-        # 反例⑩：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
-        self.write(self.CODING, self.CODING_TEXT)
-        self.write(self.JAVA, self.JAVA_TEXT)
-        self.write(self.ADOPTION, self.ADOPTION_TEXT.replace("方法名与逻辑删除的对应", "某条规则"))
-        cm.check_logical_delete_naming_guard()
+        # 反例⑯：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
+        self._write_all_valid()
+        self.write(self.ADOPTION, self.ADOPTION_TEXT.replace("链式赋值顺序随字段顺序", "某条规则"))
+        self._run_guard()
         self.assertIn("library/adoption.adoc", self.error_texts())
 
-    def test_subsection_missing_reports(self):
-        # 反例⑪：整个三级小节被删 -> 该条失去落点
+    def test_adoption_rule_hollowed_reports(self):
+        """反例⑰：图书馆登记被掏空成一句空话 -> 须报。
+
+        旧写法（`file_groups`）按**整份文件**核：三个锚点在同文件**别的条目**里反复
+        出现（分别 12 处 / 2 处 / 9 处），实测本形态 **0 条报红**。
+        """
         self._write_all_valid()
-        self._write_coding(self.CODING_TEXT.split("=== 方法名与逻辑删除的对应")[0])
-        cm.check_logical_delete_naming_guard()
-        self.assertIn("方法名与逻辑删除的对应", self.error_texts())
+        idx = self.ADOPTION_TEXT.index("* **「链式赋值顺序随字段顺序")
+        end = self.ADOPTION_TEXT.index("\n\n", idx)
+        hollow = ("* **「链式赋值顺序随字段顺序」是本集合自己的判据化取舍**：链式赋值顺序随"
+                  "字段顺序，本集合自己的判据化取舍，没有任何材料规定。\n")
+        self.write(self.ADOPTION, self.ADOPTION_TEXT[:idx] + hollow
+                   + self.ADOPTION_TEXT[end + 1:])
+        self._run_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
 
 
 class TestCheckPaginationGuard(CheckSpecsTestCase):

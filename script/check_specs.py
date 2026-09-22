@@ -3746,40 +3746,6 @@ def check_shared_cache_guard():
     phase_done()
 
 
-def check_readonly_landing_guard():
-    """『落点只读防线』：取规范副本的落点取完即**只读**，任何项目不得改动它。
-
-    用户口径（本 PR 新增，原话）："~/.cache/agent-specs 里的内容应该设置为只读，**不仅仅是
-    规范里定义，文件本身下载后要变成只读**，并严禁项目修改此文件夹内容"。
-
-    本条的重点正是**"不止是规范里写一条"**：两处都要核、互不替代——
-      * **脚本侧**（`script/fetch-specs.py`）：真的算权限位、真的调 `chmod` 把落点收紧成只读
-        （目录去掉写位＝不能在其中增删改名、文件只留读位）、落盘前只恢复本脚本所需的最小写位、
-        **`--keep` 下同样收紧**、**收紧失败不得静默**（只读挂载/Windows/非属主时权限位改不动，
-        那时须如实警告而不是照旧打「落点已设为只读」）；
-      * **规范侧**（`AGENTS_COMMON.adoc`「取规范到本地副本」+ 入口模板）：写明"落点只读"与
-        "严禁任何项目改动它"，并写明**只读由本机文件系统保证**（新实例是从复制到项目里的
-        入口文档读到这件事的）。
-
-    只核规范文本时落点仍可写、项目照旧能就地改规范副本——那正是用户点名要补的那一半
-    （"不仅仅是规范里定义"）；只核脚本时读者不知道这件事、会把落点当成自己可写的便利目录。
-    规则与锚点在 `script/specs-rules/readonly-landing.toml`，本函数只留接线。
-    "某个项目到底有没有改过落点"属运行时事实（本仓库看不到引用方的工作区），
-    交本机文件系统与实测复核（只读位让这件事从"看不出来"变成"当场失败"）。
-    """
-    phase("落点只读防线检查")
-    rel_py = os.path.relpath(os.path.join(REPO_ROOT, "script", "fetch-specs.py"),
-                             REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "fetch-specs.py")):
-        err(f"缺失 {rel_py}——取文件的抓手不在，「落点取完即只读」这件事无处执行"
-            "（规范里写一条只读不改本机权限，落点仍是可写的）", rel_py)
-    if not os.path.isfile(GENERIC_FILE):
-        err(f"缺失 {os.path.relpath(GENERIC_FILE, REPO_ROOT)}——"
-            "落点只读与「严禁项目改动」的判据无处承载", INSTALL_REL)
-    run_rule_guard("check_readonly_landing_guard")
-    phase_done()
-
-
 ENTRY_PLACEHOLDER_LINES = (
     (("优先取到本地副本", "避免网络原因无法访问"),
      "入口占位须保留『优先取到本地副本（避免网络原因无法访问）』这条要求（用户在 PR 上点名过）"
@@ -4157,7 +4123,16 @@ def check_install_repeat_update_guard():
 #   **review 补齐（同一 PR 内）**：接线数不变（仍是 111，未加新防线），只把本道的
 #   规则数据与用例补到"能被坏形态触发"——新增两组锚点（`--keep` 下同样收紧、
 #   收紧失败不得静默），用例数随 `GUARD_TEST_BASELINE` 同步。
-GUARD_WIRING_BASELINE = 111
+# **本轮（Issue #190「链式赋值顺序随字段顺序」）记账**：`check_chain_assignment_order_guard`
+#   新增一位，接线数 **110 → 112**（#186 的 110→111 与 #190 的 110→111 是**两条并行的账**：
+#   两支都按"自己那一支 +1"记账，合并后须相加，不是 111）。
+# **本轮（本 PR 返工：补"返工基点"动作侧防线）记账**：接线数 **112 → 113**——
+#   新增 `check_base_ancestor_guard`（动作侧：本分支的返工基点须是 HEAD 的祖先），
+#   插在 `check_merge_relationship_guard` 之后（文本侧 + 动作侧，两条互不替代）。
+#   `guards.adoc` 清单表同步为 113 行、编号 1..113 连续且与 `CHECKS` 逐一同序。
+#   **这一道正是本轮失效直接催生的**：原失效发生时全部防线报绿——所有防线都只读
+#   "工作区内容对不对"，没有一条读"基点对不对"。
+GUARD_WIRING_BASELINE = 113
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4368,6 +4343,7 @@ GUARD_WIRING_BASELINE = 111
 #   `test_batch_bailout_removed_reports`）。规则数据随之加两组锚点（网络层异常归一成 `OSError`、
 #   收尾不得被任何异常跳过），见 `script/specs-rules/readonly-landing.toml`。
 #   数字一律以 `_count_collectable_tests` 的实取值为唯一来源，不按两侧各自数目相加。
+#   **本轮（Issue #186「调整规范」/ #187 返工 / #190 链式赋值顺序）的三笔账，合并后逐笔都在**：
 #   **本轮（Issue #188「每次修改文件时，需要阅读要修改的位置」）**：接线数不变——
 #   **不增删防线**，新要求挂在既有 `check_dev_flow_guard` 上（新增一个判据对象的三级小节
 #   「要改的那一处是否已实际读过（改动面按处读）」+ 必加载层与自检清单两条落点回指）。
@@ -4378,7 +4354,26 @@ GUARD_WIRING_BASELINE = 111
 #   `check_effective_test.py` 新增 2 条。
 #   反例的判据是"抽掉后必须报红"，不是"断言能命中某串文本"——上一版曾有两条反例实测恒绿
 #   （断言命中的串同时出现在没被抽掉的那半句里，抽掉判据后照样全绿），本版按前者重写。
-GUARD_TEST_BASELINE = 1385
+#   **本 PR 返工（恢复被冲突解丢的 #186 内容 + 补返工基点防线）**：用例数在 #188 的
+#   **1385** 之上净增 23 条，**同源实取为 1408**（`_count_collectable_tests` 实测）——
+#   本道 18 条（`TestCheckChainAssignmentOrderGuard`，正例 1 + 反例 17）+ 返工基点防线
+#   5 条（`TestCheckBaseAncestorGuard`）；#186 那批四个测试类在本 PR 内为**恢复**
+#   （上一轮解冲突被连带删掉），不另计入净增。
+#   **两支各写 1374、合并后对不上**，正是因为解冲突时把 `TestFetchSpecsReadOnlyLanding` /
+#   `TestFetchSpecsPathBoundary` / `TestFetchSpecsTruncatedResponse` /
+#   `TestCheckReadonlyLandingGuard` 四个测试类连同 `import stat` 一起删掉了——
+#   `GUARD_TEST_BASELINE` **只核下限**，两支都把自己那一半与对方那一半混作一谈，故都报绿。
+#   **本轮（Issue #190「链式赋值顺序随字段顺序」返工）**：本道 18 条（正例 1 + 反例 17）——
+#   返工段在原有 13 条之上补 5 条**方向相反**的反例，逐项对应当轮实测漏放的形态：
+#   * 条文还在、要求被反向（`test_requirement_inverted_reports`）；
+#   * 整条移出该节（`test_rule_moved_out_of_section_reports`）；
+#   * 条目还在、要点被抽空成一句空话（`test_bullet_present_but_hollow_reports`）；
+#   * Java 落点条文被反向（`test_landing_rule_reversed_reports`）；
+#   * 图书馆登记被掏空（`test_adoption_rule_hollowed_reports`）。
+#   这五条是**旧写法确实漏放的形态**（核对对象取"整个二级节 / 整份文件"时，锚点在相邻
+#   条目与别条目里照样命中，故全绿），任一回归即报红。
+#   **真实基线数由测量定**：合并后仍以 `_count_collectable_tests` 实取值为唯一来源。
+GUARD_TEST_BASELINE = 1408
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -10033,6 +10028,69 @@ def check_deprecated_api_guard():
     phase_done()
 
 
+def check_readonly_landing_guard():
+    """『落点只读防线』：取规范副本的落点取完即**只读**，任何项目不得改动它。
+
+    用户口径（本 PR 新增，原话）："~/.cache/agent-specs 里的内容应该设置为只读，**不仅仅是
+    规范里定义，文件本身下载后要变成只读**，并严禁项目修改此文件夹内容"。
+
+    本条的重点正是**"不止是规范里写一条"**：两处都要核、互不替代——
+      * **脚本侧**（`script/fetch-specs.py`）：真的算权限位、真的调 `chmod` 把落点收紧成只读
+        （目录去掉写位＝不能在其中增删改名、文件只留读位）、落盘前只恢复本脚本所需的最小写位、
+        **`--keep` 下同样收紧**、**收紧失败不得静默**（只读挂载/Windows/非属主时权限位改不动，
+        那时须如实警告而不是照旧打「落点已设为只读」）；
+      * **规范侧**（`AGENTS_COMMON.adoc`「取规范到本地副本」+ 入口模板）：写明"落点只读"与
+        "严禁任何项目改动它"，并写明**只读由本机文件系统保证**（新实例是从复制到项目里的
+        入口文档读到这件事的）。
+
+    只核规范文本时落点仍可写、项目照旧能就地改规范副本——那正是用户点名要补的那一半
+    （"不仅仅是规范里定义"）；只核脚本时读者不知道这件事、会把落点当成自己可写的便利目录。
+    规则与锚点在 `script/specs-rules/readonly-landing.toml`，本函数只留接线。
+    "某个项目到底有没有改过落点"属运行时事实（本仓库看不到引用方的工作区），
+    交本机文件系统与实测复核（只读位让这件事从"看不出来"变成"当场失败"）。
+    """
+    phase("落点只读防线检查")
+    rel_py = os.path.relpath(os.path.join(REPO_ROOT, "script", "fetch-specs.py"),
+                             REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "fetch-specs.py")):
+        err(f"缺失 {rel_py}——取文件的抓手不在，「落点取完即只读」这件事无处执行"
+            "（规范里写一条只读不改本机权限，落点仍是可写的）", rel_py)
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺失 {os.path.relpath(GENERIC_FILE, REPO_ROOT)}——"
+            "落点只读与「严禁项目改动」的判据无处承载", INSTALL_REL)
+    run_rule_guard("check_readonly_landing_guard")
+    phase_done()
+
+
+def check_chain_assignment_order_guard():
+    """『链式赋值顺序随字段顺序』防线：判据本体不得被删、不得降级、不得自成第二真源。
+
+    用户要求（Issue #190，原话）："链式调用时，比如赋值，顺序 和字段、数据库顺序保持一致"。
+
+    落点：判据跨语言（链式 setter、builder 链、具名参数都属"赋值环节"），故判据本体唯一
+    落点在 `specs/general/coding.adoc`「命名与代码质量」；Java 的赋值载体（`@Accessors
+    (chain = true)` 的链式 setter、`@SuperBuilder` 的 builder 链）与模板文件的照抄约定
+    各自落点。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一条"属防线空转——**字段顺序取哪两处**（回指既有两条、不另定）、赋值再排一次
+    序即第二真源这一理由、判定标准、语义例外、边界与存量边界任一被抽走时照样全绿。
+    故逐组核 `script/specs-rules/coding.toml` 里的锚点；"这次构建算不算同一处 / 某两次赋值
+    的先后算不算语义相关"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("链式赋值顺序防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「链式赋值顺序随字段顺序」的判据无处承载"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——「链式赋值顺序随字段顺序」的 Java 落点（链式 setter 与 "
+            "builder 链）无处承载", rel_java)
+    run_rule_guard("check_chain_assignment_order_guard")
+    phase_done()
+
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -10673,6 +10731,78 @@ def check_merge_relationship_guard():
                     "『解决冲突/压缩后目标分支仍须是本分支的祖先』的底线，不得删除、"
                     "不得降级为建议（L1）", rel)
 
+def check_base_ancestor_guard():
+    """『返工基点防线（动作侧）』：本仓库自身分支的返工基点**须是目标分支的后代**。
+
+    背景（本 PR 实证失效一次，用户点名）：本轮"解决冲突 + 压缩提交"时，执行者把本分支
+    **重建在更早的基点上**（`main` 已经前进了，本分支却从它之前的分叉点重来），于是
+    `main` 上**刚合入的整批改动（`#187` 的「落点取完即只读」）被静默回退**——8 个文件、
+    `readonly-landing.toml` 整份、`check_readonly_landing_guard` 及其 23 条用例。
+    而**当时全部防线都报绿**：`check_specs.py` OK、单测全通过、`check_effective.py`
+    130 条"缺失 0"。原因是**全部防线都只读"工作区内容对不对"，没有一条读"基点**对不对"**——
+    内容侧看不出发生过回退（回退后的工作区本身是自洽的），且 `check_merge_relationship_guard`
+    只核**平台层文本**（`specs/platform/cnb.adoc` 里写着那句话），核不到**本仓库这次动作**。
+
+    故本检查是文本侧之外的另一半，核一件**可机械核对的取值状态**（只读本仓库自身 git、
+    不碰平台）：**本次工作区相对"返工前同源分支"是否只在往前长**。取值形态：
+
+      * 若无参照 sha（非 CNB 环境、或平台未给），按**跳过**处理，绝不猜；
+      * 有参照 sha 时，参照 sha **须是本分支 HEAD 的祖先**（`git merge-base --is-ancestor`）；
+        不是祖先即说明本分支被重建成一条**不再包含参照点**的线——那正是"回退别人改动"
+        的机械特征，也是平台侧 `--is-ancestor <目标分支> <分支>` 为假的同一件事。
+
+    **为什么必须由机械兜底而不是靠 AI 自觉**（用户原话："靠 AI 自觉是不现实"）：
+    "解冲突时两边都留"这件事在内容侧**天然看不出来**——取一侧也编译得过、测试也全绿，
+    谁都没法从结果反推过程。规范条文（`specs/general/version-control.adoc`
+    「解决冲突后须核查是否丢失内容」）要求"两侧改动逐处并集"，但它**没有可核对的取值**：
+    "两侧分别改了什么"在被回退的工作区里已经不存在了。把判据落在**基点**上就有了取值——
+    基点还是不是祖先，是一句话能查、且不依赖执行者记忆的事实。
+
+    **效力边界**：本检查只在本仓库自身（拿到参照 sha）时发声；平台上直接改基点、且不给
+    参照 sha 时看不到——那一半与 `check_merge_state_guard` 同理，须靠平台侧保证。
+    """
+    phase("返工基点防线检查（动作侧）")
+    repo_root = _merge_state_guard_repo_root()
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        phase_done()
+        return
+
+    def _git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo_root,
+                                 capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout if out.returncode == 0 else None
+
+    # 参照点：**目标分支**在本次并发唤起时钉定的 sha（平台提供时才有意义）。
+    # 取的是 `CNB_PULL_REQUEST_TARGET_SHA`（平台给的目标分支基点）——不用源分支那个
+    # `CNB_PULL_REQUEST_SHA`（那是本分支自己的 HEAD，拿它当参照恒真、防线空转）。
+    ref = (os.environ.get("CNB_PULL_REQUEST_TARGET_SHA") or "").strip()
+    if not ref:
+        phase_done()
+        return
+    head = (_git("rev-parse", "HEAD") or "").strip()
+    if not head:
+        phase_done()
+        return
+    # 参照 sha 在本仓库里不存在（未取回、或平台给的是别的仓的 sha）时跳过，不猜。
+    if _git("cat-file", "-e", ref + "^{commit}") is None:
+        phase_done()
+        return
+    anc = _git("merge-base", "--is-ancestor", ref, "HEAD")
+    if anc is None:
+        err(f"返工基点被破坏：本次唤起时钉定的基点 `{ref[:8]}` **不是**当前分支 HEAD "
+            f"`{head[:8]}` 的祖先——本分支已被重建成一条不再包含该基点的线，"
+            "**基点之后合入的改动会整批静默回退**（本仓库实证：一次解冲突+压缩把 `main` 上"
+            "刚合入的一整批改动回退，而全部文本防线与单测仍全绿）。"
+            "**正确做法**：把返工做在**基点之上**（在现基点上继续提交、解冲突时两侧都留），"
+            "而不是把分支重建在更早的分叉点。取值形态＝`git merge-base --is-ancestor "
+            f"{ref[:8]} HEAD` 须为真（即 `specs/general/git.adoc`「压缩后的合并关系核对」"
+            "所说的『目标分支仍须是本分支的祖先』）", "git 基点")
+    phase_done()
+
+
 DELIVERY_GUARD_KEYS = (
     (("报告落点", "过程性叙述", "不得作为独立的一条评论", "答非所问"),
      "报告落点：过程性叙述不得作为独立评论发出（本轮实测失效：唯一对外的输出就是一条过程性废话）"),
@@ -10972,6 +11102,7 @@ CHECKS = (
     check_merge_state_guard,
     check_squash_commit_guard,
     check_merge_relationship_guard,
+    check_base_ancestor_guard,
     check_conflict_resolution_guard,
     check_scope_boundary_guard,
     check_config_class_guard,
@@ -10995,6 +11126,7 @@ CHECKS = (
     check_java_enum_valueof_catch_guard,
     check_pagination_guard,
     check_logical_delete_naming_guard,
+    check_chain_assignment_order_guard,
     check_persistence_access_guard,
     check_deprecated_api_guard,
     check_conversion_guard,
