@@ -423,6 +423,27 @@ MECHANISMS = [
      "靠实测与留证（本仓库按逐字节比对、`--keep`/刷新三态各跑一遍复核）"),
     ("多模块项目的模块间依赖须有完整依赖关系文档（UML 表述、查依赖先读它、缺失即新增、不重复声明）", "specs/general/doc-design.adoc", "script/check_specs.py",
      "check_dependency_view_guard", "check_dependency_view_guard 钉住「依赖关系文档（模块间依赖的唯一视图）」节的要点（完整 / UML 优先 / 固定路径可直达 / 先查本文档 / 缺失即新增 / 同提交同步 / 不重复声明 / 与构建工具边界）与两处指向（加载调度器、依赖规范）；『某个项目的依赖视图是否真的完整、有没有过期』语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("取规范副本的落点取完即只读、严禁任何项目改动它（不仅是规范里定义，文件本身也变只读）",
+     "AGENTS_COMMON.adoc", "script/check_specs.py",
+     "check_readonly_landing_guard",
+     "check_readonly_landing_guard 钉住两处、互不替代：① 脚本侧 `script/fetch-specs.py` **真的**算权限位"
+     "（`_READ_ONLY_FILE_MODE`/`_READ_ONLY_DIR_MODE`）并**真的**调 `chmod` 把落点收紧成只读"
+     "（`_make_read_only`）、落盘前只恢复本脚本所需的最小写位（`_ensure_writable`，故只读不挡"
+     "「默认以远程为准」的更新）、入口脚本保留执行位；② 规范侧 `AGENTS_COMMON.adoc`「取规范到"
+     "本地副本」与入口模板写明「落点只读」「严禁任何项目改动它」与「只读由本机文件系统保证」。"
+     "用户口径的重点是「**不仅仅是规范里定义，文件本身下载后要变成只读**」——只核文本时落点仍"
+     "可写、项目照旧能就地改规范副本。『某个项目到底有没有改过落点』属运行时事实"
+     "（本仓库看不到引用方的工作区），交本机文件系统与实测复核（只读位让它从『看不出来』变成"
+     "『当场失败』）；『有没有真的生效』可由端到端用例实测（只读树上的更新、非特权调用方的写入被拒、"
+     "`--no-scripts` 下入口执行位照旧恢复）；"
+     "**平台边界也核**（PR 返工）：`os.chmod` 在 Windows 上只切只读属性，故「目录去掉写位＝"
+     "不能在其中增删改名」这句**须带平台限定**——脚本头部「已知限制」、`_make_read_only` 的 "
+     "docstring 与规范侧三处都要写明，无条件断言会让 Windows 读者以为落点真被强制；"
+     "**收尾不得被异常跳过也核**（PR 第二遍返工）：`http.client` 的 `HTTPException`"
+     "（`IncompleteRead`/`BadStatusLine`）**不是** `OSError`，若不归一就穿过只 `except OSError` 的"
+     "取文件逻辑、把整脚本掀掉——那条「整棵树收紧成只读」的收尾一次都不跑，落点留在 `755`/`644` 的"
+     "可写态且毫无提示（一次网络抖动就让本防线收益归零），故 `fetch_text` 须把网络层异常归一成 "
+     "`OSError`，且取文件那一段须有兜底（单个文件任何异常都不得掀掉整批）"),
     ("入口占位须保留三要点：优先取到本地副本 / 取不到就直接读远程 / 需要最新规范时再运行一次即是更新",
      "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_shared_cache_guard",

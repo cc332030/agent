@@ -3746,6 +3746,40 @@ def check_shared_cache_guard():
     phase_done()
 
 
+def check_readonly_landing_guard():
+    """『落点只读防线』：取规范副本的落点取完即**只读**，任何项目不得改动它。
+
+    用户口径（本 PR 新增，原话）："~/.cache/agent-specs 里的内容应该设置为只读，**不仅仅是
+    规范里定义，文件本身下载后要变成只读**，并严禁项目修改此文件夹内容"。
+
+    本条的重点正是**"不止是规范里写一条"**：两处都要核、互不替代——
+      * **脚本侧**（`script/fetch-specs.py`）：真的算权限位、真的调 `chmod` 把落点收紧成只读
+        （目录去掉写位＝不能在其中增删改名、文件只留读位）、落盘前只恢复本脚本所需的最小写位、
+        **`--keep` 下同样收紧**、**收紧失败不得静默**（只读挂载/Windows/非属主时权限位改不动，
+        那时须如实警告而不是照旧打「落点已设为只读」）；
+      * **规范侧**（`AGENTS_COMMON.adoc`「取规范到本地副本」+ 入口模板）：写明"落点只读"与
+        "严禁任何项目改动它"，并写明**只读由本机文件系统保证**（新实例是从复制到项目里的
+        入口文档读到这件事的）。
+
+    只核规范文本时落点仍可写、项目照旧能就地改规范副本——那正是用户点名要补的那一半
+    （"不仅仅是规范里定义"）；只核脚本时读者不知道这件事、会把落点当成自己可写的便利目录。
+    规则与锚点在 `script/specs-rules/readonly-landing.toml`，本函数只留接线。
+    "某个项目到底有没有改过落点"属运行时事实（本仓库看不到引用方的工作区），
+    交本机文件系统与实测复核（只读位让这件事从"看不出来"变成"当场失败"）。
+    """
+    phase("落点只读防线检查")
+    rel_py = os.path.relpath(os.path.join(REPO_ROOT, "script", "fetch-specs.py"),
+                             REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "fetch-specs.py")):
+        err(f"缺失 {rel_py}——取文件的抓手不在，「落点取完即只读」这件事无处执行"
+            "（规范里写一条只读不改本机权限，落点仍是可写的）", rel_py)
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺失 {os.path.relpath(GENERIC_FILE, REPO_ROOT)}——"
+            "落点只读与「严禁项目改动」的判据无处承载", INSTALL_REL)
+    run_rule_guard("check_readonly_landing_guard")
+    phase_done()
+
+
 ENTRY_PLACEHOLDER_LINES = (
     (("优先取到本地副本", "避免网络原因无法访问"),
      "入口占位须保留『优先取到本地副本（避免网络原因无法访问）』这条要求（用户在 PR 上点名过）"
@@ -4115,7 +4149,15 @@ def check_install_repeat_update_guard():
 #   此前这里一度写 108 而常量已是 109）。
 #   **重复登记不计入**：同一道防线在序列里出现两次以上时，`_guard_wiring_count` 按唯一名
 #   计数——重复项不承载任何新判据，若能凑够条数，"删一道真防线 + 重复顶上一道"就无从发现。
-GUARD_WIRING_BASELINE = 110
+# **本轮（Issue #186「调整规范」）记账**：接线数 **110 → 111**——新增
+#   `check_readonly_landing_guard`（落点只读：脚本侧真的把落点收紧成只读 + 规范侧写明
+#   「落点只读、严禁项目改动」），插在 `check_shared_cache_guard` 之后；
+#   `guards.adoc` 清单表同步为 111 行、编号 1..111 连续且与 `CHECKS` 逐一同序。
+#   两处都是**净增**，无删除。用例数同源实取回填（见 `GUARD_TEST_BASELINE`）。
+#   **review 补齐（同一 PR 内）**：接线数不变（仍是 111，未加新防线），只把本道的
+#   规则数据与用例补到"能被坏形态触发"——新增两组锚点（`--keep` 下同样收紧、
+#   收紧失败不得静默），用例数随 `GUARD_TEST_BASELINE` 同步。
+GUARD_WIRING_BASELINE = 111
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4308,8 +4350,26 @@ GUARD_WIRING_BASELINE = 110
 #   在 `specs/general/coding.adoc`「持久化访问」的三级小节，框架专名在 `specs/stack/java.adoc`，
 #   图书馆 `library/adoption.adoc` 登记本集合取舍），配套 12 条用例（正例 1 + 反例 11）。
 #   新防线在 `CHECKS` 里插在 `check_pagination_guard` 之后 → 清单表 74 及其后序号顺延一位。
-#   `unittest` 收集数与本口径不同（收集面含同名用例的多次出现），故**不以 `Ran` 数为基线**。
-GUARD_TEST_BASELINE = 1356
+#   `unittest` 收集数与 `_count_collectable_tests` 的口径不同（收集面含同名用例的
+#   多次出现），故**不以 `Ran` 数为基线**。
+#   **本轮（Issue #186「调整规范」）**：用例数 **1356 → 1368**（按**同源实取**回填，
+#   口径＝`_count_collectable_tests` 的 `类名.用例名` 限定名去重）——新防线
+#   `check_readonly_landing_guard` 的 12 条（`TestCheckReadonlyLandingGuard`：正例 1 +
+#   反例 11，含 review 补齐的「`--keep` 下同样收紧」「收紧失败不得静默」两条）加端到端实测
+#   `TestFetchSpecsReadOnlyLanding` 的 4 条（只读树上的更新照旧生效、非特权调用方改不动
+#   落点、`--keep` 收回放开过的权限、收紧失败会被如实警告），按 `类名.用例名` 计。
+#   **本轮（PR #187 返工：平台边界、执行位、路径边界）**：同源实取为 **1368 → 1371**
+#   （净增 3 条反例：`TestCheckReadonlyLandingGuard` 的 `test_windows_boundary_removed_reports`、
+#   `test_platform_limit_missing_in_executor_reports`、`test_spec_platform_boundary_removed_reports`；
+#   另加端到端一条 `TestFetchSpecsReadOnlyLanding.test_entry_exec_bit_restored_even_with_no_scripts`
+#   与路径边界单测两条 `TestFetchSpecsPathBoundary.*`）。
+#   **本轮（PR #187 第二遍返工：网络层异常逃逸）**：同源实取为 **1371 → 1374** ——
+#   `TestFetchSpecsTruncatedResponse` 端到端 1 条（截断响应下脚本不得崩、落点仍须被收紧成只读）
+#   加 `TestCheckReadonlyLandingGuard` 的反例 2 条（`test_http_exception_not_normalized_reports`、
+#   `test_batch_bailout_removed_reports`）。规则数据随之加两组锚点（网络层异常归一成 `OSError`、
+#   收尾不得被任何异常跳过），见 `script/specs-rules/readonly-landing.toml`。
+#   数字一律以 `_count_collectable_tests` 的实取值为唯一来源，不按两侧各自数目相加。
+GUARD_TEST_BASELINE = 1374
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -10844,6 +10904,7 @@ CHECKS = (
     check_install_codeblock,
     check_spec_fetch_guard,
     check_shared_cache_guard,
+    check_readonly_landing_guard,
     check_entry_doc_manifest,
     check_install_repeat_update_guard,
     check_guard_manifest,
