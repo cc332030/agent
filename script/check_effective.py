@@ -202,6 +202,18 @@ MECHANISMS = [
      "script/check_specs.py",
      "check_java_serial_guard",
      "check_java_serial_guard 钉住三处判据本体（不是轴名——只核『这几节在不在』属防线空转）：① 序列化——已声明实现 `Serializable` 的类型**必须显式声明** `serialVersionUID`（含父类已实现）、`lombok.config` 实时取值、缺省 `1L`、`@Serial`（JDK 14+）、**不得为未实现者补字段或顺手加 `implements Serializable`**、不得以抑制代替显式声明、判定标准与存量口径、依据行含『1L 属本集合取值』；② 局部变量——**优先 `val`、确实可变才 `var`**（`var` 是例外档不是并列选项）、用 `var` 却没重新赋值即违规、例外与未引入 lombok 时按 `var` 兜底、字段不得使用、依据与『属本集合取值』定性；③ 链式调用——**一律换行、长度不是判据**、同行两处及以上环节即违规、例外、只改形态不改语义的边界、依据与『严于通行风格（按行宽）』定性；并钉调度器三处识别特征（含通用层『所有语言』）与图书馆两处依据落点。**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——裁量点（要不要加 UID / `val` 还是 `var` / 多短算短）留给临场发挥时，同一项目里会并存两种形态；『某个类该不该算已实现 `Serializable`、某条链是否真的拆到了每一环节』属语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("弃用类/API 一律改用替代者（替代者优先取升级类/同名新类），且默认不动依赖与版本",
+     "specs/general/coding.adoc「警告与弃用」+ specs/general/dependency.adoc「升级与废弃」",
+     "script/check_specs.py",
+     "check_deprecated_api_guard",
+     "check_deprecated_api_guard 钉住两处**同向**落点的判据本体（不是轴名——只核『警告与弃用』这一节在不在属防线空转）："
+     "① 代码侧 `coding.adoc`——**不得使用被弃用的类/API、须改用替代者**（标识弃用的形态：`@Deprecated`/`deprecated`/文档标注废弃）、"
+     "**替代者优先取升级后的新类、或同名新类**、判定标准三条（直接使用弃用者／以『旧写法也能跑』自我豁免／替代者选成同类弃用者）、"
+     "例外（替代者在依赖面内不存在时写明理由保持原状）与 **『默认不调整依赖、也不动依赖版本』**；"
+     "② 依赖侧 `dependency.adoc`——**弃用迁移默认不动依赖面**并回指 `coding.adoc`、判定标准（改动里出现依赖清单/版本变化却未走升级流程即违规）；"
+     "另**单独拦**『存量条（内部弃用不迁移）未写明不构成对新代码的豁免』——两条同处一节，后条抵消前条是最易发生的读法。"
+     "**本条防的不是『没写规则』而是『替代者取向被抽掉、或借迁移顺手改依赖版本』**——"
+     "『某个类算不算被弃用、某个替代者是否等价』属语义判断（见 GUARD_CHECK_LIMITS）"),
     ("Java 字段接口只加 get、不加 set（只约束接口；下游可能加 `@Accessors(chain = true)`，接口里的 setter 会让下游编译不过）",
      "specs/stack/java.adoc「编码」", "script/check_specs.py",
      "check_java_interface_accessor_guard",
@@ -362,7 +374,7 @@ MECHANISMS = [
      "无机械抓手",
      "无机械抓手：判据是语义判断（某个调用点算不算跨类调 `IService` 成员方法、某次查询算不算补充性单表查询——见 GUARD_CHECK_LIMITS），机械只核文本会空转、且与 `check_persistence_access_guard` 成第二真源，故不设机械抓手，靠遵守 + 人/子 agent 复核。原 `check_orm_boundary_guard` 已删（删除记账见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，按次序留档）」）"),
     ("持久化访问强制走统一入口与类型安全查询构造 API（不 new 构造器、不用字符串写列名）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_persistence_access_guard", "check_persistence_access_guard 钉住通用层「持久化访问（数据库/缓存等）」的三条 L1（统一入口／优先类型安全·声明式查询构造 API／替代优先）、可逐条核对的判定标准（构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止 mapper `*.xml` 承载）、存量随动迁移与依据行；Java 栈「持久化访问（MyBatis-Plus / JPA 等）」的四个 `IService` 成员方法（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate`）、禁止面（`new QueryWrapper` 及其子类含 `new LambdaQueryWrapper`）、`IService` 之外落点与例外口径；调度器两处识别特征与 README 同步。『某个具体类该不该 new 构造器、该条件能否由 lambda 形态表达』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_persistence_access_guard", "check_persistence_access_guard 钉住通用层「持久化访问（数据库/缓存等）」的三条 L1（统一入口／优先类型安全·声明式查询构造 API／替代优先）、可逐条核对的判定标准（构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止 mapper `*.xml` 承载）、存量随动迁移与依据行；Java 栈「持久化访问（MyBatis-Plus / JPA 等）」的四个 `IService` 成员方法（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate`）、禁止面（`new QueryWrapper` 及其子类含 `new LambdaQueryWrapper`，**并入 `Wrappers` 一族静态构造方法**——`Wrappers.lambdaQuery()` 一类同样绕过统一入口）、`IService` 之外的落点（Mapper 注解/映射文件、Mapper 默认方法）与例外口径；调度器两处识别特征与 README 同步。『某个具体类该不该 new 构造器、该条件能否由 lambda 形态表达』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_config_class_guard", "check_config_class_guard 钉住通用层条文（含『任何情况都不允许』与去向）、判定标准、Java/Spring 识别特征与 README 同步；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("执行前自检（非平凡任务须逐项自检，防'加载了却没执行'）", "specs/general/self-check.adoc", "script/check_specs.py",
@@ -551,7 +563,7 @@ MECHANISMS = [
     ("规范收录侧须先找参照物、别自己造：提案校验须查现成业界标准与更优设计（存在比用户口述更优的设计时按更优的设计收）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
      "check_spec_admission_guard", "check_spec_admission_guard 钉住「新增规范的提案校验」的三处要点（先找参照物、别自己造 / 存在比用户口述更优的设计时按更优的设计收 / 检查是否已有标准与本项目条目）；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证、清单还要先核『够不够用』）、大范围改动先确认、不得绕开既有体系另写一套、老用例不得为迁就改动而改判", "specs/core/execution.adoc + specs/general/planning.adoc + specs/general/testing.adoc", "script/check_specs.py",
-     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素）与生命周期两节点、通用层 planning.adoc 的展开与依据（含基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素、**基线的适用边界**：规范类必做/代码类默认不做（除大规模重构或会改动大部分内容）/移动重命名不算）与生命周期两节点、通用层 planning.adoc 的展开与依据（含「基线的适用边界」条与基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("运行环境须与项目声明一致（jdk1.8、python2 等；换别的版本也能跑通也不得换，声明不可得时标未确证）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_runtime_env_guard",

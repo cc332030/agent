@@ -810,9 +810,9 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
 
     _CI = ("= CI\n\n== 校验链完整（定义未执行防线）\n\n"
            "* **校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（L1）**："
-           "**先探测**工具在不在、缺则**装齐**再跑，不得把缺工具走**自动跳过**；"
+           "**工具须在执行前齐备**、缺则**装齐**再跑，不得把缺工具走**自动跳过**；"
            "装不上时如实标『未执行 + 原因』、**不得记作通过**；"
-           "**安装方式**（命令级）：`gem install asciidoctor`。\n")
+           "**安装方式须随要求一起给出**（取值＝**可据以装齐**：装哪个、从哪装）。\n")
 
     # 本仓库落点按「登记处只留一层」的口径写：只点名**承载该检查的那道防线**与安装命令，
     # 处理器次序与效力边界归公共条文（防同一处口径在两份文件里各留一份、各自漂移）
@@ -848,7 +848,7 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
 
     def test_missing_install_way_reports(self):
         # 反例②：只说要装、不给安装方式 → 执行者装不上就只能跳过
-        self._write_all(ci=self._CI.replace("`gem install asciidoctor`", "某个工具"))
+        self._write_all(ci=self._CI.replace("可据以装齐", "照要求办"))
         cm.check_toolchain_present_guard()
         self.assertIn("安装方式", self.error_texts())
 
@@ -4449,7 +4449,8 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "* 不得绕开既有体系另写一套（L1）：默认改在既有实现上；"
                    "**允许另写一套的条件只有三个**：确实无法承载 / 已被用户确认废弃 / 已被证明优于，**不留两套并存**。\n"
                    "* 大范围改动先确认（L1）：**不得替用户判定某段既有流程\"已废弃\"**。\n"
-                   "* 改动前先定基线（L1）：**扫描项目声明的全部校验手段**，**完整可用时必须先跑通**，"
+                   "* 改动前先定基线（L1）：**该不该做基线按改动性质判**（取值与判据在通用层，本条不复述、**不做基线 ≠ 不做验证**）；"
+                   "**该做时** **扫描项目声明的全部校验手段**，**完整可用时必须先跑通**，"
                    "并**落盘留证**，改动完成后**复跑同一套校验**；**扫出的清单还要先核\"够不够用\"（L2）**："
                    "须**先按用例设计判据 review 既有用例**，**本次改动的直接相关面**先补全、**不阻断动手**。\n\n== 任务生命周期与节点自查\n\n"
                    "| **方案** | **基线是否已定**\n"
@@ -4470,18 +4471,27 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**确实无法承载** / **已被用户确认废弃** / **已被证明优于**；**不留两套并存**。\n\n"
                    "== 大范围改动先确认\n\n* **大动之前先确认（L1）**：**保持原状**；"
                    "**是否废弃只能由用户认定**。\n\n== 动手前先定基线\n\n"
+                   "* **基线的适用边界（L1）**：**先判改动性质、再决定这条要不要做**——"
+                   "性质判定与各档取值（含例外、**判不准时按更严的一侧**）"
+                   "**以 `specs/general/verify.adoc`「验证的适用边界」为唯一真源，本条不重列第二套定义**。\n"
                    "* **扫描既有验证手段（L1）**\n* **能跑通即跑通、并落盘留证（L1）**\n"
                    "* **留证的形态按项目自身的交付约定**：**留证不等于「必须提交」**。\n"
                    "* **不完整或本来就红时怎么办（L1，防把基线变成硬性前置）**："
                    "**没有任何校验手段**时记录即可开工；**红的还是红的**。\n"
                    "* **基线用于改完复跑（L1）**：**既有用例不得为迁就改动而改判**。\n"
-                   "* **基线的完整性：手段与用例够不够用（L2）**：**先按这些判据 review 既有用例**，"
+                   "* **基线的完整性：手段与用例够不够用（L2，仅在该做基线时适用）**：**先按这些判据 review 既有用例**，"
                    "给出**复核了哪些角度与样本**；按**正常路径**/边界/异常路径/**正反例成对**/步骤与前置核对，"
                    "**用例设计**与**测试有效性**判据见 testing.adoc；**本次改动的直接相关面**先补全，"
                    "**无关的存量缺口**如实记录、**不阻断**。\n\n"
                    "=== 依据（标准名/编号）\n\n* **ISO 10007**（配置管理）。\n")
         self.write("specs/general/verify.adoc",
-                   "= 验证\n\n* **验证须覆盖项目的全部既定校验手段（L1）**：**存在测试**≠**测试被执行**；"
+                   "= 验证\n\n== 验证的适用边界（先判改动性质，再决定验证到什么程度）\n\n"
+                   "判据只有一个问句（L1）：**\"这次改动会不会被未知项目加载、会不会改变别人的行为？\"**\n\n"
+                   "* **A 代码类改动**：**不做基线测试**——**例外**＝**大规模重构**、或本次会改动**改动大部分内容**"
+                   "（**移动/重命名不算**）。\n"
+                   "* **B 规范类改动**：**必须取得基线**。\n"
+                   "* **C 不改内容的操作**：**不做基线测试**。\n\n"
+                   "* **验证须覆盖项目的全部既定校验手段（L1）**：**存在测试**≠**测试被执行**；"
                    "手段与其用例**本身可能不完整**，须**先按 link:testing.adoc[]「用例设计」review**、"
                    "说明\"哪些未覆盖\"，**本次改动的直接相关面**先补全。\n")
         self.write("specs/general/testing.adoc",
@@ -4493,7 +4503,10 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("prompts/_common.txt",
                    "// tag::baseline-and-compat[]\n"
                    "**动手前：先定基线 + 先查现状 + 先调研最佳方案（L1，方向性前提）**\n"
-                   "  - **先查现状、再谈方案**\n  - **先定基线**\n  - **大动之前先确认**\n"
+                   "  - **先查现状、再谈方案**\n  - **先定基线**："
+                   "**按改动性质取值**（规范类必做、代码类默认不做，"
+                   "例外与判不准的取严规则见项目规范 `specs/general/verify.adoc`「验证的适用边界」）。"
+                   "\n  - **大动之前先确认**\n"
                    "  - **不得绕开既有实现另写一套**\n"
                    "  - **调整内容一类需求还须先找现成可参照的既有标准与更优设计**\n"
                    "  - **基线清单还要核\"够不够用\"（L2）**：**review 既有用例**、"
@@ -4529,6 +4542,29 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("specs/core/execution.adoc", "= 执行原则\n\n== 先规划后执行\n\n动手前先规划。\n")
         cm.check_dev_flow_guard()
         self.assertIn("改动前先定基线", self.error_texts())
+
+    def test_baseline_scope_boundary_removed_reports(self):
+        # 反例：真源侧的适用边界取值被删（基线重新变成所有改动的前置，代码类改动白付全量校验）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read().replace(
+            "**不做基线测试**", "").replace(
+            "**移动/重命名不算**", "")
+        open(v, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("verify.adoc", self.error_texts())
+
+    def test_baseline_scope_clause_not_pointing_to_source_reports(self):
+        # 反例：planning「基线的适用边界」条丢了"回指唯一真源 + 判不准取严"（基线分档
+        # 失去通用层落点与兜底取值，读 planning 的执行者会退回"所有改动都做基线"）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(f, encoding="utf-8").read().replace(
+            "**先判改动性质、再决定这条要不要做**", "").replace(
+            "**判不准时按更严的一侧**", "")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("planning.adoc", self.error_texts())
 
     def test_missing_planning_file_reports(self):
         # 反例：通用层展开文件被删（必加载层只剩底线，条件判据无处可查）
@@ -4927,8 +4963,24 @@ class TestCheckDeclarativeRuleGuard(CheckSpecsTestCase):
         "* **依据（标准名/编号）**：ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148。"
         "**\"规则只写到取值形态为止\"是本集合按现场用量判据化的取舍。**\n")
 
+    MAINTAINER_SUBSECTION = (
+        "=== 给方向、给定义、定规则——不是说明书（正文内容的取舍口径）\n\n"
+        "**本规范集合的主旨：给方向、给定义、定规则——不是说明书。**一条规范的正文只放三样：**方向（往哪走、边界在哪）、定义（是什么、取什么值）、规则（必须/不得 + 判定标准 + 依据名）**。\n\n"
+        "* **正文只到这七类（L1）**：① 方向与边界；② 定义与取值形态；③ 必须/不得与其级别；"
+        "④ 判定标准；⑤ 依据（标准名/编号）；⑥ 例外与降级路径；⑦ 承载取值的对照表。"
+        "**判定标准（正文里出现下列任一即违规）**：① **步骤与文档骨架**；"
+        '② **具体命令／文件路径／工具名**（只是"怎么取"或"用哪家"时）；'
+        "③ **对外部世界清单的照抄**。**例外**：该内容本身就是要交付的产物时（**模板类内容**）按其单独归类处理。\n"
+        "* **清单不全就删清单，不补全（L1）**：清单只在本身是规则边界时才写全；否则**删到只剩取值形态**——"
+        "照抄清单是**把外部世界的现状当成了判据**。**判定标准（可核对）**：**抽掉本仓库/当前环境/当前平台的专有名词**后该句是否仍成立？\n"
+        "* **每句须承载、一句只承载一件（L1）**：抽掉某句后约束力与可核对性都没变——即该句不承载，删。\n"
+        "* **依据留名、不留论证（L1）**：依据只写到**标准名/编号**。\n"
+        "* **生效面（L1）**：**新增、修复、review、重构**四类动作都按本条判定。\n"
+        "* **依据（标准名/编号）**：ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148。"
+        '**「正文只放三样、清单不全就删清单」是本集合按现场用量判据化的取舍。**\n')
+
     def _fixture(self):
-        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION)
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION + self.MAINTAINER_SUBSECTION)
         self.write("specs/stack/maven.adoc",
                    "* 默认启用多线程构建（L2）：取值＝当前构建设备的核心数，即 `mvn -T <核心数>`——"
                    "核心数怎么得到是执行动作，不写进规范（这是本集合对**所有**规则一视同仁的写法："
@@ -4939,7 +4991,10 @@ class TestCheckDeclarativeRuleGuard(CheckSpecsTestCase):
         self.write("AGENTS.adoc",
                    "= 项目入口\n\n* **以对象定义规则、不给具体操作**（L1）：写规范时只定义「是什么、"
                    "取什么值」；判据本体见 `specs-project-maintainer/spec-lifecycle.adoc`"
-                   "「以对象定义规则、不给具体操作」。\n")
+                   "「以对象定义规则、不给具体操作」。\n"
+                   "* **给方向、给定义、定规则——不是说明书**（L1）：正文只放方向/定义/规则，"
+                   "**清单不全就删清单**；判据本体见 "
+                   "`specs-project-maintainer/spec-lifecycle.adoc`「给方向、给定义、定规则」一节。\n")
 
     def test_positive_passes(self):
         self._fixture()
@@ -4992,6 +5047,32 @@ class TestCheckDeclarativeRuleGuard(CheckSpecsTestCase):
                    "（先实测核数再取）。\n")
         cm.check_declarative_rule_guard()
         self.assertIn("mvn -T <核心数>", self.error_texts())
+
+    def test_manual_style_rule_removed_reports(self):
+        # 反例⑩：新增的「不是说明书」小节被整条抽掉（正文又变成说明书、清单照抄回来）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION)
+        cm.check_declarative_rule_guard()
+        self.assertIn("给方向、给定义、定规则", self.error_texts())
+
+    def test_manual_style_criteria_removed_reports(self):
+        # 反例⑪：判定标准被抹成一句"要求"（"是不是说明书"回到凭印象、本条不可执行）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION
+                   + self.MAINTAINER_SUBSECTION.replace(
+                       "**判定标准（正文里出现下列任一即违规）**", "**要求**"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("判定标准（正文里出现下列任一即违规）", self.error_texts())
+
+    def test_manual_style_scope_removed_reports(self):
+        # 反例⑫：生效面被抽成三类（重构动作不受本条约束）
+        self._fixture()
+        self.write(self.LIFE, "= 维护\n\n" + self.SUBSECTION
+                   + self.MAINTAINER_SUBSECTION.replace(
+                       "**新增、修复、review、重构**四类动作都按本条判定",
+                       "新增时按本条判定"))
+        cm.check_declarative_rule_guard()
+        self.assertIn("新增、修复、review、重构", self.error_texts())
 
     def test_maintainer_entry_unregistered_reports(self):
         # 反例⑧：维护方入口（`AGENTS.adoc`）未登记该口径的落点——判据齐备但没有入口，
@@ -5734,12 +5815,15 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
         cm.check_rename_split_guard()
         self.assertIn("分批交付", self.error_texts())
 
-    def test_chain_check_command_removed_reports(self):
-        # 反例：删掉断链核对命令 -> "那一批改名"被拆分/省略成「新增 + 删除」时无抓手可核
+    def test_chain_check_notion_removed_reports(self):
+        # 反例：删掉断链核对的**取值形态**（"那一条批量改名记录仍在"）-> "那一批改名"被拆分/
+        # 省略成「新增 + 删除」时无抓手可核。核的是取值形态而不是具体命令：命令属执行动作，
+        # 收进正文即第二处"取法"（见 `specs-project-maintainer/spec-lifecycle.adoc`
+        # 「以对象定义规则、不给具体操作」）。
         self._write_valid()
-        self._drop("`git log --diff-filter=R -M --name-status`")
+        self._drop("批量改名")
         cm.check_rename_split_guard()
-        self.assertIn("diff-filter=R", self.error_texts())
+        self.assertIn("批量改名", self.error_texts())
 
     def test_compression_request_boundary_removed_reports(self):
         # 反例：删掉"压缩提交的请求不覆盖本条" -> "用户说要合并成一个提交"就成了本条失效的依据
@@ -7115,10 +7199,11 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
 
     GIT = (
         "= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n"
-        "* 规则本体见 `specs/general/version-control.adoc`；本节只写 git 上用什么命令判。\n"
-        "* **核对命令（L1）**：`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
-        "`git diff --cached -M --summary` 应显示 `rename`；不得用 `git checkout --ours/--theirs` 整体取一侧。\n"
-        "* **\"最终只有一个提交\"的核对命令（L1）**：`git log --oneline <目标分支>..HEAD` 应**只有一条**。\n"
+        "* 规则本体见 `specs/general/version-control.adoc`；本节只写 git 上取哪个值来判（只给取值形态）。\n"
+        "* **核对（L1）**：核对到的是取值状态——差异检出里不出现同一批改动的\"删除 + 新增一对\"、"
+        "应保留历史的文件**被识别为 rename**；**不得整体取一侧收尾**（取哪一侧、用什么开关属执行动作）。\n"
+        "* **\"最终只有一个提交\"的核对（L1）**：核对到的是取值状态——目标分支到本分支之间**只有一个提交**，"
+        "且压缩后仍**能取到**拆出的那两条记录。\n"
     )
 
     CNB = (
@@ -7250,11 +7335,11 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         cm.check_conflict_resolution_guard()
         self.assertIn("要压缩", self.error_texts())
 
-    def test_git_layer_delivery_criteria_needs_command(self):
-        # 反例：git 层把可核对命令删了、只留一句"应只有一条" → 判据退化成断言，无从核对
+    def test_git_layer_delivery_criteria_needs_value_form(self):
+        # 反例：git 层把可核对的**取值状态**删了、只留一句"应只有一条" → 判据退化成断言，无从核对。
+        # 核的是取值形态（"只有一个提交"这一状态），不是具体命令（命令属执行动作）。
         self._write_valid()
-        git = self.GIT.replace("`git log --oneline <目标分支>..HEAD` 应**只有一条**",
-                               "提交记录应**只有一条**")
+        git = self.GIT.replace("只有一个提交", "符合要求")
         self.write("specs/general/git.adoc", git)
         cm.check_conflict_resolution_guard()
         self.assertIn("git.adoc", self.error_texts())
@@ -7281,10 +7366,12 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         self.assertIn("压缩不等于解冲突", self.error_texts())
 
     def test_git_layer_criteria_removed_reports(self):
-        # 反例：git 侧核对命令被抽掉 → 用户点名"git 规范也要"落了空
+        # 反例：git 侧核对的**取值形态**被抽掉 → 用户点名"git 规范也要"落了空。
+        # 核的是取值形态（"删除 + 新增一对"不出现、被识别为 rename），不是具体命令——
+        # 命令属执行动作，收进正文即第二处"取法"。
         self._write_valid()
-        git = self.GIT.replace("`git diff --name-status` 应保留历史的文件不得显示为 `D` + `A`、"
-                               "`git diff --cached -M --summary` 应显示 `rename`；", "")
+        git = self.GIT.replace("差异检出里不出现同一批改动的\"删除 + 新增一对\"、"
+                               "应保留历史的文件**被识别为 rename**；", "")
         self.write("specs/general/git.adoc", git)
         cm.check_conflict_resolution_guard()
         self.assertIn("git.adoc", self.error_texts())
@@ -8045,7 +8132,7 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
                    "* 不在 CI 中调用会给出非确定性结论的外部 AI。\n")
         self.write("specs/platform/cnb.adoc",
                    "= CNB 规范（平台层）\n\n"
-                   "* 派发与复核须钉定 commit sha；须先 `git fetch -f` 强刷 ref。\n"
+                   "* 派发与复核须钉定 commit sha；须先取得该分支当前指向的 sha。\n"
                    "* 压缩提交/强推会替换对象，旧 sha 的结论视为过期。\n"
                    "* 派发前确认执行者实际可用。\n"
                    "* 流水线不无界挂起。\n")
@@ -8086,14 +8173,14 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
 
     def test_missing_cnb_sha_pin_reports(self):
         # 反例：钉定 commit sha 的要点被抽掉、仅保留 NPC 禁合并节（按分支名取到过期对象、复核错位）。
-        # 断言用本防线独有的「git fetch -f」——它与 `check_npc_merge_guard` 各自钉住
+        # 断言用本防线独有的「先取得该分支当前指向的 sha」——它与 `check_npc_merge_guard` 各自钉住
         # 同一文件的不同要点，故本防线须能在"禁合并节还在"时独立报出。
         self._write_valid()
         self.write("specs/platform/cnb.adoc",
                    "= CNB\n\n== 合并请求的合并主体（NPC 禁合并）\n\n"
                    "* NPC 严禁合并合并请求。\n")
         cm.check_ci_cd_guard()
-        self.assertIn("git fetch -f", self.error_texts())
+        self.assertIn("先取得该分支当前指向的 sha", self.error_texts())
 
     def test_missing_verify_full_chain_reports(self):
         # 反例：通用验证侧"须覆盖全部既定校验手段"被删
@@ -9919,7 +10006,9 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
     最易被五件事冲掉（故本组用例逐一覆盖）：
       * **条文被删或降级成建议** —— `new` 构造器重回默认做法；
       * **禁止面被放宽** —— 只禁非 Lambda 形态、漏掉"同样类型安全但仍绕过入口"的
-        `new LambdaQueryWrapper`（用户要求是"及其子类"）；
+        `new LambdaQueryWrapper`（用户要求是"及其子类"）；或把 `Wrappers.lambdaQuery()`
+        一类**静态构造方法**重新放行（用户追加要求："也在禁用范围内：`Wrappers.lambdaQuery()`
+        等，使用 `service.lambdaQuery()` 等"——静态工厂同样绕过统一入口）；
       * **技术栈落点缺失** —— Java 执行者按栈文件学，通用层有、栈层没有等于没写；
       * **通用层被框架专名污染** —— `coding.adoc` 里点名 `IService`/`QueryWrapper`，
         对非 Java 项目不成立、又白占其上下文；
@@ -9955,11 +10044,13 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "* **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `lambdaQuery()`、"
         "`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`；禁止 `new QueryWrapper<>()`、"
         "`new UpdateWrapper<>()` 及其子类（含 `new LambdaQueryWrapper<>()`）。\n"
-        "* **`IService` 之外的落点（L1）**：用 `Wrappers` 的 lambda 静态方法或 Mapper 接口上的"
-        "注解/映射文件声明。\n"
+        "* **`IService` 之外的落点（L1）**：不得 `new` 任何 Wrapper，也不得改走 `Wrappers` 的"
+        "**静态构造方法**（`Wrappers.lambdaQuery()` 一类）——静态构造同样绕过统一入口；落点只能"
+        "是在 Mapper 接口上用注解/映射文件声明，或在该接口上以默认方法封装一次。\n"
         "* **例外（L2，须写清理由）**：确需 Wrapper 子类时在 Mapper 接口封装一次，业务侧不 new。\n"
-        "* **判定标准（任一命中即违规）**：①构造器 `new`；②列名以字符串写进查询构造"
-        "（可用方法引用表达时）；③绕过 `IService` 另起一套访问写法。\n"
+        "* **判定标准（任一命中即违规）**：①构造器 `new`；②出现 `Wrappers.lambdaQuery()` 一类"
+        "**静态构造方法**而本 Service 的成员方法可表达；③列名以字符串写进查询构造"
+        "（可用方法引用表达时）；④绕过本实体 Service 的成员方法另起一套访问写法。\n"
         "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
     )
 
@@ -10085,13 +10176,33 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         cm.check_persistence_access_guard()
         self.assertIn("例外（L2", self.error_texts())
 
-    def test_iservice_alternative_removed_reports(self):
-        # 反例：IService 之外的落点（Wrappers / mapper 注解）被删 → 无可替代时无路可走
+    def test_iservice_static_factory_reallowed_reports(self):
+        # 反例：`Wrappers` 一族静态构造方法被重新放行（条款改回"用 `Wrappers` 的静态方法即可"、
+        # 判定标准也不再点名静态构造）→ 用户明确要求的"也在禁用范围内"被丢掉
+        # （用户原话："也在禁用范围内：`Wrappers.lambdaQuery()` 等，使用 `service.lambdaQuery()` 等"）
         self._write_valid()
         self.write("specs/stack/java.adoc",
-                   self.JAVA.replace("`Wrappers` 的 lambda 静态方法或 Mapper 接口上的", "框架提供的方法或"))
+                   self.JAVA.replace("不得 `new` 任何 Wrapper，也不得改走 `Wrappers` 的"
+                                     "**静态构造方法**（`Wrappers.lambdaQuery()` 一类）——静态构造同样绕过统一入口；落点只能"
+                                     "是在 Mapper 接口上用注解/映射文件声明，或在该接口上以默认方法封装一次。",
+                                     "用 `Wrappers` 的静态方法即可。")
+                            .replace("②出现 `Wrappers.lambdaQuery()` 一类"
+                                     "**静态构造方法**而本 Service 的成员方法可表达；", ""))
         cm.check_persistence_access_guard()
-        self.assertIn("Wrappers", self.error_texts())
+        self.assertIn("静态构造", self.error_texts())
+
+    def test_iservice_external_mapper_place_removed_reports(self):
+        # 反例：`IService` 之外的落点（Mapper 注解/映射文件声明、Mapper 默认方法）被删
+        # → 统一入口表达不了时执行者无处可去、只能回头 new 或走 Wrappers 静态工厂
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("落点只能是"
+                                     "在 Mapper 接口上用注解/映射文件声明，或在该接口上以默认方法封装一次。",
+                                     "落点见上。")
+                            .replace("* **例外（L2，须写清理由）**：确需 Wrapper 子类时在 Mapper 接口"
+                                     "封装一次，业务侧不 new。\n", ""))
+        cm.check_persistence_access_guard()
+        self.assertIn("Mapper 接口", self.error_texts())
 
     def test_dispatcher_registration_removed_reports(self):
         # 反例：调度器识别特征被删 → 该条永远不会被触发加载
@@ -10134,6 +10245,124 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         cm.check_persistence_access_guard()
         self.assertIn("持久化访问", self.error_texts())
 
+
+
+class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
+    """钉住『弃用类/API 防线』（代码侧禁止面 + 依赖侧不动依赖面）。
+
+    该条对应用户明确提出的规范调整：**不用被弃用的类，使用其他类代替（升级类/同名新类最好），
+    默认不调整依赖，也不动依赖版本**。用户报告的失效形态：旧写法与新写法并存两条路径
+    （「旧写法也能跑」「新写法不熟」留下的裁量点），以及借"换掉弃用类"顺手升级依赖版本。
+
+    两处同向落点：`specs/general/coding.adoc`「警告与弃用」给禁止面与替代者取向、
+    `specs/general/dependency.adoc`「升级与废弃」给"不动依赖面"的落点。
+
+    最易被冲掉的四件事（故本组用例逐一覆盖）：
+      * **条文被删** —— 弃用者与替代者重新并存；
+      * **替代者取向被删** —— 「升级类/同名新类最好」这一用户点名取向丢失、随手挑一个替代；
+      * **默认不动依赖面被删** —— "换掉弃用类"被读成许可顺手升级依赖（与用户口径相抵）；
+      * **存量条未写明不构成豁免** —— 后条被读成覆盖前条的许可，新代码照存量写。
+    """
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        "== 警告与弃用\n"
+        "* **警告处理（L1）**：新代码不得引入警告，存量警告须修复或声明。\n"
+        "* **不得使用被弃用的类/API，改用替代者（L1）**：被标记弃用（`@Deprecated`、"
+        "`deprecated`、文档标注废弃等）的类、方法、接口、字段一律**不得在新代码里使用**，"
+        "须改用其替代者；替代者**优先取升级后的新类、或同名新类**，其余替代形态次之。\n"
+        "* **判定标准（任一命中即违规）**：①新写的代码里出现被弃用类型/成员的直接使用；"
+        "②以「旧写法也能跑」为由继续用被弃用者；③把替代者选成同类弃用者的别名"
+        "（换了个弃用者不算替代）。\n"
+        "* **例外（L2，须写清理由）**：替代者在本项目声明的依赖面内不存在时，可写明理由"
+        "保持原状。\n"
+        "* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者**不得**顺带改依赖清单"
+        "或依赖版本。\n"
+        "* **内部弃用 API 的调用不迁移、不修复（L2，存量边界）**：既有调用点保持原样。"
+        "**本条**只管既有调用点——**不构成**对新代码的豁免。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148。\n"
+        "\n== 表达式与调用写法\n"
+        "* 略。\n"
+    )
+
+    DEPENDENCY = (
+        "= 依赖管理规范（通用层，跨语言）\n\n"
+        "== 升级与废弃\n"
+        "* **升级前看变更说明（L1）**：升级依赖须先读其变更日志/发布说明。\n"
+        "* **弃用类/API 的迁移默认不动依赖面（L1）**：代码里出现被弃用的类/API 时，按 "
+        "`specs/general/coding.adoc`「警告与弃用」改调用点、改用替代者即可，"
+        "**默认不调整依赖、也不动依赖版本**。**判定标准**：一次「弃用迁移」的改动里出现"
+        "依赖清单或版本变化，而其理由只是「替代者需要新版本」却未走本节升级流程。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_dep = cm.DEPENDENCY_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.DEPENDENCY_FILE = os.path.join(self.root, "specs", "general", "dependency.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.DEPENDENCY_FILE) = (self._orig_coding, self._orig_dep)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/general/dependency.adoc", self.DEPENDENCY)
+
+    def test_valid_deprecated_api_guard_passes(self):
+        self._write_valid()
+        cm.check_deprecated_api_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：整节被删 → 弃用者与替代者重新并存
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 表达式与调用写法\n* 略。\n")
+        cm.check_deprecated_api_guard()
+        self.assertIn("警告与弃用", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：禁止面被降级成建议 → "偶尔用一下弃用者"重新成立
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不得使用被弃用的类/API，改用替代者（L1）",
+                                       "不得使用被弃用的类/API，改用替代者（L2，建议）"))
+        cm.check_deprecated_api_guard()
+        self.assertIn("不得使用被弃用的类/API，改用替代者（L1）", self.error_texts())
+
+    def test_alternative_priority_removed_reports(self):
+        # 反例：替代者取向被删 → 用户点名的「升级类/同名新类最好」丢失
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("优先取升级后的新类、或同名新类", "随取一个可用者"))
+        cm.check_deprecated_api_guard()
+        self.assertIn("优先取升级后的新类、或同名新类", self.error_texts())
+
+    def test_dependency_boundary_removed_reports(self):
+        # 反例：默认不动依赖面被删 → "换掉弃用类"被读成许可顺手升级依赖
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者"
+                                       "**不得**顺带改依赖清单或依赖版本。\n", ""))
+        cm.check_deprecated_api_guard()
+        self.assertIn("默认不为此调整依赖、也不动依赖版本（L1）", self.error_texts())
+
+    def test_legacy_not_exempting_new_code_reports(self):
+        # 反例：存量条未写明"不构成对新代码的豁免" → 两条同处一节、后条抵消前条
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**本条**只管既有调用点——**不构成**对新代码的豁免。",
+                                       "新代码也照存量写。"))
+        cm.check_deprecated_api_guard()
+        self.assertIn("豁免", self.error_texts())
+
+    def test_dependency_side_not_synced_reports(self):
+        # 反例：依赖侧落点缺失 → 代码条与依赖条脱节，"不动依赖面"无落点
+        self._write_valid()
+        self.write("specs/general/dependency.adoc", "= 依赖管理规范\n\n== 升级与废弃\n* 略。\n")
+        cm.check_deprecated_api_guard()
+        self.assertIn("弃用类/API 的迁移默认不动依赖面（L1）", self.error_texts())
 
 
 class TestCheckConversionGuard(CheckSpecsTestCase):
@@ -11862,7 +12091,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         "* 默认启用多线程构建（L2）：未配置过并行度时默认开 `-T`，**取值＝当前构建设备的核心数**，"
         "即命令形态 `mvn -T <核心数>`——**核心数怎么得到是执行动作，不写进规范**；"
         "不写 `-T` 即默认单线程。\n"
-        "* 配置过即以配置为准（L2）：`.mvn/maven.config` 是项目级配置里优先探测的落点，不得覆盖、不得重复追加。\n"
+        "* 配置过即以配置为准（L2）：**项目级配置的落点**＝`.mvn/maven.config`，不得覆盖、不得重复追加。\n"
         "* 并行度只到模块粒度（L1）：`-T` 作用于模块间，同一模块禁止并行构建。\n"
         "* 测试并行与并行构建默认为两件事（L2）：`forkCount` 默认 `1`，`reuseForks` 须显式写，"
         "默认只启用构建并行，不因本条去开测试并行。\n"
@@ -11872,8 +12101,8 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
 
     COMMON = (
         "// tag::build-parallel[]\n"
-        "**构建并行度（仅限 Maven 多模块构建）**：只对 Maven 多模块构建生效；先探测——项目已经配过并行度时"
-        "以项目配置为准，配过就一律沿用、不覆盖、不重复追加；没配过才在本次构建命令上补默认"
+        "**构建并行度（仅限 Maven 多模块构建）**：只对 Maven 多模块构建生效；"
+        "**项目已配过并行度时以项目配置为准**，配过就一律沿用、不覆盖、不重复追加；没配过才在本次构建命令上补默认"
         "并行参数（`mvn -T <核心数>`，核心数怎么得到是执行动作，**不得写死 `-T 1C`**）；并行到模块粒度为止。\n"
         "// end::build-parallel[]\n")
 
@@ -12061,7 +12290,7 @@ class TestCheckRegistryMirrorGuard(CheckSpecsTestCase):
         "* 按次序选源、逐级降级，不得跳级（L1）：①就近/平台内已优化的源；②主流公共源；"
         "③地理上邻近的其他境外源；④更远的境外源站；只有当上一级实测取不到内容才降级；"
         "未配置过任何源时才动手配置。\n"
-        "* 先实测可用再启用、一次配置到位（L1）：先对候选源做一次**真实请求**；"
+        "* 先实测可用再启用、一次配置到位（L1）：候选源须**已实测可用**；"
         "不得**在每一轮里反复重试**同一个源。\n"
         "* 不得覆盖引用方既有配置（L1）：已配置过**包源时**一律沿用；只有在\"未配置过任何源\"时才动手配置；"
         "**推荐源不是强制源**，用户/项目声明的源永远优先。\n"
@@ -12132,7 +12361,7 @@ class TestCheckRegistryMirrorGuard(CheckSpecsTestCase):
 
     def test_probe_before_use_removed_reports(self):
         self.write("specs/general/dependency.adoc",
-                   self.SECTION.replace("先对候选源做一次**真实请求**", "按文档描述直接配置"))
+                   self.SECTION.replace("候选源须**已实测可用**", "按文档描述直接配置"))
         cm.check_registry_mirror_guard()
         self.assertIn("真实请求", self.error_texts())
 
@@ -12351,8 +12580,10 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         "* 每次运行的必留证据（L1，四项缺一即不算测过）：测量口径、各方案成绩、结论、"
         "未选方案为什么不选。\n"
         "* 成绩怎么取数（L1）：每组方案记终值（均值或中位数）+ 离散度。\n"
-        "* 方案组合矩阵（L2）：`方案编号 | 组合 | 终值 | 离散度 | 与基线之比 | 结论`。\n"
-        "* 优化日志（L2）：每轮记改了什么与是否保留；不保留的改动也必须留一行。\n"
+        "* 方案组合与取舍须可核对（L2，多轮优化时）：试过的方案各给组合取值、终值、离散度、"
+        "与基线之比与结论；覆盖范围如实声明。\n"
+        "* 优化过程须可回溯（L2）：每轮的改动与假设、改前改后成绩、是否保留、瓶颈判断与下一步；"
+        "不保留的改动同样须留痕。\n"
         "* 只记结果不记过程（L1）：只留取值 + 来源 + 结论。\n\n"
         "=== 迭代与收敛\n"
         "* 闭环迭代（L1）：测出瓶颈后继续优化并复测，直至收敛。\n"
@@ -12439,6 +12670,23 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         self._write_all(section=self.SECTION.replace("、未选方案为什么不选", ""))
         cm.check_performance_guard()
         self.assertIn("未选方案为什么不选", self.error_texts())
+
+    def test_score_matrix_removed_reports(self):
+        # 方案组合的取值（组合/终值/离散度/与基线之比）被抹成一句"记录成绩"即被拦下
+        self._write_all(section=self.SECTION.replace(
+            "* 方案组合与取舍须可核对（L2，多轮优化时）：试过的方案各给组合取值、终值、离散度、"
+            "与基线之比与结论；覆盖范围如实声明。\n",
+            "* 成绩记录（L2）：记一下成绩就好。\n"))
+        cm.check_performance_guard()
+        self.assertIn("方案组合与取舍须可核对", self.error_texts())
+
+    def test_optimization_log_removed_reports(self):
+        # 优化过程的可回溯取值（含"失败尝试同样留痕"）被整条抽掉即被拦下
+        self._write_all(section=self.SECTION.replace(
+            "* 优化过程须可回溯（L2）：每轮的改动与假设、改前改后成绩、是否保留、瓶颈判断与下一步；"
+            "不保留的改动同样须留痕。\n", ""))
+        cm.check_performance_guard()
+        self.assertIn("优化过程须可回溯", self.error_texts())
 
     def test_cause_analysis_removed_reports(self):
         # 旧"结果分析"条（差异由哪些原因引起 + 给出解决方案）被整条抽掉即被拦下
@@ -14925,6 +15173,35 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self._write_valid()
         cm.check_guard_manifest()
         self.assertEqual([], cm.errors)
+
+    def test_wiring_duplicate_registration_reports(self):
+        # 反例⑤（本轮实测失效）：同一道防线在 `CHECKS` 序列里**登记两次**——
+        # 条数被重复项凑够，掩盖了"真防线被删掉一道"（删掉的那道由重复项顶上，
+        # 接线数不掉、`check_guard_manifest` 与 `check_guard_order_guard` 都全绿）。
+        # 本轮 `check_pagination_guard` 正是这种形态：序列里一次、末尾又追加一次。
+        self._write_valid(src=self._SRC.replace(
+            "    check_beta_guard,\n",
+            "    check_beta_guard,\n    check_alpha_guard,\n"))
+        cm.check_guard_manifest()
+        self.assertIn("重复", self.error_texts())
+
+    def test_wiring_duplicate_hiding_removal_reports(self):
+        # 反例⑥（**重复登记判据自身的绕过路径**，本轮 review 复现）：把一道真防线连同
+        # 它的函数体、用例、台账声明一并删掉，再把**另一道仍存在的**防线重复登记一次，
+        # 使序列元素个数仍等于基线——此时"定义了却没被调用"那条报不出来（函数体已删）、
+        # "重复"那条又只说"写重了"，没有任何一条能指出"少了一道真防线"。
+        # 判据须让重复项**不计入**唯一防线数，故删一道 + 重复顶一道必然低于基线。
+        self._write_valid(src=self._SRC
+                          .replace("    check_alpha_guard,\n", "")
+                          .replace("def check_alpha_guard():\n"
+                                   '    """甲。"""\n'
+                                   '\n'
+                                   '\n', "")
+                          .replace("    check_beta_guard,\n",
+                                   "    check_beta_guard,\n    check_beta_guard,\n"))
+        cm.check_guard_manifest()
+        # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
+        self.assertIn("防线接线数从基线", self.error_texts())
 
     def test_guard_unwired_reports(self):
         # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例

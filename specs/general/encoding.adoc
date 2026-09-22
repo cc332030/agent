@@ -19,9 +19,7 @@
 ** **在 Unix/Linux/macOS 上编辑这类文件时（常见成因）**：编辑器与 git 提示的"换行符不一致"多数是**在 Unix 上编辑 Windows 批处理**造成的——须按本条规定**存为 CRLF**，不"随大流改成 LF"。
 * **`powershell` 的 `.ps1` 用 CRLF（L1）**：见 `specs/stack/powershell.adoc`「编码与行尾」。
 * **易被 CRLF 破坏的文本类格式（L2）**：`.cmd` 之外，含 shebang 的文本、`Makefile`、`.gitattributes`/`.gitignore`/`.editorconfig`、Dockerfile、`.env` 等以行/字节严格解析或会被工具按行读取的文本文件，默认按 LF 落盘（依据：POSIX 对文本行以 `\n` 分隔的定义；GNU Make 手册）。
-* **行尾一致性校验（L2）**：行尾问题不靠肉眼判断——改完按下面命令核对，结果须为"零违规、零混用"：
-** 批量核对：`git ls-files --eol` 中 `w/crlf`、`w/mixed` 即工作区为 CRLF 或混用，对照"哪些文件应当 CRLF"（`.bat`/`.cmd`/`.ps1`）判断是否违规；
-** 定点核对单个文件：`file <文件>`、`grep -c $'\r' <文件>`（`0` 即 LF-only，用于确认 `.sh`/`.py` 未被写成 CRLF）。
+* **行尾取值可核对（L2）**：行尾不靠肉眼判断——改动后须核对到"零违规、零混用"这一**取值状态**：逐个受检文件的行尾形态与该文件应有的形态**一致**（应当 CRLF 的仍是 CRLF、应当 LF 的仍是 LF，不得出现混用）。**怎么核对属执行动作，不写进规范**。
 
 == 跨平台检出（不靠人工手动调整）
 

@@ -307,6 +307,14 @@ class TestNewQualityAndReviewGrips(unittest.TestCase):
             statuses["重新执行安装须能更新现有副本（安装脚本经常更新：以远程为准、内容不同才刷新，"
                      "失败保留本地那一份）"], "has-grip")
 
+    def test_deprecated_api_has_mechanical_grip(self):
+        # 「弃用类/API 一律改用替代者、默认不动依赖与版本」由 check_deprecated_api_guard 钉住
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["弃用类/API 一律改用替代者（替代者优先取升级类/同名新类），"
+                     "且默认不动依赖与版本"], "has-grip")
+
     def test_grip_missing_is_reported_not_faked(self):
         # 反例：抓手文件不存在时须判 grip-missing（不得冒充"有抓手"）
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}

@@ -6,7 +6,7 @@
 
 * **行尾 CRLF，不得 LF（L1）**：`.bat`/`.cmd` **一律落盘 CRLF**。原因与依据的**唯一落点＝** `specs/general/encoding.adoc`「换行符」，本文件不重复其机制。行尾由 `.gitattributes` 的 `*.bat text eol=crlf`/`*.cmd text eol=crlf` 声明，不靠人工逐个文件手动调整。
 * **编码取纯 ASCII（L1）**：批处理**指令一律用纯 ASCII 写**——路径与参数用 `%~dp0`/`%*` 一类变量表达、不硬编码中文；需要中文提示/输出时由同栈外的同名 `.ps1` 承载。纯 ASCII 的文本**天然不带 BOM**（BOM 字节本身即非 ASCII），故"纯 ASCII"与"不写 BOM"是同一件事的两面；**不得**为了写中文而改用 UTF-8 + BOM。本栈另与首行相关：`@echo off` 的**首行**是字面意义的第一行，之前不得有空行、BOM 或注释（`cmd.exe` 只认首行的 `@` 前缀）。**机制与依据的唯一落点＝** `specs/general/encoding.adoc`「读写编码」，本文件只给取值与做法。**存量已按本地编码（如 GBK）保存的 `.bat`** 随动迁移——改到该文件时转为纯 ASCII、中文移入同名 `.ps1`，不为此发动全库一次性转换。
-* **核对**：`file <脚本>` 应显示 `ASCII` 文本（显示 `UTF-8`/`UTF-8(BOM)` 即说明含非 ASCII 或 BOM、属待改存量）且 `with CRLF line terminators`；`grep -c $'\r' <脚本>` 非 0 即确认为 CRLF。
+* **核对（取值形态）**：`.bat` 的编码取值＝纯 ASCII、行尾取值＝CRLF（逐字节为 CRLF、不得混用）；带 BOM 或含非 ASCII 即属待改存量。**怎么核对属执行动作，不写进规范**。
 
 == 语法与健壮性
 
