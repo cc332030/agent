@@ -57,6 +57,7 @@ _SPEC = importlib.util.spec_from_file_location(
     "check_specs", os.path.join(HERE, "check_specs.py"))
 cm = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(cm)  # type: ignore[union-attr]
+import rules_engine  # noqa: E402  （加载期判据：自定义文案里不得出现 `{section}`）
 
 
 def _mk_blackbox_base(root: str) -> str:
@@ -3353,7 +3354,9 @@ class TestCheckSelfCheckGuard(CheckSpecsTestCase):
                    "= 执行前自检规范\n\n"
                    "== 知识边界\n\n不得顺口编造，不知道就去查证。\n\n"
                    "== 执行前自检清单（动手前逐项过）\n\n"
-                   "适用范围是非平凡任务，逐项检查。\n\n"
+                   "适用范围是非平凡任务，逐项检查。"
+                   "**动手改一个文件前是否先读了该文件里要改的那一处**"
+                   "（判据见 `specs/general/planning.adoc`「要改的那一处是否已实际读过（改动面按处读）」条）。\n\n"
                    "== 完成前自检\n\n对照原要求逐条核。\n")
         self.write("specs/core/execution.adoc",
                    "执行前自检见 `specs/general/self-check.adoc`。\n")
@@ -3404,6 +3407,33 @@ class TestCheckSelfCheckGuard(CheckSpecsTestCase):
         cm.check_dispatcher_registry()
         cm.check_self_check_guard()
         self.assertIn("未在加载调度器登记", self.error_texts())
+
+    def test_read_before_edit_clause_removed_reports(self):
+        # 反例：自检清单里那一问被整条抽掉（「动手改文件前先读要改的那一处」挂在
+        # 自检关口上，抽掉后自检时不再问它）。**核准的是判据本体**，不看编号：
+        # 本条的两处落点里只有自检关口这一处由本防线核，另两处由
+        # `check_dev_flow_guard` 核——不核时整条被抽掉仍会全绿【复核实测】
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "self-check.adoc")
+        text = open(f, encoding="utf-8").read()
+        cut = text.replace("**动手改一个文件前是否先读了该文件里要改的那一处**",
+                           "**还有没有别的没想到的地方**")
+        self.assertNotEqual(cut, text, "反例的截法失效——按夹具正文原样截，改措辞后须同步这里")
+        open(f, "w", encoding="utf-8").write(cut)
+        cm.check_self_check_guard()
+        self.assertIn("先读了该文件里要改的那一处", self.error_texts())
+
+    def test_read_before_edit_pointer_removed_reports(self):
+        # 反例：自检关口那一问还在、但**判据回指**被抽（只剩一句问话，判据与失效形态
+        # 无处可查——该问退化成口号）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "self-check.adoc")
+        text = open(f, encoding="utf-8").read()
+        cut = text.replace("判据见 `specs/general/planning.adoc`", "判据另见")
+        self.assertNotEqual(cut, text, "反例的截法失效——按夹具正文原样截，改措辞后须同步这里")
+        open(f, "w", encoding="utf-8").write(cut)
+        cm.check_self_check_guard()
+        self.assertIn("该问的判据回指", self.error_texts())
 
 
 class TestCheckSourceGuard(CheckSpecsTestCase):
@@ -4447,6 +4477,9 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "= 执行原则\n\n== 先规划后执行\n\n"
                    "* **动手前先摸清现状与最佳方案（L1）**：先搞清现状，再**先调研最佳实践、再定方案**；"
                    "**调整内容一类需求**（新增与调整同属一类）还须**先找现成可参照的既有标准与更优设计**。\n"
+                   "* **动手改文件前先读要改的那一处（L1）**：核对对象**只到要改的那一处现状**，"
+                   "**不得按记忆中的内容写入**（该处可能已被改过、按记忆写入会把本地内容覆盖掉），"
+                   "**详细判据与失效形态见** `specs/general/planning.adoc`「要改的那一处是否已实际读过（改动面按处读）」。\n"
                    "* 不得绕开既有体系另写一套（L1）：默认改在既有实现上；"
                    "**允许另写一套的条件只有三个**：确实无法承载 / 已被用户确认废弃 / 已被证明优于，**不留两套并存**。\n"
                    "* 大范围改动先确认（L1）：**不得替用户判定某段既有流程\"已废弃\"**。\n"
@@ -4468,6 +4501,13 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收**；"
                    "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
                    "** **依据**：ISO 10007。\n\n"
+                   "=== 要改的那一处是否已实际读过（改动面按处读）\n\n"
+                   "* **改动面按处读（L1）**：**动手改文件时，先读该文件里要改的那一处**——核对对象是"
+                   "**要改的那一处现状**（与本次改动无关的部分**不必读**）。**判定标准（任一命中即不合规）**："
+                   "① 未读取目标处即按其**记忆中的内容**写入（该处已被改过时，**把本地内容覆盖掉**）；"
+                   "② 以\"可能已经改过了\"为由**跳过读取**；③ 读取的范围与本次要改的位置对不上。"
+                   "**边界**：**不得**被本条**读成**\"每个文件都要通读\"；"
+                   "必加载层的对应条在 `specs/core/execution.adoc`、自检清单侧在 `specs/general/self-check.adoc`。\n\n"
                    "== 不得绕开既有体系另写一套\n\n* **默认改在既有实现上（L1）**："
                    "**确实无法承载** / **已被用户确认废弃** / **已被证明优于**；**不留两套并存**。\n\n"
                    "== 大范围改动先确认\n\n* **大动之前先确认（L1）**：**保持原状**；"
@@ -4484,7 +4524,7 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "给出**复核了哪些角度与样本**；按**正常路径**/边界/异常路径/**正反例成对**/步骤与前置核对，"
                    "**用例设计**与**测试有效性**判据见 testing.adoc；**本次改动的直接相关面**先补全，"
                    "**无关的存量缺口**如实记录、**不阻断**。\n\n"
-                   "=== 依据（标准名/编号）\n\n* **ISO 10007**（配置管理）。\n")
+                   "* **ISO 10007**（配置管理）。\n")
         self.write("specs/general/verify.adoc",
                    "= 验证\n\n== 验证的适用边界（先判改动性质，再决定验证到什么程度）\n\n"
                    "判据只有一个问句（L1）：**\"这次改动会不会被未知项目加载、会不会改变别人的行为？\"**\n\n"
@@ -4524,6 +4564,10 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                        "include::_common.txt[tag=baseline-and-compat]\n"
                        "include::_common.txt[tag=compat]\n"
                        "3. 步骤：**调整内容一类改动动手前须先检索现成可参照的标准与更优的设计**。\n")
+        self.write("specs/general/self-check.adoc",
+                   "= 自检\n\n* **改动面按处读（L1）**：**动手改一个文件前，先读该文件里要改的那一处**；"
+                   "判据见 `specs/general/planning.adoc`「要改的那一处是否已实际读过（改动面按处读）」，"
+                   "必加载层的对应条在 `specs/core/execution.adoc`。\n")
         self.write("AGENTS_COMMON.adoc",
                    "= 入口\n\n  ** 动手前的现状与方案、基线 → link:specs/general/planning.adoc[]\n")
         self.write("PROMPTS.adoc",
@@ -4574,14 +4618,105 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         cm.check_dev_flow_guard()
         self.assertIn("planning.adoc", self.error_texts())
 
+    def test_read_before_edit_section_removed_reports(self):
+        # 反例：整条「改动面按处读」小节被删（动手前不再读要改的那一处，
+        # 按记忆写入会把本地内容覆盖掉）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(f, encoding="utf-8").read()
+        head, rest = text.split("=== 要改的那一处是否已实际读过", 1)
+        # 只删小节自身（保留其后的各节），使"小节被抽掉"与"文件被删"区分开
+        open(f, "w", encoding="utf-8").write(head + "== 不得绕开既有体系另写一套" + rest)
+        cm.check_dev_flow_guard()
+        self.assertIn("要改的那一处是否已实际读过", self.error_texts())
+
+    def test_read_before_edit_memory_clause_removed_reports(self):
+        # 反例：判据本体被抽（只剩一句"先读要改的地方"，而"不得按记忆写入 → 覆盖本地内容"
+        # 这半条消失后，实测失效照样发生）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(f, encoding="utf-8").read().replace(
+            "**记忆中的内容**", "**原来的写法**").replace(
+            "把本地内容覆盖掉", "改动不一致").replace(
+            "先读该文件里要改的那一处", "先看看文件")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("改动面按处读", self.error_texts())
+
+    def test_read_before_edit_boundary_removed_reports(self):
+        # 反例：**边界句**被抽（本条会被读成"每个文件都要通读"——与「读取按最小必要」相抵）。
+        # 截法是**只把"读成"那两字换掉**：按整句替换时实测抽不动（逐字照抄长句、
+        # 与夹具里的写法差一个全角引号就静默不生效，用例照样全绿）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(f, encoding="utf-8").read().replace("读成", "读作")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("改动面按处读", self.error_texts())
+
+    def test_read_before_edit_missing_in_execution_reports(self):
+        # 反例：必加载层那条底线被抽（判据只在用到 planning.adoc 时才可见；
+        # 断言用**报错正文里才会出现的锚点**——不得用"必加载层"这类同时出现在
+        # message 文案里的词，否则断言恒绿、这条用例什么都证不了【复核实测踩过】）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "core", "execution.adoc")
+        text = open(f, encoding="utf-8").read().replace(
+            "* **动手改文件前先读要改的那一处（L1）**", "* **动手前先看看代码（L1）**")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("**只到要改的那一处现状**", self.error_texts())
+
+    def test_read_before_edit_missing_in_self_check_reports(self):
+        # 反例：本条在通用层里**不再回指**自检清单那处落点（回指一缺，读者就不知道
+        # 该要求挂在自检关口上；自检关口本身在不在另由 ②c 分支核）
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "planning.adoc")
+        # 夹具里那条的落点是「**必加载层**与**自检清单**各有一处落点（…）」，与真实
+        # 文件的行文不同，故按**夹具里的写法**截（截不动时 assertNotEqual 会先炸——
+        # 不留一条静默全绿的用例）
+        text = open(f, encoding="utf-8").read()
+        cut = text.replace("、自检清单侧在 `specs/general/self-check.adoc`", "、自检清单侧另见")
+        self.assertNotEqual(cut, text, "反例的截法失效——按夹具正文原样截，改措辞后须同步这里")
+        text = cut
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("`specs/general/self-check.adoc`", self.error_texts())
+
+    def test_read_before_edit_self_check_file_removed_reports(self):
+        # 反例：自检规范整体被删（自检关口不会问到"要改的地方读过没有"）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "self-check.adoc"))
+        cm.check_dev_flow_guard()
+        self.assertIn("『要改的那一处读过没有』不再有人问", self.error_texts())
+
+    def test_unknown_placeholder_in_custom_message_rejected(self):
+        # 反例：规则数据的自定义文案里写了引擎不认的占位符（`{section}` 不在
+        # `PLACEHOLDERS` 里，同此前的 `{rel_exec}`）——`_msg` 填不进去，报错正文会
+        # 原样带着它（缺的是哪一节反而看不出来）。判据在**加载期**
+        # （`_check_placeholders`），**直接构造 `Rules` 也要过**：只挂在
+        # `load_rule_files` 上时，直接注入的规则数据仍能把它写进报错正文。
+        # 断言核的是**判据本身**（`可用的是` 那句只在拒绝路径上出现），
+        # 不得只断言 `{section}` 这几个字——那样改成放行也照样绿【复核实测踩过】。
+        with self.assertRaises(rules_engine.RulesError) as ctx:
+            rules_engine.Rules(
+                {"guards": {"g": [{"kind": "file_groups", "file": "a.adoc",
+                                   "groups": [["x", ["y"], "z"]],
+                                   "message": "{file}「{section}」缺 {missing}"}]}},
+                None)
+        self.assertIn("引擎不认识的占位符 `{section}`", str(ctx.exception))
+        self.assertIn("可用的是", str(ctx.exception))
+
     def test_reference_seeking_clause_removed_reports(self):
         # 反例：「需求先找参照物」被删（用户提需求/调整内容时不再先查现成标准与更优设计，
         # 退回"用户怎么说就怎么收"）
         self._write_valid()
         pl = os.path.join(self.root, "specs", "general", "planning.adoc")
         text = open(pl, encoding="utf-8").read()
-        head = text.split("* **需求先找参照物（L1）**")[0]
-        open(pl, "w", encoding="utf-8").write(head)
+        head, rest = text.split("* **需求先找参照物（L1）**", 1)
+        # 只删"参照物"那一条的业务正文（把它压成一句标题），保留其后的各节——
+        # 直接按行截断会连带删掉后面所有落点，报出来的就不是本条要证的那条规则
+        open(pl, "w", encoding="utf-8").write(
+            head + "（本步骤已简化）\n" + "== " + rest.split("\n== ", 1)[-1])
         cm.check_dev_flow_guard()
         self.assertIn("需求先找参照物", self.error_texts())
 

@@ -4350,8 +4350,7 @@ GUARD_WIRING_BASELINE = 111
 #   在 `specs/general/coding.adoc`「持久化访问」的三级小节，框架专名在 `specs/stack/java.adoc`，
 #   图书馆 `library/adoption.adoc` 登记本集合取舍），配套 12 条用例（正例 1 + 反例 11）。
 #   新防线在 `CHECKS` 里插在 `check_pagination_guard` 之后 → 清单表 74 及其后序号顺延一位。
-#   `unittest` 收集数与 `_count_collectable_tests` 的口径不同（收集面含同名用例的
-#   多次出现），故**不以 `Ran` 数为基线**。
+#   `unittest` 收集数与本口径不同（收集面含同名用例的多次出现），故**不以 `Ran` 数为基线**。
 #   **本轮（Issue #186「调整规范」）**：用例数 **1356 → 1368**（按**同源实取**回填，
 #   口径＝`_count_collectable_tests` 的 `类名.用例名` 限定名去重）——新防线
 #   `check_readonly_landing_guard` 的 12 条（`TestCheckReadonlyLandingGuard`：正例 1 +
@@ -4369,7 +4368,17 @@ GUARD_WIRING_BASELINE = 111
 #   `test_batch_bailout_removed_reports`）。规则数据随之加两组锚点（网络层异常归一成 `OSError`、
 #   收尾不得被任何异常跳过），见 `script/specs-rules/readonly-landing.toml`。
 #   数字一律以 `_count_collectable_tests` 的实取值为唯一来源，不按两侧各自数目相加。
-GUARD_TEST_BASELINE = 1374
+#   **本轮（Issue #188「每次修改文件时，需要阅读要修改的位置」）**：接线数不变——
+#   **不增删防线**，新要求挂在既有 `check_dev_flow_guard` 上（新增一个判据对象的三级小节
+#   「要改的那一处是否已实际读过（改动面按处读）」+ 必加载层与自检清单两条落点回指）。
+#   用例数 **1374 → 1385**（同源实取）：`check_specs_test.py` 新增 9 条反例
+#   （`TestCheckDevFlowGuard` 7 条：小节被抽 / 判据本体被抽 / 边界句被抽 / 必加载层落点缺 /
+#   自检清单落点回指缺 / 自检规范整体被删 / 自定义文案写了引擎不认的占位符；
+#   `TestCheckSelfCheckGuard` 2 条：自检关口那一问被抽 / 该问的判据回指被抽），
+#   `check_effective_test.py` 新增 2 条。
+#   反例的判据是"抽掉后必须报红"，不是"断言能命中某串文本"——上一版曾有两条反例实测恒绿
+#   （断言命中的串同时出现在没被抽掉的那半句里，抽掉判据后照样全绿），本版按前者重写。
+GUARD_TEST_BASELINE = 1385
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -6182,11 +6191,20 @@ def check_self_check_guard():
     else:
         with open(SELF_CHECK_FILE, encoding="utf-8") as fh:
             text = fh.read()
+        # 「改动面按处读」那一问挂在清单的第⑤项上（证据条）。**它必须逐字可核**：
+        # 本条的两处落点里，必加载层与通用层由 `check_dev_flow_guard` 核，**自检关口
+        # 这一处只有本分支能核**——不核时整条从自检清单里被抽掉仍全绿（复核实测），
+        # 而"动手前问不问这一句"正是本条要买的东西。**核的是那一问的判据本体**，
+        # 不看编号与排版（编号顺序交人工 review）。
         for key, desc in (
                 ("执行前自检清单", "动手前逐项自检的清单"),
                 ("非平凡任务", "自检适用范围界定（防被'只对大任务'架空）"),
                 ("不得顺口编造", "知识边界（不知道就说不知道、去查证）"),
-                ("完成前自检", "交付前的对照核验")):
+                ("完成前自检", "交付前的对照核验"),
+                ("动手改一个文件前是否先读了该文件里要改的那一处",
+                 "自检关口对『要改的那一处读过没有』的那一问"),
+                ("`specs/general/planning.adoc`「要改的那一处是否已实际读过",
+                 "该问的判据回指（自检关口只说问什么、判据本体在通用层）")):
             if key not in text:
                 err(f"自检防线被破坏：{rel} 缺失『{key}』（{desc}）——"
                     "自检要点不得被删或降级", rel)
@@ -6575,6 +6593,15 @@ def check_dev_flow_guard():
     else:
         v = open(path_v, encoding="utf-8").read()
         run_rule_guard("check_dev_flow_guard")
+    # ②c 自检侧：**自检关口本身还在不在**——本分支挡的是"整份自检规范被删"（「要改的
+    #    那一处读过没有」挂在自检关口上，关口没了就没人问它）。**自检清单里那一问的
+    #    判据本体**由 `check_self_check_guard` 核（本分支不重复设第二份判据：判据只在
+    #    能判定它的那处写一份）。
+    rel_sc = "specs/general/self-check.adoc"
+    path_sc = os.path.join(REPO_ROOT, *rel_sc.split("/"))
+    if not os.path.isfile(path_sc):
+        err(f"缺少文件 {rel_sc}——动手前的自检关口丢失，"
+            "『要改的那一处读过没有』不再有人问", rel_sc)
     # ③ 测试侧：老用例不得为迁就改动而改判 + 兼容不了先确认
     rel_t = "specs/general/testing.adoc"
     path_t = os.path.join(REPO_ROOT, *rel_t.split("/"))

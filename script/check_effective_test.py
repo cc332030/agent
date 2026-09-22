@@ -188,6 +188,24 @@ class TestEvaluate(unittest.TestCase):
         statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
         self.assertEqual(
             statuses["交付形态与报告落点：不得只冒一句过程性叙述、不得只交付不汇报"], "has-grip")
+    def test_read_before_edit_has_mechanical_grip(self):
+        # 「动手改文件前先读要改的那一处」由 check_dev_flow_guard 钉住
+        # （判据本体 + 必加载层与自检清单两处落点）
+        self._mk("script/check_specs.py")
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["动手改文件前先读要改的那一处（不得按记忆写入——该处可能已被改过、"
+                     "会把本地内容覆盖掉；核对对象只到要改的那一处、无关部分不必读）"],
+            "has-grip")
+
+    def test_read_before_edit_missing_reports_not_faked(self):
+        # 反例：抓手文件不存在时须判 grip-missing（不得冒充"有抓手"）
+        statuses = {r["name"]: r["status"] for r in eff.evaluate(self.root)}
+        self.assertEqual(
+            statuses["动手改文件前先读要改的那一处（不得按记忆写入——该处可能已被改过、"
+                     "会把本地内容覆盖掉；核对对象只到要改的那一处、无关部分不必读）"],
+            "grip-missing")
+
     def test_dev_flow_has_mechanical_grip(self):
         # 开发流程（现状/最佳方案/基线、大动先确认、不另写一套、老用例不得改判）
         # 由 check_dev_flow_guard 钉住
