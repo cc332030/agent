@@ -200,9 +200,10 @@ class TestSectionGroups(unittest.TestCase):
     DOC = "= 标题\n\n== 甲节\n\n要点 A\n\n== 乙节\n\n要点 B\n"
 
     def _run(self, ctx, **kw):
+        # 自定义文案里不得写 `{section}`（加载期拦住）——缺的是哪一节由引擎自己填进
+        # 默认模板，自定义文案只补"为什么失效"
         step = {"kind": "section_groups", "file": "a.adoc", "section": "甲节",
-                "groups": [["n", ["要点 A"], "why"]],
-                "missing_section_message": "缺少 {file}「{section}」"}
+                "groups": [["n", ["要点 A"], "why"]]}
         step.update(kw)
         _rules({"g": [step]}, ctx).run("g")
 
@@ -214,6 +215,7 @@ class TestSectionGroups(unittest.TestCase):
     def test_section_missing_reports(self):
         ctx = FakeCtx({"a.adoc": self.DOC})
         self._run(ctx, section="不存在节")
+        # 报错正文里须给出**缺的是哪一节**（占位符由引擎填入，不靠自定义文案）
         self.assertIn("不存在节", ctx.texts())
 
     def test_anchor_only_in_other_section_still_reports(self):
@@ -231,7 +233,7 @@ class TestSubsectionGroups(unittest.TestCase):
         _rules({"g": [{"kind": "subsection_groups", "file": "a.adoc",
                        "subsection": "目标小节",
                        "groups": [["n", ["要点 A"], "why"]],
-                       "missing_section_message": "缺 {section}"}]}, ctx).run("g")
+                       "missing_section_message": "缺对应节"}]}, ctx).run("g")
         self.assertEqual(ctx.errors, [])
 
     def test_subsection_does_not_leak_into_sibling(self):
@@ -239,7 +241,7 @@ class TestSubsectionGroups(unittest.TestCase):
         _rules({"g": [{"kind": "subsection_groups", "file": "a.adoc",
                        "subsection": "目标小节",
                        "groups": [["n", ["要点 B"], "why"]],
-                       "missing_section_message": "缺 {section}"}]}, ctx).run("g")
+                       "missing_section_message": "缺对应节"}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
 
 
@@ -251,7 +253,7 @@ class TestSplitBlock(unittest.TestCase):
         _rules({"g": [{"kind": "split_block", "file": "a.adoc",
                        "split_by": "// tag::x[]", "end_by": "// end::x[]",
                        "groups": [["n", ["要点 A"], "why"]],
-                       "missing_block_message": "缺 {marker}"}]}, ctx).run("g")
+                       "missing_block_message": "缺对应片段"}]}, ctx).run("g")
         self.assertEqual(ctx.errors, [])
 
     def test_block_marker_missing_reports(self):
@@ -259,7 +261,7 @@ class TestSplitBlock(unittest.TestCase):
         _rules({"g": [{"kind": "split_block", "file": "a.adoc",
                        "split_by": "// tag::absent[]",
                        "groups": [["n", ["要点 A"], "why"]],
-                       "missing_block_message": "缺 {marker}"}]}, ctx).run("g")
+                       "missing_block_message": "缺对应片段"}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
 
     def test_outside_block_not_counted(self):
@@ -267,7 +269,7 @@ class TestSplitBlock(unittest.TestCase):
         _rules({"g": [{"kind": "split_block", "file": "a.adoc",
                        "split_by": "// tag::x[]", "end_by": "// end::x[]",
                        "groups": [["n", ["要点 B"], "why"]],
-                       "missing_block_message": "缺 {marker}"}]}, ctx).run("g")
+                       "missing_block_message": "缺对应片段"}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
 
 
@@ -279,7 +281,7 @@ class TestRegexSection(unittest.TestCase):
         _rules({"g": [{"kind": "regex_section", "file": "a.adoc",
                        "pattern": r"^=== P7\..*?(?=\n=== |\Z)", "label": "P7.",
                        "groups": [["n", ["要点 A"], "why"]],
-                       "missing_section_message": "缺 {section}"}]}, ctx).run("g")
+                       "missing_section_message": "缺对应节"}]}, ctx).run("g")
         self.assertEqual(ctx.errors, [])
 
     def test_regex_section_missing_reports(self):
@@ -287,7 +289,7 @@ class TestRegexSection(unittest.TestCase):
         _rules({"g": [{"kind": "regex_section", "file": "a.adoc",
                        "pattern": r"^=== P9\..*?(?=\n=== |\Z)", "label": "P9.",
                        "groups": [["n", ["要点 A"], "why"]],
-                       "missing_section_message": "缺 {section}"}]}, ctx).run("g")
+                       "missing_section_message": "缺对应节"}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
 
     def test_regex_section_does_not_leak(self):
@@ -295,7 +297,7 @@ class TestRegexSection(unittest.TestCase):
         _rules({"g": [{"kind": "regex_section", "file": "a.adoc",
                        "pattern": r"^=== P7\..*?(?=\n=== |\Z)", "label": "P7.",
                        "groups": [["n", ["要点 B"], "why"]],
-                       "missing_section_message": "缺 {section}"}]}, ctx).run("g")
+                       "missing_section_message": "缺对应节"}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
 
 
@@ -325,9 +327,9 @@ class TestBulletTokens(unittest.TestCase):
         _rules({"g": [{"kind": "bullet_tokens", "file": "a.adoc", "section": "节",
                        "bullet": "不存在的条目", "tokens": ["要点 A"],
                        "message": "缺 {missing}",
-                       "missing_bullet_message": "缺条目 {bullet}",
+                       "missing_bullet_message": "缺条目 X",
                        "missing_section_message": "缺节"}]}, ctx).run("g")
-        self.assertIn("缺条目", ctx.texts())
+        self.assertIn("缺条目 X", ctx.texts())
 
     # 下面三条是 `until` / `anchor` 两个新选项的确定项：同一 bullet 的后半句会兜住前半句的
     # 缺项（本仓库实测形态：条目正文的清单句缺一项，而同一 bullet 末尾的依据行同样罗列那些名字）。

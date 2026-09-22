@@ -175,6 +175,8 @@ def _step_section_groups(rules, step):
         return
     section = ctx.section(text, step["section"])
     if not section:
+        # 缺的是**哪一个**节须出现在报错正文里（`_msg` 不认 `{section}` 这类占位符，
+        # 直接填节名）——否则读者只看到"某个句子缺了"、定位不到落点。
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["section"]), rel)
         return
@@ -192,6 +194,7 @@ def _step_subsection_groups(rules, step):
         return
     section = ctx.subsection(text, step["subsection"])
     if not section:
+        # 同上：填入 `subsection`，缺的是哪个小节须出现在报错正文里。
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["subsection"]), rel)
         return
@@ -928,6 +931,10 @@ class Rules:
     def __init__(self, data, ctx):
         if not isinstance(data, dict) or not isinstance(data.get("guards"), dict):
             raise RulesError("规则配置结构不符：须为 {'guards': {<防线名>: [<步骤>...]}}")
+        # 同一套加载期判据，走 `load_rules`（按文件加载）与直接构造（单测注入）两条路
+        # 都要过——只挂在前者时，直接构造的规则数据仍能把 `{section}` 写进报错正文。
+        for name, steps in data["guards"].items():
+            _check_placeholders("<内存>", name, steps)
         self._guards = data["guards"]
         self.ctx = ctx
 
