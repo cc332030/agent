@@ -4115,7 +4115,7 @@ def check_install_repeat_update_guard():
 #   此前这里一度写 108 而常量已是 109）。
 #   **重复登记不计入**：同一道防线在序列里出现两次以上时，`_guard_wiring_count` 按唯一名
 #   计数——重复项不承载任何新判据，若能凑够条数，"删一道真防线 + 重复顶上一道"就无从发现。
-GUARD_WIRING_BASELINE = 109
+GUARD_WIRING_BASELINE = 110
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4302,7 +4302,14 @@ GUARD_WIRING_BASELINE = 109
 #     * `check_declarative_rule_guard` 与 `check_performance_guard` 侧新增 5 条。
 #   `unittest` 收集数与 `_count_collectable_tests` 的口径不同（收集面含同名用例的
 #   多次出现），故**不以 `Ran` 数为基线**——两个数并存会让读者不知该信哪个。
-GUARD_TEST_BASELINE = 1344
+#   **本轮（Issue #184「方法名与逻辑删除的对应」）**：接线数 **109 → 110**、用例数
+#   **1344 → 1356**（按**同源实取**回填，口径＝`_count_collectable_tests` 的
+#   `类名.用例名` 限定名去重）——新增防线 `check_logical_delete_naming_guard`（判据本体
+#   在 `specs/general/coding.adoc`「持久化访问」的三级小节，框架专名在 `specs/stack/java.adoc`，
+#   图书馆 `library/adoption.adoc` 登记本集合取舍），配套 12 条用例（正例 1 + 反例 11）。
+#   新防线在 `CHECKS` 里插在 `check_pagination_guard` 之后 → 清单表 74 及其后序号顺延一位。
+#   `unittest` 收集数与本口径不同（收集面含同名用例的多次出现），故**不以 `Ran` 数为基线**。
+GUARD_TEST_BASELINE = 1356
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -9872,6 +9879,34 @@ def check_pagination_guard():
     phase_done()
 
 
+def check_logical_delete_naming_guard():
+    """『方法名与逻辑删除的对应』防线：判据本体不得被删或降级。
+
+    用户要求（Issue #184，原话）："未使用 mybatis plus 逻辑删除时，没有前缀后缀的方法名
+    默认查询且不带删除标志，如果要查询已删除/未删除……要带特征；使用 mybatis plus 逻辑删除
+    时（因为会默认带删除标志），没有前缀后缀的方法名默认查询逻辑删除数据，如果要查询已删除
+    和忽略删除标志的数据时，要带特征。不仅限 mybatis plus，其他类似的也生效（自己实现的
+    逻辑删除逻辑和框架也算），适用所有语言"。
+
+    落点：判据跨语言、不写框架专名，故唯一落点是 `specs/general/coding.adoc`「持久化访问
+    （数据库/缓存等）」下的三级小节「方法名与逻辑删除的对应（查询方法名即删隐面）」；
+    框架专名（`@TableLogic`/`@SQLDelete`）落在 `specs/stack/java.adoc`「持久化访问」。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一条"属防线空转——**默认面怎么定**、非默认面须带特征、理由、判定标准、
+    边界与存量边界任一被抽走时照样全绿。故逐组核 `script/specs-rules/coding.toml`
+    里的锚点；"某个方法算不算按实体查询、这个名字算不算带了特征"属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("方法名与逻辑删除的对应防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「方法名与逻辑删除的对应」的判据无处承载"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    run_rule_guard("check_logical_delete_naming_guard")
+    phase_done()
+
+
 def check_deprecated_api_guard():
     """『弃用类/API 防线』：不得使用被弃用的类/API、改用替代者；默认不动依赖与版本。
 
@@ -10871,6 +10906,7 @@ CHECKS = (
     check_api_naming_guard,
     check_java_enum_valueof_catch_guard,
     check_pagination_guard,
+    check_logical_delete_naming_guard,
     check_persistence_access_guard,
     check_deprecated_api_guard,
     check_conversion_guard,
