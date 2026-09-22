@@ -15456,6 +15456,151 @@ class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
 
 
 
+class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
+    """钉住『方法名与逻辑删除的对应』防线（用户提出，Issue #184）。
+
+    用户原话："未使用 mybatis plus 逻辑删除时，没有前缀后缀的方法名默认查询且不带删除标志，
+    如果要查询已删除/未删除（带了删除标志的条件）的数据时，要带特征；使用 mybatis plus
+    逻辑删除时（因为会默认带删除标志），没有前缀后缀的方法名默认查询逻辑删除数据，如果要查询
+    已删除和忽略删除标志的数据时，要带特征。不仅限 mybatis plus，其他类似的也生效（自己实现
+    的逻辑删除逻辑和框架也算），适用所有语言"。
+
+    反例逐组覆盖：默认面怎么定被抽 / 非默认面特征词被抽 / 判定标准被抽 / 理由被抽 /
+    默认面例外被抽 / 边界被抽 / 存量边界被抽 / 依据行被整行删 / Java 落点缺框架专名 /
+    图书馆未登记取舍。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    ADOPTION = "library/adoption.adoc"
+    SECTION = "持久化访问（数据库/缓存等）"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        with open(self.CODING, encoding="utf-8") as fh:
+            self.CODING_TEXT = fh.read()
+        with open(self.JAVA, encoding="utf-8") as fh:
+            self.JAVA_TEXT = fh.read()
+        with open(self.ADOPTION, encoding="utf-8") as fh:
+            self.ADOPTION_TEXT = fh.read()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_coding(self, text: str) -> None:
+        self.write(self.CODING, text)
+
+    def _write_all_valid(self) -> None:
+        self._write_coding(self.CODING_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT)
+        # `run_rule_guard` 按**阶段**去重（同一阶段内同名防线只跑一遍），而每个用例都
+        # 自成一个阶段（`phase()` 会清空去重集）——这里显式清一次只是让"同一用例里重复
+        # 调用防线"也按最新夹具核对（防御性，与 `REPO_SCRIPT_SRC_CACHE` 同理）。
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _mutated_coding(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.CODING_TEXT)
+        self._write_all_valid()
+        self._write_coding(self.CODING_TEXT.replace(removed, replacement))
+
+    def _write_coding_without_line(self, anchor: str) -> None:
+        """删掉含 `anchor` 的那一行（依据行一类"整行"判据）。"""
+        lines = self.CODING_TEXT.split("\n")
+        hit = [i for i, ln in enumerate(lines) if anchor in ln]
+        self.assertEqual(1, len(hit))
+        del lines[hit[0]]
+        self._write_all_valid()
+        self._write_coding("\n".join(lines))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿（锚点与文档脱节时先在这一条暴露）
+        self._write_all_valid()
+        cm.check_logical_delete_naming_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_default_face_rule_removed_reports(self):
+        # 反例①：默认面"取该技术是否自动附加"被抽 -> 默认面退回"约定俗成的那一面"
+        self._mutated_coding("**默认面取该技术是否自动附加删除标志条件**", "默认面即习惯用法")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("默认面取该技术是否自动附加删除标志条件", self.error_texts())
+
+    def test_feature_word_removed_reports(self):
+        # 反例②：非默认面须带特征词被抽 -> "查已删也顺手叫 list()"重新成立
+        self._mutated_coding("**方法名须带该面的特征词**", "注意区分")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("方法名须带该面的特征词", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_all_valid()
+        text = self.CODING_TEXT.replace("**判定标准（任一命中即违规）**：① 不带删隐面特征词的方法名查询了", "补充说明：")
+        self.assertNotEqual(self.CODING_TEXT, text)
+        self._write_coding(text)
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("判定标准（任一命中即违规）", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例④：理由（删隐面只能从技术配置反推）被抽 -> 本条的级别与处置会被降级
+        self._mutated_coding("**删隐面只能从技术配置反推、读代码的人与评审者都无从预期**", "不太直观")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("无从预期", self.error_texts())
+
+    def test_project_default_exception_removed_reports(self):
+        # 反例⑤：默认面的唯一例外被抽 -> 同一项目里按各实体配置各算一套
+        self._mutated_coding("项目自身规范或该项目既有先例已明确", "另有规定时")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("先例", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑥：边界被抽 -> 本条被读成"所有方法名都要加后缀"
+        self._mutated_coding("**只**约束**按实体/表做查询的方法名**", "适用于所有方法名")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("按实体/表做查询的方法名", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界（不得全库改名）被抽 -> 等于要求立刻批量重写既有方法名
+        self._mutated_coding("**且不得据本条做全库改名**", "")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("不得据本条做全库改名", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：依据行被整行删掉 -> 读者把本集合的取舍当成标准要求；
+        #          按整个二级节取值时相邻条目的同义字样会兜住缺项，故须按小节取值
+        self._write_coding_without_line("**\"默认面随技术是否自动附加删除标志条件而变")
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑨：Java 落点缺框架专名 -> MyBatis-Plus 侧的默认面无从判定
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT.replace("@TableLogic", "某个注解"))
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("TableLogic", self.error_texts())
+
+    def test_adoption_not_registered_reports(self):
+        # 反例⑩：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT)
+        self.write(self.ADOPTION, self.ADOPTION_TEXT.replace("方法名与逻辑删除的对应", "某条规则"))
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_subsection_missing_reports(self):
+        # 反例⑪：整个三级小节被删 -> 该条失去落点
+        self._write_all_valid()
+        self._write_coding(self.CODING_TEXT.split("=== 方法名与逻辑删除的对应")[0])
+        cm.check_logical_delete_naming_guard()
+        self.assertIn("方法名与逻辑删除的对应", self.error_texts())
+
+
 class TestCheckPaginationGuard(CheckSpecsTestCase):
     """钉住『分页查询返回类型与转换』防线（用户提出，Issue #180）。
 
