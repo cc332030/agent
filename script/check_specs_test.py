@@ -16571,6 +16571,205 @@ class TestCheckReadonlyLandingGuard(CheckSpecsTestCase):
         self.assertIn("写进项目自己", self.error_texts())
 
 
+class TestCheckMethodPlacementGuard(CheckSpecsTestCase):
+    """钉住『成员与方法次序』防线（用户提出，Issue #195）。
+
+    用户原话："新增方法/函数时，按照业务流程的先后顺序进行排序……（即允许按照流程前后顺序，
+    把新增方法加在已有方法的前面（包括最前面）或者中间），如果有重载方法，直接加在重载方法
+    的附近……先初始化的在前面，先用到的在前面，后面的依赖前面的……例外：接口查询数据时，
+    要对数据库实体和返回模型做转换，转换方法默认写在查询接口后面。此规范只适用于新增方法/函数，
+    不对已有方法生效，review 时不算问题不提出"。
+
+    失效形态：新增成员一律追加到类末尾（"按加入日期排序"成了第二个次序来源），**新增的位置
+    不报错**、只是次序无声漂移；重载被别的成员隔开、数据转换方法跑到查询之前。
+
+    核对对象一律是**条目/行自己的正文**（`bullet_tokens` / `line_tokens`）：本条与相邻条目
+    （「链式赋值顺序随字段顺序」含字段顺序与存量边界句、「实体类字段按数据库顺序」含表列序、
+    「静态字段排在类最前」含例外句）字样相同，按整节或整份文件核时它们会把缺项兜住。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    ADOPTION = "library/adoption.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+    SECTION = "命名与代码质量"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        for rel in (self.CODING, self.JAVA, self.ADOPTION, self.COMMON, self.README):
+            with open(rel, encoding="utf-8") as fh:
+                setattr(self, "_text_" + rel.replace("/", "_"), fh.read())
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _src(self, rel: str) -> str:
+        return getattr(self, "_text_" + rel.replace("/", "_"))
+
+    def _write_all_valid(self) -> None:
+        for rel in (self.CODING, self.JAVA, self.ADOPTION, self.COMMON, self.README):
+            self.write(rel, self._src(rel))
+        # `run_rule_guard` 按阶段去重：每个用例都自成一个阶段，这里显式清一次是防御性的
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard(self) -> None:
+        """只跑本道防线（`run_rule_guard` 有阶段内去重，故先清去重集合）。"""
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_method_placement_guard()
+
+    def _mutated(self, rel: str, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self._src(rel))
+        self._write_all_valid()
+        self.write(rel, self._src(rel).replace(removed, replacement))
+
+    def _replace_bullet(self, rel: str, start: str, hollow: str) -> None:
+        """把 `start` 打头的那条 bullet 整条换成 `hollow`（钉"要点被抽空成一句空话"）。"""
+        self._write_all_valid()
+        lines = self._src(rel).splitlines(keepends=True)
+        idx = next(i for i, ln in enumerate(lines) if ln.startswith(start))
+        self.write(rel, "".join(lines[:idx] + [hollow] + lines[idx + 1:]))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿（锚点与文档脱节时先在这一条暴露）
+        self._write_all_valid()
+        cm.check_method_placement_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：条文（含 L1 标注）被抽 -> 「新增的放哪都行」重新成立
+        self._mutated(self.CODING, "**成员与方法次序（L1，任何语言）**", "关于成员次序的说明")
+        self._run_guard()
+        self.assertIn("成员与方法次序", self.error_texts())
+
+    def test_allow_insert_removed_reports(self):
+        # 反例②：用户点名的「允许插前面/中间」被抽 -> 退回「只能往末尾加」（Google 点名禁止的形态）
+        self._mutated(self.CODING,
+                      "允许把新增的方法加在**已有成员的前面（含最前面）或中间**",
+                      "新增方法加在末尾")
+        self._run_guard()
+        self.assertIn("允许把新增的方法加在**已有成员的前面（含最前面）或中间**",
+                      self.error_texts())
+
+    def test_not_append_tail_removed_reports(self):
+        # 反例③：禁止面（不得一律追加到末尾）被抽 -> 追加到末尾重新成为默许形态
+        self._mutated(self.CODING,
+                      "**不得**为「不动已有顺序」而一律追加到类/文件末尾",
+                      "改到哪算哪")
+        self._run_guard()
+        self.assertIn("**不得**为「不动已有顺序」而一律追加到类/文件末尾", self.error_texts())
+
+    def test_overload_adjacency_removed_reports(self):
+        # 反例④：重载相邻被抽 -> 重载被别的成员隔开、无判据
+        self._mutated(self.CODING,
+                      "**重载成员**（同名不同参数）**一律紧邻已有同名成员**",
+                      "重载成员照常写")
+        self._run_guard()
+        self.assertIn("**重载成员**（同名不同参数）**一律紧邻已有同名成员**", self.error_texts())
+
+    def test_conversion_exception_removed_reports(self):
+        # 反例⑤：例外（转换方法跟随查询）被抽 -> 转换方法被按「被调用者在前」提到查询之前
+        self._mutated(self.CODING,
+                      "**默认写在查询它的那个接口/方法之后**",
+                      "")
+        self._run_guard()
+        self.assertIn("**默认写在查询它的那个接口/方法之后**", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑥：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._mutated(self.CODING,
+                      "**判定标准（任一命中即违规）**",
+                      "补充说明")
+        self._run_guard()
+        self.assertIn("**判定标准（任一命中即违规）**", self.error_texts())
+
+    def test_increment_only_boundary_removed_reports(self):
+        # 反例⑦：存量边界（只对新增生效、review 不提出问题）被抽 ->
+        # 会被读成「必须立刻重排既有成员」，与用户「不对已有方法生效」相抵
+        self._mutated(self.CODING,
+                      "**review 时把「既有成员的位置」当已知现状、不提出问题**",
+                      "")
+        self._run_guard()
+        self.assertIn("**review 时把「既有成员的位置」当已知现状、不提出问题**",
+                      self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：依据行/取舍声明被抽 -> 读者把本集合的取舍当成标准要求
+        self._mutated(self.CODING,
+                      "**「按流程次序、可插前面或中间 + 重载相邻 + 转换跟随查询」是本集合的判据化取值**",
+                      "通行做法")
+        self._run_guard()
+        self.assertIn("本集合的判据化取值", self.error_texts())
+
+    def test_bullet_present_but_hollow_reports(self):
+        """反例⑨：条目还在、要点被抽空成一句空话 -> 须报。"""
+        self._replace_bullet(
+            self.CODING,
+            "* **成员与方法次序（L1，任何语言）**",
+            "* **成员与方法次序（L1，任何语言）**：新增成员的位置看着办就行。\n")
+        self._run_guard()
+        self.assertIn("允许把新增的方法加在**已有成员的前面（含最前面）或中间**",
+                      self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑩：Java 落点被抽 -> Java 执行者按栈文件学时仍会一律追加到类末尾
+        self._mutated(self.JAVA, "**成员与方法次序（L1，本文件是 Java 落点）**",
+                      "关于成员次序")
+        self._run_guard()
+        self.assertIn("成员与方法次序（L1，本文件是 Java 落点）", self.error_texts())
+
+    def test_java_landing_reversed_reports(self):
+        """反例⑪：Java 落点条文被**反向**（载体名仍在、方向反了）-> 须报。"""
+        self._mutated(self.JAVA,
+                      "写在依赖它的 `RestTemplate` 之前",
+                      "写在依赖它的 `RestTemplate` 之后")
+        self._run_guard()
+        self.assertIn("写在依赖它的 `RestTemplate` 之前", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例⑫：调度器识别特征被抽 -> 新增方法不会触发加载该条
+        self._mutated(self.COMMON, "要**新增字段/方法/函数**", "要写代码")
+        self._run_guard()
+        self.assertIn("要**新增字段/方法/函数**", self.error_texts())
+
+    def test_dispatcher_java_feature_removed_reports(self):
+        # 反例⑬：Java 技术栈登记里的识别特征被抽 -> Java 项目按栈登记加载看不到这条
+        self._mutated(self.COMMON, "**成员与方法次序**", "**成员排序**")
+        self._run_guard()
+        self.assertIn("**成员与方法次序**", self.error_texts())
+
+    def test_readme_sync_removed_reports(self):
+        # 反例⑭：README 目录说明未同步 -> 读者按 README 学习时无从知道有这条规则
+        self._write_all_valid()
+        self.write(self.README, self._src(self.README).replace("**成员与方法次序", "**成员次序"))
+        self._run_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_adoption_not_registered_reports(self):
+        # 反例⑮：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
+        self._mutated(self.ADOPTION, "**只对新增成员生效**", "只对新写的生效")
+        self._run_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_adoption_rule_hollowed_reports(self):
+        """反例⑯：图书馆登记被掏空成一句空话 -> 须报。"""
+        self._write_all_valid()
+        text = self._src(self.ADOPTION)
+        idx = text.index("* **「成员与方法次序")
+        end = text.index("\n\n", idx)
+        hollow = ("* **「成员与方法次序」是本集合自己的判据化取舍**：成员与方法次序，"
+                  "本集合自己的判据化取舍，没有任何材料规定。\n")
+        self.write(self.ADOPTION, text[:idx] + hollow + text[end + 1:])
+        self._run_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+
 class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
     """钉住『链式赋值顺序随字段顺序』防线（用户提出，Issue #190）。
 
