@@ -15,6 +15,7 @@
   * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
   * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes`/`.editorconfig` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
   * check_review_guard   —— 评审备注落点防线（正：判据条 + 两个方向约束 + 两处引用齐备；反：文件被删/判据缺失/引用断开）
+  * check_baseline_sync_guard —— 基线同步防线（正：三处落点 + 公开面齐备；反：前置条/判定标准/假绿折衷/根因/两侧核/两档取值/压缩前复核/两个方向/分工句/依据，各落点逐条被删或掏空）
   * check_verify_guard   —— 规范验证防线（正：两问定式化节 + P2 + 本仓库落点三处一致；
                              反：文件被删/节改名/第二问被删/P2 或本仓库口径未同步/未登记）
   * check_priority_guard 另钉『怎么走』形态声明与各最高关注项的『依据』行（反：形态声明被删/依据被整段删）
@@ -4723,7 +4724,12 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "* **C 不改内容的操作**：**不做基线测试**。\n\n"
                    "* **验证须覆盖项目的全部既定校验手段（L1）**：**存在测试**≠**测试被执行**；"
                    "手段与其用例**本身可能不完整**，须**先按 link:testing.adoc[]「用例设计」review**、"
-                   "说明\"哪些未覆盖\"，**本次改动的直接相关面**先补全。\n")
+                   "说明\"哪些未覆盖\"，**本次改动的直接相关面**先补全。\n"
+                   "* **汇报须与可核对的事实一致，不得狡辩（L1）**：汇报里的每一项结论都须与**实际取值**一致。"
+                   "**判定标准（任一命中即不合规）**：① 汇报里的**数字与清单**（提交数、文件数、用例统计等）"
+                   "与**实际统计**不一致——数字类结论须与实际取值同源，**写进汇报前须重取一次**；"
+                   "② 用\"核对项全绿\"自证用户质疑的那件事没发生——**先复取值再回答**、**不得拿既有结论当辩词**；"
+                   "③ 用户指出的不符**成立**时先更正汇报。\n")
         self.write("specs/general/testing.adoc",
                    "= 测试\n\n* 重构后须**同时满足既有用例与新用例**（L1）："
                    "**既有用例不得为迁就重构而改判**（除**相关功能被显式移除**）、**前后完整兼容**"
@@ -4746,7 +4752,10 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**改动后：老用例与新用例必须同时成立（L1）**\n"
                    "  - **既有用例不得为迁就改动而改判**\n"
                    "  - **新老用例在同一套校验里同时全绿**\n  - **兼容不了就停下确认**\n"
-                   "  - **验证须与基线比对**\n// end::compat[]\n")
+                   "  - **验证须与基线比对**\n// end::compat[]\n\n"
+                   "// tag::report-tail[]\n与**交付情况**。"
+                   "**汇报里的数字与结论须与实际取值一致（L1）**——用户指出的不符"
+                   "**先复取值再回答**、**不得拿既有结论当辩词**。\n// end::report-tail[]\n")
         for name in ("review.adoc", "refactor.adoc"):
             self.write(f"prompts/{name}",
                        "= 提示词\n\ninclude::_common.txt[tag=baseline]\n"
@@ -5034,6 +5043,32 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("README.adoc", "= 说明\n\n普通说明。\n")
         cm.check_dev_flow_guard()
         self.assertIn("README.adoc", self.error_texts())
+
+    def test_report_consistency_clause_removed_reports(self):
+        # 反例（ctool4j#102 实证）：抽掉「汇报须与可核对的事实一致」的判定标准——
+        # 汇报与事实脱节（提交数与汇报对不上）时无判据可拦，执行者拿"核对项全绿"自证。
+        self._write_valid()
+        f = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(f, encoding="utf-8").read().replace(
+            "汇报须与可核对的事实一致，不得狡辩（L1）", "").replace(
+            "写进汇报前须重取一次", "").replace(
+            "先复取值再回答", "").replace(
+            "不得拿既有结论当辩词", "")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("汇报须与可核对的事实一致", self.error_texts())
+
+    def test_report_consistency_missing_in_report_tail_reports(self):
+        # 反例：`report-tail` 片段丢掉同口径半句——复制出去的提示词没有这条边界
+        self._write_valid()
+        f = os.path.join(self.root, "prompts", "_common.txt")
+        text = open(f, encoding="utf-8").read().replace(
+            "汇报里的数字与结论须与实际取值一致（L1）", "").replace(
+            "先复取值再回答", "").replace(
+            "不得拿既有结论当辩词", "")
+        open(f, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("report-tail", self.error_texts())
 
 
 class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
@@ -7481,6 +7516,415 @@ class TestCheckMergeRelationshipGuard(CheckSpecsTestCase):
                    "`git merge-base --is-ancestor <目标分支> <分支>` 为假。\n")
         cm.check_merge_relationship_guard()
         self.assertIn("不吞掉合并提交", self.error_texts())
+
+
+class TestCheckBaselineSyncGuard(CheckSpecsTestCase):
+    """钉住『基线同步防线』：**压缩前须先并入目标分支的最新改动**（用户提出，Issue #198，P0）。
+
+    用户原话："我不希望再出现丢失内容，压缩前先合并 main 有用吗？尽所有可能避免丢失内容，
+    这是 P0 优先级（最高）"；实证形态：PR `cc332030/ctool4j#101` 的源分支停在旧基点上、
+    **从未同步过目标分支**，压缩一次即把目标分支上刚合入的两批改动带成删除（22 文件、+615/−1447）。
+
+    本组覆盖三处落点（通用层判据本体 / git 层取值形态 / 平台层后果）与公开面，
+    并专门覆盖两类最要害的反例：
+      * **假绿形态**——"只把文件内容改成和目标分支一样"冒充已并入（内容上看不出来、照旧删内容）；
+      * **既有判据的免疫形态**——「共同祖先恰好等于目标分支本身」时"目标分支是祖先"为真，
+        故须有"不得以这条关系为真顶掉本条"这一句（缺则本条被既有判据兜住、形同不存在）。
+    另有"本条被误判为既有条文的重复表述而合并删除"这一反例（分工句是它的挡板）。
+    """
+
+    VC = (
+        "= 版本管理规范（通用层）\n\n"
+        "== 压缩提交（提交历史整理）\n\n"
+        "* **压缩前须先并入目标分支的最新改动（L1）**：**在压缩任何内容之前**，须确认本分支已把"
+        "目标分支的**当前最新提交**并入过——**若未并入，先并入、再压缩**（这一步不是压缩的"
+        "组成部分，是它的**前置**）。**判定标准（可核对）**：一份为本分支算出的合并结果，"
+        "与仅按目标分支当前最新提交、同一基点算出的那份，**逐条一致、且为空**；合并关系须"
+        "真实成立（**目标分支的最新提交是本分支的祖先**）——**不得**用\"只把文件内容改成和"
+        "目标分支一样\"折衷：那样在内容上看不出来，而\"已并入\"并没有发生过，"
+        "**照旧会把目标分支的改动压成删除**。**根因**：压缩的产物是\"**相对目标分支的差异**\"；"
+        "分支停在旧基点上时，那个差异里**混进了**\"目标分支后来新加的东西\"，"
+        "**压缩一次就等于把它们删一次**。**依据**：**变更须基于可追溯的基线状态（ISO 10007）**——"
+        "\"基线是否已并入\"必须是可核对的事实，**不能靠\"我以为是最新的\"**。\n"
+        "* **相对基线两侧核、不得整体取一侧（L1）**：\"目标分支在基线之后新增的\"与"
+        "\"本分支在基线之后新增的\"**两批都在**。**判定标准**：① 取\"**整体取一侧**\"收尾；"
+        "**取值**：两侧都有改动的那一处须按两档取值形态核对——**文件级**"
+        "（**一侧删除、另一侧改动的同一文件须逐条裁决并写明**）与**内容级**"
+        "（**不得只看\"冲突标记没了\"**）。\n"
+        "* **压缩前相对基线逐项核（L1）**：**合并后的差异检出**与仅按目标分支当前最新提交、"
+        "同一基点算出的那份**逐条一致（且为空）**——**这一份非空本身就是判据**"
+        "（**不是与\"逐条一致\"并列取舍的第二条**）：非空即说明有改动被记成了反向删除，"
+        "其中含**同侧**的形态（**本分支在基线之后新增过、又被回退成删除的地方**）。"
+        "**两个方向都要核**："
+        "① **目标分支在基线之后新增的内容**，**一条都不能少**；"
+        "② **本分支在基线之后新增的内容**，**一条都不能少**。"
+        "**这一条与「解决冲突后须核查是否丢失内容」的分工**：那三档判据核的是\"**冲突两侧**\"，"
+        "本条核的是\"**分支自己的旧快照 vs 目标分支**\"——**另立一条**、**不得互相替代**。\n"
+        "* **压缩后须核查有无多余的删除（L1）**：压缩的产出形态须相对**目标分支的当前最新提交**"
+        "核一遍**有没有多余的删除**。**判定标准**：① 交付形态里**给不出这份账**；"
+        "② 只核到**有没有冲突标记 / 能不能编译**、或只核**两侧内容在不在**；"
+        "③ 只核**被整体删除的文件**，**分支自己（基线之后）新增过、又被回退成删除的地方**一处未核。"
+        "**四个核对方向**：① **该在的东西一次都没被删**；② **本分支自己新增过的东西**"
+        "在压缩后的形态里不得出现为删除；③ **本分支与基线共有的东西**不得只因压缩而消失；"
+        "④ **该删的那侧**须逐条给出原因、**不得整体取一侧收尾**。"
+        "**与「解决冲突后须核查是否丢失内容」的分工**：本条核的是"
+        "**压缩之后的产出形态里有没有多出删除**——**另立一条不得互相替代**。"
+        "**与「压缩＝提交历史整理，内容零变化」的分工**：**前者为空与后者的账非空可以同时成立**，"
+        "故两条互不替代。\n"
+        "* **压缩＝提交历史整理，内容零变化（L1）**：整理前后工作副本差异为空。\n"
+    )
+
+    GIT = (
+        "= git 规范（通用层）\n\n== 冲突与压缩提交（git 侧落地）\n\n"
+        "* **并入是否真实发生的核对（L1）**：核对到的是**取值状态**——"
+        "**目标分支的当前最新提交是本分支的祖先**，且差异检出是按\"已并入该最新提交\"重算过的。"
+        "**这一条与「压缩后的合并关系核对」的分工**：那条核的是『压缩之后不要把它弄丢』，"
+        "本条核的是『**压缩之前它到底发生过没有**』——**`git merge-base` 的取值**"
+        "**恰好等于目标分支本身**时，前者为真、却不是\"已并入最新\"；"
+        "故**不得以这条关系为真顶掉本条**。\n"
+        "* **相对基线的核对（L1）**：**两个方向都核**：目标分支在基线之后新增的一条不少、"
+        "本分支在基线之后新增的一条不少；账是\"合并后的差异检出与仅按目标分支当前最新提交、"
+        "同一基点算出的那份**逐条一致（且为空）**\"。**不得整体取一侧收尾**。\n"
+        "* **压缩后不足量删除的核对（L1）**：核对到的是**取值状态**——"
+        "**本分支在基线之后新增的条目不得出现为删除**；核的账须与\"仅按目标分支当前最新提交、"
+        "同一基点重算\"的那一份**逐条一致**，且**那一份为空**。"
+        "**这一条与「相对基线的核对」的分工**：那条在**并入时**核；本条在**压缩之后**核。\n"
+        "* **被改过 / 删过的文件里的删除条目逐处核（L1）**：**两个方向的删除各自都是空**；"
+        "**不得只核被整体删除的文件**——**改过的文件里混着反向删除，文件级根本看不出来**；"
+        "**一侧单方删除的，不得被另一侧的删除抵消**。\n"
+        "* **压缩后的合并关系核对（L1）**：另议。\n"
+    )
+
+    CNB = (
+        "= CNB 规范（平台层）\n\n== 压缩提交（提交历史的整理）\n"
+        "* **压缩后须核查有无多余的删除（L1）**：压缩后须核**有没有多余的删除**"
+        "（**规则本体与四个核对方向见** `specs/general/version-control.adoc`「压缩提交」）。"
+        "**本平台上的真实失效形态**：本平台是**跨轮次接续**的——压缩后这一问，"
+        "**既有的任何一条都没读过**，故一条看起来干净的提交能一路报绿走到合并。"
+        "**与「压缩须保留与目标分支的合并关系」的关系**：两条核的是**不同的两件事**"
+        "（**产出形态里有没有多出删除 / 合并关系丢没丢**），**互不替代**——"
+        "**合并关系为真**不构成\"没有多余删除\"为真的依据——合并关系为真**不构成**任何豁免。\n"
+        "* **压缩前须先并入目标分支的最新提交（L1，本平台的用户点名形态）**：用户要求压缩时，"
+        "**先确认本分支已把目标分支的当前最新提交并入过**——未并入则**先并入、再压缩**"
+        "（规则本体见 `specs/general/version-control.adoc`「压缩提交」；本处只补平台侧能观测到的后果）。"
+        "**本平台上的真实失效形态**：分支**从未同步过目标分支**时，`git merge-base` "
+        "恰好**等于目标分支本身**——于是\"目标分支是祖先\"**为真**、既有的两条关系判据"
+        "与机械防线**全部报绿**，而**压缩一次即把目标分支后合入的改动整批删掉**；"
+        "这批删除会**随 PR 合并落进目标分支**、**不可逆**。**判定标准**：**交付说明里须给出**"
+        "\"已并入目标分支当前最新提交\"这一事实的**取值**；**只说\"分支是最新的\"不给取值，"
+        "即不合规**。**与「压缩后的合并关系核对」的关系**：两条核的是**不同的两件事**"
+        "（**压缩之前发没发生过并入** / **压缩之后关系丢没丢**），**互不替代**。\n"
+    )
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/version-control.adoc", self.VC)
+        self.write("specs/general/git.adoc", self.GIT)
+        self.write("specs/platform/cnb.adoc", self.CNB)
+        self.write(
+            "README.adoc",
+            "* **压缩前先并入目标分支**，否则\"压缩一次\"就是\"删一次\"；"
+            "**\"目标分支是祖先\"这句话在\"没并入最新\"的形态下照样为真**，"
+            "**不能拿它当事发过的凭据**。\n"
+            "* **压缩后要核\"有没有多余的删除\"**：**基准是目标分支的最新提交、不是本地历史**；"
+            "改过的文件里混进反向删除时**文件个数不变、文件级看不出来**。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_baseline_sync_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_general_file_missing_reports(self):
+        # 反例：规则本体无处承载（用户口称"版本管理"、未点名 git/CNB）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "version-control.adoc"))
+        cm.check_baseline_sync_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例：通用层「压缩提交」整节被删 → 前置条与两个方向的核对都失去落点
+        self._write_valid()
+        self.write("specs/general/version-control.adoc",
+                   "= 版本管理规范（通用层）\n\n== 其它节\n\n* 另议。\n")
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩提交", self.error_texts())
+
+    def test_gate_clause_removed_reports(self):
+        # 反例：前置条被整条抽掉（只剩"压缩要内容零变化"）→ 执行者直接进入压缩（正是 #101 的形态）
+        self._write_valid()
+        vc = self.VC.replace("* **压缩前须先并入目标分支的最新改动（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩前须先并入目标分支的最新改动", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例（关键词堆砌式假绿）：只留标题与一句口号 → 判据退化成印象
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判定标准（可核对）**：一份为本分支算出的合并结果，"
+            "与仅按目标分支当前最新提交、同一基点算出的那份，**逐条一致、且为空**；"
+            "合并关系须真实成立（**目标分支的最新提交是本分支的祖先**）",
+            "务必谨慎。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_fake_merge_excuse_removed_reports(self):
+        # 反例：**假绿形态**被删（"只把文件内容改成和目标分支一样"）→ 该折衷重新成为默许写法
+        self._write_valid()
+        vc = self.VC.replace("**不得**用\"只把文件内容改成和目标分支一样\"折衷："
+                             "那样在内容上看不出来，而\"已并入\"并没有发生过", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("折衷", self.error_texts())
+
+    def test_root_cause_removed_reports(self):
+        # 反例：根因句被删 → 本条会被读成"多做一步合并"的流程建议，而不是"不这么做就删内容"
+        self._write_valid()
+        vc = self.VC.replace("**根因**：压缩的产物是\"**相对目标分支的差异**\"；", "**说明**：另议。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("根因", self.error_texts())
+
+    def test_two_sided_check_removed_reports(self):
+        # 反例：并入时的"两侧核、不得整体取一侧"被删 → 并入动作自己就可能丢内容
+        self._write_valid()
+        vc = self.VC.replace("* **相对基线两侧核、不得整体取一侧（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("相对基线两侧核", self.error_texts())
+
+    def test_value_form_grades_removed_reports(self):
+        # 反例：两档取值形态被抽掉 → 核查只能退到"冲突标记没了"
+        self._write_valid()
+        vc = self.VC.replace("**取值**：两侧都有改动的那一处须按两档取值形态核对——"
+                             "**文件级**（", "**取值**：（")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("文件级", self.error_texts())
+
+    def test_pre_squash_recheck_removed_reports(self):
+        # 反例：压缩前的复核被删 → 只核了并入那一步、压缩前不再算账
+        self._write_valid()
+        vc = self.VC.replace("* **压缩前相对基线逐项核（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩前相对基线逐项核", self.error_texts())
+
+    def test_direction_criteria_removed_reports(self):
+        # 反例：两个方向各自的判据被抽 → 只剩"两侧都要核"这句方向性口号、无从判定
+        self._write_valid()
+        vc = self.VC.replace(
+            "**两个方向都要核**：① **目标分支在基线之后新增的内容**，**一条都不能少**；"
+            "② **本分支在基线之后新增的内容**，**一条都不能少**。", "务必都核。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("目标分支在基线之后新增的内容", self.error_texts())
+
+    def test_demarcation_removed_reports(self):
+        # 反例：与既有核查条的分工句被删 → 本条会被判为既有条文的重复表述而合并删除（真源消失）
+        self._write_valid()
+        vc = self.VC.replace(
+            "**这一条与「解决冲突后须核查是否丢失内容」的分工**：那三档判据核的是\"**冲突两侧**\"，"
+            "本条核的是\"**分支自己的旧快照 vs 目标分支**\"——**另立一条**、**不得互相替代**。", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("分支自己的旧快照 vs 目标分支", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例：依据行被删 → 读者以为这是自造的口径
+        self._write_valid()
+        vc = self.VC.replace("**依据**：**变更须基于可追溯的基线状态（ISO 10007）**——"
+                             "\"基线是否已并入\"必须是可核对的事实，**不能靠\"我以为是最新的\"**。", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("ISO 10007", self.error_texts())
+
+    def test_git_layer_value_form_removed_reports(self):
+        # 反例：git 层只剩口号、给不出取值形态
+        self._write_valid()
+        git = self.GIT.replace("* **并入是否真实发生的核对（L1）**：", "* **附注**：")
+        self.write("specs/general/git.adoc", git)
+        cm.check_baseline_sync_guard()
+        self.assertIn("并入是否真实发生的核对", self.error_texts())
+
+    def test_git_layer_immunity_clause_removed_reports(self):
+        # 反例（最要害）：**"共同祖先恰好等于目标分支本身"这一免疫形态**被删
+        # → 本条会被既有判据（"目标分支是祖先"为真）兜住、形同不存在
+        self._write_valid()
+        git = self.GIT.replace("**`git merge-base` 的取值**"
+                               "**恰好等于目标分支本身**时，前者为真、却不是\"已并入最新\"；"
+                               "故**不得以这条关系为真顶掉本条**。", "")
+        self.write("specs/general/git.adoc", git)
+        cm.check_baseline_sync_guard()
+        self.assertIn("恰好等于目标分支本身", self.error_texts())
+
+    def test_git_layer_two_direction_removed_reports(self):
+        # 反例：git 层的相对基线核对被掏空（只剩通用层的口号）
+        self._write_valid()
+        git = self.GIT.replace("* **相对基线的核对（L1）**：", "* **附注**：")
+        self.write("specs/general/git.adoc", git)
+        cm.check_baseline_sync_guard()
+        self.assertIn("相对基线的核对", self.error_texts())
+
+    def test_platform_clause_removed_reports(self):
+        # 反例：平台侧追加口径被删 → 本平台按"一个 PR 一条源分支、压完就合"的形态恰好漏掉
+        self._write_valid()
+        cnb = self.CNB.replace("* **压缩前须先并入目标分支的最新提交（L1，本平台的用户点名形态）**：",
+                               "* **附注**：")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩前须先并入目标分支的最新提交", self.error_texts())
+
+    def test_platform_observable_failure_removed_reports(self):
+        # 反例：平台侧看不见"既不报绿又不可逆"这一面 → 读者把它当成通用层的一句重复
+        self._write_valid()
+        cnb = self.CNB.replace("既有的两条关系判据"
+                               "与机械防线**全部报绿**，", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("全部报绿", self.error_texts())
+
+    def test_platform_irreversible_clause_removed_reports(self):
+        # 反例：不可逆这一面被删 → 平台侧看不出为什么在本平台更危险
+        self._write_valid()
+        cnb = self.CNB.replace("这批删除会**随 PR 合并落进目标分支**、**不可逆**。", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("不可逆", self.error_texts())
+
+    def test_platform_criteria_removed_reports(self):
+        # 反例：平台侧的判定标准被抽 → 本条在自己这一层不可判定
+        self._write_valid()
+        cnb = self.CNB.replace("**判定标准**：**交付说明里须给出**"
+                               "\"已并入目标分支当前最新提交\"这一事实的**取值**；"
+                               "**只说\"分支是最新的\"不给取值，即不合规**。", "务必谨慎。")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("交付说明里须给出", self.error_texts())
+
+    def test_platform_demarcation_removed_reports(self):
+        # 反例：平台侧与既有条的关系句被删 → 本条被读成既有条的重复而合并掉
+        self._write_valid()
+        cnb = self.CNB.replace("**与「压缩后的合并关系核对」的关系**：两条核的是**不同的两件事**"
+                               "（**压缩之前发没发生过并入** / **压缩之后关系丢没丢**），"
+                               "**互不替代**。", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("互不替代", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例：公开面只看得见"要压缩"、看不见这条 P0 前置
+        self._write_valid()
+        self.write("README.adoc", "* 另议。\n")
+        cm.check_baseline_sync_guard()
+        self.assertIn("README", self.error_texts())
+
+    def test_readme_old_criteria_still_believed_reports(self):
+        # 反例：公开面不点明"既有那句关系判据在没并入最新的形态下照样为真"
+        # → 读者沿用旧判据、把本条读成多余的一步
+        self._write_valid()
+        self.write("README.adoc",
+                   "* **压缩前先并入目标分支**，否则\"压缩一次\"就是\"删一次\"。\n")
+        cm.check_baseline_sync_guard()
+        self.assertIn("照样为真", self.error_texts())
+
+    def test_nonempty_is_primary_criterion_removed_reports(self):
+        # 反例（用户本轮要求的核心）：把「非空本身就是判据」抽回成并列取舍的第二条
+        # → 失效形态（那一份恰恰非空）被读成"两个并列条件之一"而放过
+        self._write_valid()
+        vc = self.VC.replace("——**这一份非空本身就是判据**"
+                             "（**不是与\"逐条一致\"并列取舍的第二条**）：非空即说明有改动被记成了反向删除，"
+                             "其中含**同侧**的形态（**本分支在基线之后新增过、又被回退成删除的地方**）。", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("非空本身就是判据", self.error_texts())
+
+    def test_post_squash_deletion_clause_removed_reports(self):
+        # 反例：新增的「压缩后须核查有无多余的删除」整条被抽掉
+        # → 用户要的"压缩后"这个动作点无人核（只剩压缩前那一步）
+        self._write_valid()
+        vc = self.VC.replace("* **压缩后须核查有无多余的删除（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩后须核查有无多余的删除", self.error_texts())
+
+    def test_post_squash_criteria_removed_reports(self):
+        # 反例：三态判定标准被抽（只留标题）→ 本条在自己这一层不可判定
+        self._write_valid()
+        vc = self.VC.replace("**判定标准**：① 交付形态里**给不出这份账**；"
+                             "② 只核到**有没有冲突标记 / 能不能编译**、或只核**两侧内容在不在**；"
+                             "③ 只核**被整体删除的文件**，**分支自己（基线之后）新增过、又被回退成删除的地方**一处未核。",
+                             "务必谨慎。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("给不出这份账", self.error_texts())
+
+    def test_post_squash_four_directions_removed_reports(self):
+        # 反例（"检查所有有删除的地方"落空）：四个核对方向被抽 → 只核一个维度
+        self._write_valid()
+        vc = self.VC.replace("**四个核对方向**：① **该在的东西一次都没被删**；"
+                             "② **本分支自己新增过的东西**在压缩后的形态里不得出现为删除；"
+                             "③ **本分支与基线共有的东西**不得只因压缩而消失；"
+                             "④ **该删的那侧**须逐条给出原因、**不得整体取一侧收尾**。",
+                             "务必都核。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("四个核对方向", self.error_texts())
+
+    def test_post_squash_demarcations_removed_reports(self):
+        # 反例：两处分工句被删 → 本条会被判为既有条的重复而合并删除（真源消失）
+        self._write_valid()
+        vc = self.VC.replace("**与「解决冲突后须核查是否丢失内容」的分工**：本条核的是"
+                             "**压缩之后的产出形态里有没有多出删除**——**另立一条不得互相替代**。"
+                             "**与「压缩＝提交历史整理，内容零变化」的分工**："
+                             "**前者为空与后者的账非空可以同时成立**，故两条互不替代。", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩之后的产出形态里有没有多出删除", self.error_texts())
+
+    def test_git_post_squash_deletion_removed_reports(self):
+        # 反例：git 层的「压缩后不足量删除的核对」被删 → 压缩后这一问没有取值可核
+        self._write_valid()
+        git = self.GIT.replace("* **压缩后不足量删除的核对（L1）**：", "* **附注**：")
+        self.write("specs/general/git.adoc", git)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩后不足量删除的核对", self.error_texts())
+
+    def test_git_per_file_deletions_removed_reports(self):
+        # 反例（"所有有删除的地方"最易漏的一档）：只核被整体删除的文件被重新默许
+        self._write_valid()
+        git = self.GIT.replace("* **被改过 / 删过的文件里的删除条目逐处核（L1）**：", "* **附注**：")
+        self.write("specs/general/git.adoc", git)
+        cm.check_baseline_sync_guard()
+        self.assertIn("被改过 / 删过的文件里的删除条目逐处核", self.error_texts())
+
+    def test_platform_post_squash_clause_removed_reports(self):
+        # 反例：平台侧的「压缩后须核查有无多余的删除」被删 → 本平台这一问没有落点
+        self._write_valid()
+        cnb = self.CNB.replace("* **压缩后须核查有无多余的删除（L1）**：", "* **附注**：")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩后须核查有无多余的删除", self.error_texts())
+
+    def test_platform_deletion_demarcation_removed_reports(self):
+        # 反例：平台侧与关系条的分工句被删 → 会拿"合并关系为真"顶掉本条
+        self._write_valid()
+        cnb = self.CNB.replace("**与「压缩须保留与目标分支的合并关系」的关系**：两条核的是**不同的两件事**"
+                               "（**产出形态里有没有多出删除 / 合并关系丢没丢**），**互不替代**——"
+                               "**合并关系为真**不构成\"没有多余删除\"为真的依据——合并关系为真**不构成**任何豁免。", "")
+        self.write("specs/platform/cnb.adoc", cnb)
+        cm.check_baseline_sync_guard()
+        self.assertIn("产出形态里有没有多出删除 / 合并关系丢没丢", self.error_texts())
+
+    def test_readme_post_squash_deletion_removed_reports(self):
+        # 反例：公开面看不见"压缩后要核有没有多余的删除" → 只看得见压缩前那一步
+        self._write_valid()
+        self.write("README.adoc",
+                   "* **压缩前先并入目标分支**，否则\"压缩一次\"就是\"删一次\"；"
+                   "**\"目标分支是祖先\"这句话在\"没并入最新\"的形态下照样为真**，"
+                   "**不能拿它当事发过的凭据**。\n")
+        cm.check_baseline_sync_guard()
+        self.assertIn("压缩后要核", self.error_texts())
 
 
 class TestCheckConflictResolutionGuard(CheckSpecsTestCase):

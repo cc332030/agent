@@ -704,6 +704,19 @@
      同义字样会兜住缺项（本仓库实测：该条的依据行整行删掉，仍报绿）。
      由 `check_pagination_guard` 钉住（接线数 104 → 105）；"某个分页接口算不算普通接口、
      该处该不该用自定义 page"属语义判断，交人/子 agent 复核。
+ 72. 基线同步防线（**用户提出，Issue #198，P0 最高优先级**）：**压缩前须先并入目标分支的
+     最新改动**，否则"压缩一次"就是"删一次"。判据本体在通用层
+     `specs/general/version-control.adoc`「压缩提交」（前置条 + 判定标准 + 不得用"只把文件
+     内容改成和目标分支一样"折衷 + 根因 + 并入时相对基线**两侧核**、不得整体取一侧、两档取值
+     形态 + **压缩前相对基线逐项核**、两个方向都核），git 层 `specs/general/git.adoc`
+     「冲突与压缩提交（git 侧落地）」给**取值状态**，平台层 `specs/platform/cnb.adoc`
+     「压缩提交」只补本平台能观测到的后果。**失效形态**：分支停在旧基点上、从未同步过目标
+     分支时，两个提交的**共同祖先恰好就是目标分支本身**——"目标分支是本分支的祖先"为真，
+     `check_base_ancestor_guard` 与「压缩后的合并关系核对」都判不出问题；而既有条文的前提
+     （"若本分支此前已并过目标分支"）把这一形态**恰好排除在外**。**本条不得被判为既有条文的
+     重复表述而合并**——它核的是"分支自己的旧快照 vs 目标分支"，既有三档判据核的是"冲突
+     两侧"，另立一条、不得互相替代。由 `check_baseline_sync_guard` 钉住（接线数 114 → 115）；
+     "某次压缩前到底并入过没有"属运行时事实（git 记录），交人/子 agent 复核。
 
 """
 
@@ -4211,7 +4224,10 @@ def check_install_repeat_update_guard():
 #   同步为 118 行、编号 1..118 连续且与 `CHECKS` 逐一同序；`check_effective.py` 台账新增 7 条
 #   （同一道防线钉住多条时逐条照写）；调度器三处识别特征同步（通用层「任何代码活动」、
 #   Java 与 Spring 技术栈条）。
-GUARD_WIRING_BASELINE = 118
+# **本轮（Issue #198 与上面「补机械抓手」两支并行的账须相加）**：`check_baseline_sync_guard`
+#   新增一位（114 → 115）与上一条的 4 道（114 → 118）**互不包含**，合并后为 **114 → 119**。
+#   `guards.adoc` 清单表同步为 119 行、编号 1..119 连续且与 `CHECKS` 逐一同序（本道排在末尾）。
+GUARD_WIRING_BASELINE = 119
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4488,7 +4504,14 @@ GUARD_WIRING_BASELINE = 118
 #   **Windows 上 gem 入口是 `.bat`/`.cmd` 外壳、须经 `cmd /c` 调用**（实测：探测器找到了
 #   `C:\Ruby40-x64\bin\asciidoctor.BAT`，而 `subprocess` 直接执行它抛
 #   `FileNotFoundError: [WinError 2]`，语法段整段掀掉）。用例数 **1473 → 1476**，同源实取。
-GUARD_TEST_BASELINE = 1476
+#   **两支并行的账须相加（本轮合并时记）**：main 侧支点 1428、48 条（1428 → 1476），本支
+#   支点 1428、23 条（1428 → 1451），两支互不包含 ⇒ 合并后 **1428 + 48 + 23 = 1499**
+#   （同源实取已核：`check_specs_test` 1384 + `rules_engine_test` 78 + `check_effective_test` 37）。
+#   **本轮（本支：压缩后须核查有无多余的删除）**：新增 35 条（TestCheckBaselineSyncGuard 23 → 33、
+#   TestCheckDevFlowGuard 供「汇报一致性」4 条、TestCheckDevFlowGuard 供 report-tail 2 条等，
+#   逐名比对无用例消失；同源实取：`check_specs_test` 1412 + `rules_engine_test` 78 +
+#   `check_effective_test` 37 = 1527）。
+GUARD_TEST_BASELINE = 1509
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -10836,6 +10859,31 @@ def check_conflict_resolution_guard():
     phase_done()
 
 
+def check_baseline_sync_guard():
+    """『基线同步防线』：**压缩前须先并入目标分支的最新改动**，否则"压缩一次"就是"删一次"。
+
+    背景（用户提出，Issue #198，**P0 最高优先级**）：PR `cc332030/ctool4j#101` 的源分支
+    停在旧基点上、**从未同步过目标分支**，压缩一次即把目标分支上刚合入的两批改动带成删除
+    （22 文件、+615/−1447）。用户的原话："公司管理有一套规则，就叫不能靠人管理，要靠流程
+    管理，git 管理也一样""我不希望再出现丢失内容，压缩前先合并 main 有用吗？尽所有可能
+    避免丢失内容，这是 P0 优先级（最高）"。
+
+    **为什么既有两道判据全绿**：分支没同步过目标分支时，两个提交的**共同祖先恰好就是
+    目标分支本身**（分叉点落在目标分支自己身上）——于是"目标分支是本分支的祖先"为真，
+    `check_base_ancestor_guard` 与「压缩后的合并关系核对」都判不出问题；而既有条文的前提
+    写的是"**若本分支此前已并过目标分支（或本就基于目标分支的最新提交）**"，
+    把这一形态**恰好排除在外**——"没同步过"被读成了"无需同步"。
+
+    本函数只留接线：判据本体在 `specs/general/version-control.adoc`「压缩提交」，
+    git 侧的取值形态在 `specs/general/git.adoc`「冲突与压缩提交（git 侧落地）」，
+    平台侧的后果在 `specs/platform/cnb.adoc`「压缩提交」；
+    规则数据在 `script/specs-rules/baseline-sync.toml`。
+    """
+    phase("基线同步防线检查")
+    run_rule_guard("check_baseline_sync_guard")
+    phase_done()
+
+
 def check_merge_relationship_guard():
     """『合并关系防线』：压缩/解决冲突后，**目标分支仍须是本分支的祖先**。
 
@@ -11406,6 +11454,7 @@ CHECKS = (
     check_getter_bridge_guard,
     check_validation_entry_guard,
     check_http_contract_guard,
+    check_baseline_sync_guard,
 )
 
 
