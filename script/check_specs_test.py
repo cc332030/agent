@@ -6035,7 +6035,8 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
             "* **压缩提交＝提交历史整理（L1）**：用户要求时按本条执行。\n"
             "* **压缩对象不含\"改名提交 + 内容修改提交\"（L1，与「重命名与内容修改须分两个提交」的接口）**："
             "拆出的那两个提交**不是**本节的临时中间提交（别名：改名提交 + 内容修改提交），"
-            "未点名本条时那两个提交**原样保留**；用户**明确声明**（须点名重命名与内容修改）时按 git 规范"
+            "未点名本条时本次任务的**其余提交照默认压成一个**、那两个提交**原样保留**；"
+            "用户**明确声明**（须点名重命名与内容修改）时按 git 规范"
             "「例外」执行。\n")
         self.write(
             "specs/core/execution.adoc",
@@ -6046,15 +6047,16 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
             "AGENTS_COMMON.adoc",
             "= 规范\n\n== 最高优先级铁律（先读）\n"
             "* **同一文件的重命名与内容修改必须分两个提交**：**最高关注项 P7**；"
-            "先 `git mv` 并只提交改名（**内容逐字节不变**），**再改内容**；见 "
+            "先 `git mv` 并只提交改名（**内容逐字节不变**），**再改内容**；"
+            "**\"压缩提交\"未点名本条时，其余提交默认压成一个、本条的两个提交原样保留**；见 "
             "link:specs/general/git.adoc[]\u300c重命名与内容修改须分两个提交（默认固定动作）\u300d。\n")
         self.write(
             "specs-project-maintainer/priority.adoc",
             "= 最高关注项\n\n* **规范性铁律（P1/P2/P3/P5/P6/P7，条款本身 L1）**：略。\n\n"
             "=== P7. 重命名与内容修改必须分两个提交\n"
             "* **要求（L1，最高）**：分两个提交、先重命名后改内容；本次涉及改名的文件全收在"
-            "**同一个改名提交**里、**不按文件个数分摊**；**「压缩提交」未点名本条**时只压"
-            "临时中间提交、本条两个提交**原样保留**。\n"
+            "**同一个改名提交**里、**不按文件个数分摊**；**「压缩提交」未点名本条**时**其余提交"
+            "默认压成一个**、本条两个提交**原样保留**。\n"
             "* **依据**：ISO 10007。\n"
             "* **判定标准**：`git log --follow --name-status` 应见先 R 后 M。\n")
 
@@ -6310,6 +6312,29 @@ class TestCheckRenameSplitGuard(CheckSpecsTestCase):
                    "* **要求（L2）**：分两个提交。\n* **依据**：ISO 10007。\n* **判定标准**：略。\n")
         cm.check_rename_split_guard()
         self.assertIn("P7", self.error_texts())
+
+    def test_restatement_default_one_commit_removed_reports(self):
+        # 反例：三处**复述行**（铁律 / 维护方 P7 / 平台层接口条）各自的"默认压成一个"被抽掉
+        # → 真源条文还在、复述行读不出默认交付形态，旧口径（只压部分）从复述行上复活。
+        for rel, needle, repl in (
+            ("AGENTS_COMMON.adoc",
+             "**\"压缩提交\"未点名本条时，其余提交默认压成一个、本条的两个提交原样保留**",
+             "**\"压缩提交\"不覆盖本条**"),
+            ("specs-project-maintainer/priority.adoc",
+             "**其余提交默认压成一个**",
+             "只压临时中间提交"),
+            ("specs/platform/cnb.adoc",
+             "本次任务的**其余提交照默认压成一个**",
+             "**照旧处理**"),
+        ):
+            self._write_valid()
+            body = open(os.path.join(self.root, rel), encoding="utf-8").read()
+            self.assertIn(needle, body, f"夹具与现役条文已脱节：{rel}")
+            self.write(rel, body.replace(needle, repl))
+            cm.check_rename_split_guard()
+            self.assertTrue(self.error_texts().strip(),
+                            f"{rel} 的复述行被抽掉后防线未报红——锚点与真源脱节")
+            cm.errors.clear()
 
 
 class TestCheckCriteriaNotAxisGuard(CheckSpecsTestCase):
@@ -7309,7 +7334,8 @@ class TestCheckSquashCommitGuard(CheckSpecsTestCase):
             "* `specs/general/` — 通用层：**版本管理（`version-control.adoc`；工具无关）**\n"
             "* `specs/platform/` — 平台层：cnb（**压缩提交（提交历史整理：判据与禁止形态）**、"
             "**对象钉定与可追溯**）\n"
-            "* **压缩提交要照做、合并仍不做**：压缩提交不构成“可以合并”的依据。\n")
+            "* **压缩提交要照做、默认压成一个、合并仍不做**：默认交付形态＝本次任务的提交压成一个提交；"
+            "压缩提交不构成“可以合并”的依据。\n")
 
     def test_valid_passes(self):
         self._write_valid()
@@ -7964,6 +7990,15 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         "== 压缩提交（提交历史整理）\n"
         "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
         "**压缩不能替代解冲突**。\n"
+        "* **默认压成一个提交（L1，本节默认交付形态）**：用户要求\"压缩提交\"时，"
+        "默认交付形态是本次任务的提交压成一个提交——未经用户点名，"
+        "**不得**以\"只压部分提交\"、\"保留某些提交不压\"收尾"
+        "（允许保留的例外只有下一条的两类）。\n"
+        "* **压缩对象只有本次任务尚未合入的提交；允许保留的例外（L1）**："
+        "压缩对象是本次任务产生的、尚未合入目标分支的提交——压缩须把这部分全部压成一个提交；"
+        "**允许保留（不并入压缩）的只有两类**：① **已合入目标分支**的历史；"
+        "② `specs/general/git.adoc`「重命名与内容修改须分两个提交」（最高关注项 P7）拆出的那两个提交"
+        "（未点名该条时**原样保留**）。\n"
     )
 
     GIT = (
@@ -8133,6 +8168,38 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         self.write("specs/general/version-control.adoc", vc)
         cm.check_conflict_resolution_guard()
         self.assertIn("压缩不等于解冲突", self.error_texts())
+
+    def test_default_one_commit_clause_removed_reports(self):
+        # 反例：默认交付形态被删 → 执行者可自行把"压几个"当裁量点、旧口径（只压部分）回归
+        self._write_valid()
+        vc = self.VC.replace("* **默认压成一个提交（L1，本节默认交付形态）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("默认压成一个提交", self.error_texts())
+
+    def test_default_one_commit_partial_form_allowed_reports(self):
+        # 反例：默认条被改写成"允许只压部分"（判定句被抽）→ 默认口径名存实亡
+        self._write_valid()
+        vc = self.VC.replace(
+            "**不得**以\"只压部分提交\"、\"保留某些提交不压\"收尾"
+            "（允许保留的例外只有下一条的两类）。",
+            "压几个可按现场裁量。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("默认压成一个提交", self.error_texts())
+
+    def test_exception_list_removed_reports(self):
+        # 反例：允许保留的例外清单被整条抽掉 → 例外面回到执行者自由裁量
+        self._write_valid()
+        vc = self.VC.replace(
+            "* **压缩对象只有本次任务尚未合入的提交；允许保留的例外（L1）**："
+            "压缩对象是本次任务产生的、尚未合入目标分支的提交——压缩须把这部分全部压成一个提交；"
+            "**允许保留（不并入压缩）的只有两类**：① **已合入目标分支**的历史；"
+            "② `specs/general/git.adoc`「重命名与内容修改须分两个提交」（最高关注项 P7）拆出的那两个提交"
+            "（未点名该条时**原样保留**）。\n", "")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("允许保留", self.error_texts())
 
     def test_git_layer_criteria_removed_reports(self):
         # 反例：git 侧核对的**取值形态**被抽掉 → 用户点名"git 规范也要"落了空。

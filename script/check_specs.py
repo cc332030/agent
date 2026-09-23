@@ -4519,7 +4519,17 @@ GUARD_WIRING_BASELINE = 120
 #   （TestCheckValueBindingGuard 正例 1 + 反例 13），与前两支互不包含；合并后按同源实取：
 #   `check_specs_test` 1396 + 14 = 1410、`rules_engine_test` 78、`check_effective_test` 37，
 #   合计 **1525**。
-GUARD_TEST_BASELINE = 1525
+#   **本轮（Issue #201「压缩提交默认压缩成一个提交」）**：接线数不变（未加新防线，
+#   只扩 `check_conflict_resolution_guard` 在通用层「压缩提交」节的锚点组），
+#   反例用例 **+3**（默认交付形态被删 / 被改成"压几个可裁量" / 例外清单被抽，各须报红）；
+#   用例数 **1525 → 1529**（**同源实取＝本脚本自己的 `_count_collectable_tests` 口径**：
+#   `check_specs_test` 1414 + `rules_engine_test` 78 + `check_effective_test` 37；
+#   注意它与 `unittest` 跑出来的 1430 不等——后者多算 16 条**收集不到**的用例。
+#   两个数别混用：本条只认前者）。**其中 1 条**是 `TestCheckRenameSplitGuard`
+#   新增的 `test_restatement_default_one_commit_removed_reports`——本轮实测到"复述行与
+#   真源脱节"这一失效（三处复述行逐字改述后，锚点组仍按旧措辞核，改坏哪一处都不报红），
+#   故把三处复述行各自钉住。
+GUARD_TEST_BASELINE = 1529
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
