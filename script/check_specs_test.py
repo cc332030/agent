@@ -11642,19 +11642,22 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
     # 两档生效面、依据行。防线的 `bullet_tokens` 步按这些锚点核「本条自己的正文」，
     # 故夹具必须真的把它们写在本条正文里（否则正例即报红——正是本条要防的形态）。
     JAVA_RULE = (
-        "* **数据对象模板（新建时整段照抄；存量主动声明才补）**：**新建**一个 Java 数据对象时"
+        "* **数据对象模板（新建时整段照抄；存量主动声明才补，review 不计问题）**：**新建**一个 Java 数据对象时"
         "注解清单整段照抄 `specs/stack/java-object.adoc` 的模板——`@Data`、"
         "`@Accessors(chain = true)`、`@SuperBuilder`、`@NoArgsConstructor`、"
         "`@AllArgsConstructor`。**模板文件不是规范文件**：那份文件只给可复制清单，本文件是其判据本体。\n"
-        "** **新增对象时加 `@Accessors(chain = true)`；给既有对象补注解时不加（L1）**：Spring 的 "
+        "** **新增对象时加 `@Accessors(chain = true)`；给既有对象补注解时按「类是否已提交」取值（L1）**：Spring 的 "
         "`BeanUtils` 会**忽略带泛型参数的 set 方法**（链式 setter 返回 `this`），拷贝时静默丢数据。"
-        "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了 "
+        "**类已提交**则**默认不补**、**类未提交**则**可以补**。"
+        "**判定标准（任一命中即违规）**：① 给**已提交**的类补注解时加上了 "
         "`@Accessors(chain = true)`；② 新建对象的注解清单缺 `@Accessors(chain = true)`。\n"
         "** **`@AllArgsConstructor` 无参数时不加（L1）**：类里**没有任何实例字段**时两者是同一个构造。"
         "**判定标准**：无字段的类上出现 `@AllArgsConstructor` 即违规。\n"
         "** **POJO 里的集合字段默认加 `@Singular`（L1）**：除非有问题。**判定标准（任一命中即违规）**："
         "① builder 侧**没有单个元素入口**、只能整集合设置。\n"
-        "** **两档生效面**：**既有对象不主动改**、**主动声明**才补；**存量不告警**。\n"
+        "** **两档生效面**：**既有对象不主动改**、**主动声明**才补；**存量不告警**。"
+        "**review 面**：**review 不得据此提出问题**，**review 不是第三个生效面**；"
+        "以\"既然看到了就提一条\"为由记为问题即违规。\n"
         "** 依据（标准名/编号）：**Project Lombok 官方文档**、Spring Framework 官方文档。\n")
 
     JAVA = (
@@ -11675,14 +11678,16 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         "@NoArgsConstructor\n@AllArgsConstructor\n----\n\n"
         "照抄时的三条约定（**理由、机制与判定标准见** `specs/stack/java.adoc`「编码」的"
         "「数据对象模板」条，本文件**不重复它们**）：\n\n"
-        "* **`@Accessors(chain = true)` 只在新增对象时加**：**补注解时不加**（理由与判定标准见判据本体）。\n"
+        "* **`@Accessors(chain = true)` 只在新增对象时加**：给既有对象**补注解时按该类是否已提交取值**"
+        "——**已提交的默认不补**、**未提交的可以补**（分档判据、理由与判定标准见判据本体）。\n"
         "* **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。\n"
         "* **集合字段默认加 `@Singular`**：按\"每个集合字段都标\"处理（\"除非有问题\"与判定标准见判据本体）。\n"
         "* **注解次序**：模板里的次序已按 `specs/general/coding.adoc`「命名与代码质量」的"
         "**注解排序**规则排好；该规则**不在此重述**。\n\n"
         "== 生效面与存量\n\n"
         "**两档生效面**与其判定标准**见判据本体**，**不在此重述**；本文件**不改写**判据，也"
-        "**不得以「模板没写」为由绕过判据本体**。\n\n"
+        "**不得以「模板没写」为由绕过判据本体**。**同理，review 面亦只在判据本体写一份**——照抄时只记住："
+        "**未主动声明要补时，既有对象缺这套注解不是问题**，具体判定标准见判据本体、本文件不重述。\n\n"
         "**依据（标准名/编号）**：**见判据本体**同一行——材料名与取舍声明只在那里写一份，"
         "本文件不重述。\n")
 
@@ -11749,12 +11754,37 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         self.assertIn("@SuperBuilder", self.error_texts())
 
     def test_half_add_rule_removed_reports(self):
-        # 反例⑤（用户点名的失效形态）：把"补注解时不加"这半句抽掉 → "补注解也加上吧"重新成立。
-        # 按真实文件的同形写法抽（真实文件是"只在新增对象时加**：**给既有对象**补注解时不加**"）。
+        # 反例⑤（用户点名的失效形态）：把"已提交的默认不补 / 未提交的可以补"这半句抽掉
+        # → "补注解也加上吧"重新成立。按真实文件的同形写法抽（真实文件是"只在新增对象时加：
+        # 给既有对象补注解时按该类是否已提交取值——已提交的默认不补、未提交的可以补"）。
         self.write("specs/stack/java-object.adoc", self.TPL.replace(
-            "：**补注解时不加**", "：**新增与既有都加**"))
+            "——**已提交的默认不补**、**未提交的可以补**", "——**一律都加**"))
         cm.check_java_object_template_guard()
-        self.assertIn("补注解时不加", self.error_texts())
+        self.assertIn("已提交的默认不补", self.error_texts())
+
+    def test_committed_split_removed_from_spec_reports(self):
+        # 反例⑤′（本轮新增取值）：判据本体里"类已提交 / 类未提交"两档被抽成一句"补注解不加"
+        # → 用户点名的两档取值（已提交默认不补、未提交可以补）在规范里不再可核对。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**类已提交**则**默认不补**、**类未提交**则**可以补**。", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("类已提交", self.error_texts())
+
+    def test_review_scope_removed_from_spec_reports(self):
+        # 反例⑤″（本轮新增生效面，用户点名）：判据本体里的 review 面被整段抽走
+        # → "review 时不算问题不提出"这条边界消失，review 会把存量缺注解报成问题。
+        self.write("specs/stack/java.adoc", self.JAVA.replace(
+            "**review 面**：**review 不得据此提出问题**，**review 不是第三个生效面**；"
+            "以\"既然看到了就提一条\"为由记为问题即违规。", ""))
+        cm.check_java_object_template_guard()
+        self.assertIn("review 不得据此提出问题", self.error_texts())
+
+    def test_review_scope_removed_from_template_reports(self):
+        # 反例⑤‴：模板侧的 review 面回指被抽走 → 模板读者只拿到清单，不知道 review 不报这条。
+        self.write("specs/stack/java-object.adoc", self.TPL.replace(
+            "**同理，review 面亦只在判据本体写一份**", "**另**"))
+        cm.check_java_object_template_guard()
+        self.assertIn("review 面亦只在判据本体写一份", self.error_texts())
 
     def test_no_field_rule_removed_reports(self):
         # 反例⑦：无参不加 `@AllArgsConstructor` 被删 → 无字段的类上被补出"看起来像全参构造"的注解
@@ -11801,9 +11831,9 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
     def test_criteria_removed_reports(self):
         # 反例⑪：判定标准被抽成一句口径 → 读者不知道自己是否命中
         self.write("specs/stack/java.adoc", self.JAVA.replace(
-            "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了", "**注意**：① 加上了"))
+            "**判定标准（任一命中即违规）**：① 给**已提交**的类补注解时加上了", "**注意**：① 加上了"))
         cm.check_java_object_template_guard()
-        self.assertIn("在既有对象的补注解改动里加上了", self.error_texts())
+        self.assertIn("给**已提交**的类补注解时加上了", self.error_texts())
 
     def test_backref_removed_reports(self):
         # 反例⑥：回指判据本体这一句被抽掉（改用"同上"之类含糊指代）→ 模板侧只剩取值、
@@ -11821,7 +11851,7 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         # 反例⑥′（本文件的定位）：自称"不重复那些判据"，却把判据本体的**机制**抄回模板侧
         # → 同一件事两处各给一份真源、必各自漂移（这条靠**反向**核对：机制字样不得出现）。
         self.write("specs/stack/java-object.adoc", self.TPL.replace(
-            "（理由与判定标准见判据本体）",
+            "（分档判据、理由与判定标准见判据本体）",
             "（`BeanUtils` 会忽略带泛型参数的 set 方法，故补注解时不得加）"))
         cm.check_java_object_template_guard()
         self.assertIn("忽略带泛型参数的 set", self.error_texts())
@@ -11829,7 +11859,7 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
     def test_template_duplicates_rule_criteria_reports(self):
         # 反例⑥″：把判据本体的**判定标准**抄回模板侧 → 同样属"在本文件示范重复"
         self.write("specs/stack/java-object.adoc", self.TPL.replace(
-            "（理由与判定标准见判据本体）",
+            "（分档判据、理由与判定标准见判据本体）",
             "（**判定标准（任一命中即违规）**：补注解时加了即违规）"))
         cm.check_java_object_template_guard()
         self.assertIn("判定标准（任一命中即违规）", self.error_texts())
@@ -11853,12 +11883,12 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
     def test_rule_body_criteria_backed_by_sibling_half_reports(self):
         # 反例⑮（本轮实测补的空白）：取值一的**判定标准**被抽走，而取值二/三处同样写着
         # 「判定标准」——按共享短语核时被同一 bullet 的另两处兜住。防线改核该句**独有的正文**
-        # （`在既有对象的补注解改动里加上了`），故此处必须报红。
+        # （`给**已提交**的类补注解时加上了`），故此处必须报红。
         self.write("specs/stack/java.adoc", self.JAVA.replace(
-            "**判定标准（任一命中即违规）**：① 在既有对象的补注解改动里加上了",
+            "**判定标准（任一命中即违规）**：① 给**已提交**的类补注解时加上了",
             "**注意**：① 加上了"))
         cm.check_java_object_template_guard()
-        self.assertIn("在既有对象的补注解改动里加上了", self.error_texts())
+        self.assertIn("给**已提交**的类补注解时加上了", self.error_texts())
 
     def test_readme_entry_name_only_reports(self):
         # 反例⑯（本轮实测补的空白）：README 只留 `java-object` 这个**子串**（路径里也会出现）、
