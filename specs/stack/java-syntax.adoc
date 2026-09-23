@@ -22,7 +22,7 @@
 
 * **统一入口**：同类操作优先用统一工具类（集合用 `CollUtil`/`CList`、字符串用 `StrUtil`/`CStrUtils`），不散落手写。
 * **判空处理**：优先用工具类判空（`CollUtil.isEmpty`、`StrUtil.isBlank`、`ObjectUtil.isNull`），避免手写重复判空。
-* **判空兜底用默认值工具方法**：通用判空兜底原则见 `specs/general/coding.adoc`「表达式与调用写法」；Java 中 hutool 提供 `ObjectUtil.defaultIfNull(x, default)`、`CollUtil.defaultIfEmpty(x, default)`、`StrUtil.emptyToDefault(x, default)` 等工具方法，hutool 已引入时直接用，不重复手写。
+* **判空兜底用默认值工具方法（Java 落点）**：通用判空兜底原则（判据本体、判定标准、例外与存量口径）见 `specs/general/coding.adoc`「表达式与调用写法」，此处不复述。**Java 侧只给载体**：① 现成入口取 hutool 的 `ObjectUtil.defaultIfNull(x, default)`、`CollUtil.defaultIfEmpty(x, default)`、`StrUtil.emptyToDefault(x, default)`，已引入时直接用；② **没有现成入口时补通用方法的落点是项目自有工具类**——`@UtilityClass` 的 `CStrUtils`/`CList` 一类，或另建 `*Utils`。
 * **工具类自身实现**：工具库内部为构建 API 而直接使用原生写法（stream、原生集合）属合理实现，不受本规范约束。
 
 == 工具类定义（项目自研工具库）

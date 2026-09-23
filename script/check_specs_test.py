@@ -645,16 +645,18 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
     def test_merge_commit_in_branch_history_reports(self):
-        # 反例：分支历史里出现合并提交（"合并 PR"落盘必留的痕迹）→ 报红
+        # 反例：分支历史里出现合并提交（"合并 PR"落盘必留的痕迹）→ 报红。
+        # 并的是**别的源分支**——把目标分支（`main`）并回来属返工基点的修复动作、不在此列
+        # （见 `test_merging_target_branch_back_is_allowed`）。
         with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
             fh.write("z")
         _git_commit(self._tmp, "feat: 自己分支的改动")
-        _git_argv(self._tmp, "checkout", "-q", "main")
-        with open(os.path.join(self._tmp, "a.txt"), "a", encoding="utf-8") as fh:
-            fh.write("m\n")
-        _git_commit(self._tmp, "main 前进")
+        _git_argv(self._tmp, "checkout", "-q", "-b", "other", "main")
+        with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
+            fh.write("c\n")
+        _git_commit(self._tmp, "other 分支前进")
         _git_argv(self._tmp, "checkout", "-q", "feat")
-        _git_argv(self._tmp, "merge", "--no-ff", "-q", "main", "-m", "merge main")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "other", "-m", "merge other")
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertIn("合并提交", self.error_texts())
@@ -665,6 +667,65 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_merging_target_branch_back_is_allowed(self):
+        # 例外（用户点名）：把**目标分支本身**并回来是 `check_base_ancestor_guard` 的修复动作
+        # ——分支被重建成不含基点的线之后，只有把基点并回来才能让基点重新成为祖先。
+        # 不核父提交的话，这条修复动作会被本道防线读成"合并了别人"而报红（自相矛盾）。
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        _git_commit(self._tmp, "feat: 自己分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "main")
+        with open(os.path.join(self._tmp, "a.txt"), "a", encoding="utf-8") as fh:
+            fh.write("m\n")
+        _git_commit(self._tmp, "main 前进")
+        _git_argv(self._tmp, "checkout", "-q", "feat")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "main", "-m", "合并 main：修复返工基点")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertNotIn("合并提交", self.error_texts())
+
+    def test_mixed_merge_reports(self):
+        # 反例：一条合并提交里同时并了**目标分支**与**别的源分支** → 整条报红。
+        # 判据是"**每一个**父提交都在目标分支上"，不因"含一个目标分支父提交"而打折扣——
+        # 只看"有没有一个父提交是目标分支"的松写法会把这条放过去。
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        _git_commit(self._tmp, "feat: 自己分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "main")
+        with open(os.path.join(self._tmp, "a.txt"), "a", encoding="utf-8") as fh:
+            fh.write("m\n")
+        _git_commit(self._tmp, "main 前进")
+        _git_argv(self._tmp, "checkout", "-q", "-b", "other", "main")
+        with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
+            fh.write("c\n")
+        _git_commit(self._tmp, "other 分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "feat")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "main", "-m", "合并 main")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "other", "-m", "合并 other")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertIn("合并提交", self.error_texts())
+
+    def test_shallow_clone_reports_instead_of_silently_passing(self):
+        # 边界：父提交清单取不到（浅克隆 / sha 不在本地）→ 按违规处理，不得静默放行
+        self.assertFalse(
+            cm._merge_commit_ok(self._tmp, "0" * 40, "main"))
+
+    def test_merging_other_branch_reports(self):
+        # 反例：并进来的是**别的源分支**（不是目标分支）→ 照旧报红（例外不扩大）
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        _git_commit(self._tmp, "feat: 自己分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "-b", "other", "main")
+        with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
+            fh.write("c\n")
+        _git_commit(self._tmp, "other 分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "feat")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "other", "-m", "合并 other 分支")
+        cm.errors.clear()
+        cm.check_merge_state_guard()
+        self.assertIn("合并提交", self.error_texts())
 
     def test_marker_table_is_externalized(self):
         # 措辞表须真的从规则数据取到（缺失即整道防线无从执行，不得静默放行）
@@ -742,6 +803,27 @@ class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
         texts = self._run(newer)
         self.assertIn("返工基点", texts)
         self.assertIn("不是", texts)
+
+    def test_recovery_merge_makes_base_ancestor_again(self):
+        # 修复动作的可核对形态（本 PR 实测路径）：分支被重建成不含基点的线后，**把基点并回来**
+        # （`git merge <基点>`）即让判据恢复为真；此时两侧改动都在（`other` 那批不被回退）。
+        _git_argv(self._tmp, "checkout", "-q", "-b", "other")
+        _git_argv(self._tmp, "checkout", "-q", "main")
+        with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
+            fh.write("z")
+        _git_commit(self._tmp, "基点之后合入的一批改动")
+        newer = self.sh("git rev-parse HEAD").stdout.strip()
+        # 把 feat 重建在更早的分叉点（回退了上面那批）→ 判据为假
+        _git_argv(self._tmp, "checkout", "-q", "-B", "feat", self.base)
+        with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
+            fh.write("c")
+        _git_commit(self._tmp, "feat: 重建在新基点上（回退了上面那批）")
+        self.assertIn("返工基点", self._run(newer))
+        # 修复：把基点并回来（不得用"只把文件内容改成和基点一样"折衷）
+        _git_argv(self._tmp, "merge", "--no-edit", "-q", newer)
+        self.assertEqual(self._run(newer), "")
+        self.assertTrue(os.path.isfile(os.path.join(self._tmp, "b.txt")),
+                        "并回来之后，基点之后合入的改动须仍在工作区里（不是被回退掉）")
 
     def test_missing_base_env_skips(self):
         # 边界：非 CNB 环境/平台未给参照 sha → 跳过、不报错（确定性/幂等）
@@ -18347,3 +18429,117 @@ class TestCheckHttpContractGuard(_StackGuardTestCase):
         self._write_common_mutated("**声明式客户端契约**")
         cm.check_http_contract_guard()
         self.assertIn("声明式客户端契约", self.error_texts())
+
+
+class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
+    """钉住『不得新增只做条件取值的方法』（**用户提出，Issue #206「三元」**）。
+
+    用户原话："严禁新增一个里面只有三元判断取值的方法，适应任何语言，有很多类似的
+    `defaultIfNull` `defaultIfEmpty` 的方法，没有可以加"。要治的失效：**方法体只剩一处
+    条件取值**——方法只为在一个表达式里挑一个值、**没有自己的语义**（名字只是把那次挑选
+    复述一遍），而「空则取默认值」已有现成入口，缺的只是**加一个通用工具方法**。最易被
+    三件事冲掉：条文与本集合取舍被抽（三元又被抽成专用方法）、去向被抽（没有现成方法时
+    也不去加通用方法）、Java 落点被抽（不知道该把通用方法补到哪）。
+
+    本条跨两文件（通用层本体 + Java 落点），故夹具一并重定向两处常量。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    SYNTAX = "specs/stack/java-syntax.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_syntax = cm.JAVA_SYNTAX_FILE
+        cm.CODING_FILE = os.path.join(self.root, *self.CODING.split("/"))
+        cm.JAVA_SYNTAX_FILE = os.path.join(self.root, *self.SYNTAX.split("/"))
+        with open(self.CODING, encoding="utf-8") as fh:
+            self.CODING_TEXT = fh.read()
+        with open(self.SYNTAX, encoding="utf-8") as fh:
+            self.SYNTAX_TEXT = fh.read()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_SYNTAX_FILE = self._orig_syntax
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.SYNTAX, self.SYNTAX_TEXT)
+
+    def _write_coding_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.CODING_TEXT)
+        self.write(self.CODING, self.CODING_TEXT.replace(removed, replacement))
+        self.write(self.SYNTAX, self.SYNTAX_TEXT)
+
+    def _write_syntax_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.SYNTAX_TEXT)
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.SYNTAX, self.SYNTAX_TEXT.replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_ternary_extraction_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 该条被降级成建议，「调用点会更短」把专用方法放回来
+        self._write_coding_mutated("* **不得新增只做条件取值的方法（L1）**",
+                                   "* **取值方法随便抽**")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("不得新增只做条件取值的方法", self.error_texts())
+
+    def test_no_semantics_reason_removed_reports(self):
+        # 反例②：核心理由（没有自己的语义）被抽 -> 读者不知道"为什么这算坏味道"
+        self._write_coding_mutated("**没有自己的语义**")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("没有自己的语义", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_coding_mutated("**有自身语义的取值方法")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("有自身语义的取值方法", self.error_texts())
+
+    def test_exception_face_removed_reports(self):
+        # 反例④：例外面被删 -> 已有先例、响应式管线等正当场合被判红
+        self._write_coding_mutated("**先加通用工具方法**")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("先加通用工具方法", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑤：存量边界被删 -> 等于要求立刻批量内联/删既有方法（用户口径"已经用了不管"）
+        self._write_coding_mutated("既有此类方法一律不视为违规、不告警、不要求整改")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("不视为违规", self.error_texts())
+
+    def test_takeaway_direction_removed_reports(self):
+        # 反例⑥：去向（加通用方法、不就地抽专用方法）被抽 -> 兜底退回逐处内联与逐处专用方法
+        self._write_coding_mutated("而不是就地写三段式或就地为这一次调用抽一个专用方法")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("而不是就地写三段式", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑦：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
+        self._write_coding_mutated("**「没有现成工具方法就加一个通用方法、不就地抽专用方法」是本集合自己的判据化取舍**")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("本集合自己的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑧：Java 落点被抽 -> 执行者不知道该把通用方法补到哪，会把三元写回调用点
+        self._write_syntax_mutated("**没有现成入口时补通用方法的落点是项目自有工具类**")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("项目自有工具类", self.error_texts())
+
+    def test_coding_file_missing_reports(self):
+        # 反例⑨：通用层落点整份缺失 -> 该条失去落点
+        self.write(self.SYNTAX, self.SYNTAX_TEXT)
+        cm.check_ternary_extraction_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_java_syntax_file_missing_reports(self):
+        # 反例⑩：Java 落点整份缺失 -> 补通用方法这一去向失去中文载体
+        self.write(self.CODING, self.CODING_TEXT)
+        cm.check_ternary_extraction_guard()
+        self.assertIn("java-syntax.adoc", self.error_texts())

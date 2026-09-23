@@ -5990,6 +5990,46 @@ def _merge_state_guard_rules():
     return files.get("merge_state_guard", {}) or {}
 
 
+def _merge_commit_ok(repo_root, sha, base):
+    """该合并提交是否属"把目标分支并回来"这一档（**没有并进任何外部提交**）。
+
+    判据：`<base>..<合并提交>^2` 为空——第二个父提交（"并进来的那一侧"）的全部提交
+    **都已在目标分支上**（`<base>` 是它的祖先）。这正是
+    `specs/platform/cnb.adoc`「压缩须保留与目标分支的合并关系」要求的动作：真做一次合并、
+    **以合并提交落盘**（合并提交是"已并入"的凭据）；`check_base_ancestor_guard` 的
+    返工修复路径也要求把基点并回来。两类都落成合并提交，故不报红。
+
+    **不得只看"第二个父提交是不是目标分支上的提交"**——合并提交的第二个父提交是**被并
+    那一侧的提交**：把 `main` 并回来时它是 `main` 上的提交（判据成立）；而
+    `git merge <别的源分支>` 时，第二个父提交也可能**恰好是 `main` 上的某个提交**
+    （两条分支共用的分叉点就是），那一侧却带着一整条 `main` 上没有的提交链——只看第二个
+    父提交会把这类"并进外部提交"整个放过去，故判据取**该侧的提交集合**（`<base>..<父2>`
+    为空 ＝ 一个外部提交都没并进来）。
+
+    取不到提交集合（浅克隆、sha 不在本地）时返回 False——核不出来按**违规**处理，
+    静默放行会让防线在浅克隆环境里整条空转。
+    """
+
+    def _git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo_root,
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 errors="replace")
+        except OSError:
+            return None
+        return out.stdout if out.returncode == 0 else None
+
+    parents = _git("rev-list", "--parents", "-n", "1", sha)
+    if parents is None:
+        return False
+    shas = parents.split()[1:]
+    if len(shas) < 2:
+        return False
+    # `--count` 的取值恒为 0 或正数；取不到（None）即核不出，按违规处理
+    count = _git("rev-list", "--count", f"{base}..{shas[1].strip()}")
+    return count is not None and count.strip() == "0"
+
+
 def check_merge_state_guard():
     """『NPC 禁合并·动作侧』：核**本仓库自身**的"合并动作真没做"，不是只核规则文本在不在。
 
@@ -6008,10 +6048,11 @@ def check_merge_state_guard():
       * ② **当前源分支 HEAD 不等于并发唤起时钉定的 sha**——PR 还在开着却把源分支推到
         别的 sha，是"合并/改写"的典型残留（判定只在 PR 为打开态、且钉定 sha 取得到时
         才发声；平台不提供这两个取值时按**跳过**处理，绝不猜）。
-      * ③ **本分支历史里出现合并提交**（`git rev-list --merges <默认分支>..HEAD`）——
-        "合并 PR"落盘一定会留下合并提交；正常交付（PR 分支上的单亲提交）不会。
-        只在本分支相对默认分支**领先**时才发声，且合并提交本身要与默认分支/远端同名
-        分支做交叉核对后再报——**避免把"把自己分支同步一次默认分支"这种合规动作读成违规**。
+      * ③ **本分支历史里出现"并进外部提交"的合并提交**（`git rev-list --merges
+        <默认分支>..HEAD`）——"合并 PR"落盘一定会留下合并提交。只在本分支相对默认分支
+        **领先**时才发声，且**把目标分支并回来不报**：那正是「压缩须保留与目标分支的
+        合并关系」与「返工基点的核对」要求的修复动作，合并提交是"已并入"的凭据（判据见
+        `_merge_commit_ok`——被并那一侧不得带进任何目标分支上没有的提交）。
 
     **效力边界（说明白了才不算虚报抓手）**：这三条覆盖的是"合并在本仓库留下痕迹"的
     情形；平台上直接合并、且不在本仓库留下任何痕迹时，本检查**看不到**——那一半只能
@@ -6079,11 +6120,22 @@ def check_merge_state_guard():
     merges = _git("rev-list", "--merges", f"{base}..HEAD")
     if ahead and ahead.strip() not in ("", "0") and merges is not None:
         found = [l for l in merges.splitlines() if l.strip()]
+        # 判据机械可核：合并提交的**每一个**父提交都须是目标分支上的提交
+        # （`git merge-base --is-ancestor <父> <目标分支>`）——把目标分支并回来正是
+        # `specs/platform/cnb.adoc`「压缩须保留与目标分支的合并关系」要求的动作
+        # （真做一次合并、**以合并提交落盘**；合并提交是"已并入"的凭据，见
+        # `specs/general/git.adoc`「压缩后的合并关系核对」），`check_base_ancestor_guard`
+        # 的返工修复路径也要求把基点并回来：不并回来基点就不再是祖先、基点之后合入的
+        # 改动无从核对，而差异检出看起来反而更干净。两类都落成合并提交，故不报红。
+        # 反例：只要有一个父提交不是目标分支上的（`git merge 别人的源分支`、`git pull`
+        # 把远端主线并进来），整条**全部报红**——不因"含一个目标分支父提交"而打折扣。
+        found = [h.strip() for h in found if not _merge_commit_ok(repo_root, h, base)]
         if found:
-            detail = "; ".join(f"`{h.strip()[:8]}`" for h in found[:3])
+            detail = "; ".join(f"`{h[:8]}`" for h in found[:3])
             err(f"分支历史里出现合并提交（{detail}）——`specs/platform/cnb.adoc`「NPC 禁合并」"
                 "要求合入只由人工完成，交付到创建/推送 PR 分支为止"
-                "（交付形态须是源分支上的单亲提交链）；核对命令："
+                "（把目标分支并回来不在此列：`specs/platform/cnb.adoc`「压缩须保留与目标分支的"
+                "合并关系」要求真做一次合并、以合并提交落盘）；核对命令："
                 "`git rev-list --merges <默认分支>..HEAD`", "git 历史")
     phase_done()
 
@@ -10535,7 +10587,7 @@ def check_api_naming_guard():
 
 """
     phase("Feign 接口命名带所属域前缀防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace(chr(92), "/")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(CODING_FILE):
         err(f"缺少文件 {rel_coding}——「Feign 接口命名带所属域/项目前缀」的通用层落点丢失",
             rel_coding)
@@ -10560,7 +10612,7 @@ def check_api_naming_guard():
                 "（只让通用层有、技术栈层没有，Java 执行者按栈文件学仍会随手取名）",
                 rel_java)
     # 加载调度器：两处识别特征（否则规则永远不会被加载）
-    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace(chr(92), "/")
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(GENERIC_FILE):
         err(f"缺少加载调度器 {rel_common}", rel_common)
     else:
@@ -10572,7 +10624,7 @@ def check_api_naming_guard():
                 "（含只约束 Feign 的范围标注），否则该条永远不会被触发加载"
                 "或会被读成适用于所有接口", rel_common)
     # 公开面：README 目录说明（读者按 README 学习时须能看到这条存在）
-    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace(chr(92), "/")
+    rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE) and "接口命名" not in open(
             README_FILE, encoding="utf-8").read():
         err(f"{rel_readme} 的目录说明未同步接口命名前缀条——"
@@ -11418,6 +11470,34 @@ def check_param_carrier_guard():
         run_rule_guard("check_param_carrier_guard")
 
 
+def check_ternary_extraction_guard():
+    """『不得新增只做条件取值的方法』防线（**用户提出，Issue #206「三元」**）：判据本体不得被删或降级。
+
+    用户原话（本 PR 内）："严禁新增一个里面只有三元判断取值的方法，适应任何语言，有很多类似的
+    `defaultIfNull` `defaultIfEmpty` 的方法，没有可以加"。要治的失效是：**方法体只剩一处条件
+    取值**——方法只为在一个表达式里挑一个值，**没有自己的语义**（名字只是把那次挑选复述一遍）、
+    只把同一个取值逻辑从调用点搬了个位置；而「空则取默认值」在标准库/项目自有工具类/已引入工具
+    库（`defaultIfNull`/`defaultIfEmpty`/`emptyToDefault` 一类）里已有现成入口，缺的只是**加一个
+    通用工具方法**（一处定义、全项目复用），不是就地为这一次调用造专用方法。
+
+    本条**跨语言**（用户点名"适应任何语言"），故判据本体落通用层 `specs/general/coding.adoc`
+    「表达式与调用写法」；去向（没有现成工具方法时**加通用方法**而非就地抽专用方法）与 Java 落点
+    （给项目自有工具类补通用方法）同节相邻、须一并钉住。只核"判据本体在不在"——"某个方法算不算
+    只做条件取值""某处是否已有先例"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("条件取值方法（不得新增只做三元取值的方法）防线检查")
+    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel}——『不得新增只做条件取值的方法』的落点丢失"
+            "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
+    rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_SYNTAX_FILE):
+        err(f"缺少文件 {rel_syntax}——『判空兜底用默认值工具方法』的 Java 落点丢失"
+            "（补通用方法这一去向须有 Java 侧的载体）", rel_syntax)
+    run_rule_guard("check_ternary_extraction_guard")
+    phase_done()
+
+
 def check_getter_bridge_guard():
     """『接口实现字段名与接口 getter 名不一致须手动桥接』防线（从存量项目规范引入）。
 
@@ -11584,6 +11664,7 @@ CHECKS = (
     check_pointer_no_verbatim_guard,
     check_info_density_guard,
     check_java_serial_guard,
+    check_ternary_extraction_guard,
     check_maven_parallel_guard,
     check_alter_merge_guard,
     check_toolchain_present_guard,
