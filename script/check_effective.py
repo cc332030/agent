@@ -218,20 +218,21 @@ MECHANISMS = [
      "specs/stack/java.adoc「编码」", "script/check_specs.py",
      "check_java_interface_accessor_guard",
      "check_java_interface_accessor_guard 钉住 Java 栈「编码」的**判据本体**（不是轴名——只核『这一节在不在』属防线空转）：**只约束接口**（`interface` 与「类不适用本条」须同现——判定面被放大到类上会把正常的 lombok setter 判红）、**允许 get / 禁止 set** 两侧、**理由与后果**（下游可能加 `@Accessors(chain = true)` ⇒ **编译不过**——缺则读者不知道要防什么，遇到『接口不加 set 怎么写入』会把 setter 补回去）、**判定标准四条**（接口里声明了 set，含接口上的 lombok 访问器注解 / 以『没法写入』为由补 setter 而未走主动声明 / 自我豁免）、**存量口径**（用户点名『已经有的不管，也不告警』：不视违规、不告警、不整改、随动迁移）、**豁免面与范围**（除非主动声明、仅对该处生效、不得泛化）与依据行，并反向钉住通用层不得出现框架专名 `@Accessors`、技术栈层是判据的唯一落点；另钉调度器识别特征、README 同步与图书馆两处落点。**本条防的不是『没写规则』而是『判定面被放大或理由被抽掉』**——『某个接口算不算字段接口』属语义判断（见 GUARD_CHECK_LIMITS）"),
-    ("Java 数据对象模板：新建时整段照抄；补注解不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`",
+    ("Java 数据对象模板：新建时整段照抄；补注解时已提交的类默认不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`；review 不计问题",
      "specs/stack/java.adoc「编码」+ specs/stack/java-object.adoc（模板文件）", "script/check_specs.py",
      "check_java_object_template_guard",
      "check_java_object_template_guard 钉住两处结构：① **模板文件** `specs/stack/java-object.adoc`（**模板、不是规范文件**——"
      "『要么不读、要么整份读完』的整段清单）须写明自身定位与触发特征（『没有以上目的时不加载』）、五项注解齐备、"
      "**三条照抄约定各自回指判据本体**（取值只列一次、理由与判定标准只在 `specs/stack/java.adoc`「编码」写一份："
      "模板文件自称『不重复那些判据』，在此再抄一份即第二真源；**两档生效面取值与依据行亦只回指、不复述**）；"
-     "② **判据本体**在 `specs/stack/java.adoc`「编码」的『数据对象模板』条**自己的正文里**，本条承载三处取值的取值/机制/判定标准；"
+     "② **判据本体**在 `specs/stack/java.adoc`「编码」的『数据对象模板』条**自己的正文里**，本条承载三处取值的取值/机制/判定标准，"
+     "**以及『review 不计问题』这一生效面**（未主动声明要补时，既有对象缺这套注解不构成问题——用户点名；缺则 review 会把存量缺注解报成问题）；"
      "**核对面须防兜底**：按整份文件核时同文件相邻条目的同样字样会兜住缺项、按整条 bullet 核时同一 bullet 末尾的"
      "依据行会兜住清单缺项——故取『条目正文』与『清单句』两级（`bullet_tokens` 的 `anchor`/`until`）；"
      "**模板侧另有反向核对**（`file_forbidden`）：机制、判定标准、取舍声明与两档生效面取值**不得**在模板侧再抄一份；"
      "③ 加载门（调度器技术栈层登记 + 识别特征）与 README 目录说明（须写条目名 + 『模板文件、非规范文件』，只留子串会被路径兜住）。"
      "**本条防的是『模板文件被并回规范』『判据本体被抽走只剩一份清单』『取值在模板侧另抄一份』三种失效**——"
-     "『某个类算不算数据对象、代码里到底标没标这些注解』属语义判断与运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "『某个类算不算数据对象、代码里到底标没标这些注解、某个类提交没提交』属语义判断与运行时事实（见 GUARD_CHECK_LIMITS）"),
     ("Maven 未配置过仓库/镜像且外网出口 IP 在中国大陆时，须用指定中央仓库",
      "specs/stack/maven.adoc",
      "script/check_specs.py",
