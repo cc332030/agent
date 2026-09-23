@@ -4227,7 +4227,11 @@ def check_install_repeat_update_guard():
 # **本轮（Issue #198 与上面「补机械抓手」两支并行的账须相加）**：`check_baseline_sync_guard`
 #   新增一位（114 → 115）与上一条的 4 道（114 → 118）**互不包含**，合并后为 **114 → 119**。
 #   `guards.adoc` 清单表同步为 119 行、编号 1..119 连续且与 `CHECKS` 逐一同序（本道排在末尾）。
-GUARD_WIRING_BASELINE = 119
+# **本轮（PR #202「禁用 @Value」与 Issue #198 两支并行的账须相加，解决冲突时记）**：
+#   `check_value_binding_guard` 新增一位（119 → 120）与 `check_baseline_sync_guard` 的
+#   114 → 119 **互不包含**，合并后为 **114 → 120**。`guards.adoc` 清单表同步为 120 行、
+#   编号 1..120 连续且与 `CHECKS` 逐一同序（本道排在末尾）。
+GUARD_WIRING_BASELINE = 120
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4511,7 +4515,11 @@ GUARD_WIRING_BASELINE = 119
 #   TestCheckDevFlowGuard 供「汇报一致性」4 条、TestCheckDevFlowGuard 供 report-tail 2 条等，
 #   逐名比对无用例消失；同源实取：`check_specs_test` 1412 + `rules_engine_test` 78 +
 #   `check_effective_test` 37 = 1527）。
-GUARD_TEST_BASELINE = 1509
+#   **本轮（PR #202「禁用 @Value」与上两支并行的账须相加，解决冲突时记）**：本支新增 14 条
+#   （TestCheckValueBindingGuard 正例 1 + 反例 13），与前两支互不包含；合并后按同源实取：
+#   `check_specs_test` 1396 + 14 = 1410、`rules_engine_test` 78、`check_effective_test` 37，
+#   合计 **1525**。
+GUARD_TEST_BASELINE = 1525
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -10859,6 +10867,25 @@ def check_conflict_resolution_guard():
     phase_done()
 
 
+def check_value_binding_guard():
+    """『配置项绑定』防线（用户提出：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
+
+    要治的失效：`@Value` 的"仅限少量简单配置"口径没有判据，实际执行中持续滋生——
+    字段注入、构造参数、方法参数各处散落取值，配置项失去类型安全与集中管理。
+    `@Value`/`@ConfigurationProperties`/`@Configuration` 都是 Spring 语境下的概念，
+    故只核技术栈层（`specs/stack/spring.adoc`「配置」）与其加载门。
+    「某个取值算不算外部配置绑定」「SpEL 场景算不算越界」属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("配置项绑定防线检查")
+    rel = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少文件 {rel}——『配置项绑定』的落点丢失"
+            "（`@Value`/`@ConfigurationProperties` 都是 Spring 语境下的概念，须落在技术栈层）", rel)
+    else:
+        run_rule_guard("check_value_binding_guard")
+
+
 def check_baseline_sync_guard():
     """『基线同步防线』：**压缩前须先并入目标分支的最新改动**，否则"压缩一次"就是"删一次"。
 
@@ -11455,6 +11482,7 @@ CHECKS = (
     check_validation_entry_guard,
     check_http_contract_guard,
     check_baseline_sync_guard,
+    check_value_binding_guard,
 )
 
 

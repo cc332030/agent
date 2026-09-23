@@ -161,3 +161,41 @@ file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
 message = "HTTP 接口契约防线被破坏：{file} 的 Spring 技术栈登记缺失 {missing}——缺该识别特征时，写 HTTP 方法映射与声明式客户端契约不会触发加载该节"
 tokens = ["**HTTP 方法映射**", "**声明式客户端契约**"]
+
+# 『配置项绑定』防线（PR #202：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
+# 该条对应用户提出的要求：外部配置**只允许**绑定到 `@ConfigurationProperties` 类、
+# **禁止使用 `@Value`**；存量随动迁移、code review 不对存量报。判据按**本条 bullet** 核
+# （`bullet_tokens`）：「配置」节里相邻条目含 `@ConfigurationProperties`、`@Configuration`、
+# 「判定标准」「随动迁移」等同样字样，整节核会把本条锚点被抽走的形态兜住。
+# 加载门另钉：调度器 Spring 条须给出「配置项绑定注解」识别特征（缺则写/改 `@Value`
+# 不会触发加载该条）。
+[[guards.check_value_binding_guard]]
+bullet = "配置项统一用 `@ConfigurationProperties` 绑定（L1）"
+file = "specs/stack/spring.adoc"
+kind = "bullet_tokens"
+message = "配置项绑定防线被破坏：{file} 的「配置项统一用 `@ConfigurationProperties` 绑定（L1）」条**本条自己的正文**缺失 {missing}——该条对应用户提出的要求（外部配置只允许 `@ConfigurationProperties`、禁止 `@Value`），不得删除、不得降级、不得把 `@Value` 放回允许面"
+section = "配置"
+tokens = [
+    # 条文与禁止面（防被降级成「@Value 仅限少量简单配置」那类弹性口径——判据不可核对即失效）
+    "禁止使用 `@Value`",
+    "业务代码与配置类中的字段注入、构造参数与方法参数",
+    # 边界（SpEL 不属外部配置绑定，缺则该禁令会被读成「`#{...}` 也禁」）
+    "SpEL 取值（`#{...}`）不受本条约束",
+    # 判定标准（逐条可核对）
+    "**判定标准（任一命中即违规）**",
+    "新增或改动的代码中出现 `@Value` 注解",
+    "为绕开本条把配置项塞进 `@Configuration` 类的字段",
+    # 存量边界（随动迁移 + review 静默，缺则等于要求立刻批量改存量）
+    "不属违规、按原样保留",
+    "code review 也不对存量 `@Value` 作问题提示",
+    # 依据行（标准名 + 本集合取舍）
+    "Spring Boot 官方文档「Externalized Configuration」",
+    "The Twelve-Factor App",
+]
+
+[[guards.check_value_binding_guard]]
+anchor = ["Spring 项目"]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+message = "配置项绑定防线被破坏：{file} 的 Spring 技术栈登记缺失 {missing}——缺该识别特征时，写/改 `@Value`/`@ConfigurationProperties` 不会触发加载该条"
+tokens = ["**配置项绑定注解**（`@Value`/`@ConfigurationProperties`）"]
