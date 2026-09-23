@@ -4132,7 +4132,12 @@ def check_install_repeat_update_guard():
 #   `guards.adoc` 清单表同步为 113 行、编号 1..113 连续且与 `CHECKS` 逐一同序。
 #   **这一道正是本轮失效直接催生的**：原失效发生时全部防线报绿——所有防线都只读
 #   "工作区内容对不对"，没有一条读"基点对不对"。
-GUARD_WIRING_BASELINE = 113
+# **本轮（Issue #195「方法排序」）记账**：接线数 **113 → 114**——新增
+#   `check_method_placement_guard`（新增成员的落点按流程次序、可插前面或中间、重载相邻、
+#   数据转换方法跟随查询；只对新增成员生效），插在 `check_chain_assignment_order_guard`
+#   之前；`guards.adoc` 清单表同步为 114 行、编号 1..114 连续且与 `CHECKS` 逐一同序。
+#   用例数同源实取回填（见 `GUARD_TEST_BASELINE`）——本道 17 条（正例 1 + 反例 16）。
+GUARD_WIRING_BASELINE = 114
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4373,7 +4378,12 @@ GUARD_WIRING_BASELINE = 113
 #   这五条是**旧写法确实漏放的形态**（核对对象取"整个二级节 / 整份文件"时，锚点在相邻
 #   条目与别条目里照样命中，故全绿），任一回归即报红。
 #   **真实基线数由测量定**：合并后仍以 `_count_collectable_tests` 实取值为唯一来源。
-GUARD_TEST_BASELINE = 1408
+# **本轮（Issue #195「方法排序」）**：用例数 **1408 → 1425**（同源实取）——新增
+#   `TestCheckMethodPlacementGuard` 17 条（正例 1 + 反例 16：条文被删 / 「允许插前面或中间」
+#   被抽 / 禁止面被抽 / 重载相邻被抽 / 转换跟随查询被抽 / 判定标准被抽 / 只对新增生效被抽 /
+#   依据行被抽 / 条目被掏空 / Java 落点被删 / Java 落点被反向 / 调度器两处识别特征被抽 /
+#   README 未同步 / 图书馆未登记 / 图书馆登记被掏空）。
+GUARD_TEST_BASELINE = 1425
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -10062,6 +10072,38 @@ def check_readonly_landing_guard():
     phase_done()
 
 
+def check_method_placement_guard():
+    """『成员与方法次序』防线：判据本体不得被删、不得降级、不得被读成「一律追加到末尾」。
+
+    用户要求（Issue #195，原话）："新增方法/函数时，按照业务流程的先后顺序进行排序，越底层
+    流程越靠后越在后面（即允许按照流程前后顺序，把新增方法加在已有方法的前面（包括最前面）
+    或者中间），如果有重载方法，直接加在重载方法的附近（重载方法的排序同样按照先后顺序），
+    先初始化的在前面，先用到的在前面，后面的依赖前面的……例外：接口查询数据时，要对数据库
+    实体和返回模型做转换，转换方法默认写在查询接口后面。此规范只适用于新增方法/函数，不对
+    已有方法生效，review 时不算问题不提出"。
+
+    落点：判据跨语言，故判据本体唯一落点在 `specs/general/coding.adoc`「命名与代码质量」；
+    Java 的成员载体（字段/方法/重载）落在 `specs/stack/java.adoc`「编码」并回指本体。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一条"属防线空转——**允许插前面或中间**、**重载相邻**、**转换跟随查询**、
+    **只对新增成员生效**任一被抽走时照样全绿（只在台账里报"这一条在不在"）。故逐组核
+    `script/specs-rules/coding.toml` 里的锚点；"某个方法的调用方与被调用方各是哪一个""某次
+    改动算不算新增"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("成员与方法次序防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「成员与方法次序」的判据无处承载"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——「成员与方法次序」的 Java 落点（字段/方法/重载）无处承载",
+            rel_java)
+    run_rule_guard("check_method_placement_guard")
+    phase_done()
+
+
 def check_chain_assignment_order_guard():
     """『链式赋值顺序随字段顺序』防线：判据本体不得被删、不得降级、不得自成第二真源。
 
@@ -11126,6 +11168,7 @@ CHECKS = (
     check_java_enum_valueof_catch_guard,
     check_pagination_guard,
     check_logical_delete_naming_guard,
+    check_method_placement_guard,
     check_chain_assignment_order_guard,
     check_persistence_access_guard,
     check_deprecated_api_guard,
