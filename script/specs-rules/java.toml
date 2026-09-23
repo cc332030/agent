@@ -394,3 +394,38 @@ groups = [
 ]
 kind = "file_groups"
 message = "Java 枚举查找空 catch 防线被破坏：{file} 的条件例外判据本体缺失 {missing}——{desc}"
+
+# 『接口实现字段名与 getter 名不一致须手动桥接』（用户从存量项目规范引入：类型相同、字段名与接口
+# getter 方法名不一致时，手动 `@Override` 桥接并加 `@JsonIgnore`，避免序列化出现重复属性）。
+# 机制：访问器按**字段名**生成 ⇒ 不生成接口要求的那个方法（非抽象类因此编译不过）；手动桥接后
+# 接口方法名与字段名各成一个读取方法、指向同一个值 ⇒ 不加忽略就序列化出**两个属性**。
+# 按**条目自己的正文**核（`bullet_tokens`）：「编码」一节里相邻条目含「依据/存量边界/判定标准」
+# 一类同样字样，按整节核时会把从本条抽走的要点兜住。
+[[guards.check_getter_bridge_guard]]
+bullet = "接口实现时字段名与接口 getter 名不一致须手动桥接"
+file = "specs/stack/java.adoc"
+kind = "bullet_tokens"
+message = "getter 桥接防线被破坏：{file} 的「接口实现时字段名与接口 getter 名不一致须手动桥接」条**本条自己的正文**缺失 {missing}——桥接或忽略任一被抽走时，序列化会丢属性或同一值出两个属性；边界被抽走时，新建类会被迫背上改名与否的存量包袱。每条锚点须在**本条 bullet 内唯一**"
+section = "编码"
+tokens = [
+    "接口实现时字段名与接口 getter 名不一致须手动桥接（L1）",
+    "两侧类型相同而字段名与接口的 getter 方法名不一致",
+    "手动 `@Override` 桥接出接口要求的那个 getter",
+    "并给桥接方法加 `@JsonIgnore`",
+    "非抽象的实例类因此**编译不过**",
+    "**判定标准（任一命中即违规）**",
+    "**序列化属性名已被外部依赖**",
+    "**尚无外部依赖的类不受①限制**",
+    "**存量**按 `specs/core/execution.adoc`",
+    "Project Lombok 官方文档（访问器按字段名生成）",
+    "Jackson 官方文档（getter 即序列化属性）",
+]
+
+# 加载门：调度器的 Java 技术栈条须给出识别特征（缺则该条在"实现接口而字段名与接口 getter 名
+# 不一致"这一场景不会被加载——写规则与登记是同一个动作）。
+[[guards.check_getter_bridge_guard]]
+anchor = ["Java 项目"]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+message = "getter 桥接防线被破坏：{file} 的 Java 技术栈登记缺失 {missing}——缺该识别特征时，Java 项目按栈登记加载看不到这条"
+tokens = ["**接口实现的访问器桥接**"]

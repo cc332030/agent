@@ -5,7 +5,10 @@
 检查项（每项对应一个 `check_*` 函数；**执行次序与逐条用途的清单在**
 `specs-project-maintainer/guards.adoc`，此处只给条目名）：
   1. 引用存在性：所有 `.adoc` 中的 `specs/...` 引用（反引号按仓库根、`link:` 按相对
-     当前文件）都必须指向真实文件，避免规范间交叉引用悬空。
+     当前文件）都必须指向真实文件，避免规范间交叉引用悬空；**通配（`specs/*.adoc`
+     一类清单）不是具体引用、不参与存在性核对**——它无从核对（拿通配去 `os.path.isfile`
+     必然为假），而本仓库确有"取回脚本按 `specs/*.adoc` 清单解析"这类**真实描述**，
+     按具体文件判会长期挂着一条假红（见 `_is_placeholder_ref`）。
   2. 链接格式：内部 `link:` 须用相对路径，禁止根绝对路径与越出仓库根的写法。
   3. 节名引用存在性：`link:x.adoc[]「节名」` 引用的节必须真实存在，防改名后静默悬空。
   4. 技术栈一致：AGENTS_COMMON.adoc 技术栈层登记与 specs/stack/ 实际文件双向一致。
@@ -1393,6 +1396,25 @@ def _rel_of(path: str) -> str:
     return path.replace("\\", "/")
 
 
+def _rel_label(path: str) -> str:
+    """把路径转成"仓库根相对 POSIX 路径"，**跨盘时退回绝对 POSIX 路径**——只用作**报错文案里的落点标签**。
+
+    为什么需要它（本轮实测）：`os.path.relpath` 在两个挂载点之间**直接抛**
+    `ValueError: path is on mount 'D:', start on mount 'c:'`。本机 `%TEMP%` 在 C:、仓库在 D:，
+    于是单测夹具的 `REPO_ROOT` 与模块级绝对路径常量（`ENCODING_FILE`、栈文件等）不同盘——
+    防线还没开始判"要点在不在"，就在"路径怎么写"这一步掀了：用例**报错**（看着像被测规范坏了）
+    而不是断言失败。
+
+    与 `_rel_of` 的分工：`_rel_of` 的结果会被**再拼回路径**（`os.path.join(REPO_ROOT, …)`），
+    故它必须给出真正的仓库根相对路径、跨盘时**继续抛错**（那种场景在真实运行里不成立）；
+    本函数只喂 `err(...)` 的文案，退回绝对路径不影响任何判定。
+    """
+    try:
+        return os.path.relpath(path, REPO_ROOT).replace("\\", "/")
+    except ValueError:
+        return path.replace("\\", "/")
+
+
 # **历史记录文件**：`CHANGELOG.adoc` 是**只追加的变更历史**，按定义会保留旧路径、旧文件名
 # 与"原位于…迁移至…"这类历史陈述（见 specs/general/changelog.adoc）。故它虽有语法形态、
 # 须纳入语法编译（防模板/换行被破坏），但**引用存在性、节名引用、链接格式、历史来源声明**
@@ -2519,6 +2541,27 @@ def _adoc_compile_cmd(proc, path):
     return [proc, "-o", "-", path]
 
 
+def _adoc_env():
+    """跑 AsciiDoc 处理器时的子进程环境：**统一按 UTF-8 收发**，不随本机 locale 变。
+
+    为什么需要它（本轮实测）：本仓库全部 `.adoc` 是 UTF-8，而处理器**按本机默认编码读
+    文件**——在中文 Windows（默认 GBK）上，Python 版 `asciidoc` 一遇到非 ASCII 内容就抛
+    解码异常、以 `unexpected error` 退出。**这不是文档的问题，却会一次刷出十几条
+    "语法/告警"报红**（实测：59 份里 10 份报这种红；同一批文件设 `PYTHONUTF8=1` 后
+    59 份全部编译通过）。判据是"文件能否编译"，不该随执行者的机器变，故由脚本统一给定。
+
+    同时给父进程侧的解码：`subprocess.run(..., encoding="utf-8")`——否则子进程写回的
+    中文会被父进程按 GBK 解、报 `UnicodeDecodeError`（与前面 NPC 那道防线踩过的是同一个坑）。
+
+    边界：只解决"编码"这一半，**不改处理器、不改本仓库声明的运行环境**；也**不掩盖**
+    真实语法问题——编码正确后仍编译不过的文件照样报红。
+    """
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 # CI 步骤里"执行了哪条命令"的判据用语：`run:` 的内容（含 `|`/`>` 块）与
 # `uses:` 的 action 名。步骤名不计入——名字里写 `gem install asciidoctor` 而步骤实际
 # 跑的是 `echo skip` 时，按"整段文本包含关键字"判会假绿（名字比命令更容易写）。
@@ -2779,7 +2822,8 @@ def check_asciidoctor_syntax():
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
         try:
             r = subprocess.run(_adoc_compile_cmd(proc, path),
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, timeout=30,
+                               encoding="utf-8", errors="replace", env=_adoc_env())
         except subprocess.TimeoutExpired:
             err(f"{proc} 超时 (30s)，文件可能过大或处理器卡死: {rel}")
             continue
@@ -2802,11 +2846,17 @@ def _is_dir_ref(ref: str) -> bool:
 def _is_placeholder_ref(ref: str) -> bool:
     """判断一个引用是否为**占位符/示例**（非真实具体文件，无法核对存在性）。
 
-    只含真正的占位形态：`...` 省略、`**` 整目录通配（如 `specs/**`）、`<...>` 尖括号
-    占位。**目录型引用（`specs/`）不在此列**——见 _is_dir_ref（它有确定的判据）。
+    只含真正的占位形态：`...` 省略、**通配**（`*`/`**`，如 `specs/*.adoc`、`specs/**`）、
+    `<...>` 尖括号占位。**目录型引用（`specs/`）不在此列**——见 _is_dir_ref（它有确定的判据）。
+
+    **通配算占位（本轮修）**：`specs/*.adoc` 这类**通配清单**不是具体路径，存在性无从核对
+    （拿它去 `os.path.isfile` 必然为假）。本仓库实证：`guards.adoc` 里写"登记路径须能被取回
+    脚本的 `specs/*.adoc` 清单解析命中"，被 `check_refs_exist` 报成"引用了不存在的文件"，
+    于是这条**假红长期留在本仓库**（本机跑一次就报一次）；改正那句措辞只是把一句**真实存在
+    的**规则描述改掉，问题会在下一个提到通配的地方重现——故在判据侧修：通配不是具体引用。
     """
     return (ref.endswith("...")
-            or ref.endswith("**")          # 整目录通配（如 `specs/**`），非具体文件
+            or "*" in ref                  # 通配（`*`/`**`）：不是具体路径，存在性无从核对
             or "<" in ref or ">" in ref)
 
 
@@ -4137,7 +4187,19 @@ def check_install_repeat_update_guard():
 #   数据转换方法跟随查询；只对新增成员生效），插在 `check_chain_assignment_order_guard`
 #   之前；`guards.adoc` 清单表同步为 114 行、编号 1..114 连续且与 `CHECKS` 逐一同序。
 #   用例数同源实取回填（见 `GUARD_TEST_BASELINE`）——本道 17 条（正例 1 + 反例 16）。
-GUARD_WIRING_BASELINE = 114
+# **本轮（用户口径「补机械抓手」）记账**：上一条轮次从存量项目规范（`risk/AGENTS.md`）引入并
+#   落笔的 5 条规范条目，本轮一并补上机械抓手——**新增 4 道防线**：
+#     * `check_param_carrier_guard`（方法参数不得以键值容器承载，通用层 `coding.adoc`）；
+#     * `check_getter_bridge_guard`（接口实现字段名与 getter 名不一致须手动桥接，`java.adoc`）；
+#     * `check_validation_entry_guard`（参数校验入口统一用 `@Validated`，`spring.adoc`）；
+#     * `check_http_contract_guard`（控制器显式声明 HTTP 方法 / 契约共用 / 前缀单点 / 参数承载，
+#       `spring.adoc`）。
+#   接线数 **114 → 118**；规则数据落 `script/specs-rules/coding.toml`、`java.toml` 与新增的
+#   `spring.toml`（一类规则一个文件、按被测落点切分，加载侧自动扫描）；`guards.adoc` 清单表
+#   同步为 118 行、编号 1..118 连续且与 `CHECKS` 逐一同序；`check_effective.py` 台账新增 7 条
+#   （同一道防线钉住多条时逐条照写）；调度器三处识别特征同步（通用层「任何代码活动」、
+#   Java 与 Spring 技术栈条）。
+GUARD_WIRING_BASELINE = 118
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4396,7 +4458,21 @@ GUARD_WIRING_BASELINE = 114
 #   不是单个测试文件的数、也不是源码里 `def test_` 的个数。逐文件的**明细数不在本注释
 #   复述**——它随任一轮用例增删而变，本注释只说明口径、值以 `_count_collectable_tests`
 #   实取为准（复述一份即第二处会各自漂移）；改动后按同源实取回填本常量即可。
-GUARD_TEST_BASELINE = 1428
+#   本轮（「补机械抓手」）新增 4 道防线的反例用例——`check_specs_test.py` +42：
+#   `TestCheckParamCarrierGuard` 9 条、`TestCheckGetterBridgeGuard` 10 条、
+#   `TestCheckValidationEntryGuard` 10 条、`TestCheckHttpContractGuard` 13 条（各含 1 条正例兼
+#   锚点自检，其余逐条覆盖「条文被降级 / 判定标准 / 例外面 / 边界 / 存量 / 依据名 / 加载门 /
+#   整条或整节被删」）。用例数 **1428 → 1470**，按 `_test_cases` 的限定名去重口径同源实取。
+#   其中 2 条（`test_controller_criterion_removed_reports` /
+#   `test_contract_sharing_criterion_removed_reports`）**因复核意见补**：三视角复核对
+#   `spring.toml` 的 HTTP 节组指出"只钉 `**判定标准（任一命中即违规）**` 这个标题时，
+#   具体反例被抽走仍全绿"（正是 `check_criteria_not_axis_guard` 要防的"轴名齐全、判据被抽走"），
+#   故把判定标准里的具体反例句逐个入 tokens，并为其中两条各补一条反例用例。
+#   本轮（「修既有报红 + 本机环境问题」）增补 3 条：`TestRefKindPredicates.test_glob_ref_is_placeholder`
+#   （通配算占位：`specs/*.adoc` 曾被当具体文件、假红长期挂着）与
+#   `TestRefsExistOnGlob` 的 2 条（通配不报红 / **具体路径悬空仍须报红**，防"顺手放过"）。
+#   用例数 **1470 → 1473**，同源实取。
+GUARD_TEST_BASELINE = 1473
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -5555,7 +5631,7 @@ def check_line_ending_guard():
 
 """
     phase("换行符防线检查")
-    rel = os.path.relpath(ENCODING_FILE, REPO_ROOT).replace("\\", "/")
+    rel = _rel_label(ENCODING_FILE)
     if not os.path.isfile(ENCODING_FILE):
         err(f"缺少编码与语言无关规范文件 {rel}——"
             "跨平台换行符（LF 基准与 Windows 批处理 CRLF）失去集中落点", rel)
@@ -5575,7 +5651,7 @@ def check_line_ending_guard():
                     "跨平台行尾规则不得被删或弱化", rel)
     # 脚本技术栈文件各自须写明行尾要求（引用方按各自栈文件加载）
     for stack_file in LINE_ENDING_STACK_FILES:
-        srel = os.path.relpath(stack_file, REPO_ROOT).replace("\\", "/")
+        srel = _rel_label(stack_file)
         if not os.path.isfile(stack_file):
             err(f"缺少脚本技术栈文件 {srel}——其行尾要求无处承载", srel)
             continue
@@ -5595,7 +5671,7 @@ def check_line_ending_guard():
              (("BOM 是唯一允许出现在首行之前",),),
              "PowerShell 栈须写明 BOM 是唯一允许出现在首行之前的东西——"
              "缺则空行/注释被写在 BOM 之前、首行声明失效")):
-        srel = os.path.relpath(stack_file, REPO_ROOT).replace("\\", "/")
+        srel = _rel_label(stack_file)
         if not os.path.isfile(stack_file):
             err(f"缺少脚本技术栈文件 {srel}——其 BOM/首行口径无处承载", srel)
             continue
@@ -5790,9 +5866,13 @@ def check_merge_state_guard():
     data = _merge_state_guard_rules()
 
     def _git(*args):
+        # `encoding="utf-8"`：git 输出默认就是 UTF-8，而 `text=True` 单用会按**本机 locale**
+        # 解码——中文 Windows（GBK）下中文提交说明被解成乱码，`已合并` 一类标记词**匹配不上**，
+        # 于是"真做了合并"反而**不报**（本轮实测：动作侧两条用例在本机失败，就是这一步）。
         try:
             out = subprocess.run(["git", *args], cwd=repo_root,
-                                 capture_output=True, text=True, timeout=30)
+                                 capture_output=True, text=True, timeout=30,
+                                 encoding="utf-8", errors="replace")
         except (OSError, subprocess.SubprocessError):
             return None
         return out.stdout if out.returncode == 0 else None
@@ -10827,9 +10907,13 @@ def check_base_ancestor_guard():
         return
 
     def _git(*args):
+        # `encoding="utf-8"`：git 输出默认就是 UTF-8，而 `text=True` 单用会按**本机 locale**
+        # 解码——中文 Windows（GBK）下中文提交说明被解成乱码，`已合并` 一类标记词**匹配不上**，
+        # 于是"真做了合并"反而**不报**（本轮实测：动作侧两条用例在本机失败，就是这一步）。
         try:
             out = subprocess.run(["git", *args], cwd=repo_root,
-                                 capture_output=True, text=True, timeout=30)
+                                 capture_output=True, text=True, timeout=30,
+                                 encoding="utf-8", errors="replace")
         except (OSError, subprocess.SubprocessError):
             return None
         return out.stdout if out.returncode == 0 else None
@@ -11108,6 +11192,85 @@ def check_prompt_delivery_surface_guard():
 # **次序本身也是落点**：同一序列由 `specs-project-maintainer/guards.adoc` 的清单表
 # 按同一次序复述（那张表是"有哪些防线、按什么次序跑"的可读落点，由
 # `check_guard_order_guard` 双向核对）——改这里的次序必须同步改那张表。
+def check_param_carrier_guard():
+    """『参数载体（不得以键值容器承载方法参数）』防线：判据本体不得被删或降级。
+
+    用户口径（从存量项目规范引入）：严禁在任何方法形参中用 `Map`/字典传递数据，须使用
+    具名对象（该操作自己的请求/参数/传输对象）；仅调用方主动声明时才允许。要治的失效是
+    **键值容器没有成员声明**——字段名、字段类型与必填性都没有落点，两端靠字面键约定，
+    键名改一处即**静默失效**，键集合也无法在编译期核对。
+
+    本条**跨语言**（`Map`/字典/哈希），故判据本体落通用层 `specs/general/coding.adoc`
+    「数据契约的载体」；框架与工具专名不得散落到通用层。机械只核"判据本体在不在"与
+    "本集合取舍是否如实标注"——某个参数算不算"本可由具名对象承载"属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("参数载体（不得以键值容器承载方法参数）防线检查")
+    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel}——『方法参数不得以键值容器承载』的落点丢失"
+            "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
+    else:
+        run_rule_guard("check_param_carrier_guard")
+
+
+def check_getter_bridge_guard():
+    """『接口实现字段名与接口 getter 名不一致须手动桥接』防线（从存量项目规范引入）。
+
+    用户口径：类实现接口、**两侧类型相同而字段名与接口的 getter 方法名不一致**时，
+    须手动 `@Override` 桥接出接口要求的那个 getter 并加 `@JsonIgnore`。机制在条文里：
+    访问器按**字段名**生成 ⇒ 不生成接口要求的那个方法（非抽象类因此编译不过）；桥接后
+    接口方法名与字段名各成一个读取方法、指向同一个值 ⇒ 不加忽略即序列化出两个属性。
+
+    `@Override`/`@JsonIgnore` 都是 Java 侧概念，故只核技术栈层（`specs/stack/java.adoc`
+    「编码」）与其加载门。「某个类是否已发布、序列化属性名是否真被外部依赖」属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("接口实现 getter 桥接防线检查")
+    rel = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel}——『桥接 + `@JsonIgnore`』的落点丢失"
+            "（`@Override`/`@JsonIgnore` 都是 Java 侧概念，须落在技术栈层）", rel)
+    else:
+        run_rule_guard("check_getter_bridge_guard")
+
+
+def check_validation_entry_guard():
+    """『方法参数校验入口统一用 `@Validated`』防线（从存量项目规范引入）。
+
+    用户口径：参数校验统一用 `org.springframework.validation.annotation.Validated`；
+    `@Valid` 无分组参数，只承担**对象内部字段的级联校验**、不作方法参数校验入口。
+    条文自带影响面（本条严于「参数上直接用 `@Valid`」这一常见做法，引用方项目自身规范
+    另有约定时以其为准）——防静默推翻引用方既有约定。
+    """
+    phase("参数校验入口防线检查")
+    rel = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少文件 {rel}——『参数校验入口』的落点丢失"
+            "（`@Validated`/`@Valid` 都是 Spring 语境下的概念，须落在技术栈层）", rel)
+    else:
+        run_rule_guard("check_validation_entry_guard")
+
+
+def check_http_contract_guard():
+    """『Spring HTTP 接口契约』防线（从存量项目规范引入）：控制器显式声明 HTTP 方法、
+    声明式客户端与提供方共用同一份契约接口、契约路径前缀只定义一次、内部调用接口的参数
+    以请求体承载而不逐个散参。
+
+    要治的失效：路由不限定方法 ⇒ 同一路径对全部方法开放、读写语义混在一起；两侧各写一份
+    契约 ⇒ 改一侧必漏另一侧；前缀在契约方法上重复 ⇒ 同一事实两个来源；参数逐个声明 ⇒
+    参数清单散落在方法签名里、键名只能靠字面约定。**适用范围**（契约三条以项目使用声明式
+    HTTP 客户端为前提）由规则数据一并核——缺则没用声明式客户端的 Spring 项目会被误伤。
+    """
+    phase("Spring HTTP 接口契约防线检查")
+    rel = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少文件 {rel}——『控制器显式声明 HTTP 方法 / 契约共用与前缀单点 / 参数承载』"
+            "的落点丢失（路由映射与声明式客户端都是 Spring 语境下的概念，须落在技术栈层）", rel)
+    else:
+        run_rule_guard("check_http_contract_guard")
+
+
 CHECKS = (
     check_refs_exist,
     check_link_refs,
@@ -11223,6 +11386,10 @@ CHECKS = (
     check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
     check_declarative_rule_guard,
+    check_param_carrier_guard,
+    check_getter_bridge_guard,
+    check_validation_entry_guard,
+    check_http_contract_guard,
 )
 
 

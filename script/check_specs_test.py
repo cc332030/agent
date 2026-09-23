@@ -60,6 +60,25 @@ _SPEC.loader.exec_module(cm)  # type: ignore[union-attr]
 import rules_engine  # noqa: E402  （加载期判据：自定义文案里不得出现 `{section}`）
 
 
+def _git_argv(cwd: str, *args: str) -> subprocess.CompletedProcess:
+    """按 argv 直接调用 git（**不经 shell**）。
+
+    本机实证（Windows）：`subprocess.run(..., shell=True)` 走 `cmd.exe`，而 cmd.exe **不认
+    单引号**——`git commit -qm 'feat: 已合并 main'` 会把消息拆成两个 pathspec、提交**直接失败**。
+    后果是**静默失真**：本该报红的场景变成"那次提交根本没发生"，断言不报红（看着像防线失效），
+    而"断言没有错误"的用例则**假通过**（本轮实测：动作侧两条用例在本机失败，另两条是假通过）。
+    git 命令经 argv 传递即与平台无关、也不必关心引号。
+    """
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+
+
+def _git_commit(cwd: str, message: str) -> None:
+    """暂存全部改动并提交（消息经 argv 传递，见 `_git_argv`）。"""
+    _git_argv(cwd, "add", "-A")
+    _git_argv(cwd, "commit", "-q", "-m", message)
+
+
 def _mk_blackbox_base(root: str) -> str:
     """从官仓库示例构造一个标准基目录（AGENTS + general + core + stack）。"""
     specs = os.path.join(root, "specs")
@@ -78,6 +97,10 @@ class CheckSpecsTestCase(unittest.TestCase):
         # 故必须清空——否则上一个用例的夹具内容会被下一个用例读到（本仓库实测：整类
         # 一起跑时 `.bat` 的判据用了别的用例的文件内容，单跑却通过）。
         cm.REPO_SCRIPT_SRC_CACHE.clear()
+        # 夹具落点＝**系统临时目录**（不用仓库内 `tmp/`：本轮实测把夹具放进工作区后，
+        # git 状态刷新/文件监听会跟着每次建删目录跑，全量单测由 ~80s 涨到 ~470s）。
+        # 本机 `%TEMP%` 与仓库可能不同盘，由此引发的 `os.path.relpath` 跨盘问题改在
+        # **判据侧**修（见 `check_specs.py` 的 `_rel_label`），不再靠"把夹具搬进仓库"绕开。
         self.root = tempfile.mkdtemp()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
@@ -95,10 +118,19 @@ class CheckSpecsTestCase(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def write(self, relpath: str, content: str) -> None:
-        """在临时根下按相对路径写文件（自动建父目录）。"""
+        """在临时根下按相对路径写文件（自动建父目录）。
+
+        **一律按 LF 写**（`newline="\\n"`）：夹具模仿的是仓库文件，而仓库以 **LF** 为基准
+        （`.gitattributes`）；用默认换行时 Windows 上写出来的是 CRLF，而读侧
+        `_read_script_src` 用 `newline=""` 原样保留换行——`(?m)…,$`、`str.replace("…\\n…")`
+        一类锚点随即失配，一批用例在 Windows 上**必然失败**（本轮实测：15 failures + 1 error
+        全部出自这里，CI 在 Linux 上却是绿的）。强制 LF 后本机口径与 CI 一致。
+        需要 CRLF 的夹具（`.bat`/`.cmd`/`.ps1` 的行尾判据）由内容里**显式写 `\\r\\n`**，
+        不受本参数影响。
+        """
         p = os.path.join(self.root, relpath)
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
 
     def error_texts(self) -> str:
@@ -563,8 +595,11 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         self._tmp = tempfile.mkdtemp()
 
         def sh(cmd):
+            # 与 `check_merge_state_guard` 同口径按 UTF-8 收发：中文提交说明在本机（GBK）
+            # 下会被解成乱码，夹具的建仓/提交动作本身也会跟着失真。
             return subprocess.run(cmd, shell=True, cwd=self._tmp,
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
         self.sh = sh
         sh("git init -q -b main . && git config user.email a@b.c && "
            "git config user.name t && git config commit.gpgsign false")
@@ -584,7 +619,7 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         # 正例：源分支上的单亲提交（正常交付形态）→ 不报红
         with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
             fh.write("y")
-        self.sh("git add -A && git commit -qm 'fix: 单亲提交'")
+        _git_commit(self._tmp, "fix: 单亲提交")
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertEqual(cm.errors, [])
@@ -593,7 +628,7 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         # 反例：提交说明里出现合并动作话术（"已合并"）→ 报红
         with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
             fh.write("y")
-        self.sh("git add -A && git commit -qm 'feat: 已合并 main'")
+        _git_commit(self._tmp, "feat: 已合并 main")
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertIn("合并动作", self.error_texts())
@@ -602,7 +637,7 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         # 边界：**记录禁令本身**的文字（写完又说"不得/拒绝"）不得被读成"执行了合并"
         with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
             fh.write("y")
-        self.sh("git add -A && git commit -qm 'docs: 说明「已合并」一类话术不得出现、一律拒绝'")
+        _git_commit(self._tmp, "docs: 说明「已合并」一类话术不得出现、一律拒绝")
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertEqual(cm.errors, [])
@@ -611,10 +646,13 @@ class TestCheckMergeStateGuard(CheckSpecsTestCase):
         # 反例：分支历史里出现合并提交（"合并 PR"落盘必留的痕迹）→ 报红
         with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
             fh.write("z")
-        self.sh("git add -A && git commit -qm 'feat: 自己分支的改动'")
-        self.sh("git checkout -q main && echo m >> a.txt && git commit -qam 'main 前进' "
-                "&& git checkout -q feat")
-        self.sh("git merge --no-ff -q main -m 'merge main'")
+        _git_commit(self._tmp, "feat: 自己分支的改动")
+        _git_argv(self._tmp, "checkout", "-q", "main")
+        with open(os.path.join(self._tmp, "a.txt"), "a", encoding="utf-8") as fh:
+            fh.write("m\n")
+        _git_commit(self._tmp, "main 前进")
+        _git_argv(self._tmp, "checkout", "-q", "feat")
+        _git_argv(self._tmp, "merge", "--no-ff", "-q", "main", "-m", "merge main")
         cm.errors.clear()
         cm.check_merge_state_guard()
         self.assertIn("合并提交", self.error_texts())
@@ -650,8 +688,11 @@ class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
         os.environ.pop("CNB_PULL_REQUEST_TARGET_SHA", None)
 
         def sh(cmd):
+            # 与 `check_merge_state_guard` 同口径按 UTF-8 收发：中文提交说明在本机（GBK）
+            # 下会被解成乱码，夹具的建仓/提交动作本身也会跟着失真。
             return subprocess.run(cmd, shell=True, cwd=self._tmp,
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
         self.sh = sh
         sh("git init -q -b main . && git config user.email a@b.c && "
            "git config user.name t && git config commit.gpgsign false")
@@ -680,21 +721,22 @@ class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
         # 正例：在基点之上继续提交（正常返工形态）→ 不报红
         with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
             fh.write("y")
-        self.sh("git add -A && git commit -qm 'feat: 在基点之上继续'")
+        _git_commit(self._tmp, "feat: 在基点之上继续")
         self.assertEqual(self._run(self.base), "")
 
     def test_branch_rebuilt_on_older_base_reports(self):
         # 反例：分支被重建成一条**不再包含基点**的线（正是回退别人改动的机械特征）
-        self.sh("git checkout -q -b other HEAD~0 2>/dev/null; git checkout -q main")
+        _git_argv(self._tmp, "checkout", "-q", "-b", "other")
+        _git_argv(self._tmp, "checkout", "-q", "main")
         with open(os.path.join(self._tmp, "b.txt"), "w", encoding="utf-8") as fh:
             fh.write("z")
-        self.sh("git add -A && git commit -qm '基点之后合入的一批改动'")
+        _git_commit(self._tmp, "基点之后合入的一批改动")
         newer = self.sh("git rev-parse HEAD").stdout.strip()
         # 把 feat 重建在**更早**的分叉点（不再包含 newer）
-        self.sh("git checkout -q -B feat " + self.base)
+        _git_argv(self._tmp, "checkout", "-q", "-B", "feat", self.base)
         with open(os.path.join(self._tmp, "c.txt"), "w", encoding="utf-8") as fh:
             fh.write("c")
-        self.sh("git add -A && git commit -qm 'feat: 重建在新基点上（回退了上面那批）'")
+        _git_commit(self._tmp, "feat: 重建在新基点上（回退了上面那批）")
         texts = self._run(newer)
         self.assertIn("返工基点", texts)
         self.assertIn("不是", texts)
@@ -703,7 +745,7 @@ class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
         # 边界：非 CNB 环境/平台未给参照 sha → 跳过、不报错（确定性/幂等）
         with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
             fh.write("y")
-        self.sh("git add -A && git commit -qm 'feat: 改动'")
+        _git_commit(self._tmp, "feat: 改动")
         os.environ.pop("CNB_PULL_REQUEST_TARGET_SHA", None)
         cm.errors.clear()
         cm.check_base_ancestor_guard()
@@ -886,6 +928,34 @@ class TestRefKindPredicates(unittest.TestCase):
         self.assertTrue(cm._is_placeholder_ref("specs/..."))
         self.assertTrue(cm._is_placeholder_ref("specs/**"))
         self.assertTrue(cm._is_placeholder_ref("specs/stack/<语言>.adoc"))
+
+    def test_glob_ref_is_placeholder(self):
+        # 通配清单不是具体路径（本轮修）：`specs/*.adoc` 曾被当成具体文件、假红长期挂着
+        self.assertTrue(cm._is_placeholder_ref("specs/*.adoc"))
+        self.assertTrue(cm._is_placeholder_ref("script/specs-rules/*.toml"))
+        # 具体路径不得被当成占位符（否则存在性检查被整段放过）
+        self.assertFalse(cm._is_placeholder_ref("specs/general/coding.adoc"))
+        self.assertFalse(cm._is_placeholder_ref("script/check_specs.py"))
+
+
+class TestRefsExistOnGlob(CheckSpecsTestCase):
+    """钉住『通配清单不得被当成悬空引用』（`check_refs_exist` 的判据侧修复）。
+
+    本仓库实证：`specs-project-maintainer/guards.adoc` 里那句"登记路径须能被取回脚本的
+    `specs/*.adoc` 清单解析命中"被报成「引用了不存在的文件」——那是**通配**、不是具体路径，
+    存在性无从核对，报红长期留着。反例的另一半同样要守住：**具体路径悬空时仍须报红**，
+    否则"顺手把存在性检查放过"就没人拦。
+    """
+
+    def test_glob_ref_not_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= 入口\n\n取回脚本按 `specs/*.adoc` 清单解析。\n")
+        cm.check_refs_exist()
+        self.assertEqual("", self.error_texts())
+
+    def test_concrete_missing_ref_still_reported(self):
+        self.write("AGENTS_COMMON.adoc", "= 入口\n\n见 `specs/general/nope.adoc`。\n")
+        cm.check_refs_exist()
+        self.assertIn("引用了不存在的文件", self.error_texts())
 
 
 # --------------------------------------------------------------------------- #
@@ -17152,3 +17222,362 @@ class TestCheckPaginationGuard(CheckSpecsTestCase):
         self.write("specs/stack/java.adoc", "= Java 规范\n\n== 编码\n\n* 略。\n")
         cm.check_pagination_guard()
         self.assertIn("持久化访问（MyBatis-Plus / JPA 等）", self.error_texts())
+
+
+class _StackGuardTestCase(CheckSpecsTestCase):
+    """栈层规则防线的用例基类：**夹具＝真文档逐字**（现读，不另抄一份说明文本）。
+
+    换成手抄版时，锚点与规则数据在同义改写后会整体与真文档脱节（锚点仍在、真文档已被改），
+    防线照样报红却与本用例无关；逐字读入时 `test_valid_passes` 会先一步暴露脱节。
+    同时把 `AGENTS_COMMON.adoc` 一并写进夹具——加载门（识别特征）是这几道防线的判据之一。
+    """
+
+    DOC = ""       # 真文档相对路径（子类给）
+    CONST = ""     # check_specs 里对应的模块级常量名（子类给）
+    COMMON = ""    # 真 `AGENTS_COMMON.adoc` 内容（setUp 读入）
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_const = getattr(cm, self.CONST)
+        self._orig_common = cm.GENERIC_FILE
+        self._orig_repo_root = cm.REPO_ROOT
+        setattr(cm, self.CONST, os.path.join(self.root, *self.DOC.split("/")))
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        with open(self.DOC, encoding="utf-8") as fh:
+            self.TEXT = fh.read()
+        with open("AGENTS_COMMON.adoc", encoding="utf-8") as fh:
+            self.COMMON = fh.read()
+
+    def tearDown(self) -> None:
+        setattr(cm, self.CONST, self._orig_const)
+        cm.GENERIC_FILE = self._orig_common
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write(self.DOC, self.TEXT)
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+
+    def _write_mutated(self, removed: str, replacement: str = "") -> None:
+        """把真文档里的 `removed` 换成 `replacement`（真文档里没有即报错）。"""
+        self.assertIn(removed, self.TEXT)
+        self._write_valid()
+        self.write(self.DOC, self.TEXT.replace(removed, replacement))
+
+    def _write_common_mutated(self, removed: str, replacement: str = "") -> None:
+        """把真 `AGENTS_COMMON.adoc` 里的识别特征抽掉（核加载门那一半）。"""
+        self.assertIn(removed, self.COMMON)
+        self.write(self.DOC, self.TEXT)
+        self.write("AGENTS_COMMON.adoc", self.COMMON.replace(removed, replacement))
+
+
+class TestCheckParamCarrierGuard(_StackGuardTestCase):
+    """钉住『方法参数不得以键值容器承载』（用户从存量项目规范引入：「禁止 Map 作参数」）。
+
+    该条要治的失效：以 `Map`/字典承载参数时，**字段名、字段类型与必填性都没有落点**——
+    调用方按字面键写入、实现按字面键读取，键名改一处即**静默失效**，两端键集合也无法在
+    编译期核对。最易被三件事冲掉：
+      * **条文被降级** —— 「须用具名类型」丢了，「这个参数会变」会把键值容器放回来；
+      * **例外面被放大** —— 「键值集合本身就是要表达的数据」「框架契约要求容器」被删，
+        键值容器一律被判红；或「仅对该处、该次生效、不得泛化」丢了，一次声明被套到全模块；
+      * **定性与依据被删** —— 该条是本集合取舍、依据是《Refactoring》的「数据泥团」，
+        丢了读者会把它读成某标准的规定。
+    """
+
+    DOC = "specs/general/coding.adoc"
+    CONST = "CODING_FILE"
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_param_carrier_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_gate_line_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 该条被降级成建议，键值容器传参重新成立
+        self._write_mutated("* **不得以键值容器承载方法参数（L1）**", "* **参数怎么写都行**")
+        cm.check_param_carrier_guard()
+        self.assertIn("不得以键值容器承载方法参数", self.error_texts())
+
+    def test_named_type_removed_reports(self):
+        # 反例②：载体形态（须用具名类型）被抽 -> 读者不知道"该改成什么"
+        self._write_mutated("方法参数与返回值的载体是**具名类型**", "方法参数的载体随意")
+        cm.check_param_carrier_guard()
+        self.assertIn("具名类型", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_mutated("**已有具名类型或具名先例**")
+        cm.check_param_carrier_guard()
+        self.assertIn("已有具名类型或具名先例", self.error_texts())
+
+    def test_exception_face_removed_reports(self):
+        # 反例④：例外面被删 -> 键值集合本身的正当用途（字典表/配置映射）被判红
+        self._write_mutated("**键值集合本身就是要表达的数据**")
+        cm.check_param_carrier_guard()
+        self.assertIn("键值集合本身就是要表达的数据", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑤：存量边界被删 -> 等于要求立刻批量改既有 `Map` 传参
+        self._write_mutated("本次未按需求变动的存量保持原样")
+        cm.check_param_carrier_guard()
+        self.assertIn("存量保持原样", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑥：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
+        self._write_mutated("「参数不得以键值容器承载」是本集合自己的判据化取舍")
+        cm.check_param_carrier_guard()
+        self.assertIn("本集合自己的判据化取舍", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑦：依据名被删 -> 日后无从核对它还成不成立
+        self._write_mutated("Martin Fowler《Refactoring》")
+        cm.check_param_carrier_guard()
+        self.assertIn("Refactoring", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑧：加载门（调度器识别特征）被删 -> 写方法参数时永远不加载该条
+        self._write_common_mutated("要写**方法参数**（决定该参数用什么类型承载）")
+        cm.check_param_carrier_guard()
+        self.assertIn("方法参数", self.error_texts())
+
+
+class TestCheckGetterBridgeGuard(_StackGuardTestCase):
+    """钉住『接口实现字段名与接口 getter 名不一致须手动桥接』（用户从存量项目规范引入）。
+
+    该条要治的失效：访问器按**字段名**生成 ⇒ 不生成接口要求的那个方法（非抽象类因此
+    编译不过）；手动桥接后接口方法名与字段名各成一个读取方法、指向同一个值 ⇒ 不加
+    `@JsonIgnore` 就序列化出**两个属性**。最易被三件事冲掉：条文与机制被抽（不知道要防
+    什么）、边界被删（新建类被迫背上改名与否的存量包袱）、依据名被删（无从追溯）。
+    """
+
+    DOC = "specs/stack/java.adoc"
+    CONST = "JAVA_STACK_FILE"
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_getter_bridge_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_gate_line_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 该条被降级成建议
+        self._write_mutated("* **接口实现时字段名与接口 getter 名不一致须手动桥接（L1）**",
+                            "* **字段名怎么写都行**")
+        cm.check_getter_bridge_guard()
+        self.assertIn("手动桥接", self.error_texts())
+
+    def test_bridge_call_removed_reports(self):
+        # 反例②：桥接动作被抽 -> 编译不过时只能靠改名迁就接口
+        self._write_mutated("手动 `@Override` 桥接出接口要求的那个 getter", "按需处理")
+        cm.check_getter_bridge_guard()
+        self.assertIn("桥接出接口要求的那个 getter", self.error_texts())
+
+    def test_json_ignore_removed_reports(self):
+        # 反例③：`@JsonIgnore` 被抽 -> 桥接后同一个值序列化出两个属性
+        self._write_mutated("并给桥接方法加 `@JsonIgnore`", "并保持原样")
+        cm.check_getter_bridge_guard()
+        self.assertIn("@JsonIgnore", self.error_texts())
+
+    def test_mechanism_removed_reports(self):
+        # 反例④：机制（不桥接即编译不过）被抽 -> 读者不知道这是编译期问题
+        self._write_mutated("非抽象的实例类因此**编译不过**", "会有点问题")
+        cm.check_getter_bridge_guard()
+        self.assertIn("编译不过", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 只剩一句口径
+        self._write_mutated("**判定标准（任一命中即违规）**")
+        cm.check_getter_bridge_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑥：边界（尚无外部依赖的类不受①限制）被删 -> 新建类也被迫桥接
+        self._write_mutated("**尚无外部依赖的类不受①限制**")
+        cm.check_getter_bridge_guard()
+        self.assertIn("尚无外部依赖的类", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界被删 -> 等于要求立刻批量改既有实现类
+        self._write_mutated("**存量**按 `specs/core/execution.adoc`")
+        cm.check_getter_bridge_guard()
+        self.assertIn("存量", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑧：Lombok 侧的机制依据被删 -> 读者以为"Lombok 会自己实现接口"
+        self._write_mutated("Project Lombok 官方文档（访问器按字段名生成）", "某官方文档")
+        cm.check_getter_bridge_guard()
+        self.assertIn("访问器按字段名生成", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑨：加载门被删 -> 实现接口时不会加载该条
+        self._write_common_mutated("**接口实现的访问器桥接**")
+        cm.check_getter_bridge_guard()
+        self.assertIn("访问器桥接", self.error_texts())
+
+
+class TestCheckValidationEntryGuard(_StackGuardTestCase):
+    """钉住『方法参数校验入口统一用 `@Validated`』（用户从存量项目规范引入）。
+
+    该条要治的失效：参数上直接用 `@Valid` ——它**无分组参数**，需要指定校验分组或
+    类级/方法级校验时表达不了。最易被冲掉的是「不把 `@Valid` 用作参数入口」这半句
+    （只留"建议用 `@Validated`"），以及影响面（引用方项目自身规范为准）与依据名。
+    """
+
+    DOC = "specs/stack/spring.adoc"
+    CONST = "SPRING_STACK_FILE"
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_validation_entry_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_gate_line_removed_reports(self):
+        # 反例①：条文被降级成建议（"统一用"丢了）-> 参数上直接用 `@Valid` 重新成立
+        self._write_mutated("方法参数校验统一用 `@Validated`（L2）", "方法参数校验可以用 `@Validated`")
+        cm.check_validation_entry_guard()
+        self.assertIn("方法参数校验统一用", self.error_texts())
+
+    def test_param_entry_ban_removed_reports(self):
+        # 反例②：禁止面被抽 -> 只剩"建议"，需要分组时仍会用 `@Valid`
+        self._write_mutated("**不把 `@Valid` 用作方法参数校验的入口**")
+        cm.check_validation_entry_guard()
+        self.assertIn("用作方法参数校验的入口", self.error_texts())
+
+    def test_field_cascade_role_removed_reports(self):
+        # 反例③：分工被删 -> 禁令被读成"`@Valid` 一律不许用"，嵌套校验被一并禁掉
+        self._write_mutated("**对象内部字段的级联校验**")
+        cm.check_validation_entry_guard()
+        self.assertIn("字段的级联校验", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例④：判定标准被抽 -> 本条自身不可判定
+        self._write_mutated("**类级/方法级校验入口**")
+        cm.check_validation_entry_guard()
+        self.assertIn("类级/方法级校验入口", self.error_texts())
+
+    def test_impact_face_removed_reports(self):
+        # 反例⑤：影响面被删 -> 等于静默推翻引用方"参数上直接用 `@Valid`"的既有约定
+        self._write_mutated("引用方项目自身规范另有约定时以其为准")
+        cm.check_validation_entry_guard()
+        self.assertIn("以其为准", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑥：存量边界被删 -> 等于要求立刻批量改既有校验注解
+        self._write_mutated("随动迁移")
+        cm.check_validation_entry_guard()
+        self.assertIn("随动迁移", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑦：依据名被删 -> 无从追溯
+        self._write_mutated("Jakarta Bean Validation 官方规范")
+        cm.check_validation_entry_guard()
+        self.assertIn("Jakarta Bean Validation", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑧：整节被删 -> 该条失去落点
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 注入\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_validation_entry_guard()
+        self.assertIn("参数校验", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑨：加载门被删 -> 写校验注解时不会加载该条
+        self._write_common_mutated("要写/改**参数校验注解**")
+        cm.check_validation_entry_guard()
+        self.assertIn("参数校验注解", self.error_texts())
+
+
+class TestCheckHttpContractGuard(_StackGuardTestCase):
+    """钉住『Spring HTTP 接口契约』四条（用户从存量项目规范引入）。
+
+    要治的失效：路由不限定方法（同一路径对全部方法开放、读写语义混在一起）、两侧各写一份
+    契约（改一侧必漏另一侧）、前缀在契约方法上重复（同一事实两个来源）、参数逐个声明
+    （清单散落在方法签名里）。最易被冲掉的是**适用范围**（缺则没用声明式客户端的项目被误伤）
+    与**取舍定性**（缺则读者把"路由须显式声明方法"读成协议强制）。
+    """
+
+    DOC = "specs/stack/spring.adoc"
+    CONST = "SPRING_STACK_FILE"
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_http_contract_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_scope_removed_reports(self):
+        # 反例①：适用范围被删 -> 没用声明式客户端的 Spring 项目把契约条当通用必做
+        self._write_mutated("**适用范围**：提供或调用 HTTP 接口的项目")
+        cm.check_http_contract_guard()
+        self.assertIn("适用范围", self.error_texts())
+
+    def test_controller_method_removed_reports(self):
+        # 反例②：控制器条被降级 -> 不限定方法的映射重新成立
+        self._write_mutated("控制器方法须显式声明 HTTP 方法（L2）", "控制器方法尽量声明方法")
+        cm.check_http_contract_guard()
+        self.assertIn("显式声明 HTTP 方法", self.error_texts())
+
+    def test_controller_criterion_removed_reports(self):
+        # 反例②′：判定标准里的**具体反例**被抽（标题还在）-> 只剩轴名，判据无从核对
+        self._write_mutated("① 新增或改动的路由用不限定 HTTP 方法的映射；"
+                            "② 以「调用方反正只发一种方法」为由不限定。")
+        cm.check_http_contract_guard()
+        self.assertIn("不限定 HTTP 方法的映射", self.error_texts())
+
+    def test_contract_sharing_removed_reports(self):
+        # 反例③：契约共用的执行形态被抽 -> 两侧各写一份方法签名重新成立
+        self._write_mutated("**客户端继承该契约、提供方实现该契约**")
+        cm.check_http_contract_guard()
+        self.assertIn("客户端继承该契约、提供方实现该契约", self.error_texts())
+
+    def test_contract_sharing_criterion_removed_reports(self):
+        # 反例③′：契约共用条的**具体反例**被抽（标题还在）-> 只剩轴名
+        self._write_mutated("① 客户端与提供方各自声明方法签名、不共用同一契约类型；")
+        cm.check_http_contract_guard()
+        self.assertIn("不共用同一契约类型", self.error_texts())
+
+    def test_prefix_single_point_removed_reports(self):
+        # 反例④：前缀单点被抽 -> 方法上重复写前缀（同一事实两个来源）
+        self._write_mutated("**契约方法上只写相对路径**")
+        cm.check_http_contract_guard()
+        self.assertIn("只写相对路径", self.error_texts())
+
+    def test_param_carrier_removed_reports(self):
+        # 反例⑤：参数承载条被整条抽掉（该 bullet 里两处 `@SpringQueryMap` 一并消失）
+        # -> 参数清单只能逐个声明
+        self.assertIn("内部调用接口的参数以请求体承载，不逐个散参（L2）", self.TEXT)
+        self._write_valid()
+        self.write(self.DOC,
+                   self.TEXT.replace("`@SpringQueryMap`", "整对象映射")
+                            .replace("内部调用接口的参数以请求体承载，不逐个散参（L2）", "参数承载随意"))
+        cm.check_http_contract_guard()
+        self.assertIn("不逐个散参", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑥：取舍定性被删 -> 读者把"路由须显式声明方法"读成协议强制
+        self._write_mutated("**「路由须显式声明 HTTP 方法」是本集合的判据化取值**")
+        cm.check_http_contract_guard()
+        self.assertIn("本集合的判据化取值", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑦：Feign 侧依据名被删 -> 契约共用条无从追溯
+        self._write_mutated("Spring Cloud OpenFeign 官方文档")
+        cm.check_http_contract_guard()
+        self.assertIn("Spring Cloud OpenFeign", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑧：存量边界被删 -> 等于要求立刻批量改既有路由与契约
+        self._write_mutated("随动迁移")
+        cm.check_http_contract_guard()
+        self.assertIn("随动迁移", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑨：整节被删 -> 四条一起失去落点
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 注入\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_http_contract_guard()
+        self.assertIn("HTTP 接口（控制器与声明式客户端）", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑩：加载门被删 -> 写声明式客户端契约时不会加载该节
+        self._write_common_mutated("**声明式客户端契约**")
+        cm.check_http_contract_guard()
+        self.assertIn("声明式客户端契约", self.error_texts())
