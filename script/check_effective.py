@@ -218,7 +218,7 @@ MECHANISMS = [
      "specs/stack/java.adoc「编码」", "script/check_specs.py",
      "check_java_interface_accessor_guard",
      "check_java_interface_accessor_guard 钉住 Java 栈「编码」的**判据本体**（不是轴名——只核『这一节在不在』属防线空转）：**只约束接口**（`interface` 与「类不适用本条」须同现——判定面被放大到类上会把正常的 lombok setter 判红）、**允许 get / 禁止 set** 两侧、**理由与后果**（下游可能加 `@Accessors(chain = true)` ⇒ **编译不过**——缺则读者不知道要防什么，遇到『接口不加 set 怎么写入』会把 setter 补回去）、**判定标准四条**（接口里声明了 set，含接口上的 lombok 访问器注解 / 以『没法写入』为由补 setter 而未走主动声明 / 自我豁免）、**存量口径**（用户点名『已经有的不管，也不告警』：不视违规、不告警、不整改、随动迁移）、**豁免面与范围**（除非主动声明、仅对该处生效、不得泛化）与依据行，并反向钉住通用层不得出现框架专名 `@Accessors`、技术栈层是判据的唯一落点；另钉调度器识别特征、README 同步与图书馆两处落点。**本条防的不是『没写规则』而是『判定面被放大或理由被抽掉』**——『某个接口算不算字段接口』属语义判断（见 GUARD_CHECK_LIMITS）"),
-    ("Java 数据对象模板：新建时整段照抄；补注解时已提交的类默认不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`；review 不计问题",
+    ("Java 数据对象模板：新建时整段照抄；补注解时已提交的类默认不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`（review 不查存量缺注解属全局口径）",
      "specs/stack/java.adoc「编码」+ specs/stack/java-object.adoc（模板文件）", "script/check_specs.py",
      "check_java_object_template_guard",
      "check_java_object_template_guard 钉住两处结构：① **模板文件** `specs/stack/java-object.adoc`（**模板、不是规范文件**——"
@@ -226,7 +226,7 @@ MECHANISMS = [
      "**三条照抄约定各自回指判据本体**（取值只列一次、理由与判定标准只在 `specs/stack/java.adoc`「编码」写一份："
      "模板文件自称『不重复那些判据』，在此再抄一份即第二真源；**两档生效面取值与依据行亦只回指、不复述**）；"
      "② **判据本体**在 `specs/stack/java.adoc`「编码」的『数据对象模板』条**自己的正文里**，本条承载三处取值的取值/机制/判定标准，"
-     "**以及『review 不计问题』这一生效面**（未主动声明要补时，既有对象缺这套注解不构成问题——用户点名；缺则 review 会把存量缺注解报成问题）；"
+     "**以及 review 回指**（『review 不查存量缺注解』已升为全局口径——`specs/general/review.adoc`「review 的默认检查面」，判据本体与模板侧只留一行回指；缺则该边界无从找到真源）；"
      "**核对面须防兜底**：按整份文件核时同文件相邻条目的同样字样会兜住缺项、按整条 bullet 核时同一 bullet 末尾的"
      "依据行会兜住清单缺项——故取『条目正文』与『清单句』两级（`bullet_tokens` 的 `anchor`/`until`）；"
      "**模板侧另有反向核对**（`file_forbidden`）：机制、判定标准、取舍声明与两档生效面取值**不得**在模板侧再抄一份；"
@@ -293,6 +293,12 @@ MECHANISMS = [
      "check_after_change_review_guard 钉住该节仍在、『每次』与『按性质取值』、改完即审的固定动作（跑机械手段／比基线／核原话／留证）、"
      "『规范类改动不得只跑机械手段』与复核者不可用时的处置，以及依据行（IEEE 1028 / ISO 10007）；"
      "**本条只钉要点文本仍在**——『某次改动到底有没有复核、跑没跑机械手段』运行时事实（见 GUARD_CHECK_LIMITS）"),
+    ("review 的默认检查面：只查问题（代码/文档/用例三类）、存量不动随动迁移、唯一例外是主动声明（用户点名，Issue #203）",
+     "specs/general/review.adoc「review 的默认检查面（只查问题，不动存量）」", "script/check_specs.py",
+     "check_default_review_scope_guard",
+     "check_default_review_scope_guard 钉住**判据本体**三组要点（默认检查面 L1：三类问题清单 + 其余取向性要求对存量默认不查不报不整改／存量不动随动迁移、review 不得据此提出问题／唯一例外是主动声明且仅当次生效不得泛化），"
+     "并钉两处**既有单项豁免已收敛为回指**——`specs/stack/java.adoc`「数据对象模板」与 `specs/general/coding.adoc`「成员与方法次序」各留一行指向全局真源，且旧单项措辞（review 不得据此提出问题／review 不是第三个生效面等）不得在原处复活（防第二真源）。"
+     "『某条意见算不算取向性要求的缺失』『用户的声明算不算主动声明』语义判断（见 GUARD_CHECK_LIMITS）"),
     ("精炼性：同一描述只写一处（重复面是必查项、收敛形态、与内容不减少的边界）",
      "specs/general/review.adoc「精炼性（同一描述只写一处）」+ prompts/_common.txt `delivery` 片段",
      "script/check_specs.py",
@@ -682,9 +688,6 @@ MECHANISMS = [
     ("内部调用接口的参数以请求体承载、不逐个散参", "specs/stack/spring.adoc", "script/check_specs.py",
      "check_http_contract_guard",
      "check_http_contract_guard 钉住同节的参数承载条（以请求体承载参数对象、查询参数用整对象映射 `@SpringQueryMap`、不得把参数清单逐个声明，含判定标准、例外与存量口径）"),
-    ("外部配置只允许 @ConfigurationProperties 绑定、禁止 @Value（字段/构造参数/方法参数均禁；SpEL 取值不属外部配置绑定不受约束；存量随动迁移、review 静默）", "specs/stack/spring.adoc", "script/check_specs.py",
-     "check_value_binding_guard",
-     "check_value_binding_guard 钉住 Spring 栈「配置」的该条 bullet（条文与禁止面、SpEL 边界、判定标准、存量边界与依据名）与调度器 Spring 技术栈识别特征；「某个取值算不算外部配置绑定」属语义判断（见 GUARD_CHECK_LIMITS）"),
 ]
 
 

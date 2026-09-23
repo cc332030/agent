@@ -1613,6 +1613,17 @@ CHANGE_REVIEW_ANCHORS = _RULES_TOKENS["CHANGE_REVIEW_ANCHORS"]
 # 在 review 与重构任务里不会被执行（正是用户说的"应该在 review 及重构时强制生效"）。
 REFINEMENT_SECTION = "精炼性（同一描述只写一处）"
 REFINEMENT_ANCHORS = _RULES_TOKENS["REFINEMENT_ANCHORS"]
+
+# 『review 的默认检查面（只查问题，不动存量）』防线：用户点名（Issue #203）——
+# "review 时默认只查问题（代码问题、文档问题、用例问题），规范里定义的取向性要求
+# （如优先使用 `@ConfigurationProperties`）在 review 时不查出来，调整到全局（原单项
+# 的删掉）；不动存量数据，除非用户主动声明"。
+# **判据本体**（不是轴名）落 `specs/general/review.adoc` 新节；本防线核三组锚点：
+# ① 三类问题清单 + 存量默认不查不报；② 存量随动迁移与"不得据此提出问题"；
+# ③ 唯一例外是主动声明（仅当次生效、不得泛化）。另核两处**既有单项豁免**已改为回指全局
+# 口径（java 数据对象模板、成员与方法次序）——防单项豁免被删后真源丢失、也防它以旧措辞复活。
+DEFAULT_REVIEW_SCOPE_SECTION = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_SECTION"]
+DEFAULT_REVIEW_SCOPE_ANCHORS = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_ANCHORS"]
 # `delivery` 片段里"重复面的处理"须在的要点（两个提示词共用同一片段，改一处即两处生效）
 REFINEMENT_DELIVERY_ANCHORS = (
     ("重复面的处理（L1",
@@ -1893,6 +1904,56 @@ def check_after_change_review_guard():
         missing = [k for k in keys if k not in body]
         if missing:
             err(f"改动后复核防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_default_review_scope_guard():
+    """『review 的默认检查面』防线：review 默认只查三类问题、存量不动、主动声明才查。
+
+    用户口径（Issue #202/#203，原话）："review 时默认只查问题（代码问题、文档问题、
+    用例问题），规范里定义了很多比如优先使用 ConfigurationProperties 等，都限制了
+    review 时不查出来，现在调整到全局（原来单项的删掉），所有的这些在 review 时不查
+    出来，不动存量数据，除非用户主动声明"。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：逐组核
+    `specs/general/review.adoc`「review 的默认检查面」的可核对那几句；另核两处既有单项
+    豁免（Java 数据对象模板、成员与方法次序）已收敛为对全局口径的回指——单项豁免被删
+    且全局真源也丢失时，"review 不报存量缺注解/既有位置"的边界即失效。
+    """
+    phase("review 默认检查面防线检查")
+    if not _section_anchor_check(REVIEW_SPEC, DEFAULT_REVIEW_SCOPE_SECTION,
+                                 DEFAULT_REVIEW_SCOPE_ANCHORS):
+        phase_done()
+        return
+    # 单项豁免须改为回指（删旧措辞、留一行指向全局真源；判定标准不在单项处复述）
+    xrefs = (
+        ("specs/stack/java.adoc",
+         ("review 时对存量缺这套模板注解不提出问题",),
+         ("review 不得据此提出问题", "review 不是第三个生效面",
+          "既然看到了就提一条"),
+         "Java 数据对象模板的「两档生效面」"),
+        ("specs/general/coding.adoc",
+         ("review 时对既有成员的位置不提出问题",),
+         ("review 时把「既有成员的位置」当已知现状、不提出问题",),
+         "「成员与方法次序」的存量边界"),
+    )
+    for rel, must_have, forbidden, where in xrefs:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少 {rel}——{where}无从核对", rel)
+            continue
+        body = open(path, encoding="utf-8").read()
+        missing = [t for t in must_have if t not in body]
+        if missing:
+            err(f"review 默认检查面防线被破坏：{rel} 的{where}缺失 {missing}——"
+                "该单项豁免已升为全局口径（`specs/general/review.adoc`「review 的默认"
+                "检查面」），本处须保留一行回指，否则按该文件工作的执行者看不到这条边界",
+                rel)
+        revived = [t for t in forbidden if t in body]
+        if revived:
+            err(f"review 默认检查面防线被破坏：{rel} 出现已收敛的旧单项措辞 {revived}——"
+                "判定标准只在全局真源（review.adoc「review 的默认检查面」）写一份，"
+                "单项处再写即第二真源（两处各自漂移）", rel)
     phase_done()
 
 
@@ -4227,11 +4288,16 @@ def check_install_repeat_update_guard():
 # **本轮（Issue #198 与上面「补机械抓手」两支并行的账须相加）**：`check_baseline_sync_guard`
 #   新增一位（114 → 115）与上一条的 4 道（114 → 118）**互不包含**，合并后为 **114 → 119**。
 #   `guards.adoc` 清单表同步为 119 行、编号 1..119 连续且与 `CHECKS` 逐一同序（本道排在末尾）。
-# **本轮（PR #202「禁用 @Value」与 Issue #198 两支并行的账须相加，解决冲突时记）**：
-#   `check_value_binding_guard` 新增一位（119 → 120）与 `check_baseline_sync_guard` 的
-#   114 → 119 **互不包含**，合并后为 **114 → 120**。`guards.adoc` 清单表同步为 120 行、
-#   编号 1..120 连续且与 `CHECKS` 逐一同序（本道排在末尾）。
-GUARD_WIRING_BASELINE = 120
+#   **本轮（Issue #203）**：新增 check_default_review_scope_guard（本支接线数 119 → 120）。
+# **本轮（PR #202「禁用 @Value」与上面各支并行的账须相加）**：main 侧新增
+#   `check_value_binding_guard`（本支位移记作 119 → 120），与 #203 的
+#   `check_default_review_scope_guard` **互不包含**。
+# **本轮（Issue #201「压缩提交默认压缩成一个提交」）**：main 侧未加新防线，只扩
+#   `check_conflict_resolution_guard` 的锚点组，接线数不变。
+# **解决冲突一轮（PR #205 并入 main）**：两侧各自都把对方的位移当成本支位的位移，
+#   故两处都写 120；合并后 `CHECKS` 里**唯一防线**实有 **121** 道，基线按实取回填 **121**。
+#   `guards.adoc` 清单表同步为 121 行、编号 1..121 连续且与 `CHECKS` 逐一同序。
+GUARD_WIRING_BASELINE = 121
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4515,6 +4581,19 @@ GUARD_WIRING_BASELINE = 120
 #   TestCheckDevFlowGuard 供「汇报一致性」4 条、TestCheckDevFlowGuard 供 report-tail 2 条等，
 #   逐名比对无用例消失；同源实取：`check_specs_test` 1412 + `rules_engine_test` 78 +
 #   `check_effective_test` 37 = 1527）。
+#   **本轮（Issue #203「review 默认只查问题」）**：新增 7 条（TestCheckDefaultReviewScopeGuard
+#   正例 1 + 反例 6）+ 方法放置反例与模板夹具随口径改写（条数不变）；同源实取
+#   1403 + 78 + 37 = **1518**（1509 → 1518）。
+#   **本轮（用例计数口径修正）**：`_test_cases` 的边界口径此前取"任意深度的下一个
+#   `def`/`class`/装饰器"，故**用例体里的局部夹具**（`class _R:` / `def _run(...)`，
+#   见 `TestAsciidoctorFailureLevel` 等三处）会把这一节截断：断言落在节外，那一节
+#   于是"没有断言"、条目数也被压低；同一处还把局部 `class` 读成"新的测试类"，令其后
+#   本类里的用例**整段收集不到**。修正为"**同层级**的下一个定义才是边界、只有模块级与
+#   一层缩进的 `class` 参与类识别"后，本口径与 `python3 -m unittest discover -s script
+#   -p '*_test.py'` 的实际收集数逐条相等。
+#   **合并后同源实取**：`check_specs_test` 1435 + `rules_engine_test` 78 +
+#   `check_effective_test` 37 = **1550**（旧值低于真实收集数时"删一条"照样不报红，
+#   故基数按实收取）。
 #   **本轮（PR #202「禁用 @Value」与上两支并行的账须相加，解决冲突时记）**：本支新增 14 条
 #   （TestCheckValueBindingGuard 正例 1 + 反例 13），与前两支互不包含；合并后按同源实取：
 #   `check_specs_test` 1396 + 14 = 1410、`rules_engine_test` 78、`check_effective_test` 37，
@@ -4529,7 +4608,17 @@ GUARD_WIRING_BASELINE = 120
 #   新增的 `test_restatement_default_one_commit_removed_reports`——本轮实测到"复述行与
 #   真源脱节"这一失效（三处复述行逐字改述后，锚点组仍按旧措辞核，改坏哪一处都不报红），
 #   故把三处复述行各自钉住。
-GUARD_TEST_BASELINE = 1529
+
+#   **本轮（解决 PR #205 与 main 的冲突：接线数 120 → 121、用例数按同源实取回填）**：
+#   main 侧（#202 的 `check_value_binding_guard`、#201 的压缩提交锚点组）与本支（#203 的
+#   `check_default_review_scope_guard`）**互不包含**，故账目须相加：接线数两侧各记 120
+#   （各自把对方的位移当成本支位的位移），合并后 `CHECKS` 实有 **121** 道唯一防线，
+#   基线回填 **121**；用例数按**同源实取**回填为 **1554**
+#   （`check_specs_test` 1439 + `rules_engine_test` 78 + `check_effective_test` 37，
+#   与 `python3 -m unittest discover -s script -p '*_test.py'` 的 `Ran 1554 tests` 逐条相等——
+#   本仓库 `_test_cases` 的计数口径已修正为"同层级边界"，故两数不再相差 16）。
+#   **数值以实取为唯一来源**：`_count_collectable_tests` 口径，勿按两侧各自数目相加。
+GUARD_TEST_BASELINE = 1554
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -4850,7 +4939,13 @@ def _test_cases(module_name: str, src: str) -> list:
         mc = re.match(r"(?P<indent>[ \t]*)class ([A-Za-z_][A-Za-z0-9_]*)\b", line)
         if mc:
             indent = mc.group("indent").expandtabs(4)
-            cls = mc.group(2) if indent == "" or len(indent) == 4 else None
+            # **只有模块级与一层缩进的 `class` 参与识别、更深的既不识别也不置空**：
+            # 用例体里的局部类（如伪造响应用的 `class _R:`）不是新的测试类，把它读成
+            # 新类时 `cls` 被置空、**它之后本类里的用例整段收集不到**（本仓库实测：
+            # `TestAsciidoctorFailureLevel` 的一层缩进类被 `class _R:` 打断，
+            # 其后两条用例在条目清单里消失）。
+            if len(indent) in (0, 4):
+                cls = mc.group(2)
             continue
         md = re.match(r"(?P<indent>[ \t]*)def (test_[A-Za-z0-9_]+)\(", line)
         if not md:
@@ -4862,18 +4957,26 @@ def _test_cases(module_name: str, src: str) -> list:
             heads.append((idx, f"{cls}.{md.group(2)}"))
     if not heads:
         return []
-    # 同层级的下一个定义（含装饰器）＝本条用例那一节的结束位置
-    stops = []
-    for idx, line in enumerate(lines):
-        m = re.match(r"(?P<indent>[ \t]*)(?:(?:def|class) [A-Za-z_]|@)", line)
-        if not m:
-            continue
-        indent = m.group("indent").expandtabs(4)
-        if indent == "" or len(indent) == 4:
-            stops.append(idx)
+    # 与用例**同层级**的下一个定义/装饰器＝本条用例那一节的结束位置。**严于用例所在
+    # 层级的 `def`/`class` 不是边界**——用例体里常定义局部夹具（如伪造响应用的
+    # `class _R:` 与 `def _run(...)`，本仓库 `TestAsciidoctorFailureLevel` 等三处）；
+    # 把深一层的定义当边界时，这一节会被截在夹具处、只覆盖前半段：**该用例那一节于是
+    # "没有断言"**（断言都在节外）、条目数也被压低（本仓库实测）。
+    def _depth(line: str) -> int:
+        indent = re.match(r"(?P<indent>[ \t]*)", line).group("indent").expandtabs(4)
+        return len(indent) if indent else 0
+
+    boundaries = []
+    for n, line in enumerate(lines):
+        if re.match(r"[ \t]*(?:(?:def|class) [A-Za-z_]|@)", line):
+            boundaries.append((n, _depth(line)))
     for idx, qualified in heads:
-        after = [d for d in stops if d > idx]
-        end = after[0] if after else len(lines)
+        level = _depth(lines[idx])
+        end = len(lines)
+        for n, depth in boundaries:
+            if n > idx and depth == level:
+                end = n
+                break
         cases.append((qualified, "".join(lines[idx:end])))
     return cases
 
@@ -9581,9 +9684,9 @@ def check_java_object_template_guard():
       * **三处取值被删或降级** —— 无参 `@AllArgsConstructor`、集合 `@Singular` 两条各自
         都可能被当成风格偏好顺手去掉；
       * **生效面被当不存在** —— `@Accessors` 补注解时的两档（**类已提交默认不补 /
-        类未提交可以补**）与 **review 面**（未主动声明要补时，既有对象缺这套注解
-        **不构成问题、review 不得据此提出问题**）都是**容易被当成"没写也一样"**的边界，
-        缺则补注解一律都加、或 review 把存量缺注解报成问题。
+        类未提交可以补**）是**容易被当成"没写也一样"**的边界，缺则补注解一律都加；
+        "review 不查存量缺注解"已升为全局口径（`specs/general/review.adoc`「review 的默认
+        检查面」），判据本体与模板侧只须保留回指。
     故逐组核模板文件与规范文件的**可核对那句话**（取值 + 机制 + 判定标准 + 依据；锚点与
     分组见 `script/specs-rules/java.toml`），并核调度器登记与 README 同步。"某个类算不算
     数据对象、代码里到底标没标"属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），
@@ -11475,6 +11578,7 @@ CHECKS = (
     check_quality_guard,
     check_generation_efficiency_guard,
     check_after_change_review_guard,
+    check_default_review_scope_guard,
     check_refinement_guard,
     check_duplicate_scan_guard,
     check_pointer_no_verbatim_guard,

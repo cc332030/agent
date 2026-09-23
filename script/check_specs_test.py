@@ -12253,7 +12253,7 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
     # 两档生效面、依据行。防线的 `bullet_tokens` 步按这些锚点核「本条自己的正文」，
     # 故夹具必须真的把它们写在本条正文里（否则正例即报红——正是本条要防的形态）。
     JAVA_RULE = (
-        "* **数据对象模板（新建时整段照抄；存量主动声明才补，review 不计问题）**：**新建**一个 Java 数据对象时"
+        "* **数据对象模板（新建时整段照抄；存量主动声明才补）**：**新建**一个 Java 数据对象时"
         "注解清单整段照抄 `specs/stack/java-object.adoc` 的模板——`@Data`、"
         "`@Accessors(chain = true)`、`@SuperBuilder`、`@NoArgsConstructor`、"
         "`@AllArgsConstructor`。**模板文件不是规范文件**：那份文件只给可复制清单，本文件是其判据本体。\n"
@@ -12266,9 +12266,9 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         "**判定标准**：无字段的类上出现 `@AllArgsConstructor` 即违规。\n"
         "** **POJO 里的集合字段默认加 `@Singular`（L1）**：除非有问题。**判定标准（任一命中即违规）**："
         "① builder 侧**没有单个元素入口**、只能整集合设置。\n"
-        "** **两档生效面**：**既有对象不主动改**、**主动声明**才补；**存量不告警**。"
-        "**review 面**：**review 不得据此提出问题**，**review 不是第三个生效面**；"
-        "以\"既然看到了就提一条\"为由记为问题即违规。\n"
+        "** **两档生效面**：**既有对象不主动改**、**主动声明**才补；**存量不告警**；"
+        "**review 时对存量缺这套模板注解不提出问题**"
+        "（全局口径见 `specs/general/review.adoc`「review 的默认检查面」，本条不复述）。\n"
         "** 依据（标准名/编号）：**Project Lombok 官方文档**、Spring Framework 官方文档。\n")
 
     JAVA = (
@@ -12297,8 +12297,8 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         "**注解排序**规则排好；该规则**不在此重述**。\n\n"
         "== 生效面与存量\n\n"
         "**两档生效面**与其判定标准**见判据本体**，**不在此重述**；本文件**不改写**判据，也"
-        "**不得以「模板没写」为由绕过判据本体**。**同理，review 面亦只在判据本体写一份**——照抄时只记住："
-        "**未主动声明要补时，既有对象缺这套注解不是问题**，具体判定标准见判据本体、本文件不重述。\n\n"
+        "**不得以「模板没写」为由绕过判据本体**。**同理，review 时对存量缺这套注解不提出问题**——"
+        "全局口径见 `specs/general/review.adoc`「review 的默认检查面」、本文件不重述。\n\n"
         "**依据（标准名/编号）**：**见判据本体**同一行——材料名与取舍声明只在那里写一份，"
         "本文件不重述。\n")
 
@@ -12382,20 +12382,20 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         self.assertIn("类已提交", self.error_texts())
 
     def test_review_scope_removed_from_spec_reports(self):
-        # 反例⑤″（本轮新增生效面，用户点名）：判据本体里的 review 面被整段抽走
-        # → "review 时不算问题不提出"这条边界消失，review 会把存量缺注解报成问题。
+        # 反例⑤″（review 不查存量缺注解已升为全局口径，用户点名 Issue #203）：判据本体里的
+        # review 回指被整段抽走 → "review 不报存量缺注解"这条边界消失。
         self.write("specs/stack/java.adoc", self.JAVA.replace(
-            "**review 面**：**review 不得据此提出问题**，**review 不是第三个生效面**；"
-            "以\"既然看到了就提一条\"为由记为问题即违规。", ""))
+            "**review 时对存量缺这套模板注解不提出问题**"
+            "（全局口径见 `specs/general/review.adoc`「review 的默认检查面」，本条不复述）", ""))
         cm.check_java_object_template_guard()
-        self.assertIn("review 不得据此提出问题", self.error_texts())
+        self.assertIn("review 时对存量缺这套模板注解不提出问题", self.error_texts())
 
     def test_review_scope_removed_from_template_reports(self):
-        # 反例⑤‴：模板侧的 review 面回指被抽走 → 模板读者只拿到清单，不知道 review 不报这条。
+        # 反例⑤‴：模板侧的 review 回指被抽走 → 模板读者只拿到清单，不知道 review 不报这条。
         self.write("specs/stack/java-object.adoc", self.TPL.replace(
-            "**同理，review 面亦只在判据本体写一份**", "**另**"))
+            "**同理，review 时对存量缺这套注解不提出问题**", "**另**"))
         cm.check_java_object_template_guard()
-        self.assertIn("review 面亦只在判据本体写一份", self.error_texts())
+        self.assertIn("review 时对存量缺这套注解不提出问题", self.error_texts())
 
     def test_no_field_rule_removed_reports(self):
         # 反例⑦：无参不加 `@AllArgsConstructor` 被删 → 无字段的类上被补出"看起来像全参构造"的注解
@@ -13836,6 +13836,87 @@ class TestCheckGenerationEfficiencyGuard(CheckSpecsTestCase):
         self._write_all(common="= 入口\n== 分类与懒加载（加载调度器）\n  ** 别的 → link:x[]\n")
         cm.check_generation_efficiency_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+
+class TestCheckDefaultReviewScopeGuard(CheckSpecsTestCase):
+    """钉住『review 的默认检查面（只查问题，不动存量）』防线（用户点名，Issue #203）。
+
+    用户口径：review 默认只查问题（代码/文档/用例三类），规范里取向性要求（如优先用
+    `@ConfigurationProperties`）在 review 时不查出来；原单项豁免删掉、升为全局；不动
+    存量，除非主动声明。故用例覆盖：判据本体三组锚点各自被抽、以及单项豁免的两种失效
+    ——回指被删（真源断链）与旧措辞复活（第二真源）。
+    """
+
+    SECTION = (
+        "== review 的默认检查面（只查问题，不动存量）\n\n"
+        "review **默认只查问题**：**代码问题、文档问题、用例问题**三类。\n\n"
+        "* **默认检查面（L1）**：review 只提出三类问题。其余规范条目**只约束\"本次新增/"
+        "修改的内容\"**，对存量**默认不查、不报、不要求整改**。\n"
+        "* **存量不动、随动迁移（L1）**：按 `specs/core/execution.adoc`「规范变更的存量处理」"
+        "**随动迁移**；**review 不得据此提出问题**。\n"
+        "* **唯一例外是主动声明（L1）**：**声明是例外而非默认**，且**仅对当次生效**、"
+        "**不得泛化**为默认检查面。\n"
+        "* 依据（标准名/编号）：IEEE 1028；ISO/IEC/IEEE 29148。\n\n")
+
+    JAVA = ("= Java 规范\n\n"
+            "**review 时对存量缺这套模板注解不提出问题**"
+            "（全局口径见 `specs/general/review.adoc`「review 的默认检查面」）。\n")
+    CODING = ("= 通用编码\n\n"
+              "**review 时对既有成员的位置不提出问题**"
+              "（全局口径见 `specs/general/review.adoc`）。\n")
+
+    def _write(self, section=None, java=None, coding=None) -> None:
+        self.write("specs/general/review.adoc",
+                   section if section is not None else self.SECTION)
+        self.write("specs/stack/java.adoc", java if java is not None else self.JAVA)
+        self.write("specs/general/coding.adoc", coding if coding is not None else self.CODING)
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_default_review_scope_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 全局真源丢失，review 退回全量符合性审计
+        self._write(section="== 问题记录\n\n* 记一笔。\n\n")
+        cm.check_default_review_scope_guard()
+        self.assertIn("review 的默认检查面", self.error_texts())
+
+    def test_three_issues_removed_reports(self):
+        # 反例②：三类问题清单/存量默认不查不报被抽 → 检查面退回"什么都查"
+        self._write(section=self.SECTION.replace(
+            "**默认不查、不报、不要求整改**", "按规范全量核对"))
+        cm.check_default_review_scope_guard()
+        self.assertIn("默认检查面", self.error_texts())
+
+    def test_migrate_boundary_removed_reports(self):
+        # 反例③：随动迁移与"不得据此提出问题"被抽 → 存量缺失被当成违规、发动全库改造
+        self._write(section=self.SECTION.replace(
+            "；**review 不得据此提出问题**", ""))
+        cm.check_default_review_scope_guard()
+        self.assertIn("存量随动迁移", self.error_texts())
+
+    def test_exception_boundary_removed_reports(self):
+        # 反例④："仅对当次生效、不得泛化"被抽 → 一次声明被泛化成默认检查面（反向失效）
+        self._write(section=self.SECTION.replace(
+            "**声明是例外而非默认**，且**仅对当次生效**、**不得泛化**为默认检查面。",
+            "用户声明过一次后即可长期按声明查。"))
+        cm.check_default_review_scope_guard()
+        self.assertIn("唯一例外是主动声明", self.error_texts())
+
+    def test_single_xref_removed_reports(self):
+        # 反例⑤：单项豁免的回指被删 → 按该文件工作的执行者看不到这条边界（真源断链）
+        self._write(java=self.JAVA.replace(
+            "**review 时对存量缺这套模板注解不提出问题**", ""))
+        cm.check_default_review_scope_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_old_wording_revived_reports(self):
+        # 反例⑥：旧单项措辞复活 → 判定标准两处各写一份（第二真源、各自漂移）
+        self._write(coding=self.CODING + (
+            "**review 时把「既有成员的位置」当已知现状、不提出问题**（判定标准……）。\n"))
+        cm.check_default_review_scope_guard()
+        self.assertIn("旧单项措辞", self.error_texts())
 
 
 class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
@@ -15964,6 +16045,8 @@ class TestLedgerSourceEntries(CheckSpecsTestCase):
         self.assertIn("also-missing.adoc", self.error_texts())
 
 
+
+
 class TestCheckGuardManifest(CheckSpecsTestCase):
     """钉住『防线清单与删除记账』（防"删了却全绿"）。
 
@@ -16187,6 +16270,49 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self._write_valid(test_file=(
             "import unittest\n\n\nclass T(unittest.TestCase):\n"
             "    def test_case_0(self):\n        pass\n"
+            "    def test_case_1(self):\n        self.assertTrue(True)\n"
+            "    def test_case_2(self):\n        self.assertTrue(True)\n"
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+        cm.check_guard_manifest()
+        self.assertIn("没有任何断言", self.error_texts())
+
+    def test_nested_class_in_test_body_is_not_a_boundary(self):
+        # 反例⑫（本仓库实测）：用例体里定义**局部夹具**（`class _R:` / `def _run(...)`，
+        # 见 `TestAsciidoctorFailureLevel` 等三处）——边界若按"任意深度的下一个定义"取，
+        # 这一节会被截在夹具处、只覆盖前半段：断言留在节外，于是**该用例的那一节"没有
+        # 断言"**、用例数也被压低（实测少 11 条、基线因此虚降）。判据＝同层级的定义才是边界。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n"
+            "        calls = []\n"
+            "\n"
+            "        class _R:\n"
+            "            returncode = 0\n"
+            "\n"
+            "        def _run(cmd):\n"
+            "            calls.append(cmd)\n"
+            "\n"
+            "        self.assertEqual(calls[:1], [])\n"
+            "    def test_case_1(self):\n        self.assertTrue(True)\n"
+            "    def test_case_2(self):\n        self.assertTrue(True)\n"
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+        cm.GUARD_TEST_BASELINE = 4
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_nested_class_body_hollowing_still_reports(self):
+        # 反例⑬：同一形态的反面——真被掏空（通篇没有断言）时仍须报出，不得因
+        # "夹具里也有个 `def`"而把这一节算成"有断言了"。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_case_0(self):\n"
+            "        class _R:\n"
+            "            returncode = 0\n"
+            "\n"
+            "        def _run(cmd):\n"
+            "            return None\n"
+            "\n"
+            "        _run(None)\n"
             "    def test_case_1(self):\n        self.assertTrue(True)\n"
             "    def test_case_2(self):\n        self.assertTrue(True)\n"
             "    def test_case_3(self):\n        self.assertTrue(True)\n"))
@@ -17331,13 +17457,14 @@ class TestCheckMethodPlacementGuard(CheckSpecsTestCase):
         self.assertIn("**判定标准（任一命中即违规）**", self.error_texts())
 
     def test_increment_only_boundary_removed_reports(self):
-        # 反例⑦：存量边界（只对新增生效、review 不提出问题）被抽 ->
+        # 反例⑦：存量边界（只对新增生效、review 不提出问题——后者已升为全局口径，
+        # specs/general/review.adoc「review 的默认检查面」，此处只留回指）被抽 ->
         # 会被读成「必须立刻重排既有成员」，与用户「不对已有方法生效」相抵
         self._mutated(self.CODING,
-                      "**review 时把「既有成员的位置」当已知现状、不提出问题**",
+                      "review 时对既有成员的位置不提出问题",
                       "")
         self._run_guard()
-        self.assertIn("**review 时把「既有成员的位置」当已知现状、不提出问题**",
+        self.assertIn("review 时对既有成员的位置不提出问题",
                       self.error_texts())
 
     def test_basis_line_removed_reports(self):
@@ -17811,6 +17938,104 @@ class _StackGuardTestCase(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", self.COMMON.replace(removed, replacement))
 
 
+class TestCheckValueBindingGuard(_StackGuardTestCase):
+    """钉住『配置项绑定』条（PR #202：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
+
+    要治的失效：`@Value` 的"仅限少量简单配置"口径没有判据，实际执行中持续滋生。最易被
+    冲掉的是**禁止面**（只留"统一用"、`@Value` 放回允许面）、**SpEL 边界**（缺则该禁令被
+    读成「`#{...}` 也禁」）、**存量边界**（缺则等于要求立刻批量改存量）与依据名。
+    判据按**本条 bullet** 核——「配置」节相邻条目含同样字样，整节核会兜住缺项。
+    """
+
+    DOC = "specs/stack/spring.adoc"
+    CONST = "SPRING_STACK_FILE"
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_value_binding_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_entry_bullet_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 禁令失效，`@Value` 重新可用
+        self._write_mutated("* **配置项统一用 `@ConfigurationProperties` 绑定（L1）**",
+                            "* **配置怎么写都行**")
+        cm.check_value_binding_guard()
+        self.assertIn("配置项统一用 `@ConfigurationProperties` 绑定（L1）", self.error_texts())
+
+    def test_ban_removed_reports(self):
+        # 反例②：禁止面被抽 -> 只剩"统一用"，`@Value` 放回允许面
+        self._write_mutated("禁止使用 `@Value`", "建议少用 `@Value`")
+        cm.check_value_binding_guard()
+        self.assertIn("禁止使用 `@Value`", self.error_texts())
+
+    def test_ban_scope_removed_reports(self):
+        # 反例③：禁用范围被抽 -> 只禁字段注入，构造参数/方法参数上的 `@Value` 漏网
+        self._write_mutated("业务代码与配置类中的字段注入、构造参数与方法参数", "业务代码的字段注入")
+        cm.check_value_binding_guard()
+        self.assertIn("构造参数与方法参数", self.error_texts())
+
+    def test_spel_boundary_removed_reports(self):
+        # 反例④：SpEL 边界被删 -> 该禁令被读成「`#{...}` 也禁」，误伤面扩大
+        self._write_mutated("SpEL 取值（`#{...}`）不受本条约束")
+        cm.check_value_binding_guard()
+        self.assertIn("SpEL 取值", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 只剩一句口号
+        self._write_mutated("**判定标准（任一命中即违规）**")
+        cm.check_value_binding_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_criteria_case_removed_reports(self):
+        # 反例⑥：判定标准的具体反例被抽（轴名齐全、判据被抽走的形态）
+        self._write_mutated("新增或改动的代码中出现 `@Value` 注解")
+        cm.check_value_binding_guard()
+        self.assertIn("新增或改动的代码中出现 `@Value` 注解", self.error_texts())
+
+    def test_bypass_case_removed_reports(self):
+        # 反例⑦：绕行反例被抽 -> 把配置塞进 `@Configuration` 字段的绕法不再被判
+        self._write_mutated("为绕开本条把配置项塞进 `@Configuration` 类的字段")
+        cm.check_value_binding_guard()
+        self.assertIn("为绕开本条把配置项塞进", self.error_texts())
+
+    def test_legacy_removed_reports(self):
+        # 反例⑧：存量边界被删 -> 等于要求立刻批量改存量
+        self._write_mutated("不属违规、按原样保留", "属违规、须立刻整改")
+        cm.check_value_binding_guard()
+        self.assertIn("不属违规、按原样保留", self.error_texts())
+
+    def test_legacy_review_silence_removed_reports(self):
+        # 反例⑨：review 静默口径被删 -> code review 对存量 `@Value` 报问题提示
+        self._write_mutated("code review 也不对存量 `@Value` 作问题提示")
+        cm.check_value_binding_guard()
+        self.assertIn("code review 也不对存量 `@Value` 作问题提示", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例⑩：依据名被删 -> 无从追溯
+        self._write_mutated("Spring Boot 官方文档「Externalized Configuration」")
+        cm.check_value_binding_guard()
+        self.assertIn("Externalized Configuration", self.error_texts())
+
+    def test_second_basis_removed_reports(self):
+        # 反例⑪：第二依据名被删 -> 取舍无从追溯
+        self._write_mutated("The Twelve-Factor App")
+        cm.check_value_binding_guard()
+        self.assertIn("The Twelve-Factor App", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑫：整节被删 -> 该条失去落点
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 注入\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_value_binding_guard()
+        self.assertIn("配置", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑬：加载门被删 -> 写/改 `@Value` 时不会加载该条
+        self._write_common_mutated("**配置项绑定注解**（`@Value`/`@ConfigurationProperties`）")
+        cm.check_value_binding_guard()
+        self.assertIn("配置项绑定注解", self.error_texts())
+
 class TestCheckParamCarrierGuard(_StackGuardTestCase):
     """钉住『方法参数不得以键值容器承载』（用户从存量项目规范引入：「禁止 Map 作参数」）。
 
@@ -18122,102 +18347,3 @@ class TestCheckHttpContractGuard(_StackGuardTestCase):
         self._write_common_mutated("**声明式客户端契约**")
         cm.check_http_contract_guard()
         self.assertIn("声明式客户端契约", self.error_texts())
-
-
-class TestCheckValueBindingGuard(_StackGuardTestCase):
-    """钉住『配置项绑定』条（PR #202：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
-
-    要治的失效：`@Value` 的"仅限少量简单配置"口径没有判据，实际执行中持续滋生。最易被
-    冲掉的是**禁止面**（只留"统一用"、`@Value` 放回允许面）、**SpEL 边界**（缺则该禁令被
-    读成「`#{...}` 也禁」）、**存量边界**（缺则等于要求立刻批量改存量）与依据名。
-    判据按**本条 bullet** 核——「配置」节相邻条目含同样字样，整节核会兜住缺项。
-    """
-
-    DOC = "specs/stack/spring.adoc"
-    CONST = "SPRING_STACK_FILE"
-
-    def test_valid_passes(self):
-        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
-        self._write_valid()
-        cm.check_value_binding_guard()
-        self.assertEqual("", self.error_texts())
-
-    def test_entry_bullet_removed_reports(self):
-        # 反例①：整条被摘掉（含 L1 标注）-> 禁令失效，`@Value` 重新可用
-        self._write_mutated("* **配置项统一用 `@ConfigurationProperties` 绑定（L1）**",
-                            "* **配置怎么写都行**")
-        cm.check_value_binding_guard()
-        self.assertIn("配置项统一用 `@ConfigurationProperties` 绑定（L1）", self.error_texts())
-
-    def test_ban_removed_reports(self):
-        # 反例②：禁止面被抽 -> 只剩"统一用"，`@Value` 放回允许面
-        self._write_mutated("禁止使用 `@Value`", "建议少用 `@Value`")
-        cm.check_value_binding_guard()
-        self.assertIn("禁止使用 `@Value`", self.error_texts())
-
-    def test_ban_scope_removed_reports(self):
-        # 反例③：禁用范围被抽 -> 只禁字段注入，构造参数/方法参数上的 `@Value` 漏网
-        self._write_mutated("业务代码与配置类中的字段注入、构造参数与方法参数", "业务代码的字段注入")
-        cm.check_value_binding_guard()
-        self.assertIn("构造参数与方法参数", self.error_texts())
-
-    def test_spel_boundary_removed_reports(self):
-        # 反例④：SpEL 边界被删 -> 该禁令被读成「`#{...}` 也禁」，误伤面扩大
-        self._write_mutated("SpEL 取值（`#{...}`）不受本条约束")
-        cm.check_value_binding_guard()
-        self.assertIn("SpEL 取值", self.error_texts())
-
-    def test_criteria_removed_reports(self):
-        # 反例⑤：判定标准被抽 -> 只剩一句口号
-        self._write_mutated("**判定标准（任一命中即违规）**")
-        cm.check_value_binding_guard()
-        self.assertIn("判定标准", self.error_texts())
-
-    def test_criteria_case_removed_reports(self):
-        # 反例⑥：判定标准的具体反例被抽（轴名齐全、判据被抽走的形态）
-        self._write_mutated("新增或改动的代码中出现 `@Value` 注解")
-        cm.check_value_binding_guard()
-        self.assertIn("新增或改动的代码中出现 `@Value` 注解", self.error_texts())
-
-    def test_bypass_case_removed_reports(self):
-        # 反例⑦：绕行反例被抽 -> 把配置塞进 `@Configuration` 字段的绕法不再被判
-        self._write_mutated("为绕开本条把配置项塞进 `@Configuration` 类的字段")
-        cm.check_value_binding_guard()
-        self.assertIn("为绕开本条把配置项塞进", self.error_texts())
-
-    def test_legacy_removed_reports(self):
-        # 反例⑧：存量边界被删 -> 等于要求立刻批量改存量
-        self._write_mutated("不属违规、按原样保留", "属违规、须立刻整改")
-        cm.check_value_binding_guard()
-        self.assertIn("不属违规、按原样保留", self.error_texts())
-
-    def test_legacy_review_silence_removed_reports(self):
-        # 反例⑨：review 静默口径被删 -> code review 对存量 `@Value` 报问题提示
-        self._write_mutated("code review 也不对存量 `@Value` 作问题提示")
-        cm.check_value_binding_guard()
-        self.assertIn("code review 也不对存量 `@Value` 作问题提示", self.error_texts())
-
-    def test_basis_removed_reports(self):
-        # 反例⑩：依据名被删 -> 无从追溯
-        self._write_mutated("Spring Boot 官方文档「Externalized Configuration」")
-        cm.check_value_binding_guard()
-        self.assertIn("Externalized Configuration", self.error_texts())
-
-    def test_second_basis_removed_reports(self):
-        # 反例⑪：第二依据名被删 -> 取舍无从追溯
-        self._write_mutated("The Twelve-Factor App")
-        cm.check_value_binding_guard()
-        self.assertIn("The Twelve-Factor App", self.error_texts())
-
-    def test_section_missing_reports(self):
-        # 反例⑫：整节被删 -> 该条失去落点
-        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 注入\n\n* 略。\n")
-        self.write("AGENTS_COMMON.adoc", self.COMMON)
-        cm.check_value_binding_guard()
-        self.assertIn("配置", self.error_texts())
-
-    def test_dispatch_trigger_removed_reports(self):
-        # 反例⑬：加载门被删 -> 写/改 `@Value` 时不会加载该条
-        self._write_common_mutated("**配置项绑定注解**（`@Value`/`@ConfigurationProperties`）")
-        cm.check_value_binding_guard()
-        self.assertIn("配置项绑定注解", self.error_texts())
