@@ -18055,3 +18055,102 @@ class TestCheckHttpContractGuard(_StackGuardTestCase):
         self._write_common_mutated("**声明式客户端契约**")
         cm.check_http_contract_guard()
         self.assertIn("声明式客户端契约", self.error_texts())
+
+
+class TestCheckValueBindingGuard(_StackGuardTestCase):
+    """钉住『配置项绑定』条（PR #202：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
+
+    要治的失效：`@Value` 的"仅限少量简单配置"口径没有判据，实际执行中持续滋生。最易被
+    冲掉的是**禁止面**（只留"统一用"、`@Value` 放回允许面）、**SpEL 边界**（缺则该禁令被
+    读成「`#{...}` 也禁」）、**存量边界**（缺则等于要求立刻批量改存量）与依据名。
+    判据按**本条 bullet** 核——「配置」节相邻条目含同样字样，整节核会兜住缺项。
+    """
+
+    DOC = "specs/stack/spring.adoc"
+    CONST = "SPRING_STACK_FILE"
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_value_binding_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_entry_bullet_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 禁令失效，`@Value` 重新可用
+        self._write_mutated("* **配置项统一用 `@ConfigurationProperties` 绑定（L1）**",
+                            "* **配置怎么写都行**")
+        cm.check_value_binding_guard()
+        self.assertIn("配置项统一用 `@ConfigurationProperties` 绑定（L1）", self.error_texts())
+
+    def test_ban_removed_reports(self):
+        # 反例②：禁止面被抽 -> 只剩"统一用"，`@Value` 放回允许面
+        self._write_mutated("禁止使用 `@Value`", "建议少用 `@Value`")
+        cm.check_value_binding_guard()
+        self.assertIn("禁止使用 `@Value`", self.error_texts())
+
+    def test_ban_scope_removed_reports(self):
+        # 反例③：禁用范围被抽 -> 只禁字段注入，构造参数/方法参数上的 `@Value` 漏网
+        self._write_mutated("业务代码与配置类中的字段注入、构造参数与方法参数", "业务代码的字段注入")
+        cm.check_value_binding_guard()
+        self.assertIn("构造参数与方法参数", self.error_texts())
+
+    def test_spel_boundary_removed_reports(self):
+        # 反例④：SpEL 边界被删 -> 该禁令被读成「`#{...}` 也禁」，误伤面扩大
+        self._write_mutated("SpEL 取值（`#{...}`）不受本条约束")
+        cm.check_value_binding_guard()
+        self.assertIn("SpEL 取值", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 只剩一句口号
+        self._write_mutated("**判定标准（任一命中即违规）**")
+        cm.check_value_binding_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_criteria_case_removed_reports(self):
+        # 反例⑥：判定标准的具体反例被抽（轴名齐全、判据被抽走的形态）
+        self._write_mutated("新增或改动的代码中出现 `@Value` 注解")
+        cm.check_value_binding_guard()
+        self.assertIn("新增或改动的代码中出现 `@Value` 注解", self.error_texts())
+
+    def test_bypass_case_removed_reports(self):
+        # 反例⑦：绕行反例被抽 -> 把配置塞进 `@Configuration` 字段的绕法不再被判
+        self._write_mutated("为绕开本条把配置项塞进 `@Configuration` 类的字段")
+        cm.check_value_binding_guard()
+        self.assertIn("为绕开本条把配置项塞进", self.error_texts())
+
+    def test_legacy_removed_reports(self):
+        # 反例⑧：存量边界被删 -> 等于要求立刻批量改存量
+        self._write_mutated("不属违规、按原样保留", "属违规、须立刻整改")
+        cm.check_value_binding_guard()
+        self.assertIn("不属违规、按原样保留", self.error_texts())
+
+    def test_legacy_review_silence_removed_reports(self):
+        # 反例⑨：review 静默口径被删 -> code review 对存量 `@Value` 报问题提示
+        self._write_mutated("code review 也不对存量 `@Value` 作问题提示")
+        cm.check_value_binding_guard()
+        self.assertIn("code review 也不对存量 `@Value` 作问题提示", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例⑩：依据名被删 -> 无从追溯
+        self._write_mutated("Spring Boot 官方文档「Externalized Configuration」")
+        cm.check_value_binding_guard()
+        self.assertIn("Externalized Configuration", self.error_texts())
+
+    def test_second_basis_removed_reports(self):
+        # 反例⑪：第二依据名被删 -> 取舍无从追溯
+        self._write_mutated("The Twelve-Factor App")
+        cm.check_value_binding_guard()
+        self.assertIn("The Twelve-Factor App", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑫：整节被删 -> 该条失去落点
+        self.write("specs/stack/spring.adoc", "= Spring 规范\n\n== 注入\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_value_binding_guard()
+        self.assertIn("配置", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例⑬：加载门被删 -> 写/改 `@Value` 时不会加载该条
+        self._write_common_mutated("**配置项绑定注解**（`@Value`/`@ConfigurationProperties`）")
+        cm.check_value_binding_guard()
+        self.assertIn("配置项绑定注解", self.error_texts())

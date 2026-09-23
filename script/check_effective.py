@@ -682,6 +682,9 @@ MECHANISMS = [
     ("内部调用接口的参数以请求体承载、不逐个散参", "specs/stack/spring.adoc", "script/check_specs.py",
      "check_http_contract_guard",
      "check_http_contract_guard 钉住同节的参数承载条（以请求体承载参数对象、查询参数用整对象映射 `@SpringQueryMap`、不得把参数清单逐个声明，含判定标准、例外与存量口径）"),
+    ("外部配置只允许 @ConfigurationProperties 绑定、禁止 @Value（字段/构造参数/方法参数均禁；SpEL 取值不属外部配置绑定不受约束；存量随动迁移、review 静默）", "specs/stack/spring.adoc", "script/check_specs.py",
+     "check_value_binding_guard",
+     "check_value_binding_guard 钉住 Spring 栈「配置」的该条 bullet（条文与禁止面、SpEL 边界、判定标准、存量边界与依据名）与调度器 Spring 技术栈识别特征；「某个取值算不算外部配置绑定」属语义判断（见 GUARD_CHECK_LIMITS）"),
 ]
 
 

@@ -16,7 +16,7 @@
 
 == 配置
 
-* **配置项统一用 `@ConfigurationProperties` 绑定**（类型安全），不在业务代码中散落 `@Value`；`@Value` 仅限少量简单配置。
+* **配置项统一用 `@ConfigurationProperties` 绑定（L1）**：外部配置**只允许**绑定到 `@ConfigurationProperties` 类（类型安全、集中管理、可校验），**禁止使用 `@Value`**——包括业务代码与配置类中的字段注入、构造参数与方法参数上的 `@Value`；SpEL 取值（`#{...}`）不受本条约束（它不属外部配置绑定）。**判定标准（任一命中即违规）**：① 新增或改动的代码中出现 `@Value` 注解（任意用途）；② 为绕开本条把配置项塞进 `@Configuration` 类的字段而不走 `@ConfigurationProperties`。**存量处理（L1）**：已有项目中的存量 `@Value` **不属违规、按原样保留**，按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**（改到的文件顺带调整，不发动全库改造），**code review 也不对存量 `@Value` 作问题提示**（存量长期不合规范不视为违规）。依据（标准名/编号）：Spring Boot 官方文档「Externalized Configuration」（`@ConfigurationProperties` 是类型安全配置绑定的推荐方式，`@Value` 仅适合零散单值）；The Twelve-Factor App（配置外置与集中管理）。
 * **配置类不写逻辑（任何情况都不允许，L1）**：`@ConfigurationProperties` 类与 `@Configuration` 类只承载"配置项声明 + 按配置装配对象"，逻辑一律下沉到工具类或 Service——取值兜底、条件判断、格式转换、派生值与数据加工**一律不在配置类中做**，只放字段与访问器（判定标准见 `specs/general/coding.adoc`「类设计」）。
 * **`@ConfigurationProperties` 类须提供校验**（`@Validated` + JSR-303 注解），启动即校验配置合法性，避免运行期才发现配置错误。
 * **校验注解只做声明式校验**：校验逻辑写在自定义 `ConstraintValidator` 或工具类中，不得在配置类里写校验/判空逻辑。
