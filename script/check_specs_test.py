@@ -50,6 +50,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -936,6 +937,35 @@ class TestRefKindPredicates(unittest.TestCase):
         # 具体路径不得被当成占位符（否则存在性检查被整段放过）
         self.assertFalse(cm._is_placeholder_ref("specs/general/coding.adoc"))
         self.assertFalse(cm._is_placeholder_ref("script/check_specs.py"))
+
+
+class TestAdocCompileCmd(unittest.TestCase):
+    """钉住『RubyInstaller 的 gem 入口是 `.bat`/`.cmd` 外壳，须经 `cmd /c` 调用』。
+
+    本轮实测：本机装上 Ruby 版 `asciidoctor`（`C:\\Ruby40-x64\\bin\\asciidoctor.BAT`）后，
+    探测器确实找到了它，但 `subprocess` **不能直接执行 `.bat`**——语法段整段抛
+    `FileNotFoundError: [WinError 2]`（连"缺工具即报错"那条路径都走不到）。故按后缀判、
+    这类外壳经 `cmd /c` 调用；非 Windows 或普通可执行文件照旧按 argv 调。
+    """
+
+    def test_bat_shim_wrapped_by_cmd(self):
+        with mock.patch.object(os, "name", "nt"):
+            cmd = cm._adoc_compile_cmd("asciidoctor", "a.adoc",
+                                       exe=r"C:\Ruby40-x64\bin\asciidoctor.BAT")
+        self.assertEqual(cmd[:3], ["cmd", "/c", r"C:\Ruby40-x64\bin\asciidoctor.BAT"])
+        self.assertIn("--failure-level=WARN", cmd)
+
+    def test_plain_executable_not_wrapped(self):
+        cmd = cm._adoc_compile_cmd("asciidoctor", "a.adoc", exe="/usr/local/bin/asciidoctor")
+        self.assertEqual(cmd[0], "/usr/local/bin/asciidoctor")
+        self.assertNotIn("cmd", cmd)
+        self.assertIn("--failure-level=WARN", cmd)
+
+    def test_python_processor_has_no_failure_level_flag(self):
+        # Python 版没有 `--failure-level`（传了整批命令都会失败），故对它不发该开关
+        cmd = cm._adoc_compile_cmd("asciidoc", "a.adoc", exe="asciidoc")
+        self.assertNotIn("--failure-level=WARN", cmd)
+        self.assertEqual(cmd, ["asciidoc", "-o", "-", "a.adoc"])
 
 
 class TestRefsExistOnGlob(CheckSpecsTestCase):

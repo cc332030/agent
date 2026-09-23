@@ -2528,17 +2528,29 @@ def _detect_asciidoc_processor():
     return None, None
 
 
-def _adoc_compile_cmd(proc, path):
+def _adoc_compile_cmd(proc, path, exe=None):
     """拼一次语法编译的命令行；`--failure-level=WARN` 只发给认它的 `asciidoctor`。
 
     Ruby 版 `asciidoctor` **默认对 WARNING/ERROR 仍返回 0**，故必须显式带
     `--failure-level=WARN`，否则 `include::` 目标缺失、`image::` 找不到这类"只告警不报错"
     的问题必然漏报、防线形同虚设。Python 版 `asciidoc`（PyPI）**没有**这个开关（实测传了
     整批命令都会以 `illegal command options` 失败），故对它**不发**并如实把效力降级告警。
+
+    `exe`＝探测器给到的**可执行文件路径**（形参给默认值只为兼容既有调用）。Windows 上
+    RubyInstaller 的 gem 入口是 **`.bat`/`.cmd` 外壳**，`CreateProcess` **不能直接执行**它
+    ——本轮实测：本机装上 Ruby 版 `asciidoctor` 后，语法段整段抛
+    `FileNotFoundError: [WinError 2] 系统找不到指定的文件`（连"缺工具"那条报错都走不到，
+    因为探测器确实找到了它）。故这类外壳一律经 `cmd /c` 调用；非 Windows 或直接可执行的
+    路径照旧按 argv 调。
     """
     if proc == "asciidoctor":
-        return [proc, "--failure-level=WARN", "-o", "-", path]
-    return [proc, "-o", "-", path]
+        args = ["--failure-level=WARN", "-o", "-", path]
+    else:
+        args = ["-o", "-", path]
+    target = exe or proc
+    if os.name == "nt" and target.lower().endswith((".bat", ".cmd")):
+        return ["cmd", "/c", target, *args]
+    return [target, *args]
 
 
 def _adoc_env():
@@ -2821,7 +2833,7 @@ def check_asciidoctor_syntax():
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         detail(f"  [{i}/{len(files)}] 检查 {rel}")
         try:
-            r = subprocess.run(_adoc_compile_cmd(proc, path),
+            r = subprocess.run(_adoc_compile_cmd(proc, path, proc_path),
                                capture_output=True, text=True, timeout=30,
                                encoding="utf-8", errors="replace", env=_adoc_env())
         except subprocess.TimeoutExpired:
@@ -4472,7 +4484,11 @@ GUARD_WIRING_BASELINE = 118
 #   （通配算占位：`specs/*.adoc` 曾被当具体文件、假红长期挂着）与
 #   `TestRefsExistOnGlob` 的 2 条（通配不报红 / **具体路径悬空仍须报红**，防"顺手放过"）。
 #   用例数 **1470 → 1473**，同源实取。
-GUARD_TEST_BASELINE = 1473
+#   本轮（本机装上 Ruby 版 `asciidoctor`）增补 3 条 `TestAdocCompileCmd`：钉住
+#   **Windows 上 gem 入口是 `.bat`/`.cmd` 外壳、须经 `cmd /c` 调用**（实测：探测器找到了
+#   `C:\Ruby40-x64\bin\asciidoctor.BAT`，而 `subprocess` 直接执行它抛
+#   `FileNotFoundError: [WinError 2]`，语法段整段掀掉）。用例数 **1473 → 1476**，同源实取。
+GUARD_TEST_BASELINE = 1476
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
