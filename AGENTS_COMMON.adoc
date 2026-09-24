@@ -95,7 +95,7 @@ https://agent.c332030.com/script/fetch-specs.py
 * **读取范围、长会话治理、执行吞吐、生成效率（同等质量下最少往返）与 token 纪律**（识别特征：多步命令/构建/轮询、预计需多次往返、要在"多读一份资料 / 再跑一遍"这类**安排取舍**上做决定；**任务开始时即加载**）→ `specs/general/context.adoc`
 * **产出规范/文档/汇报/review 意见等涉及引用与事实的内容** → `specs/general/source.adoc`
 * **新建/调整入口文档（项目根 `AGENTS.adoc`/`AGENTS.md`），或遇到"另起新实例就接不上"的信息** → `specs/general/entry-doc.adoc`
-* **编译/运行/分步验证**（要编译、要运行、要分步验证本次改动，或要判定"验证做到什么程度才算完"）→ `specs/general/verify.adoc`
+* **编译/运行/分步验证**（要编译、要运行、要分步验证本次改动，或要判定"验证做到什么程度才算完"、"这次该不该验/验多少/哪些不必重验"）→ `specs/general/verify.adoc`
 * **跑构建/测试/脚本前、要配置 CI/CD 流水线，或要判定"运行环境须与项目声明一致"**（存在 `.github/workflows/`、`.gitlab-ci.yml`、`.cnb.yml`；识别特征：出现"换个版本也能跑通"、项目里有运行环境的声明落点）→ `specs/general/ci-cd.adoc`
 
 === 技术栈层（检测到即加载，不得遗漏）

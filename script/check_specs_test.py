@@ -4822,9 +4822,15 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "（**移动/重命名不算**）。\n"
                    "* **B 规范类改动**：**必须取得基线**。\n"
                    "* **C 不改内容的操作**：**不做基线测试**。\n\n"
-                   "* **验证须覆盖项目的全部既定校验手段（L1）**：**存在测试**≠**测试被执行**；"
+                   "* **验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）**：**存在测试**≠**测试被执行**；"
                    "手段与其用例**本身可能不完整**，须**先按 link:testing.adoc[]「用例设计」review**、"
                    "说明\"哪些未覆盖\"，**本次改动的直接相关面**先补全。\n"
+                   "* **按需验证、不滥验证（L1）**：验证**只在必须有验证的地方做**。判定标准："
+                   "**尚未做完时不做阶段性验证**、多个待验证项**合并为一次执行**、"
+                   "验证范围**只覆盖本次改动的直接相关面**、一次执行内拿到结果（\u201c延后验证、一次到位\u201d）、"
+                   "**先信已验过的、不重复验**（前面已验过且**其后无改动**的部分直接采信已有结果、**不重复验**；"
+                   "重验只限**该部分自身之后又被改动**、上次验的**不是这份内容**、上次结论本就不成立三类，"
+                   "**单纯又提交了一个 commit 不构成重验理由**）。\n"
                    "* **汇报须与可核对的事实一致，不得狡辩（L1）**：汇报里的每一项结论都须与**实际取值**一致。"
                    "**判定标准（任一命中即不合规）**：① 汇报里的**数字与清单**（提交数、文件数、用例统计等）"
                    "与**实际统计**不一致——数字类结论须与实际取值同源，**写进汇报前须重取一次**；"
@@ -4885,6 +4891,31 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("specs/core/execution.adoc", "= 执行原则\n\n== 先规划后执行\n\n动手前先规划。\n")
         cm.check_dev_flow_guard()
         self.assertIn("改动前先定基线", self.error_texts())
+
+    def test_on_demand_verification_removed_reports(self):
+        # 反例：「按需验证、不滥验证」条被删（验证重新被撒在每一步上，
+        # 交付被拖长而换不来新判据——用户口径：验证耗费太多时间）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read()
+        head, rest = text.split("* **按需验证、不滥验证", 1)
+        rest = rest.split("\n", 1)[1]
+        open(v, "w", encoding="utf-8").write(head + rest)
+        cm.check_dev_flow_guard()
+        self.assertIn("按需验证、不滥验证", self.error_texts())
+
+    def test_on_demand_verification_trust_prior_result_removed_reports(self):
+        # 反例：「先信已验过的、不重复验」被删（前面验过的部分被要求再来一遍，
+        # 同一动作来回重跑、交付被拖长——用户口径：不是最后一次就不要重复验）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read()
+        idx = text.index("先信已验过的、不重复验")
+        head, rest = text[:idx], text[idx:]
+        rest = rest.split("\n", 1)[1]
+        open(v, "w", encoding="utf-8").write(head + rest)
+        cm.check_dev_flow_guard()
+        self.assertIn("先信已验过的、不重复验", self.error_texts())
 
     def test_baseline_scope_boundary_removed_reports(self):
         # 反例：真源侧的适用边界取值被删（基线重新变成所有改动的前置，代码类改动白付全量校验）
@@ -9074,7 +9105,7 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
                    "* 流水线不无界挂起。\n")
         self.write("specs/general/verify.adoc",
                    "= 验证\n\n"
-                   "* 验证须覆盖项目的全部既定校验手段。\n"
+                   "* 验证须覆盖项目的全部既定校验手段、按需验证、不滥验证。\n"
                    "* 验证对象须钉定 commit sha。\n")
         self.write("specs/general/collab.adoc",
                    "= 协作\n\n"

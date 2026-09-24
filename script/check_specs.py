@@ -403,6 +403,8 @@
      `specs-project-maintainer/spec-lifecycle.adoc`「新增规范的提案校验」须含「先找参照物、别自己造」
      （现成口径 / 存在比用户口述更优的设计时按更优的设计收 / 判定标准）、
      `specs/general/verify.adoc`「验证须覆盖项目的全部既定校验手段」须补"跑的那套够不够用"、
+     `specs/general/verify.adoc`「按需验证、不滥验证」须写全五要素（该不该验/没做完就不验/能合就合/
+     能简化就简化只覆盖改动范围/先信已验过的不重复验）且分步复核不逐步骤复（Issue #213：验证耗费太多时间）、
      提示词片段 `baseline-and-compat` 同口径，任务生命周期表的「方案」「验证」两节点须带基线条；通用层
      `specs/general/planning.adoc` 须承载展开（现状与最佳方案、另写一套的三条件与处置、大动确认四问与
      老旧废弃流程、基线的扫描/留证/复跑与"既有用例不得改判"的接口、依据行）；`specs/general/testing.adoc`
@@ -6723,6 +6725,7 @@ def check_ci_cd_guard():
             vtext = fh.read()
         for key, desc in (
                 ("验证须覆盖项目的全部既定校验手段", "‘存在测试’≠‘测试被执行’"),
+                ("按需验证、不滥验证", "“验证只在必须有验证的地方做”（收尾须做、中间只在必要时加、能合就合、只覆盖改动范围、前面已验过且其后未改动的部分直接采信已有结果）"),
                 ("验证对象须钉定 commit sha", "验证/复核前须先取定 sha")):
             if key not in vtext:
                 err(f"CI/CD 防线被破坏：{rel_v} 缺失『{key}』（{desc}）", rel_v)
