@@ -30,6 +30,7 @@ class FakeCtx:
     def __init__(self, files=None, prompt_files=None):
         self.files = files or {}
         self._prompt_files = prompt_files or []
+        self._tokens = {}
         self.errors = []
 
     def read(self, rel):
@@ -50,6 +51,10 @@ class FakeCtx:
 
     def prompt_files(self):
         return list(self._prompt_files)
+
+    def tokens(self, name):
+        # `anchor_count` 按清单名取锚点条数（`tokens` 段里的常量），与 `check_specs` 同形
+        return self._tokens.get(name)
 
     def list_files(self, prefix, suffix=""):
         return sorted(r for r in self.files if r.startswith(prefix) and r.endswith(suffix))

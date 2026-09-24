@@ -83,7 +83,7 @@ https://agent.c332030.com/script/fetch-specs.py
 * **git 操作**（要移动/重命名文件、要判定只剩一份历史时由哪一份继承（同一源文件**既移动又复制**）、要核对或处置行尾与检出、要暂存与提交、要写提交信息、要处置冲突与压缩提交）→ `specs/general/git.adoc`
 * **版本管理**（识别特征：要处置冲突、要整理提交历史；只要有版本管理工具即命中，**不限 git/CNB**）→ `specs/general/version-control.adoc`
 * **写/更新变更日志**（存在 `CHANGELOG.*`、要新增或改写条目）→ `specs/general/changelog.adoc`
-* **code review，或每次改完东西后对本轮改动的复核**（识别特征：要做代码评审、要判定"这算不算一个问题"——review 默认只查代码/文档/用例三类问题，存量不动、除非用户主动声明）→ `specs/general/review.adoc`
+* **code review，或每次改完东西后对本轮改动的复核**（识别特征：要做代码评审、要判定"这算不算一个问题"——review 默认只查代码/文档/用例三类问题，存量不动、除非用户主动声明；**要开或要判"能不能拿到干净子 agent"来复核**）→ `specs/general/review.adoc`
 * **多 agent 协作**（识别特征：要拆分任务、要派发或复核、要控制调用量与硬超时、要按评论/评论唤起新实例这类**派发入口**发起一次执行）→ `specs/general/collab.adoc`
 * **文件编码与换行符**（新增/编辑文件、跨 Linux 与 Windows 协作、写 `.bat`/`.cmd`/`.ps1`、配置 `.gitattributes`/`.editorconfig`）→ `specs/general/encoding.adoc`
 * **涉及安全边界的代码**（外部输入、认证授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载）→ `specs/general/security.adoc`

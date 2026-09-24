@@ -142,7 +142,8 @@ class CheckSpecsTestCase(unittest.TestCase):
     # 其夹具都须把这两份按**原样**落进来（**不手抄**——手抄必然与现场漂移，本轮实测：
     # 手抄版少一组锚点即产生假红）。规则文件由防线按仓库根相对路径读取，故夹具落点与
     # 现场一致即可。
-    RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml")
+    RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml",
+                           "script/specs-rules/verify.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -14181,6 +14182,209 @@ class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
         self._write_all(entry="= 项目规范\n* 别的\n")
         cm.check_after_change_review_guard()
         self.assertIn("AGENTS.adoc", self.error_texts())
+
+class TestCheckCleanSubagentReviewGuard(CheckSpecsTestCase):
+    """钉住『review 时的干净子 agent 复核』防线（用户提出，Issue #219）。
+
+    用户原话："强制 review 时必须开启干净子 agent 进行 review"。失效形态是**要求全在、
+    而干净上下文从未发生**：沿用本次会话结论充当复核、把"知道有子 agent 能力"当成
+    "已派发"、或把复核者降级成"上一次那个上下文"。故用例逐项覆盖该节各要点被抽，以及
+    "复用上一次上下文"这类放宽写法复活。
+    """
+
+    REVIEW = (
+        "= code review 规范\n\n"
+        "== review 时的干净子 agent 复核（强制）\n\n"
+        "依据：评审与被评审须相互独立（IEEE 1028）。\n\n"
+        "* **强制开干净子 agent（L1）**：用**与执行者相同的 Agent**。\n"
+        "* **\"干净\"指上下文（L1）**：**上下文干净**——**不得复用前序对话里的结论**；"
+        "**不得以自己那次执行的上下文充当复核的上下文**。\n"
+        "* **通道须先实测、后派发（L1）**：只有确实取到的通道才算成立，**取不到按不成立处理**；"
+        "确认该次调用**不承载本次会话的上下文**；对象须**钉定**。\n"
+        "* **判定标准**：① **该入口的调用实际返回结果**；② **只带本次钉定的对象与其判据**。\n"
+        "* **派发形式（L1）**：**一次性、边界明确、可超时**；**不带工具**；每次复核"
+        "**换一次干净上下文**。\n"
+        "* **硬超时（L1）**：到点按\"**放弃 + 如实标悬置**\"处置。\n"
+        "* **不得换外部来源（L1）**：**不得换外部来源**的 Agent/NPC 顶替。\n"
+        "* **降级路径（L1）**：**由执行者本人串行承担**、**标注独立性边界**，或**如实标悬置**；"
+        "\"已交付 + 校验全绿 + 缺口\"**不得混写成**\"已复核通过\"。\n"
+        "* **复核结论按三态留证**：**三态各占一栏、不得合并**；写明**实际读到的上下文范围**"
+        "（判据见 `specs/general/verify.adoc`「验证的效力等级」）。\n"
+        "* **对引用方的口径（L1）**：**不指定实现**；冲突时**以其自身规范为准**；只约束"
+        "**本条生效之后**的 review。\n"
+        "* **依据落点**：`specs/general/collab.adoc` 与 `specs/general/self-check.adoc`。\n"
+        "== 改动后的 review（每次改完都得复核一次）\n"
+        "* 执行形态见「review 时的干净子 agent 复核（强制）」——**本条只说**要做哪种复核，"
+        "两者**互不替代**。\n")
+
+    def _write_all(self, review=None, execution=True, common=True, maint=True):
+        cm._RULES_RUN_THIS_PHASE.clear()
+        self.write("specs/general/review.adoc",
+                   review if review is not None else self.REVIEW)
+        self.write("specs/core/execution.adoc",
+                   ("= 执行原则\n\n== 任务生命周期与节点自查\n"
+                    "| **验证** | **review 场景**下清理复核的干净子 agent 通道是否已实测"
+                    "（见 `specs/general/review.adoc`）|\n") if execution else "= 执行原则\n")
+        self.write("AGENTS_COMMON.adoc",
+                   ("= 入口\n\n== 分类与懒加载（加载调度器）\n"
+                    "* **code review**（识别特征：要做评审、要判能不能拿到**干净子 agent**）"
+                    " → `specs/general/review.adoc`\n") if common else "= 入口\n")
+        self.write("specs-project-maintainer/verify.adoc",
+                   ("= 维护方验证\n* **review 时的干净子 agent 通道**：**能不能拿到**须实测，"
+                    "判据见 `specs/general/review.adoc`「review 时的干净子 agent 复核（强制）」。\n")
+                   if maint else "= 维护方验证\n* 别的\n")
+        self.write_rules_fixture()
+
+    def test_positive_passes(self):
+        self._write_all()
+        cm.check_clean_subagent_review_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 用户点名的那条要求失去落点
+        self._write_all(review="= code review 规范\n\n== 问题修复\n* x\n")
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("review 时的干净子 agent 复核", self.error_texts())
+
+    def test_mandatory_removed_reports(self):
+        # 反例②：强制语被降级成倡议 → "沿用本次会话结论当复核"照样发生
+        self._write_all(review=self.REVIEW.replace(
+            "**强制开干净子 agent（L1）**：用**与执行者相同的 Agent**。",
+            "**建议**用子 agent 复核一遍。"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("强制开干净子 agent", self.error_texts())
+
+    def test_self_context_as_review_removed_reports(self):
+        # 反例③：改动方不得自任复核上下文这一句被抽 → 复核与改动同一上下文仍算"已复核"
+        self._write_all(review=self.REVIEW.replace(
+            "**不得以自己那次执行的上下文充当复核的上下文**。", ""))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("不得以自己那次执行的上下文充当复核的上下文", self.error_texts())
+
+    def test_channel_probe_removed_reports(self):
+        # 反例④：通道实测判据被抽 → "我知道有子 agent 能力"被读成"已派发"
+        self._write_all(review=self.REVIEW.replace(
+            "**取不到按不成立处理**", "有需要就用"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("通道须先实测", self.error_texts())
+
+    def test_probe_criteria_removed_reports(self):
+        # 反例⑤：实测到什么算成立的取值被抽 → "实测过"无判据
+        self._write_all(review=self.REVIEW.replace(
+            "**该入口的调用实际返回结果**", "看着可用"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("通道的可执行性与原子性判据", self.error_texts())
+
+    def test_hard_timeout_removed_reports(self):
+        # 反例⑥：硬超时与到点处置被抽 → 派发会无限挂起
+        self._write_all(review=self.REVIEW.replace(
+            "**放弃 + 如实标悬置**", "等一等"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("派发形式与硬超时", self.error_texts())
+
+    def test_mention_only_removed_reports(self):
+        # 反例⑦：一次性/不带工具被抽 → 复核者带上一次上下文、或自行探查仓库
+        self._write_all(review=self.REVIEW.replace("**不带工具**；", ""))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("不带工具", self.error_texts())
+
+    def test_downgrade_path_removed_reports(self):
+        # 反例⑧：降级路径被抽 → 通道不可用会被读成"这次免了"
+        self._write_all(review=self.REVIEW.replace(
+            "**由执行者本人串行承担**、**标注独立性边界**", "换个人复核"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("降级路径", self.error_texts())
+
+    def test_external_source_removed_reports(self):
+        # 反例⑨：不得换外部来源被抽 → 复核派给不可核对的跨来源执行者
+        # （该组还含降级路径的四句，故整段替换、不逐句删——缺任一句整组即报）
+        self._write_all(review=self.REVIEW.replace(
+            "* **不得换外部来源（L1）**：**不得换外部来源**的 Agent/NPC 顶替。\n"
+            "* **降级路径（L1）**：**由执行者本人串行承担**、**标注独立性边界**，或**如实标悬置**；"
+            "\"已交付 + 校验全绿 + 缺口\"**不得混写成**\"已复核通过\"。\n",
+            "* 拿不到就换别的 Agent 顶一下。\n"))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("不得换外部来源与降级路径", self.error_texts())
+
+    def test_ledger_removed_reports(self):
+        # 反例⑩：三态留证与"实际读到的上下文范围"被抽 → 留证退化成散文、"查不出"与"没做"分不清
+        self._write_all(review=self.REVIEW.replace(
+            "**三态各占一栏、不得合并**；", ""))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("留证形态", self.error_texts())
+
+    def test_reuse_context_revived_reports(self):
+        # 反例⑪：放宽形态复活——"复用上一次复核用过的上下文"成许可语态
+        self._write_all(review=self.REVIEW.replace(
+            "* **依据落点**：",
+            "* 可以复用上一次复核用过的上下文。\n"
+            "* **依据落点**："))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("被放宽的写法", self.error_texts())
+
+    def test_backref_removed_reports(self):
+        # 反例⑫：两节之间的回指被抽 → 按「改动后的 review」工作的执行者看不到干净上下文怎么落成
+        self._write_all(review=self.REVIEW.replace(
+            "* 执行形态见「review 时的干净子 agent 复核（强制）」——**本条只说**要做哪种复核，"
+            "两者**互不替代**。\n", ""))
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("执行形态回指", self.error_texts())
+
+    def test_checklist_node_removed_reports(self):
+        # 反例⑬：任务生命周期「验证」节点不问这一问 → 要求只在专项提示词里存在
+        self._write_all(execution=False)
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("specs/core/execution.adoc", self.error_texts())
+
+    def test_dispatcher_trigger_removed_reports(self):
+        # 反例⑭：调度器识别特征被抽 → 规则实际失效（不会被触发加载）
+        self._write_all(common=False)
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_maintainer_landing_removed_reports(self):
+        # 反例⑮：维护方落点被删 → 公共要求与本地动作断链
+        self._write_all(maint=False)
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("specs-project-maintainer/verify.adoc", self.error_texts())
+
+
+class TestCleanSubagentReviewAnchorListShape(CheckSpecsTestCase):
+    """锚点清单自己的形状与条数（**规则数据是纯数据**，被削时现场一字不少）。
+
+    失效形态：删掉 `CLEAN_SUBAGENT_REVIEW_ANCHORS` 里的一个锚点项、或删掉一个 `[`，
+    规范正文一字不动，`_section_anchor_check` 的 `miss` 是空集——"核过且通过"与"没核"
+    完全一样（本仓库已有实证的口径）。
+    """
+
+    def _write_all(self):
+        cm._RULES_RUN_THIS_PHASE.clear()
+        self.write_real_file("specs/general/review.adoc")
+        self.write_real_file("specs/core/execution.adoc")
+        self.write_real_file("AGENTS_COMMON.adoc")
+        self.write_real_file("specs-project-maintainer/verify.adoc")
+        self.write_rules_fixture()
+        # `_RULES_TOKENS` 是**导入期**读的（模块级常量），用例改了它之后须还原
+        self.addCleanup(cm._RULES_TOKENS.update, cm._RULES_TOKENS)
+
+    def test_anchor_item_removed_reports(self):
+        # 反例：清单里被削掉一个锚点项 → 按文档核的那些步骤全绿，只有条数这一步报得出
+        self._write_all()
+        anchors = [list(g) for g in cm._RULES_TOKENS["CLEAN_SUBAGENT_REVIEW_ANCHORS"]]
+        anchors[2][1] = anchors[2][1][:1]
+        cm._RULES_TOKENS["CLEAN_SUBAGENT_REVIEW_ANCHORS"] = anchors
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("CLEAN_SUBAGENT_REVIEW_ANCHORS", self.error_texts())
+        self.assertIn("只剩", self.error_texts())
+
+    def test_group_shape_broken_reports(self):
+        # 反例：清单里掉一个 `[`（少一项）或组里只剩一项 → 解包失败会让**整道防线**不生效，
+        # 须先判形状、指名报出，不得静默（实测形态：`    [\n    [\n` 让解包直接抛异常）
+        self._write_all()
+        cm._RULES_TOKENS["CLEAN_SUBAGENT_REVIEW_ANCHORS"] = [["只有一项"]]
+        cm.check_clean_subagent_review_guard()
+        self.assertIn("三项", self.error_texts())
+
 
 class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
     """钉住『跨环境脚本防线』：一份跨平台逻辑 + 各平台薄壳入口不得被删或降级。

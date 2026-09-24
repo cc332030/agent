@@ -802,6 +802,15 @@ class RulesContext:
         return [os.path.relpath(f, REPO_ROOT).replace(os.sep, "/")
                 for f in _iter_prompt_files()]
 
+    def tokens(self, name):
+        """取规则数据 `tokens` 段里的锚点清单（`anchor_count` 核清单自己的条数时用）。
+
+        只对锚点清单开放：清单是**纯数据**，删掉一项时现场文档一字不少、按文档核的那些
+        步骤全绿——故清单条数须另有一步核（见 `rules_engine._step_anchor_count`）。
+        """
+        data = _RULES_TOKENS.get(name)
+        return data if isinstance(data, (list, tuple)) else None
+
     def err(self, msg, path="", line=0):
         err(msg, path, line)
 
@@ -1599,6 +1608,7 @@ GEN_EFF_SECTION = "生成效率（同等质量下最少往返）"
 TOKEN_SECTION = "token 纪律（提高利用率与节省开销）"
 CONTEXT_SPEC = "specs/general/context.adoc"
 AFTER_REVIEW_SECTION = "改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）"
+CLEAN_SUBAGENT_REVIEW_SECTION = "review 时的干净子 agent 复核（强制）"
 CHANGE_REVIEW_SECTION = "改动后的 review（每次改完都得复核一次）"
 VERIFY_SPEC = "specs/general/verify.adoc"
 REVIEW_SPEC = "specs/general/review.adoc"
@@ -1922,6 +1932,38 @@ def check_after_change_review_guard():
         missing = [k for k in keys if k not in body]
         if missing:
             err(f"改动后复核防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_clean_subagent_review_guard():
+    """『review 时的干净子 agent 复核』防线（**用户提出，Issue #219**）。
+
+    用户原话："强制 review 时必须开启干净子 agent 进行 review"。判据本体落
+    `specs/general/review.adoc`「review 时的干净子 agent 复核（强制）」——**核对对象是该节
+    自己的正文**（不是整份文件：同文件的「改动后的 review」一节含"干净子 agent""三态台账"
+    等同样字样，按整份文件核时会把抽走的要点兜住）。
+
+    两件事一起钉：① **要求本身不得被删或降级**（强制 + 通道实测判据 + 一次性/不带工具的
+    派发形式 + 硬超时 + 降级路径 + 三态留证）；② **锚点清单自己的条数与组内形状不得被削**
+    ——清单是**纯数据**：删掉一项或整组时，规范正文一字不少、`_section_anchor_check` 的
+    `miss` 是空集，"核过且通过"与"没核"无从区分（本仓库已有实证的口径，见
+    `script/specs-rules/coding.toml` 各处 `anchor_count`）；③ **不得被"复用上一次上下文"
+    这类放宽写法顶替**（放宽形态一律报红，禁止式表述不误伤）。
+
+    "这次是不是真开了一次干净上下文"属**运行时事实**、机械核不到（见 `GUARD_CHECK_LIMITS`）：
+    本道只证明要求文本仍在，**不证明它被执行过**——是否真派发交人/子 agent 复核。
+    """
+    phase("review 时的干净子 agent 复核防线检查")
+    anchors = _RULES_TOKENS["CLEAN_SUBAGENT_REVIEW_ANCHORS"]
+    # 分组形状先判：清单里掉一个 `[` 一类的手误会让解包直接崩（防线整道静默失效）
+    for index, group in enumerate(anchors, 1):
+        if not isinstance(group, (list, tuple)) or len(group) != 3:
+            err(f"`CLEAN_SUBAGENT_REVIEW_ANCHORS` 第 {index} 组不是"
+                "「组名 + 锚点清单 + 理由」三项——防线会因解包失败而整道不生效，"
+                f"当前形状：{group!r}", REVIEW_SPEC)
+            return
+    _section_anchor_check(REVIEW_SPEC, CLEAN_SUBAGENT_REVIEW_SECTION, anchors)
+    run_rule_guard("check_clean_subagent_review_guard")
     phase_done()
 
 
@@ -4384,10 +4426,12 @@ def check_install_repeat_update_guard():
 #   ③ 用例夹具是**手抄**的节选（该条 bullet + 6 行），把条目改成反向口径（"同一源文件可以
 #   让多份继承历史"）也不报红，而真文档里防线更穷（实测 5 处反向/抽空改法全绿）——改用
 #   真文档逐字进夹具、逐词核；基线原写 1591 而**同源实取为 1617**（低报会让"删用例"静默过去）。
-# **本轮（合并 main 解决冲突）**：两笔接线数相加——本支的 `check_tool_class_inheritance_guard`
-#   与 main 的 `check_split_history_ownership_guard` **互不包含**（各占 `CHECKS` 序列一个位置），
-#   合并后 **125 → 126**；`guards.adoc` 清单表同步为 126 行、编号 1..126 连续且与 `CHECKS` 逐一同序。
-GUARD_WIRING_BASELINE = 126
+#   **本轮（Issue #219）**：新增 `check_clean_subagent_review_guard`（用户口径："强制 review 时
+#   必须开启干净子 agent 进行 review"）；**同一轮内合并 main 解决冲突**：main 侧新增
+#   `check_tool_class_inheritance_guard`，与本题的 `check_clean_subagent_review_guard`
+#   **互不包含**（各占 `CHECKS` 序列一个位置），故两笔相加：126 → **127**；
+#   `guards.adoc` 清单表同步为 127 行、编号 1..127 连续且与 `CHECKS` 逐一同序。
+GUARD_WIRING_BASELINE = 127
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4718,11 +4762,16 @@ GUARD_WIRING_BASELINE = 126
 #   `TestToolchainPresentGuard` 新增 1 条（删掉『降级实现不算通过』一句即报红）、
 #   `TestAsciidoctorStubGuard` 新增 1 条（函数体不判 `ASCIIDOC_REQUIRED_PROCESSOR` 即报红）——
 #   故同源实取 1617（`check_specs_test` 1502 + `rules_engine_test` 78 + `check_effective_test` 37）。
-# **本轮（合并 main 解决冲突）**：两笔账相加——本支的 `check_tool_class_inheritance_guard`
-#   与 main 的 `check_split_history_ownership_guard` 各占一个位置（接线数 125 → 126），用例数按
-#   **同源实取**回填为 **1635**（分叉点 1598 + 本支 18 + main 19，逐项对得上；
-#   `check_specs_test` 1516 + `rules_engine_test` 82 + `check_effective_test` 37）。
-GUARD_TEST_BASELINE = 1635
+#   本轮（Issue #219 + 同一轮内合并 main 解决冲突）：本支新增
+#   `check_clean_subagent_review_guard` 的 16 条用例（正例 1 + 反例 15），main 侧新增
+#   `check_tool_class_inheritance_guard` 的用例；两笔相加后按**同源实取**回填为 1651
+#   （`check_specs_test` 1532 + `rules_engine_test` 82 + `check_effective_test` 37）。
+#   **本轮（复核补：锚点清单自己的形状与条数）**：新增
+#   `TestCleanSubagentReviewAnchorListShape` 2 条（锚点项被削 1 条 + 组内形状被破 1 条）——
+#   锚点清单是**纯数据**，删掉一项时规范正文一字不少、按文档核的那些步骤全绿，故须另有
+#   一步核清单条数（`anchor_count` + `token_list`）；同源实取回填为 **1653**
+#   （`check_specs_test` 1534 + `rules_engine_test` 82 + `check_effective_test` 37）。
+GUARD_TEST_BASELINE = 1653
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -12084,6 +12133,7 @@ CHECKS = (
     check_generation_efficiency_guard,
     check_after_change_review_guard,
     check_default_review_scope_guard,
+    check_clean_subagent_review_guard,
     check_refinement_guard,
     check_duplicate_scan_guard,
     check_pointer_no_verbatim_guard,
