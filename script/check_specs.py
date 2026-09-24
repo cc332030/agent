@@ -719,6 +719,17 @@
      重复表述而合并**——它核的是"分支自己的旧快照 vs 目标分支"，既有三档判据核的是"冲突
      两侧"，另立一条、不得互相替代。由 `check_baseline_sync_guard` 钉住（接线数 114 → 115）；
      "某次压缩前到底并入过没有"属运行时事实（git 记录），交人/子 agent 复核。
+ 73. 工具类继承防线（**用户提出，Issue #217**）：**严禁工具类继承另一个工具类，适用所有
+     语言**（用户原话"严禁工具类继承另一个工具类，适用所有语言"）。判据本体落通用层
+     `specs/general/coding.adoc`「类设计」（条文、理由、公共部分的两条去向（组合／静态导入）、
+     判定标准、边界（只管工具类之间的继承）、存量边界与依据行），Java 侧载体落
+     `specs/stack/java-syntax.adoc`「工具类定义」（认类看命名与用法、`@UtilityClass` 自带
+     私有构造器故不可被继承、不新起工具基类，并回指 `specs/stack/java.adoc`「命名」把
+     JDK 扩展类/补齐类排除在工具类之外）。**失效形态**：抽一个"工具基类"把公共静态方法
+     往上挪——少写一次签名，换来一层隐藏的、只增不减的耦合（改基类即改全部子类），而工具类
+     的能力面本应平铺、可按名直接找到。两处都按**条目自己的正文**核（同节相邻条目含"工具类"
+     字样，按整节核会被兜住）。由 `check_tool_class_inheritance_guard` 钉住（接线数 124 → 125）；
+     "某个类算不算工具类""某处继承是不是工具类之间的继承"属语义判断，交人/子 agent 复核。
 
 """
 
@@ -795,20 +806,22 @@ class RulesContext:
         err(msg, path, line)
 
 
-_RULES_SPEC = None
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
+# 规则数据落点：与本脚本同目录的规则**目录**（随 `REPO_ROOT` 走，单测可重定向）。
 def _rules_spec():
     """规则数据落点（与脚本同目录的规则**目录**）；现场推导，便于单测重定向。
 
     登记的是**目录**、不是文件名清单：加一个规则文件不必改本脚本（自动扫描加载）——
     "一类规则一个文件、脚本只登记目录"正是本脚本与规则数据隔离后的加载口径。
     """
-    global _RULES_SPEC
-    if _RULES_SPEC is None:
-        _RULES_SPEC = rules_engine.default_rules_spec(
-            os.path.dirname(os.path.abspath(__file__)))
-    return _RULES_SPEC
+    rel = os.path.join(REPO_ROOT, "script")
+    # 落点＝本脚本旁的规则**目录**；`REPO_ROOT` 被重定向（单测夹具）而那边**确实备了**
+    # 规则目录时随它走，否则回落到本脚本自己那一份——否则"只重定向 REPO_ROOT、没备规则数据"
+    # 的既有夹具会整批报"规则数据缺失"（那与本道判据无关的假红）。
+    if not os.path.isdir(rel):
+        rel = os.path.dirname(os.path.abspath(__file__))
+    return rules_engine.default_rules_spec(rel)
 
 
 def _bootstrap_rules_tokens():
@@ -890,7 +903,6 @@ DISPATCHER_ITEMS_MAX = 40
 # 「单个规范文件的软阈值」正文里的"约 30 KB"。
 SOFT_FILE_SIZE_HINT = 30000
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # AGENTS_COMMON.adoc 是通用规范入口，位于仓库根目录（引用方以仓库根为基准解析
 # 其内部 specs/... 引用，故下文对其链接解析用 base_dir=""）。
 # 机械防线的**核对边界**（结构化声明，取代逐条在 err()/台账备注里写一句口径——同一句
@@ -4339,6 +4351,24 @@ def check_install_repeat_update_guard():
 #   不是规则本体被改）。
 #   `guards.adoc` 清单表同步为 124 行、编号 1..124 连续且与 `CHECKS` 逐一同序。
 #   用例数按**同源实取**回填（`_count_collectable_tests` 的 `类名.用例名` 限定名去重）。
+# **本轮（Issue #217「工具类」）记账**：接线数 **124 → 125**、用例数 **1591 → 1616**
+#   （按**同源实取**回填，口径＝`_count_collectable_tests` 的 `类名.用例名` 限定名去重——
+#   `check_specs_test` 1497 + `rules_engine_test` 82 + `check_effective_test` 37）。
+#   **本轮追加（review 发现的问题）**：`bullet_tokens` 的核对对象是"规则数据里登记的锚点"，
+#   而锚点**自己**被删时现场一字不少、`miss` 是空集——实测删掉 `coding.toml` 里某条锚点后
+#   `check_specs.py` 仍报"OK 规范检查全部通过"。新增引擎步骤 `anchor_count`（核清单自己的
+#   条数，`min` 取当前值、删清单须与调基线一并发生），并在**每个** `bullet_tokens` 步骤后
+#   配一步；另把 `_rules_spec()` 改为随 `REPO_ROOT` 走（单测才能把规则数据这一形态测出来）。
+#   用例数 1611 → 1616：`check_specs_test` +1（规则数据锚点被删）、`rules_engine_test` +4。
+#   **新增一道防线** `check_tool_class_inheritance_guard`（**严禁工具类继承另一个工具类，
+#   适用所有语言**，用户原话）：判据本体落通用层 `specs/general/coding.adoc`「类设计」，
+#   Java 侧载体落 `specs/stack/java-syntax.adoc`「工具类定义」，规则数据落
+#   `script/specs-rules/coding.toml`（两处都按**条目自己的正文**核——同节相邻条目含
+#   「工具类」字样，按整节核会被兜住）；配套 12 条用例（正例 1 + 反例 11）。
+#   新防线在 `CHECKS` 里插在 `check_ternary_extraction_guard` 之后 → 清单表 112 及其后
+#   序号顺延一位（两侧次序由 `check_guard_order_guard` 逐一同序核对）。
+#   同轮另有两处**就地同步**：调度器「任何代码活动」条补识别特征（要写工具类继承 /
+#   为工具类公共方法建基类时）、`README.adoc` 通用层目录说明补该条。
 # **本轮（Issue #215「历史」记账）**：接线数 **124 → 125**——新增一道
 #   `check_split_history_ownership_guard`（一份变多份的历史归属：同一次改动里既移动/重命名
 #   又复制的文件丢历史时，继承历史的那一份按三级判据取——相似度高者优先 → 相似度相同时
@@ -4354,7 +4384,10 @@ def check_install_repeat_update_guard():
 #   ③ 用例夹具是**手抄**的节选（该条 bullet + 6 行），把条目改成反向口径（"同一源文件可以
 #   让多份继承历史"）也不报红，而真文档里防线更穷（实测 5 处反向/抽空改法全绿）——改用
 #   真文档逐字进夹具、逐词核；基线原写 1591 而**同源实取为 1617**（低报会让"删用例"静默过去）。
-GUARD_WIRING_BASELINE = 125
+# **本轮（合并 main 解决冲突）**：两笔接线数相加——本支的 `check_tool_class_inheritance_guard`
+#   与 main 的 `check_split_history_ownership_guard` **互不包含**（各占 `CHECKS` 序列一个位置），
+#   合并后 **125 → 126**；`guards.adoc` 清单表同步为 126 行、编号 1..126 连续且与 `CHECKS` 逐一同序。
+GUARD_WIRING_BASELINE = 126
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4675,7 +4708,7 @@ GUARD_WIRING_BASELINE = 125
 #   与 `python3 -m unittest discover -s script -p '*_test.py'` 的 `Ran 1554 tests` 逐条相等——
 #   本仓库 `_test_cases` 的计数口径已修正为"同层级边界"，故两数不再相差 16）。
 #   **数值以实取为唯一来源**：`_count_collectable_tests` 口径，勿按两侧各自数目相加。
-#   **本轮（Issue #215 返工）**：原写 1591，而按同一口径**同源实取是 1617**
+# **本轮（Issue #215 返工）**：原写 1591，而按同一口径**同源实取是 1617**
 #   （`check_specs_test` 1502 + `rules_engine_test` 78 + `check_effective_test` 37）——
 #   基线**低于实取数**时，删掉至多 20 条用例都不会惊动任何防线（本条自己点名的形态：
 #   本仓库已登记"基线停在旧口径上会长期低于实际数、删掉若干条仍不报红"）；
@@ -4685,7 +4718,11 @@ GUARD_WIRING_BASELINE = 125
 #   `TestToolchainPresentGuard` 新增 1 条（删掉『降级实现不算通过』一句即报红）、
 #   `TestAsciidoctorStubGuard` 新增 1 条（函数体不判 `ASCIIDOC_REQUIRED_PROCESSOR` 即报红）——
 #   故同源实取 1617（`check_specs_test` 1502 + `rules_engine_test` 78 + `check_effective_test` 37）。
-GUARD_TEST_BASELINE = 1617
+# **本轮（合并 main 解决冲突）**：两笔账相加——本支的 `check_tool_class_inheritance_guard`
+#   与 main 的 `check_split_history_ownership_guard` 各占一个位置（接线数 125 → 126），用例数按
+#   **同源实取**回填为 **1635**（分叉点 1598 + 本支 18 + main 19，逐项对得上；
+#   `check_specs_test` 1516 + `rules_engine_test` 82 + `check_effective_test` 37）。
+GUARD_TEST_BASELINE = 1635
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -11771,6 +11808,36 @@ def check_param_carrier_guard():
         run_rule_guard("check_param_carrier_guard")
 
 
+def check_tool_class_inheritance_guard():
+    """『工具类不继承另一个工具类』防线（**用户提出，Issue #217**）：判据本体不得被删或降级。
+
+    用户原话（本轮）："严禁工具类继承另一个工具类，适用所有语言"。要治的失效：工具类之间
+    以 `extends`（或各语言的继承语法）复用公共静态方法——**少写一次签名，换来一层隐藏的、
+    只增不减的耦合**（改基类即改全部子类）；而工具类的能力面本应是**平铺、可按名直接找到**
+    的一组静态入口，抽成基类后调用点读到的方法不属于它自己的类、搜索与跳转落不到定义处。
+    去向是**组合**（调用另一个工具类）或静态导入，不是"工具基类"；工具类本身**无状态、无多态**，
+    不需要被按父类型使用。
+
+    本条**跨语言**，故判据本体落通用层 `specs/general/coding.adoc`「类设计」；Java 侧载体
+    （认类看命名与用法、`@UtilityClass` 不可被继承、`java.adoc`「命名」已把 JDK 扩展类/
+    补齐类排除在工具类之外）落 `specs/stack/java-syntax.adoc`「工具类定义」。两处都按**条目
+    自己的正文**核（相邻条目含「工具类」字样，按整节核会被兜住）。只核"判据本体在不在"——
+    "某个类算不算工具类""某处继承是不是工具类之间的继承"属语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("工具类不继承工具类防线检查")
+    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel}——『工具类不得继承工具类』的落点丢失"
+            "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
+    rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_SYNTAX_FILE):
+        err(f"缺少文件 {rel_syntax}——该条的 Java 落点丢失"
+            "（`@UtilityClass` 与 JDK 扩展类的边界须有技术栈侧的载体）", rel_syntax)
+    run_rule_guard("check_tool_class_inheritance_guard")
+    phase_done()
+
+
 def check_ternary_extraction_guard():
     """『不得新增只做条件取值的方法』防线（**用户提出，Issue #206「三元」**）：判据本体不得被删或降级。
 
@@ -12023,6 +12090,7 @@ CHECKS = (
     check_info_density_guard,
     check_java_serial_guard,
     check_ternary_extraction_guard,
+    check_tool_class_inheritance_guard,
     check_maven_parallel_guard,
     check_alter_merge_guard,
     check_toolchain_present_guard,

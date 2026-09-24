@@ -704,6 +704,21 @@ MECHANISMS = [
     ("内部调用接口的参数以请求体承载、不逐个散参", "specs/stack/spring.adoc", "script/check_specs.py",
      "check_http_contract_guard",
      "check_http_contract_guard 钉住同节的参数承载条（以请求体承载参数对象、查询参数用整对象映射 `@SpringQueryMap`、不得把参数清单逐个声明，含判定标准、例外与存量口径）"),
+    ("工具类不得继承另一个工具类（任何语言；公共部分去向是组合或静态导入）",
+     "specs/general/coding.adoc「类设计」+ specs/stack/java-syntax.adoc「工具类定义」",
+     "script/check_specs.py",
+     "check_tool_class_inheritance_guard",
+     "check_tool_class_inheritance_guard 按**条目/行自己的正文**核（不是整节）：本条与相邻的"
+     "「纯数据结构类中不写逻辑」「配置类不写逻辑」同节相邻、字样相近，按整节核时会把抽走的要点兜住。"
+     "钉住两处判据本体：① 通用层「工具类不继承另一个工具类」——条文（不得以 `extends`/`:` 继承、"
+     "**继承链里不得出现两个工具类相邻**）、理由（能力面须平铺、可按名直接找到；工具类无状态、无多态）、"
+     "公共部分的两条去向（组合／静态导入）、判定标准三条、边界（**只管工具类之间的继承**）与"
+     "存量边界（既有这类继承不视为违规、不告警、不发动全库改造）；② Java 落点（`java-syntax.adoc`）——"
+     "认类看命名与用法、`@UtilityClass` 自带私有构造器故不可被继承、不新起工具基类，"
+     "并回指 `java.adoc`「命名」把 JDK 扩展类/补齐类排除在工具类之外。"
+     "**本条防的不是『没写规则』而是『判据被抽成一句口号』**——"
+     "『某个类算不算工具类』『某处继承是不是工具类之间的继承』属语义判断（见 GUARD_CHECK_LIMITS），"
+     "交人/子 agent 复核"),
 ]
 
 

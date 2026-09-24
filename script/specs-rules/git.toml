@@ -396,6 +396,7 @@ file = "specs/platform/cnb.adoc"
 kind = "bullet_tokens"
 message = "重命名与内容修改防线被破坏：{file} 的「压缩提交」与 P7 的接口缺失 {missing}——{desc}（该接口条的**正文**须自带这些要点，被抽空或搬到别处即等于失效）"
 section = "压缩提交"
+min = 6
 tokens = [
     "别名",
     "不是",
@@ -405,6 +406,15 @@ tokens = [
     "点名",
 ]
 
+
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_rename_split_guard]]
+file = "specs/platform/cnb.adoc"
+kind = "anchor_count"
+bullet = "压缩对象不含"
+section = "压缩提交"
+min = 6
 # 锚点一律取**本条 bullet 内只出现一次**的词——`bullet_tokens` 只回答"这一串在不在这条
 # 正文里"，`内容相似度高`（在 ① 与 ② 的位置句里各出现一次）这类**重复出现**的写法会被
 # 同一个 bullet 的另一处兜住：**把一级判据整句删掉、同形字样仍在**，防线照样报绿。

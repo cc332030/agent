@@ -16628,6 +16628,9 @@ class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
         self._orig_java = cm.JAVA_STACK_FILE
         cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
         cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        # 真实规则目录（本仓库那一份）：夹具按原样复制，**不手抄**（手抄必然与现场漂移）
+        self._rules_src = os.path.join(
+            os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
         with open(self.CODING, encoding="utf-8") as fh:
             self.CODING_TEXT = fh.read()
         with open(self.JAVA, encoding="utf-8") as fh:
@@ -18527,6 +18530,9 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         self._orig_syntax = cm.JAVA_SYNTAX_FILE
         cm.CODING_FILE = os.path.join(self.root, *self.CODING.split("/"))
         cm.JAVA_SYNTAX_FILE = os.path.join(self.root, *self.SYNTAX.split("/"))
+        # 真实规则目录（本仓库那一份）：夹具按原样整份复制，**不手抄**（手抄必然与现场漂移）
+        self._rules_src = os.path.join(
+            os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
         with open(self.CODING, encoding="utf-8") as fh:
             self.CODING_TEXT = fh.read()
         with open(self.SYNTAX, encoding="utf-8") as fh:
@@ -18537,18 +18543,47 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         cm.JAVA_SYNTAX_FILE = self._orig_syntax
         super().tearDown()
 
+    # 规则数据（`coding.toml`）是判据措辞的唯一来源，且**本道另有一步核它自己的条数**，
+    # 故夹具须把它按真实文件原样落进来（`_rules_spec()` 随 `REPO_ROOT` 走，正例才不是假红）。
+    RULES = "script/specs-rules/coding.toml"
+
     def _write_valid(self) -> None:
         self.write(self.CODING, self.CODING_TEXT)
         self.write(self.SYNTAX, self.SYNTAX_TEXT)
+        self.write_rules_fixture()
+        for rel in self._rule_files():
+            self.write(rel, self._rule_text(rel))
+        self._prime_rules()
+
+    def _rule_files(self) -> list:
+        """规则目录下的全部文件（引擎按**目录**扫描加载，缺一份即整批静默失效）。"""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        folder = os.path.join(repo_root, os.path.dirname(self.RULES))
+        return [f"{os.path.dirname(self.RULES)}/{n}"
+                for n in sorted(os.listdir(folder)) if n.endswith(".toml")]
+
+    def _prime_rules(self) -> None:
+        """重新装配规则引擎（夹具换过 `REPO_ROOT`，`RULES` 缓存指向上一份）。
+
+        `run_rule_guard` 的 `RULES` 是模块级缓存、**首次用到才构造**，同一阶段内也去重；
+        夹具重定向 `REPO_ROOT` 后必须作废，否则读到的是上一个用例的规则数据。
+        """
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _rule_text(self, rel: str) -> str:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            return fh.read()
 
     def _write_coding_mutated(self, removed: str, replacement: str = "") -> None:
         self.assertIn(removed, self.CODING_TEXT)
+        self._write_valid()
         self.write(self.CODING, self.CODING_TEXT.replace(removed, replacement))
-        self.write(self.SYNTAX, self.SYNTAX_TEXT)
 
     def _write_syntax_mutated(self, removed: str, replacement: str = "") -> None:
         self.assertIn(removed, self.SYNTAX_TEXT)
-        self.write(self.CODING, self.CODING_TEXT)
+        self._write_valid()
         self.write(self.SYNTAX, self.SYNTAX_TEXT.replace(removed, replacement))
 
     def test_valid_passes(self):
@@ -18616,6 +18651,176 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         # 反例⑩：Java 落点整份缺失 -> 补通用方法这一去向失去中文载体
         self.write(self.CODING, self.CODING_TEXT)
         cm.check_ternary_extraction_guard()
+        self.assertIn("java-syntax.adoc", self.error_texts())
+
+
+class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
+    """钉住『工具类不继承另一个工具类』（**用户提出，Issue #217**）。
+
+    用户原话："严禁工具类继承另一个工具类，适用所有语言"。要治的失效：工具类之间以
+    `extends`（或各语言的继承语法）复用公共静态方法——少写一次签名，换来一层隐藏的、
+    只增不减的耦合；而工具类的能力面本应是平铺、可按名直接找到的一组静态入口。最易被
+    四件事冲掉：条文本身被抽（继承又被当"实现复用"的捷径）、**继承链里不得出现两个工具类
+    相邻**这一判定面被抽（"只是加了一层"即可自圆其说）、例外面被抽（连非工具类的正常继承
+    一起判红）、存量边界被抽（等于要求立刻批量拆基类）。
+
+    本条跨两文件（通用层本体 + Java 落点），故夹具一并重定向两处常量。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    SYNTAX = "specs/stack/java-syntax.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_syntax = cm.JAVA_SYNTAX_FILE
+        cm.CODING_FILE = os.path.join(self.root, *self.CODING.split("/"))
+        cm.JAVA_SYNTAX_FILE = os.path.join(self.root, *self.SYNTAX.split("/"))
+        # 真实规则目录（本仓库那一份）：夹具按原样整份复制，**不手抄**（手抄必然与现场漂移）
+        self._rules_src = os.path.join(
+            os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
+        with open(self.CODING, encoding="utf-8") as fh:
+            self.CODING_TEXT = fh.read()
+        with open(self.SYNTAX, encoding="utf-8") as fh:
+            self.SYNTAX_TEXT = fh.read()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_SYNTAX_FILE = self._orig_syntax
+        super().tearDown()
+
+    # 规则数据（`specs-rules/` 目录）是判据措辞的唯一来源，本道另有一步核**清单自己的条数**，
+    # 故夹具须把整个目录按真实文件原样落进来（引擎按目录扫描加载，缺一份即整批静默失效），
+    # 且 `_rules_spec()` 随 `REPO_ROOT` 走、正例才不是假红。
+    RULES = "specs-rules/coding.toml"
+
+    def _write_valid(self) -> None:
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.SYNTAX, self.SYNTAX_TEXT)
+        for rel in self._rule_files():
+            self.write(f"script/{rel}", self._rule_text(rel))
+        self._prime_rules()
+
+    def _rule_files(self) -> list:
+        """规则目录下全部 `*.toml`（相对仓库根的路径），路径以 `script/` 起头。"""
+        folder = getattr(self, "_rules_src", None)
+        assert folder, "setUp 须先记下真实规则目录"
+        return [f"specs-rules/{n}" for n in sorted(os.listdir(folder))
+                if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        with open(os.path.join(self._rules_src, os.path.basename(rel)),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
+    def _prime_rules(self) -> None:
+        """作废规则引擎缓存（夹具换过 `REPO_ROOT`，`RULES` 还指着上一份规则数据）。"""
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_coding_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.CODING_TEXT)
+        self._write_valid()
+        self.write(self.CODING, self.CODING_TEXT.replace(removed, replacement))
+
+    def _write_syntax_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.SYNTAX_TEXT)
+        self._write_valid()
+        self.write(self.SYNTAX, self.SYNTAX_TEXT.replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_tool_class_inheritance_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）-> 继承又被当"实现复用"的捷径
+        self._write_coding_mutated("* **工具类不继承另一个工具类（L1，任何语言）**",
+                                   "* **工具类随便继承**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("工具类不继承另一个工具类", self.error_texts())
+
+    def test_adjacent_chain_criterion_removed_reports(self):
+        # 反例②：判定面被抽（继承链里不得出现两个工具类相邻）-> "只是加了一层"即可自圆其说
+        self._write_coding_mutated("继承链里不得出现两个工具类相邻")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("继承链里不得出现两个工具类相邻", self.error_texts())
+
+    def test_class_identification_face_removed_reports(self):
+        # 反例③：认类判据被抽（不论继承者是否另加了方法、是否为 abstract）-> 加个方法就不算工具类
+        self._write_coding_mutated("不论继承者是否另加了方法、是否为 `abstract`")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("不论继承者是否另加了方法", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例④：核心理由（无状态、无多态）被抽 -> 读者不知道"为什么这算坏味道"
+        self._write_coding_mutated("**无状态、无多态**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("无状态、无多态", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑤：例外面被删 -> 非工具类的正常继承、工具类实现接口被一并判红
+        self._write_coding_mutated("**只管工具类之间的继承**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("只管工具类之间的继承", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑥：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_coding_mutated("**判定标准（任一命中即违规）**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界被删 -> 等于要求立刻批量拆基类、批量挪方法
+        self._write_coding_mutated("既有这类继承一律不视为违规、不告警、不要求整改")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("不视为违规", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑧：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
+        self._write_coding_mutated("**「工具类不得继承工具类」是本集合自己的判据化取舍**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("本集合自己的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑨：Java 落点被抽 -> 执行者不知道 `@UtilityClass` 本就不可被继承、
+        # 会把静态方法重新抽成基类
+        self._write_syntax_mutated("**lombok 的 `@UtilityClass` 自带私有构造器、本身不可被继承**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("不可被继承", self.error_texts())
+
+    def test_java_jdk_extension_boundary_removed_reports(self):
+        # 反例⑩：JDK 扩展类/补齐类被排除在工具类之外这一条被抽 -> `CList`/`CCollectors`
+        # 会被误判成"工具类继承"
+        self._write_syntax_mutated("**明确排除在工具类之外**")
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("明确排除在工具类之外", self.error_texts())
+
+    def test_rules_data_anchor_removed_reports(self):
+        # 反例⑪：规则数据里这一条锚点被删（**规范正文一字未动**）-> 防线须报红。
+        # 本条是"防线零证据"的唯一形态：现场什么都不缺，只有锚点清单自己少了一项，
+        # 于是 `miss` 是空集、"核过且通过"与"没核"完全一样（实测：删掉该行后
+        # `check_specs.py` 仍报"OK 规范检查全部通过"）。
+        self._write_valid()
+        rel = self.RULES
+        text = self._rule_text(rel).replace('    "**无状态、无多态**",\n', "", 1)
+        self.write(f"script/{rel}", text)
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("锚点", self.error_texts())
+
+    def test_coding_file_missing_reports(self):
+        # 反例⑫：通用层落点整份缺失 -> 该条失去落点
+        self._write_valid()
+        os.remove(cm.CODING_FILE)
+        cm.check_tool_class_inheritance_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_java_syntax_file_missing_reports(self):
+        # 反例⑬：Java 落点整份缺失 -> `@UtilityClass` 与 JDK 扩展类的边界失去载体
+        self._write_valid()
+        os.remove(cm.JAVA_SYNTAX_FILE)
+        cm.check_tool_class_inheritance_guard()
         self.assertIn("java-syntax.adoc", self.error_texts())
 
 

@@ -223,6 +223,7 @@ section = "编码"
 # 本步核 bullet 正文的**后半段**（`until` 截断）：定位句及其后的三处判据都要核，
 # 而末尾的**依据行**会把 `@SuperBuilder`/`@AllArgsConstructor` 等字样再列一遍（同一个
 # bullet 的后半句兜住前半句的缺项），故核对对象截到依据行之前。五项齐备另由下面单独一步核。
+min = 14
 tokens = [
     "specs/stack/java-object.adoc",
     "模板文件不是规范文件",
@@ -252,6 +253,14 @@ until = "依据（标准名/编号）"
 # （Project Lombok 官方文档那一段），故在 bullet 级核会被**同一个 bullet 的后半句**兜住
 # （本轮实测：抽掉清单里的 `@SuperBuilder` 后 bullet 级核仍全绿）。`until` 取
 # `模板文件不是规范文件`——清单句以「。」收尾，其后的定位句不参与核对。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_java_object_template_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "数据对象模板"
+section = "编码"
+min = 14
 [[guards.check_java_object_template_guard]]
 anchor = "注解清单整段照抄"
 bullet = "数据对象模板"
@@ -259,6 +268,7 @@ file = "specs/stack/java.adoc"
 kind = "bullet_tokens"
 message = "Java 数据对象模板防线被破坏：{file} 的「数据对象模板」条**清单句**缺失 {missing}——判据本体须写明“整段照抄的清单包含哪五项注解”；缺任一项时该注解是否属于清单就只在模板文件一处承载（第二真源），且“缺 `@SuperBuilder` 也被读成合规”。本步按清单句切（不是整条 bullet）：依据行里同样罗列这些注解名，bullet 级核会被同一 bullet 的后半句兜住"
 section = "编码"
+min = 5
 tokens = [
     "@Data",
     "@Accessors(chain = true)",
@@ -268,6 +278,14 @@ tokens = [
 ]
 until = "模板文件不是规范文件"
 
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_java_object_template_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "数据对象模板"
+section = "编码"
+min = 5
 [[guards.check_java_object_template_guard]]
 file = "AGENTS_COMMON.adoc"
 kind = "file_tokens"
@@ -405,6 +423,7 @@ file = "specs/stack/java.adoc"
 kind = "bullet_tokens"
 message = "getter 桥接防线被破坏：{file} 的「接口实现时字段名与接口 getter 名不一致须手动桥接」条**本条自己的正文**缺失 {missing}——桥接或忽略任一被抽走时，序列化会丢属性或同一值出两个属性；边界被抽走时，新建类会被迫背上改名与否的存量包袱。每条锚点须在**本条 bullet 内唯一**"
 section = "编码"
+min = 11
 tokens = [
     "接口实现时字段名与接口 getter 名不一致须手动桥接（L1）",
     "两侧类型相同而字段名与接口的 getter 方法名不一致",
@@ -421,6 +440,14 @@ tokens = [
 
 # 加载门：调度器的 Java 技术栈条须给出识别特征（缺则该条在"实现接口而字段名与接口 getter 名
 # 不一致"这一场景不会被加载——写规则与登记是同一个动作）。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_getter_bridge_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "接口实现时字段名与接口 getter 名不一致须手动桥接"
+section = "编码"
+min = 11
 [[guards.check_getter_bridge_guard]]
 anchor = ["Java 项目"]
 file = "AGENTS_COMMON.adoc"
