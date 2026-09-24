@@ -1614,6 +1614,10 @@ CHANGE_REVIEW_ANCHORS = _RULES_TOKENS["CHANGE_REVIEW_ANCHORS"]
 REFINEMENT_SECTION = "精炼性（同一描述只写一处）"
 REFINEMENT_ANCHORS = _RULES_TOKENS["REFINEMENT_ANCHORS"]
 
+# 『引用坐标防线』的规则数据（引用式坐标的例外清单 + 位置式坐标的判据用语）。
+# 判据本体在 `specs/general/source.adoc`「内部引用」的「引用坐标不得靠位置」一条。
+REFERENCE_COORD_TOKENS = _RULES_TOKENS["REFERENCE_COORD_TOKENS"]
+
 # 『review 的默认检查面（只查问题，不动存量）』防线：用户点名（Issue #203）——
 # "review 时默认只查问题（代码问题、文档问题、用例问题），规范里定义的取向性要求
 # （如优先使用 `@ConfigurationProperties`）在 review 时不查出来，调整到全局（原单项
@@ -4297,7 +4301,20 @@ def check_install_repeat_update_guard():
 # **解决冲突一轮（PR #205 并入 main）**：两侧各自都把对方的位移当成本支位的位移，
 #   故两处都写 120；合并后 `CHECKS` 里**唯一防线**实有 **121** 道，基线按实取回填 **121**。
 #   `guards.adoc` 清单表同步为 121 行、编号 1..121 连续且与 `CHECKS` 逐一同序。
-GUARD_WIRING_BASELINE = 121
+# **本轮（PR #209，Issue #208 的待确认第 2 项：补一道核「跨文件定位坐标」的防线）记账**：
+#   接线数 **121 → 124**——新增三道，**互不包含**、都插在 `check_section_refs` 之后
+#   （同为"引用指向的东西还在不在/找不找得到"的基础台账）：
+#     * `check_reference_coord_guard`（引用坐标：引用式须写**目标全名**、位置式一律不得用）；
+#     * `check_skill_ref_coord_guard`（skill 里指到**兄弟文件**的引用在目标项目里必然落空）。
+#   三道一起入账（前一道 + 后两道各占一位，故 121 + 3 = 124；`guards.adoc` 清单表行数与
+#   `CHECKS` 的唯一防线数都由 `check_guard_order_guard` / `check_guard_manifest` 逐一同序核对）。
+#   同轮另有两处**就地修**：`specs/general/script.adoc` 与 `specs/stack/batch.adoc` 里
+#   "最后一条命令"被本条防线按位置式误报，已改述为"该批处理里执行的最后一条命令"
+#   （**先核清形态再改**：那两处指的是"批处理里最后执行的命令"、不是引用坐标，属误报形态、
+#   不是规则本体被改）。
+#   `guards.adoc` 清单表同步为 124 行、编号 1..124 连续且与 `CHECKS` 逐一同序。
+#   用例数按**同源实取**回填（`_count_collectable_tests` 的 `类名.用例名` 限定名去重）。
+GUARD_WIRING_BASELINE = 124
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4618,7 +4635,7 @@ GUARD_WIRING_BASELINE = 121
 #   与 `python3 -m unittest discover -s script -p '*_test.py'` 的 `Ran 1554 tests` 逐条相等——
 #   本仓库 `_test_cases` 的计数口径已修正为"同层级边界"，故两数不再相差 16）。
 #   **数值以实取为唯一来源**：`_count_collectable_tests` 口径，勿按两侧各自数目相加。
-GUARD_TEST_BASELINE = 1554
+GUARD_TEST_BASELINE = 1591
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -5469,6 +5486,239 @@ def _substance_chars(text: str) -> int:
     判注水属误报，故低于下限时不参与占位段/重复段判定。
     """
     return len(FILLER_NOISE_PAT.sub("", text))
+
+
+# ---- 『引用坐标』防线（引用式 / 位置式两类坐标）----
+#
+# 规则数据（例外清单与判据用语）外置在 `script/specs-rules/_tokens.toml`（判据见
+# `specs/general/script.adoc`「规则与脚本的隔离（规则数据外置）」）。
+_REF_COORD_ANCHORS = _RULES_TOKENS["REFERENCE_COORD_TOKENS"]
+_REF_COORD_POSITIONAL_OK = set(_RULES_TOKENS["POSITIONAL_SCOPE_OK"])
+
+# 判据图形外置在规则数据（`script/specs-rules/_tokens.toml`）：写在函数体里时，
+# 把条号那一段正则整段删掉仍会全绿（本轮实测的防线空转形态）。
+REF_COORD_POSITIONAL_PAT = re.compile(_RULES_TOKENS["REF_COORD_POSITIONAL_RE"])
+REF_COORD_POSITIONAL_OK_PAT = re.compile(_RULES_TOKENS["REF_COORD_POSITIONAL_OK_RE"])
+
+# 位置式表述的正当形态（流程步骤 `第 1 步`、章节号 `第 3 节`、标准分部名 `第 2 部分`）：
+# 这些不是"用位置代替名称"，由规则数据给图形。
+RELATIVE_POSITION_OK_PAT = re.compile(_RULES_TOKENS["RELATIVE_POSITION_OK_RE"])
+
+
+def _iter_bullet_items(text: str):
+    """按 AsciiDoc 的**条目边界**切正文，逐条产出 `(条目首行号, 条目全文, 条目首行文本)`。
+
+    引用坐标的两类判定都要求"**名称**在同一条目/同一行内相邻"，故必须按同一条目的范围看，
+    而不是按整份文件看——按文件看时，远处一条"同文件「x」"会把另一条只有文件名、不带
+    名称的引用兜住（相邻性判据）。条目边界：行首 `* ` 起、到下一个行首 `* ` 或 EOF。
+    """
+    items, cur, start = [], None, 0
+    for i, line in enumerate(text.split("\n"), 1):
+        if line.startswith("* ") or re.match(r"^\*{2,}\s", line):
+            if cur is not None:
+                items.append((start, "\n".join(cur), cur[0]))
+            cur, start = [line], i
+        elif cur is not None:
+            cur.append(line)
+    if cur is not None:
+        items.append((start, "\n".join(cur), cur[0]))
+    return items
+
+
+def _reference_coord_label(rel: str) -> bool:
+    """本防线只管**会随分发流到未知项目里的文本**：`.adoc` 规范/文档与 `prompts/`。
+
+    代码目录不在范围：`script/**` 与 `specs-rules/**` 是**本仓库自身工具**（不分发），
+    按位置说话在那里是常见写法且不构成引用方读不到（用户口径：检查范围限于会被引用的
+    规范与文档）。判据是"谁会读到这段文本"，不按目录名硬编码。
+    """
+    return rel.endswith(".adoc") or rel.startswith("prompts/")
+
+
+def _ref_coord_file_only_name(line: str, base: str) -> str:
+    """反引号引用只写文件名、紧跟着一个名称时，返回那个名称（否则空串）。
+
+    **坏形态**（本轮实证）——同级/跨层解析到底落到哪一份文件由读者猜：
+    `` `verify.adoc`「验证的适用边界」 `` 在维护方层里按同级解析落到维护方自己的
+    `verify.adoc`，而目标节在 `specs/general/verify.adoc`。写全名（`specs/general/verify.adoc`
+    + 名称）才能定位到那一份。
+
+    **例外**（不报）：① 目标是本文件的**自身简称**（如 `guards.adoc` 指自己）；② 该文件名
+    在本仓库**唯一**（`README.adoc`/`AGENTS.adoc`/`CHANGELOG.adoc`/`PUBLIC.adoc`/`PROMPTS.adoc`
+    —— 定位结果无歧义，改全名只是换个写法）。
+    """
+    for m in re.finditer(r"`([^`\s]*?/([^`/:\s]+\.adoc)|([^`/:\s]+\.adoc))`"
+                         r"\s*「([^」]+)」", line):
+        # 形如 `specs/general/verify.adoc`「节名」时第 2 组非空（已写全名）；
+        # 只写文件名时第 3 组才有值——分组名按此对齐（避免"写了全名却仍报"的假红）。
+        base_name, bare = m.group(2), m.group(3)
+        if not bare:
+            continue                      # 已写全名：坐标完整，不在本判据内
+        # 带目录的相对路径（`../verify.adoc`）不属本条：坐标落在哪一层由引用自己给出；
+        # `a/adoc` 这类无扩展名的写法会落到第 3 组，按原样去掉前导目录才是文件名。
+        bare = bare.rsplit("/", 1)[-1]
+        if bare == os.path.basename(base):
+            continue                      # 自身简称：同文件内的引用
+        stem = bare[:-len(".adoc")]
+        hits = _ADOC_BASENAME_INDEX.get(stem)
+        if hits is not None and hits > 1:
+            return bare
+    return ""
+
+
+# 文件名（去扩展名）→ 本仓库维护范围内同名的 `.adoc` 份数（1 表示写全名是多余的）。
+# 由 `check_reference_coord_guard` 每次现场重建（含单测重定向仓库根的场景）。
+_ADOC_BASENAME_INDEX: dict = {}
+
+
+def check_reference_coord_guard():
+    """『引用坐标』防线：指到仓库内某一处内容时，坐标须是**引用式**、不得是**位置式**。
+
+    失效形态（Issue #208 实测，7 处同形）：被指向的内容**一个字的正文都没改**，坏的是
+    "去哪儿找"这一跳——① 位置式坐标随增删**必然漂移**（`README.adoc` 引"本文件第 41 条"
+    而该节只剩 25 条；`library/sources.adoc` 按序号引 `guards.adoc` 第 94 条，那道防线早已
+    被新防线挤到第 105 行）；② 引用式坐标的**目标不全**（`verify.adoc`「验证的适用边界」
+    在维护方层里按同级解析落到维护方自己的那一份，而目标节在 `specs/general/verify.adoc`）。
+    既有防线核的是"条文/判据在不在"，**核不到"跨文件的定位坐标对不对"**——`check_section_refs`
+    只认 `link:x.adoc[]「节名」` 一种写法，本次 7 处里仅 1 处落在它的覆盖面内。
+
+    判据本体：`specs/general/source.adoc`「内部引用」的「引用坐标不得靠位置」一条
+    （含引用式坐标的写法、位置式坐标的禁令与边界）。本道核两件**可机械判定**的：
+      * **位置式坐标**：条目正文里出现"第 N 条 / 第 N 行 / 序号为 N / 末尾一条"这类
+        **用位置代替名称**的表述；**例外**是"编号即内容本身的载体"（`guards.adoc` 清单表
+        的「| 序号 | 防线 |」、`priority.adoc` 隐患清单的 `H1..H7`）——那些编号是内容的
+        一部分、不是指向别人的坐标，故**按规则数据里的例外清单**放行（本仓库实测：
+        `library/adoption.adoc` 有 10 余处「第 N 条」指 `guards.adoc` 清单表的行号，
+        `specs-project-maintainer/priority.adoc` 有「第 N 条」指 `spec-lifecycle.adoc`
+        的隐患清单编号，都不是位置式引用，一律不得误报）。正当形态（流程步骤、章节号、
+        标准分部名）由 `RELATIVE_POSITION_OK_RE` 消化，判定词夹在中间（"第 2 步判定需
+        性能测试"）也由同一图形排除，按**命中片段自身的形态**取，不看上下文。
+      * **引用式坐标的目标不全**：反引号引用只写**文件名**、紧跟着一个名称——同级/跨层
+        解析落到哪一份文件不进判据，读者只能猜；须写**目标全名**。例外见
+        `_ref_coord_file_only_name`。
+
+    **效力边界（说明白了才不算虚报抓手）**：本条只核**引用坐标的形态**。名称所指的节
+    是否真实存在由 `check_section_refs`（反引号 +「名称」与 `link:` 两种写法）核；
+    "这条引用在语义上是不是指对了别的东西"属语义判断，交人/子 agent 复核。
+    """
+    phase("引用坐标防线检查（引用式 / 位置式）")
+    files = collect_adoc_files()
+    # 同名的 `.adoc` 份数：写全名是否有必要（唯一名文件不报，见 `_ref_coord_file_only_name`）
+    global _ADOC_BASENAME_INDEX
+    index: dict = {}
+    for rel in files:
+        index.setdefault(os.path.splitext(os.path.basename(rel))[0], 0)
+        index[os.path.splitext(os.path.basename(rel))[0]] += 1
+    _ADOC_BASENAME_INDEX = index
+    positional_ok = _REF_COORD_POSITIONAL_OK
+    checked = 0
+    for rel in files:
+        if _is_historical(rel) or not _reference_coord_label(rel):
+            continue
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
+            text = fh.read()
+        base = _ref_base(rel)
+        for lineno, body, first in _iter_bullet_items(text):
+            checked += 1
+            # ① 位置式坐标：用位置代替名称
+            if rel not in positional_ok:
+                m = REF_COORD_POSITIONAL_PAT.search(body)
+                if m and not RELATIVE_POSITION_OK_PAT.search(m.group(0)):
+                    _ref_coord_err(rel, lineno, "positional", m.group(0))
+            # ③ 位置式坐标被写成"可以按位置引"（本条判据的反向形态）
+            m_ok = REF_COORD_POSITIONAL_OK_PAT.search(body)
+            if m_ok and rel not in positional_ok:
+                _ref_coord_err(rel, lineno, "reversed", m_ok.group(0))
+            # ② 引用式坐标只写文件名
+            for name in set(_ref_coord_file_only_name(body, base).split("\n")) - {""}:
+                _ref_coord_err_file_only(rel, lineno, name)
+    log(f"  校验 {checked} 个条目（{len([f for f in files if _reference_coord_label(f)])} 份文件）")
+    # 判据本体（`specs/general/source.adoc`「内部引用」的「引用坐标不得靠位置」一条）的锚点：
+    # 只核形态属**半道防线**——把位置式禁令抽掉后，形态判据仍在、继续报绿（本轮实测）。
+    run_rule_guard("check_reference_coord_guard")
+    phase_done()
+
+
+
+def _ref_coord_err(rel: str, lineno: int, kind: str, hit: str) -> None:
+    """位置式坐标的三类报错（直读 / 反向读法），措辞按 `kind` 取值。"""
+    head = "位置式坐标被写成可接受形态" if kind == "reversed" else "出现位置式坐标"
+    err(f"{head} `{hit}`：按行号/条号/序号指向内容随增删必然漂移，须改成"
+        "「目标全名 + 被指向的名称」（如 `specs/general/verify.adoc`「验证的适用边界」），"
+        "不得靠定期核对补救；例外按 `script/specs-rules/_tokens.toml` 的 "
+        "`POSITIONAL_SCOPE_OK` 声明。判据见 `specs/general/source.adoc`「内部引用」的"
+        "「引用坐标不得靠位置（L1）」", rel, lineno)
+
+
+def _ref_coord_err_file_only(rel: str, lineno: int, name: str) -> None:
+    """引用式坐标只写文件名（分组与相对路径同名时按 `a/b.adoc` 报出）。"""
+    err(f"引用坐标不完整：`{name}`「名称」只写了文件名——同级/跨层解析落到哪一份文件"
+        "不进判据、读者只能猜，须写目标全名（如 `specs/general/verify.adoc`「名称」）；"
+        "判据见 `specs/general/source.adoc`「内部引用」的「引用坐标不得靠位置（L1）」",
+        rel, lineno)
+
+
+def check_skill_ref_coord_guard():
+    """『skill 的引用坐标』防线：skill 里指到**兄弟文件**的引用，在目标项目里必然落空。
+
+    安装 side 的实测（`skills` 包，`skills-1.7.0`）：落点里**只会出现 `SKILL.md`**，配套的
+    `references/**`、`scripts/**` 等兄弟文件**不进落点**——`containsSupportingFiles` 只用来
+    判断"这个 skill 除 SKILL.md 之外还有没有别的文件"，据此在提示里给一句"到别处读"，
+    而那个"别处"只存在于安装侧的临时目录。换句话说：**skill 被装进未知项目后，它与
+    SKILL.md 之外的任何相对引用都无效**。
+
+    故**受支持的写法是"跟着走"**：配套文件就地落盘（以 `.` 开头、或随 SKILL.md 同处一个
+    skill 目录），引用也按**落点内的相对位置**写；指到仓库内兄弟文件的引用（`references/x.md`
+    这类）在目标项目里找不到。
+
+    本道核的是 `SKILL.md` 之外的**兄弟文件**这一类引用：`pulls` 取到的 skill（如
+    `cnb-tapd-resource-fetcher/getIssue.md`、`cnb-pipeline/references/*.md`）被拆成独立
+    skill 时，若仍按原来"同一个仓库里的兄弟文件"引用，引用方读到的是一个不存在的路径。
+
+    **效力边界**：只核**引用坐标的形态**（指向兄弟文件）；"这段引用在语义上指对了没有、
+    配套文件该怎么就地落盘"属语义判断，交人/子 agent 复核。
+    """
+    phase("skill 引用坐标防线检查（兄弟文件引用）")
+    prefixes = tuple(_RULES_TOKENS["SKILL_SIBLING_REF_PREFIXES"])
+    files = [f for f in _all_files_under(".claude/skills")
+             + _all_files_under(".agents/skills") + _all_files_under(".codebuddy/skills")
+             if f.endswith(".md")]
+    checked = 0
+    for rel in files:
+        with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
+            inside = False
+            for lineno, line in enumerate(fh, 1):
+                if line.startswith("```"):
+                    inside = not inside
+                    continue
+                checked += 1
+                for m in re.finditer(r"`([^`\s]+)`", line):
+                    target = m.group(1).split("#")[0].split("?")[0]
+                    if target.startswith(prefixes) and "/" in target:
+                        err(f"引用坐标在目标项目里落空：`{target}` 指向 skill 的**兄弟文件**，"
+                            "而安装后真正落到落点的只有 `SKILL.md`（`skills-1.7.0` 实测："
+                            "配套文件不进落点，`containsSupportingFiles` 只用来给提示里加一句"
+                            "『到别处读』，那个别处是安装侧的临时目录）。受支持的写法是"
+                            "**跟着 SKILL.md 就地落盘**、按落点内的相对位置引用",
+                            rel, lineno)
+    log(f"  校验 {checked} 行（{len(files)} 份 skill 文档）")
+    # 判据本体的落点是**实测依据**（安装侧真正落到落点的只有 SKILL.md）与引用前缀清单，
+    # 故一并核锚点：仅核形态而不核"依据还在不在"，前缀被清空后本道会静默空转。
+    run_rule_guard("check_skill_ref_coord_guard")
+    phase_done()
+
+
+def _all_files_under(rel_dir: str):
+    """返回仓库内 `rel_dir` 下的全部文件（仓库根相对 POSIX 路径）；目录不存在时返回空表。"""
+    root = os.path.join(REPO_ROOT, *rel_dir.split("/"))
+    if not os.path.isdir(root):
+        return []
+    out = []
+    for dirpath, _, names in os.walk(root):
+        for n in names:
+            p = os.path.join(dirpath, n)
+            out.append(os.path.relpath(p, REPO_ROOT).replace("\\", "/").replace(os.sep, "/"))
+    return sorted(out)
 
 
 def check_filler_docs():
@@ -11559,6 +11809,8 @@ CHECKS = (
     check_refs_exist,
     check_link_refs,
     check_section_refs,
+    check_reference_coord_guard,
+    check_skill_ref_coord_guard,
     check_stack_consistency,
     check_dispatcher_registry,
     check_dispatcher_layers,

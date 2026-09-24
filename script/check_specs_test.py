@@ -138,6 +138,24 @@ class CheckSpecsTestCase(unittest.TestCase):
     def error_texts(self) -> str:
         return "\n".join(cm.errors)
 
+    # 规则数据是判据措辞的**唯一来源**：凡"本道判据外置在 `script/specs-rules/`"的防线，
+    # 其夹具都须把这两份按**原样**落进来（**不手抄**——手抄必然与现场漂移，本轮实测：
+    # 手抄版少一组锚点即产生假红）。规则文件由防线按仓库根相对路径读取，故夹具落点与
+    # 现场一致即可。
+    RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml")
+
+    def write_rules_fixture(self) -> None:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        for rel in self.RULES_FIXTURE_FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.write(rel, fh.read())
+
+    def write_real_file(self, rel: str) -> None:
+        """把仓库里**真实的那份文件**原样落进夹具（判据本体的正例用它，不手抄）。"""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            self.write(rel, fh.read())
+
     def capture_phase_log(self) -> list:
         """捕获 `cm.log` 的阶段级输出，返回一个**实时增长**的列表（用例读它判收尾）。
 
@@ -18543,3 +18561,299 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         self.write(self.CODING, self.CODING_TEXT)
         cm.check_ternary_extraction_guard()
         self.assertIn("java-syntax.adoc", self.error_texts())
+
+
+class TestCheckReferenceCoordGuard(CheckSpecsTestCase):
+    """钉住『引用坐标』防线（Issue #208 实测 7 处同形失效：坏的是"去哪儿找"这一跳）。
+
+    用户口径（本轮待确认第 2 项）：补一道机械防线核**跨文件定位坐标**——既有防线只核
+    "条文/判据在不在"，`check_section_refs` 又只认 `link:x.adoc[]「节名」` 一种写法，
+    本次 7 处里仅 1 处落在它覆盖面内。故本道核两件可机械判定的：① **位置式坐标**
+    （按行号/条号/序号指内容）；② **引用式坐标的目标不全**（只写文件名、其后紧跟名称，
+    且该文件名在本仓库不唯一）。
+    """
+
+    # 本道判据的**本体**与**图形**都外置在规则数据里（`script/specs-rules/`），
+    # 故正例夹具须把这两份也备齐——否则"落点缺失"会被本道一并报出、正例成了假红。
+    # **不手抄**：规则数据是唯一的措辞来源，手抄一份必然与现场漂移（本轮实测：手抄版
+    # 少一组锚点即产生假红），故按真实文件原样落进夹具。
+    _RULES_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml")
+
+    def _write_spec(self, body: str, extra: str = "") -> None:
+        """落点＝**真实的** `source.adoc`（判据本体不手抄、不重写），被测形态**追加**在其后。
+
+        这样正例（`body` 本身合规）与反例（`body` 是坏形态）都只在"本道核什么"上变化，
+        判据本体与其锚点始终是现场那一份——手抄本体必然与现场漂移（本轮实测：手抄版
+        少一组锚点即产生假红）。
+        """
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/verify.adoc",
+                   "= verify\n\n== 验证的适用边界\n\n内容\n\n" + extra)
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "specs/general/source.adoc"),
+                  encoding="utf-8") as fh:
+            real = fh.read()
+        self.write("specs/general/source.adoc", real + "\n" + body)
+
+    def _write_spec_lines(self, lines: str) -> None:
+        """同上，但被测形态写成**多行条目**（首行是 `* `，续行不进 `_iter_bullet_items` 的切分）。
+
+        判据的锚点组与位置式禁令按**条目正文**核，故反例的两半必须落在**同一条目**里——
+        分成两个条目时，"位置式坐标一律不得使用"会被判成本条目的要点缺失（假红）。
+        """
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/verify.adoc",
+                   "= verify\n\n== 验证的适用边界\n\n内容\n")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "specs/general/source.adoc"),
+                  encoding="utf-8") as fh:
+            real = fh.read()
+        self.write("specs/general/source.adoc", real + "\n" + lines)
+
+    def test_positional_ref_reports(self):
+        # 反例①：按条号指向内容（本仓库实测形态：README 引"本文件第 41 条"而该节只剩 25 条）
+        self._write_spec_lines("* 引用坐标不得靠位置（L1）：引用式坐标照写，「位置式坐标一律不得使用」；\n"
+                               "  并核对 `specs/general/verify.adoc` 的第 41 条说明。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("位置式坐标", self.error_texts())
+
+    def test_positional_serial_reports(self):
+        # 反例②：按序号指向内容（实测形态：按行号引 guards.adoc 第 94 条，那道防线早已被挤位）
+        self._write_spec_lines("* 引用坐标不得靠位置（L1）：引用式坐标照写，「位置式坐标一律不得使用」；\n"
+                               "  并核对 `specs/general/verify.adoc` 的序号 94 那一道。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("位置式坐标", self.error_texts())
+
+    def test_positional_tail_reports(self):
+        # 反例③：按"末尾一条"指代（同样是位置，不是名称）
+        self._write_spec_lines("* 引用坐标不得靠位置（L1）：引用式坐标照写，「位置式坐标一律不得使用」；\n"
+                               "  落点按 `specs/general/verify.adoc` 的末尾一条取值。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("位置式坐标", self.error_texts())
+
+    def test_relative_procedure_position_passes(self):
+        # 正例：流程步骤里的"第 N 步"不是引用坐标
+        self._write_spec("* 执行流程：第 1 步先跑机械手段、第 2 步做三视角复核。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_procedure_position_in_rule_passes(self):
+        # 正例：条文里的"第 N 步"接判定词（本仓库实测：prompts/refactor.adoc
+        # "仅对第 2 步判定需性能测试的敏感点补性能用例"）——指名的是流程步骤，
+        # 不是"用位置代替名称"；判据按**命中片段自身的形态**取，不看上下文。
+        self._write_spec("* 仅对第 2 步判定需性能测试的敏感点补性能用例，其余不加。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_part_position_passes(self):
+        # 正例：标准分部名（本仓库实测：`library/sources.adoc` 的
+        # "GB/T 7713.1-2025《信息与文献 编写规则 第1部分：学位论文》"）
+        self._write_spec("* 标准名：《信息与文献 编写规则 第1部分：学位论文》——现行。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_ordinal_article_passes(self):
+        # 正例：序数词（"第 1 款/第 2 条例外"）不是按序号指内容
+        self._write_spec("* 按第 2 条例外处理，其余照第 1 款执行。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_relative_path_ref_passes(self):
+        # 正例：带目录的相对路径（`../general/verify.adoc`）——坐标落在哪一层由引用自己
+        # 给出，不属"只写文件名"（判据不得把无扩展名的 `a/adoc` 误当 `.adoc` 文件名）
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("specs/general/verify.adoc", "= t\n\n== 验证的适用边界\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "* 见 `../general/verify.adoc`「验证的适用边界」。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_file_only_ref_reports(self):
+        # 反例④：引用式坐标只写文件名（实测形态：维护方层写 `verify.adoc`「验证的适用边界」，
+        # 同级解析落到维护方自己的那一份，而目标节在 specs/general/verify.adoc）
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/verify.adoc", "= t\n\n== 验证的适用边界\n\n内容")
+        self.write("specs-project-maintainer/verify.adoc", "= t\n\n== 维护方\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "* 性质与各档取值见 `verify.adoc`「验证的适用边界」。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("引用坐标不完整", self.error_texts())
+
+    def test_same_stem_in_two_dirs_reports(self):
+        # 反例⑨（同名文件计数）：两份 `doc.adoc` 分处两层——按**去扩展名的词干**计数
+        # 才认得出来（写成 `specs/general/doc-design.adoc` 之类的近名不算同名，
+        # 判据也不得按"文件名字面"计数，否则 `library/doc.adoc` 会被漏掉）。
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("specs/general/doc.adoc", "= t\n\n== 注释与文档\n\n内容")
+        self.write("library/doc.adoc", "= t\n\n== 馆内同名\n\n内容")
+        self.write("specs/general/verify.adoc",
+                   "* 见 `doc.adoc`「注释与文档」。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("引用坐标不完整", self.error_texts())
+
+    def test_full_name_ref_passes(self):
+        # 正例：写全目标路径 + 名称
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("specs/general/verify.adoc", "= t\n\n== 验证的适用边界\n\n内容")
+        self.write("specs/general/doc.adoc",
+                   "* 见 `specs/general/verify.adoc`「验证的适用边界」。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_unique_basename_passes(self):
+        # 正例：目标文件名在本仓库唯一（README.adoc/AGENTS.adoc），写全名是多余的
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("README.adoc", "= t\n\n== 使用要点\n\n内容")
+        self.write("specs/general/doc.adoc", "* 见 `README.adoc`「使用要点」。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_own_file_short_name_passes(self):
+        # 正例：指向本文件的自身简称（同文件内的引用，不存在解析歧义）
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("specs/general/verify.adoc", "= t\n\n== 验证的适用边界\n\n内容")
+        self.write("specs/general/doc.adoc", "= t\n\n* 见 `doc.adoc`「验证的适用边界」。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_ok_scope_exempt_from_positional(self):
+        # 正例：编号即内容本身的载体（清单表行号）按规则数据声明放行
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write_real_file("specs/general/source.adoc")
+        self.write("README.adoc", "* 见清单表第 94 条。\n")
+        cm.check_reference_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_reversed_positional_reading_reports(self):
+        # 反例⑤：把"按位置引用"写成可接受形态（与判据反向）
+        self._write_spec_lines("* 引用坐标不得靠位置（L1）：引用式坐标照写，「位置式坐标一律不得使用」；\n"
+                               "  位置式坐标可以按条号引用，只是要注意维护。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("可接受形态", self.error_texts())
+
+    def _mutate_real_source(self, a: str, b: str) -> None:
+        """把**真实的** `source.adoc` 里某一段换成别的样子（判据本体被抽的形态）。"""
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "specs/general/source.adoc"),
+                  encoding="utf-8") as fh:
+            real = fh.read()
+        assert a in real, f"夹具锚点不存在：{a}"
+        self.write("specs/general/source.adoc", real.replace(a, b, 1))
+
+    def test_judge_body_replaced_by_slogan_reports(self):
+        # 反例⑥：判据本体被抹成一句口号（只核"这一节还在不在"属防线空转）
+        self._mutate_real_source("* **引用坐标不得靠位置（L1）**", "* **引用写准点（L1）**")
+        cm.check_reference_coord_guard()
+        self.assertIn("引用坐标不得靠位置", self.error_texts())
+
+    def test_positional_ban_removed_reports(self):
+        # 反例⑦：位置式禁令被抽走（形态判据仍在、须仍报红）
+        self._mutate_real_source("**位置式坐标一律不得使用**", "")
+        cm.check_reference_coord_guard()
+        self.assertIn("位置式坐标一律不得使用", self.error_texts())
+
+    def test_file_only_ban_removed_reports(self):
+        # 反例⑧：「不得只写文件名」被抽走 -> 引用式坐标的目标写法失去判据
+        self._mutate_real_source("**不得只写文件名**", "")
+        cm.check_reference_coord_guard()
+        self.assertIn("不得只写文件名", self.error_texts())
+
+    def test_boundary_clause_removed_reports(self):
+        # 反例⑨：边界句被抽走 -> 清单表行号、隐患编号一类误判成违规
+        self._mutate_real_source("**编号即内容本身的载体**", "")
+        cm.check_reference_coord_guard()
+        self.assertIn("编号即内容本身的载体", self.error_texts())
+
+    def test_positional_pattern_removed_reports(self):
+        # 反例⑩：判据图形（位置式正则）被改成认不出条号的形态
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("specs/general/source.adoc", "= t\n\n== 内部引用\n\n内容\n")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "script/specs-rules/_tokens.toml"),
+                  encoding="utf-8") as fh:
+            tok = fh.read()
+        self.write("script/specs-rules/_tokens.toml",
+                   tok.replace("序号(?:为|是)?", "序号XX"))
+        cm.check_reference_coord_guard()
+        self.assertIn("判据图形", self.error_texts())
+
+    def test_prompts_are_checked(self):
+        # 覆盖范围：提示词（会被复制到未知项目执行）同样纳入
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write("prompts/review.adoc", "* 见 `specs/general/verify.adoc` 的第 41 条。\n")
+        cm.check_reference_coord_guard()
+        self.assertIn("位置式坐标", self.error_texts())
+
+
+class TestCheckSkillRefCoordGuard(CheckSpecsTestCase):
+    """钉住『skill 引用坐标』防线：skill 里指到**兄弟文件**的引用在目标项目里必然落空。
+
+    实测依据（`skills-1.7.0` 的安装侧行为）：真正落到落点的**只有 `SKILL.md`**——
+    `containsSupportingFiles` 只用来判断"除 SKILL.md 之外还有没有别的文件"，据此在提示里
+    加一句"到别处读"，而那个别处只存在于安装侧的临时目录。故配套文件须**就地落盘**
+    （以 `.` 开头、或随 SKILL.md 同处一个 skill 目录）。
+    """
+
+    def test_sibling_reference_reports(self):
+        # 反例①：SKILL.md 指向 references/ 下的兄弟文件（安装后那边没有这个文件）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write(".claude/skills/foo/SKILL.md",
+                   "---\nname: foo\ndescription: d\n---\n\n读 `references/guide.md`。\n")
+        cm.check_skill_ref_coord_guard()
+        self.assertIn("落空", self.error_texts())
+
+    def test_script_sibling_reference_reports(self):
+        # 反例②：指向 scripts/ 下的兄弟文件（同样不进落点）
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write(".claude/skills/foo/SKILL.md",
+                   "---\nname: foo\ndescription: d\n---\n\n跑 `scripts/run.js`。\n")
+        cm.check_skill_ref_coord_guard()
+        self.assertIn("落空", self.error_texts())
+
+    def test_dot_relative_passes(self):
+        # 正例：配套文件就地落盘（以 `.` 开头）、按落点内相对位置引用
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        self.write(".claude/skills/foo/SKILL.md",
+                   "---\nname: foo\ndescription: d\n---\n\n读 `./guide.md`、跑 `./scripts/run.js`。\n")
+        cm.check_skill_ref_coord_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_prefix_list_emptied_reports(self):
+        # 反例③：前缀清单被清空 -> 形态判据无引用面可核，且本组锚点须报红（不空转）
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "script/specs-rules/_tokens.toml"),
+                  encoding="utf-8") as fh:
+            tok = fh.read()
+        self.write("script/specs-rules/_tokens.toml",
+                   tok.replace('SKILL_SIBLING_REF_PREFIXES = [\n    "references/",\n'
+                               '    "scripts/",\n]', "SKILL_SIBLING_REF_PREFIXES = []"))
+        cm.check_skill_ref_coord_guard()
+        self.assertIn("兄弟文件引用前缀清单", self.error_texts())
+
+    def test_no_skills_passes(self):
+        # 正例：没有 skill 目录时本道不发声（不是所有仓库都装 skill）
+        self.write_rules_fixture()
+        self.write("AGENTS_COMMON.adoc", "= t")
+        cm.check_skill_ref_coord_guard()
+        self.assertEqual(cm.errors, [])
