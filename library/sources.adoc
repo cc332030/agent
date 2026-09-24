@@ -55,7 +55,7 @@
 
 * 标准名：Quality management — Guidelines for configuration management。
 * 版本：**ISO 10007:2017**（Edition 3）。
-* 用途：变更控制与可追溯（P1/P2/P3/P5 的依据、`specs/general/verify.adoc`「验证总纲」①完整性）；「改动范围边界」条所引的"变更须有明确的对象与范围、受控可追溯"；「**改动前先定基线**」（`specs/general/planning.adoc`）——基线＝变更前既有行为的可追溯状态；以及 `specs/general/review.adoc`「精炼性」的**同一配置项不得有多个真源**（同一描述在多处各写一遍即多个真源）——**这是一条要求，不是一句原则**：本集合据此在 `script/specs-rules/duplicate.toml` 落了一处机械抓手（逐字重复扫描，见 `specs-project-maintainer/guards.adoc` 第 94 条），与之配套的 `specs/general/source.adoc`「外部引用」要求同一事实只在一处完整定义、别处一行引用。**注意同义性差异**：该标准**未**规定"执行者只允许修改某一份工作空间/某一个项目"，也**未**规定"动手前必须先跑通既有校验手段并留证"（后者是本集合按该标准变更控制要求做的判据化取舍）。
+* 用途：变更控制与可追溯（P1/P2/P3/P5 的依据、`specs/general/verify.adoc`「验证总纲」①完整性）；「改动范围边界」条所引的"变更须有明确的对象与范围、受控可追溯"；「**改动前先定基线**」（`specs/general/planning.adoc`）——基线＝变更前既有行为的可追溯状态；以及 `specs/general/review.adoc`「精炼性」的**同一配置项不得有多个真源**（同一描述在多处各写一遍即多个真源）——**这是一条要求，不是一句原则**：本集合据此在 `script/specs-rules/duplicate.toml` 落了一处机械抓手（逐字重复扫描，见 `specs-project-maintainer/guards.adoc` 的 `check_duplicate_scan_guard` 一行），与之配套的 `specs/general/source.adoc`「外部引用」要求同一事实只在一处完整定义、别处一行引用。**注意同义性差异**：该标准**未**规定"执行者只允许修改某一份工作空间/某一个项目"，也**未**规定"动手前必须先跑通既有校验手段并留证"（后者是本集合按该标准变更控制要求做的判据化取舍）。
 
 == ISO 9001（质量管理体系——要求）
 
