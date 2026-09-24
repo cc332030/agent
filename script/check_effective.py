@@ -496,6 +496,15 @@ MECHANISMS = [
      "`check_specs.py` 报 OK、单测全通过、台账上的『抓手数』也没变；台账里的防线名改成不存在的"
      "名字仍报『有抓手』；清单两条被整条删掉仍报绿。『某次删除是否该被批准』语义判断（见 GUARD_CHECK_LIMITS）"
      "交人/子 agent 复核"),
+    ("已被证否的旧口径不得写回：口径被现场实测证否后，描述该口径『旧错法』的特征措辞不得再写回脚本注释/文档字符串",
+     "AGENTS.adoc（本仓库自身工具）", "script/check_specs.py",
+     "check_stale_wording_guard",
+     "`check_stale_wording_guard` 把**实测证否**的口径的**特征措辞**外置成规则数据"
+     "（`script/specs-rules/_tokens.toml`）、逐条核『有没有被写回来』。失效形态：口径被证否后"
+     "改掉的是**方向**，而『旧的错法长什么样』只留在改动记录里——下一个人照旧句子复述一遍就把"
+     "错口径带回注释（本仓库实证：`def test_` 的旧计数口径在被证否之后仍在多轮沿革里成串出现）。"
+     "效力边界：只核措辞形态，『这条口径今天还成不成立』属语义判断（见 GUARD_CHECK_LIMITS）、"
+     "交人/子 agent 复核"),
     ("入口文档须给『隔一次会话还认得回来』的清单：安装与取回口径的落点路径与取规范脚本路径、副本检索路径、取回与更新方式、要跨会话保留的本项目信息（落点只有用户家目录下的一处）",
      "specs/general/entry-doc.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_entry_doc_manifest",
@@ -709,6 +718,17 @@ MECHANISMS = [
     ("内部调用接口的参数以请求体承载、不逐个散参", "specs/stack/spring.adoc", "script/check_specs.py",
      "check_http_contract_guard",
      "check_http_contract_guard 钉住同节的参数承载条（以请求体承载参数对象、查询参数用整对象映射 `@SpringQueryMap`、不得把参数清单逐个声明，含判定标准、例外与存量口径）"),
+    ("AsciiDoc 表格行不得以行尾管道收尾（行尾多出的管道符 = 多一个空单元格的残缺行）",
+     "specs-project-maintainer/guards.adoc",
+     "script/check_specs.py",
+     "check_table_row_pipe_guard",
+     "check_table_row_pipe_guard 按**维护范围内的全部 .adoc**逐份文档核（覆盖范围与语法编译段同一处收集实现，本道不另列维护根清单）「`|===` 之间的表格行是否以管道符收尾」：收尾即报红。"
+     "**与处理器版本无关**（不装 `asciidoctor` 也能核）——这正是本条的立项理由："
+     "本机装不出处理器时 `check_asciidoctor_syntax` 报错而非报出问题，"
+     "行尾多出的管道符因此长期留在 `guards.adoc` 的清单表里（本仓库实证两处），"
+     "除编译告警外没有任何检查会发声，而它同时让整表单元格错位、报错行号落到别的行上。"
+     "**只钉这一种形态**——「表格该有几列」「某行是否漏写单元格」属语义判断（列数可随表格改、补法不唯一），"
+     "仍由 `check_asciidoctor_syntax` 的编译验证承担。规则数据在 `script/specs-rules/table.toml`"),
     ("工具类不得继承另一个工具类（任何语言；公共部分去向是组合或静态导入）",
      "specs/general/coding.adoc「类设计」+ specs/stack/java-syntax.adoc「工具类定义」",
      "script/check_specs.py",
