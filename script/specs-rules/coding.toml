@@ -1211,6 +1211,7 @@ message = "链式赋值顺序防线被破坏：{file} 的「链式赋值顺序�
 # 只是从别处命中，报不出来。本轮实测：`不发动全库重排` 三处出现、`ISO/IEC 25010` 两处、
 # `不改变求值语义` 两处（边界句 + 「不改变」的另一种说法），逐词删净后仍全绿。
 section = "命名与代码质量"
+min = 19
 tokens = [
     # 条文：赋值顺序随字段顺序、标 L1（防被降级成建议——『顺序怎么写都行』读起来无害）
     "链式赋值顺序随字段顺序（L1，任何语言）",
@@ -1245,12 +1246,21 @@ tokens = [
 # 与 `@SuperBuilder`），整节核时把本条的载体名抽走也报不出来。本轮实测：把本条 Java 落点条文
 # 整条改成「赋值环节按**书写者顺手的次序**排列，**不要求**按字段声明次序」后 **0 条报红**
 # （锚点词全在相邻条目里命中过）。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_chain_assignment_order_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "链式赋值顺序随字段顺序"
+section = "命名与代码质量"
+min = 19
 [[guards.check_chain_assignment_order_guard]]
 bullet = "链式赋值顺序随字段顺序（L1）"
 file = "specs/stack/java.adoc"
 kind = "bullet_tokens"
 message = "链式赋值顺序（Java 落点）防线被破坏：{file} 的「链式赋值顺序随字段顺序（L1）」条**本条自己的正文**缺失 {missing}——Java 执行者按栈文件学时仍会随手排；载体是链式 setter 与 builder 链，顺序取字段声明次序"
 section = "编码"
+min = 6
 tokens = [
     "`@Accessors(chain = true)` 的链式 setter",
     "`@SuperBuilder` 的 builder 链",
@@ -1259,6 +1269,14 @@ tokens = [
     "此处**不复述**",
     "本条**不另定一套顺序**",
 ]
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_chain_assignment_order_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "链式赋值顺序随字段顺序（L1）"
+section = "编码"
+min = 6
 [[guards.check_chain_assignment_order_guard]]
 file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
@@ -1315,6 +1333,7 @@ file = "specs/general/coding.adoc"
 kind = "bullet_tokens"
 message = "成员与方法次序防线被破坏：{file} 的「成员与方法次序」条**本条自己的正文**缺失 {missing}——该条对应用户提出的要求（新增成员按业务流程先后落点、允许加在已有成员的前面或中间、重载紧邻、先初始化的在前、被依赖者在前、数据转换方法写在查询接口之后、只对新增成员生效），不得删除、不得降级、不得被读成「一律追加到末尾」。每条锚点须在**本条 bullet 内唯一**"
 section = "命名与代码质量"
+min = 25
 tokens = [
     # 条文：新增成员按流程次序落点、标 L1（防被降级成建议）
     "**成员与方法次序（L1，任何语言）**",
@@ -1355,12 +1374,21 @@ tokens = [
 # （「成员与注解排序」含实体类字段与注解次序、「数据对象模板」含 builder 链），
 # 整节核时把本条的载体名抽走也报不出来。锚点取**Java 侧的载体**——判据本体与
 # 判定标准由通用层那条核，本侧只须证明「回指通用层 + 给到 Java 载体」还在。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_method_placement_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "成员与方法次序"
+section = "命名与代码质量"
+min = 25
 [[guards.check_method_placement_guard]]
 bullet = "成员与方法次序（L1，本文件是 Java 落点）"
 file = "specs/stack/java.adoc"
 kind = "bullet_tokens"
 message = "成员与方法次序（Java 落点）防线被破坏：{file} 的「成员与方法次序（L1，本文件是 Java 落点）」条**本条自己的正文**缺失 {missing}——Java 执行者按栈文件学时仍会一律追加到类末尾、重载散落、转换方法跑到查询之前"
 section = "编码"
+min = 8
 tokens = [
     "按 `specs/general/coding.adoc`",
     "判据本体、判定标准、例外与存量口径见该处",
@@ -1371,6 +1399,14 @@ tokens = [
     "**数据库实体与返回模型的互转方法**",
     "**静态初始化块与字段初始化顺序**",
 ]
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_method_placement_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "成员与方法次序（L1，本文件是 Java 落点）"
+section = "编码"
+min = 8
 [[guards.check_method_placement_guard]]
 file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
@@ -1414,6 +1450,7 @@ file = "specs/general/coding.adoc"
 kind = "bullet_tokens"
 message = "参数载体防线被破坏：{file} 的「不得以键值容器承载方法参数」条**本条自己的正文**缺失 {missing}——判据被抽走时，「这个参数会变」「字段太多」「只是个内部方法」会把键值容器放回来。每条锚点须在**本条 bullet 内唯一**"
 section = "数据契约的载体（数据库实体类不进对外契约）"
+min = 11
 tokens = [
     "不得以键值容器承载方法参数（L1）",
     "方法参数与返回值的载体是**具名类型**",
@@ -1430,6 +1467,14 @@ tokens = [
 
 # 同条的**定性**（该条是本集合自己的取舍、不是标准规定）与**依据名**在**节末的依据行**上——
 # 那条是独立的 bullet，`bullet_tokens` 取不到它，故另起一步按整份文件核。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_param_carrier_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "不得以键值容器承载方法参数"
+section = "数据契约的载体（数据库实体类不进对外契约）"
+min = 11
 [[guards.check_param_carrier_guard]]
 file = "specs/general/coding.adoc"
 groups = [
@@ -1475,6 +1520,7 @@ file = "specs/general/coding.adoc"
 kind = "bullet_tokens"
 message = "条件取值方法防线被破坏：{file} 的「不得新增只做条件取值的方法」条**本条自己的正文**缺失 {missing}——判据被抽走时，「调用点会更短」「复述一下意图」会把只做三元取值的方法放回来。每条锚点须在**本条 bullet 内唯一**"
 section = "表达式与调用写法"
+min = 11
 tokens = [
     "不得新增只做条件取值的方法（L1）",
     "不得让方法体只剩一处条件取值",
@@ -1492,12 +1538,21 @@ tokens = [
 # 同条的去向（没有现成工具方法时**加一个通用工具方法**、而非就地抽专用方法）落在相邻的
 # 「判空/默认值兜底优先用工具方法」条上——它也是 `bullet_tokens` 取不到的独立 bullet，
 # 故另起一步按该 bullet 的正文核。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "不得新增只做条件取值的方法"
+section = "表达式与调用写法"
+min = 11
 [[guards.check_ternary_extraction_guard]]
 bullet = "判空/默认值兜底优先用工具方法"
 file = "specs/general/coding.adoc"
 kind = "bullet_tokens"
 message = "条件取值方法防线被破坏：{file} 的「判空/默认值兜底优先用工具方法」条**本条自己的正文**缺失 {missing}——缺「没有现成工具方法就加一个通用方法、不就地抽专用方法」的去向时，兜底会重新退回逐处内联与逐处专用方法"
 section = "表达式与调用写法"
+min = 9
 tokens = [
     "判空/默认值兜底优先用工具方法",
     "**没有现成工具方法时，取值的去向是",
@@ -1512,12 +1567,21 @@ tokens = [
 
 # Java 落点：没有现成入口时给项目自有工具类**补一个通用方法**（`@UtilityClass`
 # 的 `*Utils`），不得就地写三元/if-else、也不得就地抽专用方法。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "判空/默认值兜底优先用工具方法"
+section = "表达式与调用写法"
+min = 9
 [[guards.check_ternary_extraction_guard]]
 bullet = "判空兜底用默认值工具方法"
 file = "specs/stack/java-syntax.adoc"
 kind = "bullet_tokens"
 message = "条件取值方法防线被破坏：{file} 的「判空兜底用默认值工具方法」条**本条自己的正文**缺失 {missing}——缺 Java 落点时，执行者不知道该把通用方法补到哪、会把三元写回调用点"
 section = "工具类使用约定"
+min = 8
 tokens = [
     "判空兜底用默认值工具方法（Java 落点）",
     "`specs/general/coding.adoc`",
@@ -1528,3 +1592,77 @@ tokens = [
     "`StrUtil.emptyToDefault(x, default)`",
     "**没有现成入口时补通用方法的落点是项目自有工具类**",
 ]
+
+# 工具类不继承另一个工具类（**用户提出，Issue #217**）——判据本体跨语言，落通用层
+# 「类设计」；Java 侧载体落 `java-syntax.adoc`「工具类定义」。两处都按**条目自己的正文**核
+# （相邻条目含「工具类」字样，按整节核会被兜住）。只钉"判据是否仍在"——"某个类算不算
+# 工具类""某处继承是不是工具类之间的继承"属语义判断，交人/子 agent 复核。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/stack/java-syntax.adoc"
+kind = "anchor_count"
+bullet = "判空兜底用默认值工具方法"
+section = "工具类使用约定"
+min = 8
+[[guards.check_tool_class_inheritance_guard]]
+bullet = "工具类不继承另一个工具类"
+file = "specs/general/coding.adoc"
+kind = "bullet_tokens"
+message = "工具类继承防线被破坏：{file} 的「工具类不继承另一个工具类」条**本条自己的正文**缺失 {missing}——判据被抽走时，「公共方法抽到基类里」「方法都还调得到」会把工具类继承放回来"
+section = "类设计"
+min = 13
+tokens = [
+    "工具类不继承另一个工具类（L1，任何语言）",
+    "不得继承另一个工具类",
+    "继承链里不得出现两个工具类相邻",
+    "**理由**",
+    "**无状态、无多态**",
+    "**判定标准（任一命中即违规）**",
+    "不论继承者是否另加了方法、是否为 `abstract`",
+    "**边界（L2，防反用）**",
+    "**只管工具类之间的继承**",
+    "**存量边界（L1）**",
+    "既有这类继承一律不视为违规、不告警、不要求整改",
+    "批量拆基类、批量挪方法",
+    "**「工具类不得继承工具类」是本集合自己的判据化取舍**",
+]
+
+# Java 落点（`java-syntax.adoc`「工具类定义」）：给载体——认类看命名与用法、
+# `@UtilityClass` 自带私有构造器故不可被继承、公共部分去向是组合与静态导入；
+# 并回指 `java.adoc`「命名」把 JDK 扩展类/补齐类排除在工具类之外。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_tool_class_inheritance_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "工具类不继承另一个工具类"
+section = "类设计"
+min = 13
+[[guards.check_tool_class_inheritance_guard]]
+bullet = "工具类不继承工具类"
+file = "specs/stack/java-syntax.adoc"
+kind = "bullet_tokens"
+message = "工具类继承防线被破坏：{file} 的「工具类不继承工具类」条**本条自己的正文**缺失 {missing}——缺 Java 落点时，执行者不知道 `@UtilityClass` 本就不可被继承、会把静态方法重新抽成基类"
+section = "工具类定义"
+min = 9
+tokens = [
+    "工具类不继承工具类（L1，Java 落点）",
+    "不得 `extends` 另一个工具类",
+    "`specs/general/coding.adoc`",
+    "此处**不复述**",
+    "**Java 侧只给载体**",
+    "**不因它继承了谁而改变性质**",
+    "**lombok 的 `@UtilityClass` 自带私有构造器、本身不可被继承**",
+    "**不新起一个工具基类**",
+    "**明确排除在工具类之外**",
+]
+
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_tool_class_inheritance_guard]]
+file = "specs/stack/java-syntax.adoc"
+kind = "anchor_count"
+bullet = "工具类不继承工具类"
+section = "工具类定义"
+min = 9

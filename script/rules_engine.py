@@ -100,6 +100,9 @@ DEFAULTS = {
     "missing_file_message": "缺少 {file}——该条的落点无处承载（文件被删则判据一并消失）",
     "missing_section_message": "缺少 {file}「{section}」——该条的判据失去落点",
     "missing_bullet_message": "缺少 {file} 的 `* **{bullet}` 条目——条目级判据须落在该 bullet 正文上",
+    "anchor_count_message": "规则数据里 `{file}` 的 `* **{bullet}` 一条只剩 {have} 项锚点（基线 {min}）"
+                            "——锚点被删时规范正文一字不少、防线却少核一项，"
+                            "报绿与「核过且通过」看起来一样；删锚点须与调基线一并发生",
     "missing_line_message": "缺少 {file} 的对应条目——没有登记行则该条实际失效",
     "missing_block_message": "缺少 {file} 的 `{marker}` 片段——该边界在提示词侧失去落点",
     "file_message": "缺少 {file}——该条的落点无从核对",
@@ -366,6 +369,42 @@ def _step_bullet_tokens(rules, step):
     miss = [t for t in step["tokens"] if t not in scope]
     if miss:
         ctx.err(step["message"].replace("{missing}", str(miss)), rel)
+
+
+def _paired_bullet_token_count(rules, step) -> int:
+    """取本步所指的那条 `bullet_tokens` 步骤的锚点条数（同一防线、同 file + bullet）。"""
+    guard = step.get("_guard")
+    if guard is None:
+        return 0
+    for other in rules.steps(guard):
+        if (other is not step and other.get("kind") == "bullet_tokens"
+                and other.get("file") == step.get("file")
+                and other.get("bullet") == step.get("bullet")):
+            return len(other.get("tokens", []))
+    return 0
+
+
+def _step_anchor_count(rules, step):
+    """核「锚点清单自身的条数」——**规则数据里的锚点被删**是唯一一种"防线零证据"的形态。
+
+    其余步骤核的都是"现场文档里有没有这些锚点"；而锚点清单**自己**被删掉几项时（规范正文
+    一字未动），现场什么都不缺、防线一次也不报错——`miss` 是空集，"核过且通过"与"没核"
+    看起来一模一样。本步把清单条数变成可核对的：低于 `min` 即报错并给出本条清单的现值。
+
+    实测（本仓库）：把规则数据里某条锚点整行删掉、规范正文一字未动，`python3 script/check_specs.py`
+    仍报"OK 规范检查全部通过"——**判据被静默摘走一项**，且与"核过且通过"无从区分。
+
+    `min` 取**当前条数**（不是理想条数）：本判据只拦"无声变少"，拦不住"本来就少"。
+    删清单须与改 `min` 一并发生，于是这个动作在 diff 里可见。
+    """
+    ctx = rules.ctx
+    have = _paired_bullet_token_count(rules, step)
+    floor = step["min"]
+    if have < floor:
+        ctx.err(_msg(step, "anchor_count_message")
+                .replace("{file}", step["file"]).replace("{have}", str(have))
+                .replace("{min}", str(floor)).replace("{bullet}", step["bullet"]),
+                step["file"])
 
 
 def _step_prompt_files_groups(rules, step):
@@ -906,6 +945,7 @@ KINDS = {
     "split_block": _step_split_block,
     "regex_section": _step_regex_section,
     "bullet_tokens": _step_bullet_tokens,
+    "anchor_count": _step_anchor_count,
     "prompt_files_groups": _step_prompt_files_groups,
     "section_bullets": _step_section_bullets,
     "text_block_groups": _step_text_block_groups,
@@ -955,8 +995,14 @@ class Rules:
     # ---- 执行 ----
 
     def run(self, guard: str) -> None:
-        """跑某道防线的全部规则步骤（步骤相互独立：任一失败即报错、其余照跑）。"""
+        """跑某道防线的全部规则步骤（步骤相互独立：任一失败即报错、其余照跑）。
+
+        运行前给每步注入 `_guard`（**运行期视图，不回写规则数据**）：步骤之间可以互相
+        取用对方的信息（如 `anchor_count` 取同防线同 bullet 的 `bullet_tokens` 步的锚点条数），
+        故步骤须知道自己属于哪道防线。
+        """
         for step in self.steps(guard):
+            step["_guard"] = guard
             self._run_step(step)
 
     def _run_step(self, step):

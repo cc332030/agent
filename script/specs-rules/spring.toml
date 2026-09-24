@@ -175,6 +175,7 @@ file = "specs/stack/spring.adoc"
 kind = "bullet_tokens"
 message = "配置项绑定防线被破坏：{file} 的「配置项统一用 `@ConfigurationProperties` 绑定（L1）」条**本条自己的正文**缺失 {missing}——该条对应用户提出的要求（外部配置只允许 `@ConfigurationProperties`、禁止 `@Value`），不得删除、不得降级、不得把 `@Value` 放回允许面"
 section = "配置"
+min = 10
 tokens = [
     # 条文与禁止面（防被降级成「@Value 仅限少量简单配置」那类弹性口径——判据不可核对即失效）
     "禁止使用 `@Value`",
@@ -193,6 +194,14 @@ tokens = [
     "The Twelve-Factor App",
 ]
 
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_value_binding_guard]]
+file = "specs/stack/spring.adoc"
+kind = "anchor_count"
+bullet = "配置项统一用 `@ConfigurationProperties` 绑定（L1）"
+section = "配置"
+min = 10
 [[guards.check_value_binding_guard]]
 anchor = ["Spring 项目"]
 file = "AGENTS_COMMON.adoc"

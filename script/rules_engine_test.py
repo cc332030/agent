@@ -387,6 +387,55 @@ class TestBulletTokens(unittest.TestCase):
         self.assertEqual(len(ctx.errors), 1)
 
 
+class TestAnchorCount(unittest.TestCase):
+    """`anchor_count`：核**锚点清单自己的条数**（规则数据里锚点被删的唯一机械抓手）。
+
+    要治的失效：锚点被删时规范正文一字不少、现场什么都不缺，`bullet_tokens` 的 `miss`
+    是空集——"核过且通过"与"根本没核"完全一样（本仓库实测：删掉规则数据里的某条锚点后，
+    `check_specs.py` 仍报"OK 规范检查全部通过"）。
+    """
+
+    DOC = "= t\n\n== 节\n\n* **目标条目**：要点 A 与 要点 B\n"
+
+    def _steps(self, tokens, floor):
+        return [
+            {"kind": "bullet_tokens", "file": "a.adoc", "section": "节",
+             "bullet": "目标条目", "tokens": tokens,
+             "message": "缺 {missing}", "missing_bullet_message": "缺条目",
+             "missing_section_message": "缺节"},
+            {"kind": "anchor_count", "file": "a.adoc", "section": "节",
+             "bullet": "目标条目", "min": floor},
+        ]
+
+    def test_at_floor_passes(self):
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        _rules({"g": self._steps(["要点 A", "要点 B"], 2)}, ctx).run("g")
+        self.assertEqual(ctx.errors, [])
+
+    def test_below_floor_reports(self):
+        # 锚点被删一项：现场一字未动，`bullet_tokens` 一声不响，只有本步报得出
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        _rules({"g": self._steps(["要点 A"], 2)}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+        self.assertIn("只剩 1 项锚点", ctx.texts())
+        self.assertIn("基线 2", ctx.texts())
+
+    def test_counts_paired_step_not_itself(self):
+        # 条数取**成对那一步**（同防线同 file + bullet）的 `tokens`，不是本步自己的
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        steps = self._steps(["要点 A", "要点 B"], 2)
+        steps[1]["tokens"] = ["与现场无关的一项"]
+        _rules({"g": steps}, ctx).run("g")
+        self.assertEqual(ctx.errors, [])
+
+    def test_unpaired_reports(self):
+        # 找不到成对的那一步 -> 条数 0（配置写错时不得静默放过）
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        _rules({"g": [{"kind": "anchor_count", "file": "a.adoc", "section": "节",
+                       "bullet": "目标条目", "min": 1}]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+
+
 class TestPromptFilesGroups(unittest.TestCase):
     def test_each_prompt_file_checked(self):
         ctx = FakeCtx({"prompts/a.txt": "要点 A", "prompts/b.txt": "没有"},
