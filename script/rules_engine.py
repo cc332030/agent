@@ -108,6 +108,7 @@ DEFAULTS = {
     "file_message": "缺少 {file}——该条的落点无从核对",
     "dup_message": "{a}:{line_a} 与 {b}:{line_b} 逐字重合 {overlap} 字：`{frag}`",
     "dup_missing_files_message": "逐字重复扫描的落点不足（{file}）——少于两个可核对文档时该防线空转",
+    "missing_files_message": "{file} 一份都取不到——落点整个缺失时该判据空转（不得当成'没有内容就是通过'）",
 }
 
 
@@ -951,6 +952,70 @@ def _step_duplicate_scan(rules, step):
 
 
 
+def _step_table_row_pipe(rules, step):
+    """**表格行不得以 `|` 收尾**：维护范围内的每份文档里，`|===` 之间的表格行（以 `|` 起头）
+    若以 `|` 结尾即报红——AsciiDoc 把它读成**多出一个空单元格**的残缺行。
+
+    为什么需要它：`check_asciidoctor_syntax` 是**确定项**校验，但它只在"本机能装出
+    `asciidoctor`"时跑得出问题（本仓库实证：本机长期没有处理器，该段报错而不是报出问题，
+    于是**行尾多出的一个 `|`** 安静地留在了 `guards.adoc` 的清单表里）。这类错字有两个
+    恶果：① 编译告警（`dropping cells from incomplete row detected end of table`）；
+    ② **整表错乱**——多一个空单元格会让后续单元格整体错位，报出的行号还落到**别的行**上。
+    而它**不会**被任何按文本核锚点的检查发现（文本一字不少、锚点全在）。
+
+    判据（可逐字判定，与处理器版本无关）：表格行**以 `|` 收尾**即报红；行内相邻单元格之间
+    照旧以管道分隔。**行尾那个 `|` 之后的行内注释（`// ...`）与硬换行标记（`+`）先剥掉
+    再看正文**——实测 `asciidoctor 2.0.26` 对"裸行尾管道""管道后跟注释""管道后跟硬换行"
+    三种写法报的是同一句 `dropping cells from incomplete row detected end of table`，
+    只核裸形态会把后两种**漏放**。只核这一种形态——"表格该有几列""某行的单元格是否
+    漏写"属语义性判断，仍由 `check_asciidoctor_syntax` 编译验证承担。
+
+    规则参数：
+      * `files`（可选）：参与检测的**文件清单**；不给时取维护范围内的全部 `.adoc`
+        （`ctx.adoc_files()`，与语法编译段**同一处收集实现**）——**不另列维护根清单**，
+        否则"哪些文档算维护范围"就有两处真源、改一处必漏另一处。
+    """
+    ctx = rules.ctx
+    files = step.get("files") or []
+    if not files:
+        # 维护范围**不外列清单**：`adoc_files()` 与语法编译段同源（同一处实现），
+        # 规则数据再自列一份"哪些根算维护范围"就是第二真源——改一处必漏另一处
+        # （本条立项的失效形态正是"两处各自漂移"）。未提供时按同源口径取全量。
+        files = ctx.adoc_files() if hasattr(ctx, "adoc_files") else []
+    files = sorted(set(files))
+    if not files:
+        ctx.err(_msg(step, "missing_files_message").replace("{file}", "维护范围内的 .adoc"),
+                "")
+        return
+    for rel in files:
+        text = ctx.read(rel)
+        if text is None:
+            ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
+            continue
+        in_table = False
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if line.strip().startswith("|==="):
+                in_table = not in_table
+                continue
+            if not in_table or not line.startswith("|"):
+                continue
+            # 行尾那个 `|` 之后还可能有**行内注释**（`// ...`）或**硬换行**（`+`）——
+            # AsciiDoc 同样把它们读成"多一个空单元格"（实测 `asciidoctor 2.0.26` 对
+            # `| A | B | // x` 与 `| A | B | +` 都报同一句
+            # `dropping cells from incomplete row detected end of table`）。故先把
+            # 行内注释与硬换行标记剥掉，再看剩下的正文是否以 `|` 收尾——否则这两种
+            # 真实残缺行会**漏放**（只核"裸行尾管道"一种形态时它们全绿）。
+            body = line.rstrip()
+            body = re.sub(r"\s*//.*$", "", body) if " // " in body or body.endswith("//") else body
+            body = body.rstrip()
+            while body.endswith(" +"):
+                body = body[:-2].rstrip()
+            if body.endswith("|"):
+                ctx.err(step["message"].replace("{file}", rel)
+                        .replace("{line}", str(lineno)),
+                        rel, lineno)
+
+
 KINDS = {
     "exists": _step_exists,
     "section_groups": _step_section_groups,
@@ -970,6 +1035,7 @@ KINDS = {
     "dispatcher_no_verbatim": _step_dispatcher_no_verbatim,
     "duplicate_scan": _step_duplicate_scan,
     "pointer_no_verbatim": _step_pointer_no_verbatim,
+    "table_row_pipe": _step_table_row_pipe,
 }
 
 

@@ -90,6 +90,9 @@ def _mk_blackbox_base(root: str) -> str:
     return specs
 
 
+NL = "\n"   # 夹具里的换行占位（避免源码里出现真换行、读起来分不清"这是内容还是缩进"）
+
+
 class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
@@ -1443,6 +1446,89 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_table_row_pipe_guard（表格行不得以管道收尾）
+# --------------------------------------------------------------------------- #
+class TestTableRowPipeGuard(CheckSpecsTestCase):
+    """钉住『表格行不得以管道收尾』（**本轮 Issue #221 实测的失效路径**）。
+
+    AsciiDoc 把行尾多出的那个管道符读成"多一个空单元格"的残缺行：编译报
+    `dropping cells from incomplete row detected end of table`，且**整表单元格错位**、
+    报错行号落到别的行上。这类错字**不会被任何文本核锚点的检查发现**（文本一字不少）；
+    唯一发现路径是 `check_asciidoctor_syntax` 的编译告警——而本机装不出处理器时那一段
+    报错而非报出问题（本仓库实证：行尾多出的管道符长期留在 `guards.adoc` 的清单表里）。
+    故本道**与处理器版本无关**、不依赖外部程序即可核。
+    """
+
+    _HEAD = ("= 清单" + NL + NL + '[cols="1,2,3", options="header"]' + NL
+             + "|===" + NL + "| 序号 | 防线 | 钉住什么" + NL + NL)
+
+    def test_trailing_pipe_reports(self):
+        # 反例①：行尾多一个管道符（本轮实测的真实形态）
+        self.write("specs-project-maintainer/guards.adoc", self._HEAD
+                   + "| 1 | `check_a` | 用途" + NL
+                   + "| 2 | `check_b` | 用途 |" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertIn("收尾", self.error_texts())
+        self.assertIn("guards.adoc", self.error_texts())
+
+    def test_clean_table_passes(self):
+        # 正例：表格行行尾不写管道符（行内相邻单元格之间照旧以管道分隔）
+        self.write("specs-project-maintainer/guards.adoc", self._HEAD
+                   + "| 1 | `check_a` | 用途" + NL
+                   + "| 2 | `check_b` | 用途" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_pipe_outside_table_not_reported(self):
+        # 边界：表格之外的行以管道符收尾不属本条——AsciiDoc 只把表格块内的管道符
+        # 当单元格分隔，正文里的管道符是普通字符（防误伤）
+        self.write("specs/general/a.adoc", "= T" + NL + NL + "正文一行以管道符结尾 |" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_trailing_pipe_before_comment_reports(self):
+        # 反例①′：行尾 `|` 之后还有**行内注释**——AsciiDoc 同样读成"多一个空单元格"
+        # （实测 `asciidoctor 2.0.26`：`| D | E | F | // x` 报同一句
+        # `dropping cells from incomplete row detected end of table`）。
+        # 只核"裸行尾管道"一种形态时这一行**漏放**。
+        self.write("specs-project-maintainer/guards.adoc", self._HEAD
+                   + "| 1 | `check_a` | 用途" + NL
+                   + "| 2 | `check_b` | 用途 | // 备注" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertIn("收尾", self.error_texts())
+
+    def test_trailing_pipe_before_hard_break_reports(self):
+        # 反例①″：行尾 `|` 之后还有**硬换行标记**（`+`）——同上，AsciiDoc 同样报
+        # `dropping cells from incomplete row detected end of table`。
+        self.write("specs-project-maintainer/guards.adoc", self._HEAD
+                   + "| 1 | `check_a` | 用途" + NL
+                   + "| 2 | `check_b` | 用途 | +" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertIn("收尾", self.error_texts())
+
+    def test_comment_after_clean_row_passes(self):
+        # 正例：行尾本来没有 `|`，注释/硬换行标记不得把这一行误报（防剥标记时误伤）
+        self.write("specs-project-maintainer/guards.adoc", self._HEAD
+                   + "| 1 | `check_a` | 用途 // 备注" + NL
+                   + "| 2 | `check_b` | 用途 +" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_landing_reports(self):
+        # 反例②：落点整个缺失（防线无从核对，不得静默通过）
+        cm.check_table_row_pipe_guard()
+        self.assertTrue(cm.errors)
+
+    def test_multiple_landings_all_checked(self):
+        # 反例③：多个维护根逐份核（只核一个文件时，别的落点里的同形错字无人发现）
+        self.write("specs/general/a.adoc", "= T" + NL + NL + "|===" + NL + "| x | |" + NL + "|===" + NL)
+        self.write("library/b.adoc", "= T" + NL + NL + "|===" + NL + "| x | |" + NL + "|===" + NL)
+        cm.check_table_row_pipe_guard()
+        texts = self.error_texts()
+        self.assertIn("specs/general/a.adoc", texts)
+        self.assertIn("library/b.adoc", texts)
+
+
 # check_refs_exist：目录型引用
 # --------------------------------------------------------------------------- #
 class TestCheckRefsExistDirRefs(CheckSpecsTestCase):
@@ -5472,7 +5558,7 @@ class TestCheckDeclarativeRuleGuard(CheckSpecsTestCase):
         "**不写\"取不到时就用某个具体写法\"**：规则并没有变干净。\n"
         "* **例外只在有歧义时开口（L1）**：只有当**按定义做不出唯一动作**时才给具体操作——"
         "且**只补\"消除歧义所需的那一句\"**。\n"
-        "* **生效面（L1）**：**新增、修复、review** 三类动作都按本条判定（存量随动迁移；"
+        "* **生效面（L1）**：**新增、修复、review** 三类动作都按本条判定（存量随动迁移、不单独发动全库清理）；"
         "review 时把\"正文里写着怎么取\"当必查项）。\n"
         "* **判定标准（可核对）**：抽掉**本仓库/当前环境/当前平台**的专有名词后规则是否仍成立——"
         "**要靠\"在哪台机器上、用什么命令取\"才成立的句子，就不是规则**。\n"
@@ -6856,7 +6942,7 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         "* **边界（防反用，L1）**：**内容不减少（最高关注项 P3）优先于本条**；"
         "**只有\"这一句没有承载\"才是**；把多条判据合并成一句口号属**违反 P3**。\n"
         "* **适用面（L2）**：适用于会被他人读的产物；**不适用**于代码与测试断言。\n"
-        "* **发现即改、不单独发动全库清理（L2）**：按**随动迁移**执行。\n"
+        "* **发现即改、不单独发动全库清理（L2）**：改到哪就按本条看哪（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "* 依据（标准名/编号）：**GB/T 7713.2-2022** 与 **GB/T 7713.1-2025**；"
         "**ISO/IEC Directives Part 2**；**ISO/IEC/IEEE 29148**。\n\n"
         "== 文档组织与导航\n\n* 略。\n")
@@ -7013,7 +7099,7 @@ class TestCheckAlterMergeGuard(CheckSpecsTestCase):
         "** **例外面（只适用于 DML）**：合并只约束**执行者本次新写的 DML**——"
         "**用户主动写的 DML 一律不动、不告警**；**DDL 不适用这个例外**"
         "（用户原话：「此条只使用于 dml，ddl 一定会锁表」）。**DML 优先合并**。\n"
-        "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n"
+        "** **存量边界**：发现即改、不单独发动全库清理（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "* 依据（标准名/编号）：MySQL 官方文档（`ALTER TABLE` 语法、Online DDL）。\n\n"
         "== 缓存与热点\n\n* 略。\n")
 
@@ -7118,7 +7204,8 @@ class TestCheckAlterMergeGuard(CheckSpecsTestCase):
     def test_legacy_boundary_removed_reports(self):
         # 反例：存量边界被删 -> 会被读成"立刻发动全库改写历史迁移"
         self._write(section=self.SECTION.replace(
-            "** **存量边界**：发现即改、不单独发动全库清理，按随动迁移执行。\n", ""))
+            "** **存量边界**：发现即改、不单独发动全库清理"
+            "（随动迁移，见 `specs/core/execution.adoc`）。\n", ""))
         cm.check_alter_merge_guard()
         self.assertIn("存量边界", self.error_texts())
 
@@ -7301,7 +7388,7 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
         "**也不得顺手给它加 `implements Serializable`**。\n"
         "* **显式声明优先于抑制（L1）**：以 `@SuppressWarnings` 代替显式声明不算完成"
         "（见 `specs/general/coding.adoc`「警告与弃用」）。\n"
-        "* **判定标准（任一命中即违规）**：①②③④。**存量**按「存量处理」随动迁移。\n"
+        "* **判定标准（任一命中即违规）**：①②③④。**存量**：随动迁移，见 `specs/core/execution.adoc`。\n"
         "* 依据（标准名/编号）：**Java Object Serialization Specification**、"
         "**Java 官方 API 文档**、ISO/IEC 25010、ISO/IEC/IEEE 29148；"
         "**「默认取 `1L`」是本集合的取值**。\n\n"
@@ -8497,8 +8584,8 @@ class TestCheckConfigClassGuard(CheckSpecsTestCase):
         "需计算/转换/组装时下沉到工具类或服务中。"
         "判定标准：①不得出现条件分支与循环；②不得做计算与对外部对象的访问；"
         "③`@Bean` 方法须是构造/装配形态。"
-        "识别特征：以 Config/Properties/Options/Settings 等命名的类"
-        "（已有存量按「规范变更的存量处理」随动迁移）\n")
+        "识别特征：以 Config/Properties/Options/Settings 等命名的类。"
+        "**存量处理**：本条严于框架常规用法（随动迁移，见 `specs/core/execution.adoc`）。\n")
 
     def setUp(self) -> None:
         super().setUp()
@@ -8528,8 +8615,8 @@ class TestCheckConfigClassGuard(CheckSpecsTestCase):
                    "* 配置类不写逻辑（**任何情况都不允许**）：`@ConfigurationProperties` 类与 "
                    "`@Configuration` 类只承载配置项声明与装配，逻辑下沉到工具类或 Service"
                    "（判定标准：条件分支为零、不做计算与对外访问）。\n"
-                   "* 与框架既有做法的边界：本条**严于** Spring 的常规用法，"
-                   "已有项目按「规范变更的存量处理」随动迁移。\n")
+                   "* 与框架既有做法的边界（防静默推翻）：本条**严于** Spring 的常规用法，"
+                   "已有项目改到的文件顺带调整（随动迁移，见 `specs/core/execution.adoc`）。\n")
         self.write("README.adoc", "目录结构：通用编码（含**配置类不写逻辑**）。\n")
 
     def test_valid_config_class_guard_passes(self):
@@ -8586,7 +8673,7 @@ class TestCheckConfigClassGuard(CheckSpecsTestCase):
         # 反例：未写存量边界 → 严于框架常规用法的条目会变成"静默推翻引用方既有做法"
         self._write_valid()
         self.write("specs/general/coding.adoc",
-                   self.CODING.replace("（已有存量按「规范变更的存量处理」随动迁移）", ""))
+                   self.CODING.replace("（随动迁移，见 `specs/core/execution.adoc`）", ""))
         cm.check_config_class_guard()
         self.assertIn("存量处理", self.error_texts())
 
@@ -8667,8 +8754,8 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         "给不出默认时须显式声明必填失败面，**禁止既无默认又不声明**。"
         "判定标准：二者必居其一。\n"
         "* 能自动装配就不要求接入方手写（L2）：如 SPI 自动装配（`ServiceLoader`）。\n"
-        "* 存量边界：本条适用于新写的对外能力与改到的既有抽象"
-        "（按「规范变更的存量处理」随动迁移、不发动全库改造）。\n"
+        "* 存量边界：适用面为**新写的对外能力**与**改到的既有抽象**"
+        "（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "* 多实现用限定符、不逐层传参（L2）：用限定符/命名 Bean 区分，"
         "禁止参数穿透；跨层级对象用作用域/上下文对象承载。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO 9241-110、ISO/IEC/IEEE 29148、"
@@ -8759,7 +8846,7 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         # 反例：存量边界被删 → 该条（严于常见既成做法）会被读成"必须立即全量重构"
         self._write_valid()
         self.write("specs/general/coding.adoc",
-                   self.CODING.replace("不发动全库改造", ""))
+                   self.CODING.replace("随动迁移，见 `specs/core/execution.adoc`", ""))
         cm.check_abstraction_adoption_guard()
         self.assertIn("存量边界", self.error_texts())
 
@@ -10807,7 +10894,9 @@ class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
         "仍属可一起移动。**判定标准（任一命中即违规）**：①另建新建的请求/响应类而项目内已有等价同类；"
         "②该新建类与既有类**同名或仅差包名**；③只**复制**既有类而不改原引用；"
         "④以「它依赖本项目的其他模块」为由拒绝移动；⑤**移动了数据库实体类**而没有用户声明。"
-        "存量随动迁移（不发动全库改造）。依据：ISO/IEC 25010 可维护性。\n"
+        "**存量边界**：改到哪个接口才顺带调整"
+        "（随动迁移，见 `specs/core/execution.adoc`）。"
+        "依据：ISO/IEC 25010 可维护性。\n"
     )
 
     SPRING = (
@@ -10815,7 +10904,7 @@ class TestCheckApiContractReuseGuard(CheckSpecsTestCase):
         "* **HTTP 接口路径优先用中划线（kebab-case）（L1）**：路由路径的**路径片段**须用小写 + 中划线（`-`），"
         "**不得**用下划线（`_`）或驼峰/大写。**两处照旧**：①**服务路由前缀/网关前缀**；"
         "②**已发布、外部依赖的对外路径**。**判定标准**：①路径里出现 `_`；②路径片段用驼峰/大写；"
-        "③同一接口内两种风格混用。存量路径按「规范变更的存量处理」随动迁移。"
+        "③同一接口内两种风格混用。**存量边界**：不发动全库改名（随动迁移，见 `specs/core/execution.adoc`）。"
         "**与命名规则的分工**：本条只管**路径字符串**，类名命名按 link:java.adoc[]「命名」。"
         "依据：RFC 3986。\n"
     )
@@ -11022,7 +11111,7 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "* **判定标准（任一命中即违规）**：①出现技术自带构造器的直接 `new`；②列名以字符串写进"
         "查询构造；③绕过统一入口自建查询构造。\n"
         "* **例外与边界（L2）**：不禁止「跨语言执行脚本的落点」所指的映射文件承载。\n"
-        "* **存量边界**：按「规范变更的存量处理」随动迁移。\n"
+        "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148。\n"
         "\n== 跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）\n"
         "* 略。\n"
@@ -11043,7 +11132,7 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "* **判定标准（任一命中即违规）**：①构造器 `new`；②出现 `Wrappers.lambdaQuery()` 一类"
         "**静态构造方法**而本 Service 的成员方法可表达；③列名以字符串写进查询构造"
         "（可用方法引用表达时）；④绕过本实体 Service 的成员方法另起一套访问写法。\n"
-        "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
+        "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
     )
 
     # 调度器**只给触发特征**（在哪个类里调持久化 API、要查/改库时即命中），
@@ -11391,7 +11480,7 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "* **映射声明的落点**：映射声明与转换方法独立成文件、不塞进纯数据结构类。\n"
         "* **例外与边界（L2）**：①映射声明表达不了的语义不在本条适用，可在映射声明内以自定义方法承接；"
         "②**无嵌套（单层）的转换不在本条范围内**（与字段数量无关）。\n"
-        "* **存量边界**：按「规范变更的存量处理」随动迁移。\n"
+        "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148。\n"
         "\n== 代码复用\n* 略。\n"
     )
@@ -11407,7 +11496,7 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "或集合映射方法表达；手写循环不构成违规。\n"
         "* **不并存两套写法（先例优先）**：项目已有转换工具/既有 Converter 先例时跟随先例并在其基础上扩展。\n"
         "* **例外与边界（L2）**：**无嵌套（单层）的转换不在本条范围内**；确需手写时在**代码注释备注原因**。\n"
-        "* **存量**按 link:../core/execution.adoc[]「规范变更的存量处理」随动迁移。\n"
+        "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
     )
 
     GENERIC = (
@@ -11869,8 +11958,8 @@ class TestCheckLombokConstructorGuard(CheckSpecsTestCase):
         "** **判定标准（任一命中即违规）**：①类中出现手写的构造方法，而该构造可由注解表达；"
         "②同一类里手写与 lombok 生成的构造方法并存；③以「lombok 表达不了」为由手写而未写原因。\n"
         "** 例外（L2，须写清理由）**：构造期需要注解表达不了的动作（校验/规范化/防御性拷贝）时，"
-        "可手写该构造方法，须在代码**注释**写明原因。**存量**按 link:../core/execution.adoc[]"
-        "「规范变更的存量处理」随动迁移。\n"
+        "可手写该构造方法，须在代码**注释**写明原因。**存量边界**：随动迁移，见"
+        " `specs/core/execution.adoc`。\n"
         "** 依据（标准名/编号）：ISO/IEC 25010（可维护性）；ISO/IEC/IEEE 29148（判定须可验证）。\n"
     )
 
@@ -12011,8 +12100,8 @@ class TestCheckEntityDtoGuard(CheckSpecsTestCase):
         "* **例外与边界（L2）**：① **纯内部调用**不在本条范围内；"
         "② **持久化自身的出口**不受本条约束；③ 项目自身规范可加严或收窄本条、"
         "冲突时以项目自身规范为准。\n"
-        "* **存量边界（L1，用户点名「已经用了不管」）**：已有接口一律不视为违规、不告警、"
-        "不要求整改；按「规范变更的存量处理」**随动迁移**，不得据此发动全库改造。\n"
+        "* **存量边界（L1，用户点名「已经用了不管」）**：改到哪个接口才顺带调整"
+        "（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "* **例外之例外**：**除非用户主动声明**允许某处以数据库实体类作为请求/响应参数，"
         "否则一律适用本条。声明仅对该次任务、该处生效、**不得泛化**。\n"
         "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、OWASP API Security Top 10。\n"
@@ -12223,7 +12312,8 @@ class TestCheckJavaInterfaceAccessorGuard(CheckSpecsTestCase):
         "** **例外（L2，主动声明才生效）**：**除非主动声明**否则一律适用；声明**仅对该处生效、"
         "**不得泛化**。\n"
         "** **存量边界（L1，用户点名「已经有的不管，也不告警」）**：**既有接口不视为违规、"
-        "**不告警**、不要求整改**，按「存量处理」**随动迁移**；**不得**发动全库改造。\n"
+        "**不告警**、不要求整改**，改到哪个接口才顺带调整；**不得**发动全库改造"
+        "（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "** 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、**Project Lombok 官方文档**；"
         "**「接口只加 get、不加 set」是本集合自己更严的判据化取舍**。\n"
         # 相邻条目（真实文件里就在同节）：它也有『不适用本条』——按整文件核关键词时会把
@@ -12317,7 +12407,8 @@ class TestCheckJavaInterfaceAccessorGuard(CheckSpecsTestCase):
         # 反例⑤（用户点名要件）：存量口径被删 → L1 被扩到存量接口上，存量项目大面积命中
         self.write("specs/stack/java.adoc", self.JAVA.replace(
             "** **存量边界（L1，用户点名「已经有的不管，也不告警」）**：**既有接口不视为违规、"
-            "**不告警**、不要求整改**，按「存量处理」**随动迁移**；**不得**发动全库改造。\n", ""))
+            "**不告警**、不要求整改**，改到哪个接口才顺带调整；**不得**发动全库改造"
+            "（随动迁移，见 `specs/core/execution.adoc`）。\n", ""))
         cm.check_java_interface_accessor_guard()
         self.assertIn("不视为违规", self.error_texts())
 
@@ -12737,7 +12828,7 @@ class TestCheckJavaEnumValueofCatchGuard(CheckSpecsTestCase):
         "② **工具类自身是正常类**：查不到就返回 `null`/`Optional.empty()` 的**本身就合规**，"
         "**此时无需、也不得**为该返回值再补一个空 `catch`；"
         "③ 只约束 Java、**替换主语测试**：非 Java 的对应能力另行判定。"
-        "**存量**按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。"
+        "**存量**：随动迁移，见 `specs/core/execution.adoc`。"
         "**依据（标准名/编号）**：Java 官方 API 文档、ISO/IEC 25010、ISO/IEC/IEEE 29148。"
         "**「只此一种原因才允许空 `catch`」是本集合的判据化取值**。\n")
 
@@ -14008,7 +14099,7 @@ class TestCheckDefaultReviewScopeGuard(CheckSpecsTestCase):
         "review **默认只查问题**：**代码问题、文档问题、用例问题**三类。\n\n"
         "* **默认检查面（L1）**：review 只提出三类问题。其余规范条目**只约束\"本次新增/"
         "修改的内容\"**，对存量**默认不查、不报、不要求整改**。\n"
-        "* **存量不动、随动迁移（L1）**：按 `specs/core/execution.adoc`「规范变更的存量处理」"
+        "* **存量不动、随动迁移（L1）**：改到哪个文件才顺带调整，见 `specs/core/execution.adoc`"
         "**随动迁移**；**review 不得据此提出问题**。\n"
         "* **唯一例外是主动声明（L1）**：**声明是例外而非默认**，且**仅对当次生效**、"
         "**不得泛化**为默认检查面。\n"
@@ -16689,6 +16780,87 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         names = cm._collectable_test_names("script/check_specs_test.py", src)
         self.assertEqual({"A.test_same", "B.test_same"}, names)
 
+    def test_malformed_item_number_reports(self):
+        # 反例⑭（本轮实测的缺口）：清单里一条真条目被写成 ` 31b.`、且**缩进 5 格**——
+        # 编号判据的正则取 `^ (\d+)[a-z]?\. `，凡不合该形态的条目行**一条判据都核不到**
+        # （断号/重号/乱序三条全部放行），它于是成了藏在清单里、永不参与核对的第二份描述。
+        # 本仓库实证：`31b.` 那条与它前后的条目并存了多轮，任何检查都没有报过它。
+        self._write_valid(src=self._SRC.replace(
+            'def check_beta_guard():',
+            '     31b. 丙。\n\n\ndef check_beta_guard():'))
+        cm.check_guard_manifest()
+        self.assertIn("编号形态不规范", self.error_texts())
+
+    def test_item_number_with_multi_char_suffix_reports(self):
+        # 反例⑮：后缀不止一个字符（`36b2.`）同样是判据盲区——字符类放宽到 `[a-z0-9]*`
+        # 之后仍须靠"形态"这一条兜住（前缀字符类只保证 `31b` 这类进得来）。
+        self._write_valid(src=self._SRC.replace(
+            'def check_beta_guard():',
+            '     36b2. 丙。\n\n\ndef check_beta_guard():'))
+        cm.check_guard_manifest()
+        self.assertIn("编号形态不规范", self.error_texts())
+
+    def test_well_formed_item_number_passes(self):
+        # 正例：规范形态（单空格缩进 + 纯数字序号）不得被误报——本条判据的假阳性
+        # 会误伤整份清单，故须有正例钉住。
+        self._write_valid(src=self._SRC.replace(
+            'def check_beta_guard():',
+            ' 1. 丙。\n\n\ndef check_beta_guard():'))
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+
+class TestCheckStaleWordingGuard(CheckSpecsTestCase):
+    """钉住『已被证否的旧口径不得写回』防线。
+
+    失效形态（本仓库实证）：口径被现场实测证否后改掉的是**方向**，而"旧的错法长什么样"
+    只留在改动记录里——下一个人照旧句子复述一遍，就把错口径带回脚本注释。故把特征措辞
+    外置成规则数据（`script/specs-rules/_tokens.toml`）并逐条核"有没有被写回来"。
+
+    **核对对象是措辞形态**（`file_forbidden` 原语），"这条口径今天还成不成立"属语义判断。
+    """
+
+    def _write(self, extra: str = "") -> None:
+        self.write("script/check_specs.py",
+                   "def check_alpha_guard():\n"
+                   '    """甲。"""\n\n\n'
+                   + extra)
+
+    def test_stale_wording_absent_passes(self):
+        # 正例：脚本里没有旧口径的特征措辞——不得误报（假阳性会误伤整份脚本的注释）
+        self._write()
+        cm.check_stale_wording_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_stale_def_test_count_wording_reports(self):
+        # 反例①：写回"`*_test.py` 里的 `def test_` 个数"这一**已被证否**的计数口径
+        # （实测证否：源码正则数得到、`unittest` 收集不到，两者不等）
+        self._write("# 用例数＝全部 `*_test.py` 里的 `def test_` 个数\n")
+        cm.check_stale_wording_guard()
+        self.assertIn("证否", self.error_texts())
+
+    def test_stale_single_file_counting_wording_reports(self):
+        # 反例②：写回"只数某一个测试文件"的旧口径（被证否：它长期低于实际收集数，
+        # 使基线虚低、删掉若干条用例都不报红）
+        self._write('# 口径：写成"只数 check_specs_test.py"\n')
+        cm.check_stale_wording_guard()
+        self.assertIn("证否", self.error_texts())
+
+    def test_missing_script_reports(self):
+        # 反例③：核对对象整体缺失 → 须报红，不得静默通过（"核不到"与"核过且通过"要分得清）
+        cm.check_stale_wording_guard()
+        self.assertIn("check_specs.py", self.error_texts())
+
+    def test_anchor_present_in_rule_data(self):
+        # 反向核对：本条钉的措辞**逐条来自规则数据**（不是散落在脚本里的字面量），
+        # 改措辞只改规则数据——两处各写一份正是本仓库反复出现的"第二真源"。
+        import rules_engine
+        specs = rules_engine.load_rule_files(cm._rules_spec())
+        steps = specs["guards"]["check_stale_wording_guard"]
+        self.assertEqual(1, len(steps))
+        self.assertEqual("file_forbidden", steps[0]["kind"])
+        self.assertTrue(steps[0]["forbidden"])
+
 
 class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
     """钉住『模板类内容的单独归类』防线：判据本体 + 两处登记/引用不得被删或降级。
@@ -18048,14 +18220,24 @@ class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
         self.assertIn("链式赋值顺序随字段顺序", self.error_texts())
 
     def test_bullet_present_but_hollow_reports(self):
-        """反例⑪：条目还在、要点被抽空成一句空话 -> 须报。"""
+        """反例⑪：条目还在、要点被抽空成一句空话 -> 须报。
+
+        该条 bullet 由「定义段 + 缩进子段（理由/判定标准/例外/存量/依据）」组成，
+        故"掏空"须把子段一并清掉——只换首行时那些子段原样留着，防线照样全绿，
+        这个用例就不再能证明"掏空会报"（核的是同一条 bullet 的完整正文）。
+        """
         self._write_all_valid()
         keep = ("* **链式赋值顺序随字段顺序（L1，任何语言）**：链式调用里的**赋值环节**"
                 "按**字段顺序**书写，顺序怎么写都行。\n")
         lines = self.CODING_TEXT.splitlines(keepends=True)
         idx = next(i for i, ln in enumerate(lines)
                    if ln.startswith("* **链式赋值顺序随字段顺序（L1，任何语言）**"))
-        self.write(self.CODING, "".join(lines[:idx] + [keep] + lines[idx + 1:]))
+        # 连同其后紧跟的缩进子段（空行 + 两空格起头的续段）一并删除
+        end = idx + 1
+        while end < len(lines) and (not lines[end].strip()
+                                    or lines[end].startswith("  ")):
+            end += 1
+        self.write(self.CODING, "".join(lines[:idx] + [keep] + lines[end:]))
         self._run_guard()
         self.assertIn("本集合的判据化取值", self.error_texts())
 
@@ -18148,7 +18330,7 @@ class TestCheckPaginationGuard(CheckSpecsTestCase):
     REASON = "**当前页、每页条数、总记录数、总页数等分页元数据原样保留**"
     CRITERIA_LINE = "** **判定标准（任一命中即违规）**：\u2460 普通接口的分页查询返回类型不是"
     XREF = "与相邻条目的关系（防误读）"
-    MIGRATION = "随动迁移"
+    MIGRATION = "随动迁移，见 `specs/core/execution.adoc`"
 
     def _write_without_line(self, line_start: str) -> None:
         """把真文档里**以 `line_start` 开头的那一整行**删掉后写进夹具。
@@ -18234,7 +18416,7 @@ class TestCheckPaginationGuard(CheckSpecsTestCase):
         # 反例⑦：存量边界被删 -> 等于要求立刻批量重写既有分页接口
         self._write_mutated(self.MIGRATION)
         cm.check_pagination_guard()
-        self.assertIn("随动迁移", self.error_texts())
+        self.assertIn("随动迁移，见 `specs/core/execution.adoc`", self.error_texts())
 
     def test_basis_line_removed_reports(self):
         # 反例⑧：依据行被整行删掉 -> 读者把本集合的取舍当成框架要求
@@ -18447,9 +18629,9 @@ class TestCheckParamCarrierGuard(_StackGuardTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑤：存量边界被删 -> 等于要求立刻批量改既有 `Map` 传参
-        self._write_mutated("本次未按需求变动的存量保持原样")
+        self._write_mutated("随动迁移，见 `specs/core/execution.adoc`")
         cm.check_param_carrier_guard()
-        self.assertIn("存量保持原样", self.error_texts())
+        self.assertIn("随动迁移，见 `specs/core/execution.adoc`", self.error_texts())
 
     def test_takeaway_nature_removed_reports(self):
         # 反例⑥：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
@@ -18526,7 +18708,7 @@ class TestCheckGetterBridgeGuard(_StackGuardTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑦：存量边界被删 -> 等于要求立刻批量改既有实现类
-        self._write_mutated("**存量**按 `specs/core/execution.adoc`")
+        self._write_mutated("**存量**")
         cm.check_getter_bridge_guard()
         self.assertIn("存量", self.error_texts())
 
@@ -18591,9 +18773,9 @@ class TestCheckValidationEntryGuard(_StackGuardTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑥：存量边界被删 -> 等于要求立刻批量改既有校验注解
-        self._write_mutated("随动迁移")
+        self._write_mutated("随动迁移，见 `specs/core/execution.adoc`")
         cm.check_validation_entry_guard()
-        self.assertIn("随动迁移", self.error_texts())
+        self.assertIn("随动迁移，见 `specs/core/execution.adoc`", self.error_texts())
 
     def test_basis_name_removed_reports(self):
         # 反例⑦：依据名被删 -> 无从追溯
@@ -18694,9 +18876,9 @@ class TestCheckHttpContractGuard(_StackGuardTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑧：存量边界被删 -> 等于要求立刻批量改既有路由与契约
-        self._write_mutated("随动迁移")
+        self._write_mutated("随动迁移，见 `specs/core/execution.adoc`")
         cm.check_http_contract_guard()
-        self.assertIn("随动迁移", self.error_texts())
+        self.assertIn("随动迁移，见 `specs/core/execution.adoc`", self.error_texts())
 
     def test_section_missing_reports(self):
         # 反例⑨：整节被删 -> 四条一起失去落点
@@ -18823,9 +19005,9 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑤：存量边界被删 -> 等于要求立刻批量内联/删既有方法（用户口径"已经用了不管"）
-        self._write_coding_mutated("既有此类方法一律不视为违规、不告警、不要求整改")
+        self._write_coding_mutated("**存量边界（L1）**")
         cm.check_ternary_extraction_guard()
-        self.assertIn("不视为违规", self.error_texts())
+        self.assertIn("存量边界", self.error_texts())
 
     def test_takeaway_direction_removed_reports(self):
         # 反例⑥：去向（加通用方法、不就地抽专用方法）被抽 -> 兜底退回逐处内联与逐处专用方法
@@ -18977,9 +19159,9 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
 
     def test_migration_boundary_removed_reports(self):
         # 反例⑦：存量边界被删 -> 等于要求立刻批量拆基类、批量挪方法
-        self._write_coding_mutated("既有这类继承一律不视为违规、不告警、不要求整改")
+        self._write_coding_mutated("**存量边界（L1）**")
         cm.check_tool_class_inheritance_guard()
-        self.assertIn("不视为违规", self.error_texts())
+        self.assertIn("存量边界", self.error_texts())
 
     def test_takeaway_nature_removed_reports(self):
         # 反例⑧：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
@@ -19000,6 +19182,19 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         self._write_syntax_mutated("**明确排除在工具类之外**")
         cm.check_tool_class_inheritance_guard()
         self.assertIn("明确排除在工具类之外", self.error_texts())
+
+    def test_migration_boundary_reference_hollowed_reports(self):
+        """反例（轴名齐全、判据被抽走）：存量边界只剩轴名、真源引用被抽走 -> 须报。
+
+        本仓库 r2 轮把「存量口径」的**逐份照写样板句**收敛为**一行引用**（真源在
+        `specs/core/execution.adoc`「规范变更的存量处理」）。故这条判据本体就是**那个引用**：
+        `**存量边界**：……` 的轴名全留着、引用被抽掉时，读者拿不到任何存量口径——
+        本防线必须报红（只核轴名的防线在这里会全绿，正是 `priority.adoc`「机械防线的
+        核对对象是判据本体，不是轴名」点名的失效形态）。
+        """
+        self._write_coding_mutated("随动迁移，见 `specs/core/execution.adoc`")
+        cm.check_ternary_extraction_guard()
+        self.assertIn("随动迁移，见 `specs/core/execution.adoc`", self.error_texts())
 
     def test_rules_data_anchor_removed_reports(self):
         # 反例⑪：规则数据里这一条锚点被删（**规范正文一字未动**）-> 防线须报红。
