@@ -86,6 +86,8 @@ MECHANISMS = [
      "check_review_guard", "check_review_guard 钉住判据条与两个方向的约束（去限定词后仍成立=全局性 / 只有某一处能触发=范围性 / 全局性问题不得写进范围性落点 / 全局备注不夹带范围性内容 / 范围性问题不上升为全局规范）仍在，并要求必加载层执行原则与 doc-design「信息归属」两处引用未断；语义判断（见 GUARD_CHECK_LIMITS）"),
     ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       "script/check_specs.py",
      "check_git_mv_selfcheck",      "check_git_mv_selfcheck 覆盖**本仓库自身侧**（暂存区不得出现 delete+add 形态）；**引用方侧**本仓库看不到、仍靠遵守 + 各项目按 git 规范自检"),
+    ("一份变多份的历史归属（同类只让一份继承历史，三级判据）", "specs/general/git.adoc", "script/check_specs.py",
+     "check_split_history_ownership_guard", "check_split_history_ownership_guard 钉住三级判据（相似度高者优先 / 相似度相同时集中到一个模块 / 模块取能继承数量最多者且一经选定即固定）、判定标准四条与不可降级清单回指仍在；加载门（AGENTS_COMMON.adoc「git 操作」的识别特征）一并核；『两个模块各算几个能继承的文件』『哪一份相似度更高』属运行时事实与语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,
      "无机械抓手",
      "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
@@ -130,7 +132,7 @@ MECHANISMS = [
     ("校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（声明的校验手段不得『从未执行却报绿』）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_toolchain_present_guard",
-     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）。"
+     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、**只装到降级实现（Python 版 `asciidoc`，无 `--failure-level`、拦不住 WARNING）时同样报错、不得记作通过**（条文的『降级实现不算通过』一句由锚点组钉住、函数体须按 `ASCIIDOC_REQUIRED_PROCESSOR` 判定合格实现是否就位）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；只装 Python 版时该段打一句告警就照常绿、告警级问题（含多余 `|` 造成的表格不完整）长期未被拦下（本轮实装 `asciidoctor` 后即报出并据以修复）；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）。"
      "**本轮（Issue #173）补第二道**：`check_asciidoctor_stub_guard` 钉住『语法段不得只剩壳』"
      "——上面这道钉的是探测代码与 CI 安装步骤的**文本**，而『真的编了每一份 .adoc』本身"
      "没有 CI 级断言：实测把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); "
