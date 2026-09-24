@@ -1103,14 +1103,16 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
     _CI = ("= CI\n\n== 校验链完整（定义未执行防线）\n\n"
            "* **校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（L1）**："
            "**工具须在执行前齐备**、缺则**装齐**再跑，不得把缺工具走**自动跳过**；"
+           "**装了但不够、不算通过（L1）**：同一手段有多个**能力不等价**的实现，"
+           "只装了能力弱的那个**不得记作通过**、须装齐能力完整的实现；"
            "装不上时如实标『未执行 + 原因』、**不得记作通过**；"
            "**安装方式须随要求一起给出**（取值＝**可据以装齐**：装哪个、从哪装）。\n")
 
     # 本仓库落点按「登记处只留一层」的口径写：只点名**承载该检查的那道防线**与安装命令，
     # 处理器次序与效力边界归公共条文（防同一处口径在两份文件里各留一份、各自漂移）
     _OWN = ("= 自身\n* toolchain: 承载该检查的防线是 `check_asciidoctor_syntax`；"
-            "两个处理器都探测不到时 `check_asciidoctor_syntax` 会**直接报错**"
-            "（不再\"跳过\"）；安装：`gem install asciidoctor`。\n")
+            "探测不到处理器、或只探测到能力弱的那个时 `check_asciidoctor_syntax` 一律**直接报错**"
+            "（不再\"跳过\"，也不\"降级通过\"）；安装：`gem install asciidoctor`。\n")
 
     # CI 侧的形态：装上并**就地校验**（校验写在安装同一步骤里，失败即整步失败；
     # 只"装"不校验、或校验只输出一行而不影响结论，都会静默退回"缺工具也绿"）
@@ -1143,6 +1145,12 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
         self._write_all(ci=self._CI.replace("可据以装齐", "照要求办"))
         cm.check_toolchain_present_guard()
         self.assertIn("安装方式", self.error_texts())
+
+    def test_missing_degraded_not_pass_clause_reports(self):
+        # 反例②b：删掉『降级实现不算通过』这一句 → 只装能力弱的实现时会被记作通过
+        self._write_all(ci=self._CI.replace("装了但不够、不算通过（L1）**：", ""));
+        cm.check_toolchain_present_guard()
+        self.assertIn("装了但不够、不算通过", self.error_texts())
 
     def test_missing_repo_landing_reports(self):
         # 反例③：本仓库落点缺失（只说原则、不点名防线与命令）
@@ -1201,8 +1209,8 @@ class TestAsciidoctorStubGuard(CheckSpecsTestCase):
         '    """语法。"""\n'
         '    phase("AsciiDoc 语法编译验证")\n'
         '    proc, proc_path = _detect_asciidoc_processor()\n'
-        '    if proc is None:\n'
-        '        err("探测不到处理器", "script/check_specs.py")\n'
+        '    if proc is None or proc != ASCIIDOC_REQUIRED_PROCESSOR:\n'
+        '        err("探测不到处理器、或只装到降级实现", "script/check_specs.py")\n'
         '        phase_done()\n'
         '        return\n'
         '    files = []\n'
@@ -1242,7 +1250,7 @@ class TestAsciidoctorStubGuard(CheckSpecsTestCase):
     def test_probe_without_err_reports(self):
         # 反例②：探测了、但缺处理器时不报错（只告警）→ 缺工具静默退回"绿"
         self._write_all(src=self._SRC.replace(
-            '        err("探测不到处理器", "script/check_specs.py")\n',
+            '        err("探测不到处理器、或只装到降级实现", "script/check_specs.py")\n',
             '        log("跳过")\n').replace(
             '            err("语法/告警", rel)\n', '            log("跳过")\n'))
         cm.check_asciidoctor_stub_guard()
@@ -1260,6 +1268,15 @@ class TestAsciidoctorStubGuard(CheckSpecsTestCase):
         self._write_all(src=self._SRC.replace('    for root in ADOC_ROOTS:\n', ''))
         cm.check_asciidoctor_stub_guard()
         self.assertIn("ADOC_ROOTS", self.error_texts())
+
+    def test_probe_without_required_processor_reports(self):
+        # 反例④b：只判"装没装某个处理器"、不看是不是**能力完整的实现**——
+        # 装了 Python 版（拦不住 WARNING）也会被当成通过，正是"降级实现也算通过"的偷懒路径
+        self._write_all(src=self._SRC.replace(
+            '    if proc is None or proc != ASCIIDOC_REQUIRED_PROCESSOR:\n',
+            '    if proc is None:\n'))
+        cm.check_asciidoctor_stub_guard()
+        self.assertIn("ASCIIDOC_REQUIRED_PROCESSOR", self.error_texts())
 
     def test_missing_function_reports(self):
         # 反例⑤：整道语法段函数被删
@@ -1293,9 +1310,11 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
     * `asciidoctor`（Ruby）默认对 WARNING/ERROR 仍返回 0，故命令行必须显式带
       `--failure-level=WARN`，否则 `include::` 目标缺失这类"只告警不报错"的问题必然漏报。
     * Python 版 `asciidoc` **没有**这个开关（实测传了会 `illegal command options`、
-      整批命令都会以非 0 失败），故对它必须**不发**该开关，并如实把效力降级告警。
+      整批命令都会以非 0 失败）——它**拦不住 WARNING 级问题**，故**降级实现不算通过**：
+      只探测到它时报错、要求装齐 Ruby 版（旧实现只打一句告警就照常绿，正是"偷懒"路径）。
     * **两个处理器都探测不到时报错**（用户口径：没有环境就要安装环境，不得省略）——
       旧实现此处走"跳过"分支，语法段在本环境长期没跑而脚本照旧报 OK。
+    * **合格实现（`asciidoctor`）就位时真的编译**：不因"装了弱实现也能跑"而放过。
     """
 
     def test_failure_level_constant_present(self):
@@ -1324,8 +1343,10 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
             cm.shutil.which = orig
         self.assertEqual((proc, found), ("asciidoctor", "/usr/bin/asciidoctor"))
 
-    def test_python_asciidoc_gets_no_failure_level_flag(self):
-        # Python 实现不认 --failure-level：发给它会让整批命令以 `illegal command options` 失败
+    def test_python_asciidoc_only_reports_error(self):
+        # 只装了 Python 版（降级实现）：**报错**、要求装齐 Ruby 版——
+        # 它不认 --failure-level、拦不住 WARNING 级问题，故"降级处理器不得记作通过"。
+        # 也不得对 Python 版发 --failure-level（会以 illegal command options 整批失败）。
         calls = []
         orig_which, orig_run = cm.shutil.which, cm.subprocess.run
         cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
@@ -1343,8 +1364,8 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
             cm.check_asciidoctor_syntax()
         finally:
             cm.shutil.which, cm.subprocess.run = orig_which, orig_run
-        self.assertEqual(cm.errors, [])
-        self.assertTrue(calls)
+        self.assertTrue(cm.errors, "只装降级实现时必须报错（不得降级通过）")
+        self.assertIn("降级实现", cm.errors[0])
         self.assertFalse([c for c in calls if "--failure-level=WARN" in c],
                          "不得对 Python 版 asciidoc 发 --failure-level")
 
@@ -1382,7 +1403,9 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
         # 只编仓库根时，被 `ADOC_ROOTS` 点名的子树一份都不会被真的编译，而检查照旧显示"完成"
         seen = []
         orig_which, orig_run = cm.shutil.which, cm.subprocess.run
-        cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
+        # 用**合格实现** asciidoctor 观察"真的编了哪些文件"：只装 Python 版会先报错返回、
+        # 走不到逐个编译，故这里必须给合格实现（否则用例核的是另一件事）
+        cm.shutil.which = lambda name: "/usr/bin/asciidoctor" if name == "asciidoctor" else None
 
         class _R:
             returncode, stderr = 0, ""
@@ -1407,7 +1430,8 @@ class TestAsciidoctorFailureLevel(CheckSpecsTestCase):
     def test_syntax_check_reports_missing_adoc_root(self):
         # 反例：`ADOC_ROOTS` 点名的根不存在——该子树一份都没编，须报错而不是静默"完成"
         orig_which = cm.shutil.which
-        cm.shutil.which = lambda name: "/usr/bin/asciidoc" if name == "asciidoc" else None
+        # 同前：须给合格实现，否则会先因"降级不通过"返回、核不到 ADOC_ROOTS 这一段
+        cm.shutil.which = lambda name: "/usr/bin/asciidoctor" if name == "asciidoctor" else None
         try:
             cm.ADOC_ROOTS = ("", "docs")
             cm.check_asciidoctor_syntax()
@@ -17940,7 +17964,8 @@ class TestCheckPaginationGuard(CheckSpecsTestCase):
         super().setUp()
         self._orig_java = cm.JAVA_STACK_FILE
         cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
-        with open("specs/stack/java.adoc", encoding="utf-8") as fh:
+        with open(os.path.join(os.path.dirname(HERE), "specs", "stack", "java.adoc"),
+                  encoding="utf-8") as fh:
             self.JAVA = fh.read()
 
     def tearDown(self) -> None:
@@ -18888,3 +18913,183 @@ class TestCheckSkillRefCoordGuard(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc", "= t")
         cm.check_skill_ref_coord_guard()
         self.assertEqual(cm.errors, [])
+
+
+# --------------------------------------------------------------------------- #
+# check_split_history_ownership_guard（一份变多份的历史归属，Issue #215）
+# --------------------------------------------------------------------------- #
+class TestCheckSplitHistoryOwnershipGuard(CheckSpecsTestCase):
+    """『一份变多份的历史归属』防线的反例用例。
+
+    失效形态：同一批"移动/重命名 + 复制"的历史按模块**平均分**——每一边都接上局部历史，
+    **每一处看上去都"保留了历史"**，而同一批文件的历史归属被拆成两处（用户口径里的
+    "不要每一边丢几个"）。故本条须把三级判据、判定标准与例外都钉在**条目自己的正文**上。
+
+    **夹具＝真文档逐字读入**（现读，不另抄一份节选）：手抄夹具时锚点与真文档在同义改写后
+    会整体脱节——上一版抄了"该条 bullet + 6 行"，把条目改成**反向口径**（"同一源文件可以
+    让多份继承移动历史"）仍全绿，而真文档里防线更穷（实测 5 处反向/抽空改法一个都不报）。
+    逐字读入时 `test_valid_passes` 会先一步暴露脱节。
+    """
+
+    GIT = "specs/general/git.adoc"
+    PRIORITY = "specs-project-maintainer/priority.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_common = cm.GENERIC_FILE
+        cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
+        # 真文档以 `HERE` 为基准取绝对路径：cwd 相对路径在非仓库根跑单测时会
+        # `FileNotFoundError`，夹具读不到真文档、整套反例失去对象。
+        repo = os.path.dirname(HERE)
+        for rel in (self.GIT, self.PRIORITY, self.COMMON):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                setattr(self, "_text_" + rel.replace("/", "_"), fh.read())
+
+    def tearDown(self) -> None:
+        cm.GENERIC_FILE = self._orig_common
+        super().tearDown()
+
+    def _text(self, rel: str) -> str:
+        return getattr(self, "_text_" + rel.replace("/", "_"))
+
+    def _write_valid(self) -> None:
+        for rel in (self.GIT, self.PRIORITY, self.COMMON):
+            self.write(rel, self._text(rel))
+
+    def _run(self) -> None:
+        # `run_rule_guard` 按**阶段**去重（每个用例自成一个阶段），显式清一次只是让
+        # "同一用例里重复调用防线"也按最新夹具核对（防御性，与 `_StackGuardTestCase` 同理）。
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_split_history_ownership_guard()
+
+    def _mutate_git(self, removed: str, replacement: str = "") -> None:
+        # 先断言真文档里确实有这句——锚点与真文档脱节时本轮反例就失去了对象。
+        self.assertIn(removed, self._text(self.GIT))
+        self._write_valid()
+        self.write(self.GIT, self._text(self.GIT).replace(removed, replacement))
+
+    def _mutate_common(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self._text(self.COMMON))
+        self._write_valid()
+        self.write(self.COMMON, self._text(self.COMMON).replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_git_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
+        self._run()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 -> 同类只让一份继承历史的裁决无处可查
+        self._write_valid()
+        self.write(self.GIT, "= git 规范\n\n== 别的节\n* 略。\n")
+        self._run()
+        self.assertIn("文件移动与重命名", self.error_texts())
+
+    def test_bullet_removed_reports(self):
+        # 反例：整条 bullet 被摘掉 -> 判据整条消失
+        self._mutate_git("* **一份变多份的历史归属（一拆多 / 移动 + 复制）**")
+        self._run()
+        self.assertIn("一份变多份的历史归属", self.error_texts())
+
+    def test_similarity_first_removed_reports(self):
+        # 反例：删掉一级判据整句 -> 集中到一个模块被读成"不问相似度、只看模块"。
+        # 锚点原取 `内容相似度高`（在 ① 与 ② 里各出现一次），这条反例**实测全绿**:
+        # 同形字样被 ② 的位置句兜住——故锚点须取**本条 bullet 内只出现一次**的写法。
+        self._mutate_git("① **内容相似度高的那一份继承**")
+        self._run()
+        self.assertIn("内容相似度高的那一份继承", self.error_texts())
+
+    def test_concentrate_one_module_removed_reports(self):
+        # 反例：删掉"集中到一个模块"那一级判据 -> 用户点名的"不要每一边丢几个"无条文可依
+        self._mutate_git("② **相似度相同时，集中到一个模块**")
+        self._run()
+        self.assertIn("集中到一个模块", self.error_texts())
+
+    def test_most_inheritable_removed_reports(self):
+        # 反例：删掉"能继承数量最多者" -> 模块怎么选没有判据，重新落回任选
+        self._mutate_git("③ **模块的选择取能继承数量最多者**")
+        self._run()
+        self.assertIn("能继承数量最多者", self.error_texts())
+
+    def test_tie_is_fixed_removed_reports(self):
+        # 反例：删掉"一经选定即固定" -> 同一次改动里可以来回改归属
+        self._mutate_git("**一经选定即固定**")
+        self._run()
+        self.assertIn("一经选定即固定", self.error_texts())
+
+    def test_split_across_modules_clause_removed_reports(self):
+        # 反例：删掉判定标准里"落在两个及以上模块"那一档 -> 判定标准只剩口号
+        self._mutate_git("继承历史的文件**落在两个及以上模块**")
+        self._run()
+        self.assertIn("落在两个及以上模块", self.error_texts())
+
+    def test_multiple_moves_clause_removed_reports(self):
+        # 反例：删掉"同一源文件被移动多次" -> 多份同时继承历史不再被拦
+        self._mutate_git("④ 同一源文件被移动多次（多份同时继承）")
+        self._run()
+        self.assertIn("同一源文件被移动多次", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例：判定标准整体被抽掉 -> 只剩一句"要集中"，判不出有没有被遵守
+        self._mutate_git("**判定标准（逐条可核对，任一命中即不合规）**")
+        self._run()
+        self.assertIn("任一命中即不合规", self.error_texts())
+
+    def test_requirement_inverted_reports(self):
+        # 反例（**上一版夹具漏放的形态**）：条文还在、**要求被反向**——一对一被改成"可以让
+        # 多份继承移动历史"，锚点落在原句上才判得出来（按"三级判据的轴名还在不在"核时，
+        # 整条被反向也能报绿）。
+        self._mutate_git("**同一源文件只能让其中一份继承移动历史**",
+                         "**同一源文件可以让多份继承移动历史**")
+        self._run()
+        self.assertIn("同一源文件只能让其中一份继承移动历史", self.error_texts())
+
+    def test_rule_lowered_to_judgement_reports(self):
+        # 反例：判据被降级为"执行者自行判断"（轴名齐全、判据被抽走的形态）
+        self._mutate_git("**继承哪一份、按三级判据取**", "**继承哪一份由执行者判断**")
+        self._run()
+        self.assertIn("继承哪一份、按三级判据取", self.error_texts())
+
+    def test_concentrate_value_clause_removed_reports(self):
+        # 反例：删掉取值句"整体落在同一个模块内" -> "集中"没有可核对的取值形态
+        self._mutate_git("整体落在同一个模块内")
+        self._run()
+        self.assertIn("整体落在同一个模块内", self.error_texts())
+
+    def test_priority_ledger_removed_reports(self):
+        # 反例：不可降级清单侧的回指被删 -> 重构时该判据会被当普通条目删掉
+        self._write_valid()
+        self.write(self.PRIORITY, self._text(self.PRIORITY).replace(
+            "* **一份变多份的历史归属（同列，用户提出）**"
+            "：同一源文件既移动又复制、只能一份继承历史时，**相似度高者优先**；"
+            "相似度相同则**集中到一个模块**、模块取**能继承数量最多者**"
+            "（不得跨模块各分几个）——判据与判定标准见 "
+            "`specs/general/git.adoc`「文件移动与重命名」的「一份变多份的历史归属」条。\n", ""))
+        self._run()
+        self.assertIn("能继承数量最多者", self.error_texts())
+
+    def test_priority_file_missing_reports(self):
+        # 反例：维护方清单整个缺失 -> 不可降级登记无从核对
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs-project-maintainer", "priority.adoc"))
+        self._run()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_dispatch_trigger_removed_reports(self):
+        # 反例：加载门被抽 -> 判定"只剩一份历史时由哪一份继承"时不会加载 git.adoc，
+        # 判据写了却读不到（与"规则被删"在执行侧等价）
+        self._mutate_common("要判定只剩一份历史时由哪一份继承（同一源文件**既移动又复制**）、")
+        self._run()
+        self.assertIn("既移动又复制", self.error_texts())
+
+
+if __name__ == "__main__":
+    unittest.main()

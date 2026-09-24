@@ -80,7 +80,7 @@ https://agent.c332030.com/script/fetch-specs.py
 * **写/更新设计文档、测试设计文档，或判定信息归属**（识别特征：多模块项目，或要**增删依赖/新增模块/改包或模块结构**）→ `specs/general/doc-design.adoc`
 * **业务系统全生命周期文档**（`doc/` 下有阶段目录、项目走立项→上线完整流程）→ `specs/general/doc-lifecycle.adoc`
 * **多模块项目的模块文档组织** → `specs/general/doc-module.adoc`
-* **git 操作**（要移动/重命名文件、要核对或处置行尾与检出、要暂存与提交、要写提交信息、要处置冲突与压缩提交）→ `specs/general/git.adoc`
+* **git 操作**（要移动/重命名文件、要判定只剩一份历史时由哪一份继承（同一源文件**既移动又复制**）、要核对或处置行尾与检出、要暂存与提交、要写提交信息、要处置冲突与压缩提交）→ `specs/general/git.adoc`
 * **版本管理**（识别特征：要处置冲突、要整理提交历史；只要有版本管理工具即命中，**不限 git/CNB**）→ `specs/general/version-control.adoc`
 * **写/更新变更日志**（存在 `CHANGELOG.*`、要新增或改写条目）→ `specs/general/changelog.adoc`
 * **code review，或每次改完东西后对本轮改动的复核**（识别特征：要做代码评审、要判定"这算不算一个问题"——review 默认只查代码/文档/用例三类问题，存量不动、除非用户主动声明）→ `specs/general/review.adoc`

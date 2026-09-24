@@ -126,10 +126,16 @@ AFTER_REVIEW_ANCHORS = [
         "缺边界则代码类改动被拖进概念性流程（把可控的验证做成不可控的多步流程）",
     ],
 ]
+# 处理器探测次序（先 Ruby、后 Python）。**探测到 Python 版不算通过**：
+# 它不支持 `--failure-level`，WARNING 级问题拦不住，属"降级处理器"——
+# 本仓库口径：降级处理器不得记作通过，须装齐 `ASCIIDOC_REQUIRED_PROCESSOR`。
 ASCIIDOC_PROCESSORS = [
     "asciidoctor",
     "asciidoc",
 ]
+# 必须装齐的处理器（唯一支持 `--failure-level=WARN` 的实现）：缺它即语法段
+# 无法拦住 WARNING 级问题——用户口径：**没有环境就要装环境，不得走降级通过**。
+ASCIIDOC_REQUIRED_PROCESSOR = "asciidoctor"
 CHAIN_CALL_ANCHORS = [
     [
         "链式调用一律换行（L1，长度不是判据）",

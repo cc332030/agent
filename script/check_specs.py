@@ -2566,10 +2566,15 @@ def check_java_serial_guard():
 #   ② `asciidoc`（Python 实现，PyPI 包名 `asciidoc`）——**无 `--failure-level`**（传了会
 #      `illegal command options`），缺 `include::` 目标时只 WARNING、仍返回 0，
 #      故这条效力边界须显式记下（本仓库实测），不得假装它能拦 WARNING。
-# 两个实现都探测不到时**报错**：语法验证是"确定项"（文件能否编译、include 目标在不在，
+# **只探测到 Python 版同样报错**（本仓库实测的"偷懒"路径）：只装 `asciidoc` 时，语法段
+# 拦不住 WARNING 级问题（含 `include::` 目标缺失），而这恰是"已在跑的校验"里最易漏的一半
+# ——用户口径：**没有环境就要装环境，不得以"降级处理器也能跑"顶替**。故本段要求
+# `ASCIIDOC_REQUIRED_PROCESSOR` 必须就位，Python 版不算通过。
+# 两个实现都探测不到时同样**报错**：语法验证是"确定项"（文件能否编译、include 目标在不在，
 # 二值可判），跳过它等于把已声明的校验手段变成摆设——用户口径：**不得省略**。
 # 空串是"未指定"：默认取仓库根（REPO_ROOT 现场推导，见 _detect_asciidoc_processor）。
 ASCIIDOC_PROCESSORS = _RULES_TOKENS["ASCIIDOC_PROCESSORS"]
+ASCIIDOC_REQUIRED_PROCESSOR = _RULES_TOKENS["ASCIIDOC_REQUIRED_PROCESSOR"]
 ADOC_ROOTS = _RULES_TOKENS["ADOC_ROOTS"]
 
 
@@ -2847,6 +2852,12 @@ def check_asciidoctor_stub_guard():
             err("`check_asciidoctor_syntax` 的函数体里**没有按 `ADOC_ROOTS` 覆盖全部维护根**"
                 "——只编仓库根时，被点名的子树一份都不会被真的编译，而检查照样显示完成",
                 "script/check_specs.py")
+        if "ASCIIDOC_REQUIRED_PROCESSOR" not in body:
+            err("`check_asciidoctor_syntax` 的函数体里**没有按 `ASCIIDOC_REQUIRED_PROCESSOR` "
+                "判『合格实现是否就位』**——只比『装没装某个处理器』时，装了能力不足的实现"
+                "（Python 版拦不住 WARNING）也会被当成通过：这正是『降级实现不算通过』那条"
+                "要拦的『偷懒』路径（本仓库实测：旧实现只打一句告警就照常报 OK）",
+                "script/check_specs.py")
 
     rel_wf = ".github/workflows/check-specs.yml"
     wf_path = os.path.join(REPO_ROOT, *rel_wf.split("/"))
@@ -2874,13 +2885,15 @@ def check_asciidoctor_syntax():
     这是**确定项**（文件能否编译、`include::` 目标在不在，二值可判），故不设
     "环境没有就跳过"的旁路（用户口径：没有环境就要安装环境，不得省略）。
 
-    工具探测与效力边界：
-      * `asciidoctor`（Ruby）：带 `--failure-level=WARN`，WARNING（含 `include::`
-        目标缺失）也返回非 0；
+    工具探测与效力边界（**降级实现不算通过**）：
+      * `asciidoctor`（Ruby）＝唯一合格实现：带 `--failure-level=WARN`，WARNING
+        （含 `include::` 目标缺失）也返回非 0；
       * `asciidoc`（Python 实现）：**没有** `--failure-level`，缺 `include::` 目标时
-        只 WARNING、仍返回 0——故这一半效力降级，但"编译是否失败"仍被真正拦住；
-      * **两个都没有 → 报错**：安装方式见 `.github/workflows/check-specs.yml`
-        与 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」。
+        只 WARNING、仍返回 0——**拦不住这一半，故不算通过**（旧实现只打一句告警就
+        照常绿，正是用户点名的"偷懒"路径），须改装有 `--failure-level` 的处理器；
+      * **没装 / 只装了降级实现 → 一律报错**：安装方式见
+        `.github/workflows/check-specs.yml` 与 `specs/general/ci-cd.adoc`
+        「校验链完整（定义未执行防线）」。
     """
     phase("AsciiDoc 语法编译验证")
     proc, proc_path = _detect_asciidoc_processor()
@@ -2888,16 +2901,26 @@ def check_asciidoctor_syntax():
         err("本机探测不到任何 AsciiDoc 处理器（按次序试过 "
             + "、".join(f"`{c}`" for c in ASCIIDOC_PROCESSORS) + "）——"
             "语法编译验证是**确定项**、不得跳过：请先装齐工具再跑本脚本"
-            "（Ruby：`gem install asciidoctor`；只需 Python 时：`pip install asciidoc`；"
+            f"（`gem install {ASCIIDOC_REQUIRED_PROCESSOR} --no-document`；"
+            "**只装 Python 版 `asciidoc` 不算通过**，它拦不住 WARNING 级问题；"
             "CI 的安装步骤见 `.github/workflows/check-specs.yml`）",
             "script/check_specs.py")
         phase_done()
         return
     detail(f"  处理器: {proc}（{proc_path}）")
-    if proc != "asciidoctor":
-        log(f"  警告: 本机处理器是 `{proc}`（Python 实现），它不支持 `--failure-level`，"
-            "WARNING 级问题（含 `include::` 目标缺失）本次无法拦截；"
-            "要拦住这一半请改装有 `--failure-level` 的 `asciidoctor`（Ruby 实现，>= 1.5.7）")
+    # **降级处理器不算通过**：只装 Python 版 `asciidoc` 时，WARNING 级问题（含 `include::`
+    # 目标缺失）拦不住——这不是"环境受限的如实降级"（那种情况须按 verify 规范标"未执行 + 原因、
+    # 不得记作通过"），而是**明明装得上却图省事**：Ruby 版只差一条 `gem install`。
+    # 故这里**报错**、要求装齐，不再打印一句提示就照常绿（旧实现正是用户点名的"偷懒"路径）。
+    if proc != ASCIIDOC_REQUIRED_PROCESSOR:
+        err(f"本机 AsciiDoc 处理器是 `{proc}`（降级实现，不支持 `--failure-level`），"
+            f"WARNING 级问题（含 `include::` 目标缺失）拦不住——"
+            f"须装齐 `{ASCIIDOC_REQUIRED_PROCESSOR}`（Ruby 实现，>= 1.5.7）再跑本脚本："
+            f"`gem install {ASCIIDOC_REQUIRED_PROCESSOR} --no-document`；"
+            "**降级处理器不得记作通过**（用户口径：没有环境就要装环境，不得省略）",
+            "script/check_specs.py")
+        phase_done()
+        return
     # 覆盖**全部维护根**（`ADOC_ROOTS`，默认仓库根）：只编仓库根时，被点名的子树
     # （独立的规范集合/产物目录）一份都不会被真的编译，而检查照样显示"完成"。
     files = []
@@ -4316,7 +4339,22 @@ def check_install_repeat_update_guard():
 #   不是规则本体被改）。
 #   `guards.adoc` 清单表同步为 124 行、编号 1..124 连续且与 `CHECKS` 逐一同序。
 #   用例数按**同源实取**回填（`_count_collectable_tests` 的 `类名.用例名` 限定名去重）。
-GUARD_WIRING_BASELINE = 124
+# **本轮（Issue #215「历史」记账）**：接线数 **124 → 125**——新增一道
+#   `check_split_history_ownership_guard`（一份变多份的历史归属：同一次改动里既移动/重命名
+#   又复制的文件丢历史时，继承历史的那一份按三级判据取——相似度高者优先 → 相似度相同时
+#   集中到一个模块 → 模块取能继承数量最多者；含判定标准四条与用户声明例外），
+#   排在 `CHECKS` 末尾、`guards.adoc` 清单表同步为 125 行、编号 1..125 连续且与 `CHECKS` 逐一同序；
+#   规则数据在 `script/specs-rules/git.toml`，反例用例 17 条
+#   （`TestCheckSplitHistoryOwnershipGuard`：正例 1 + 反例 16），用例总数按**同源实取**回填。
+#   **返工一轮（review 实测的三处空转）**：① 锚点原取 `内容相似度高` 这类**本条 bullet 内
+#   重复出现**的写法——把一级判据整句删掉、② 的位置句仍含同形字样，防线**照样报绿**
+#   （实测：抽掉 `① **内容相似度高的那一份继承**` 全绿）；② 用户点名的形态「**同一源文件
+#   既移动又复制**」在调度器的『git 操作』识别特征里**没有对应项**——执行作业时 `git.adoc`
+#   根本不会被加载（写规则与登记识别特征是同一个动作，与 `check_method_placement_guard` 同口径）；
+#   ③ 用例夹具是**手抄**的节选（该条 bullet + 6 行），把条目改成反向口径（"同一源文件可以
+#   让多份继承历史"）也不报红，而真文档里防线更穷（实测 5 处反向/抽空改法全绿）——改用
+#   真文档逐字进夹具、逐词核；基线原写 1591 而**同源实取为 1617**（低报会让"删用例"静默过去）。
+GUARD_WIRING_BASELINE = 125
 # 本轮（PR #171 返工：入口那一节与 `script/fetch-specs.py` 头部注释**重复**——用户口径「这一节重复了」）：
 # 取回口径收敛为「一处完整定义（脚本头部注释）+ 入口只留落点与回指」，防线的
 # `_check_install_fetch_method_section`（要求入口复述）随之并入 `_check_install_no_python_section`
@@ -4637,7 +4675,17 @@ GUARD_WIRING_BASELINE = 124
 #   与 `python3 -m unittest discover -s script -p '*_test.py'` 的 `Ran 1554 tests` 逐条相等——
 #   本仓库 `_test_cases` 的计数口径已修正为"同层级边界"，故两数不再相差 16）。
 #   **数值以实取为唯一来源**：`_count_collectable_tests` 口径，勿按两侧各自数目相加。
-GUARD_TEST_BASELINE = 1591
+#   **本轮（Issue #215 返工）**：原写 1591，而按同一口径**同源实取是 1617**
+#   （`check_specs_test` 1502 + `rules_engine_test` 78 + `check_effective_test` 37）——
+#   基线**低于实取数**时，删掉至多 20 条用例都不会惊动任何防线（本条自己点名的形态：
+#   本仓库已登记"基线停在旧口径上会长期低于实际数、删掉若干条仍不报红"）；
+#   按实收回填为 1617（含本轮新增的 `TestCheckSplitHistoryOwnershipGuard` 17 条）。
+#   **本轮（降级处理器不算通过）**：`TestAsciidoctorFailureLevel` 里"只装 Python 版不得
+#   降级通过"由旧的"发不发 `--failure-level`"改判为"报错"（改判、非净增），
+#   `TestToolchainPresentGuard` 新增 1 条（删掉『降级实现不算通过』一句即报红）、
+#   `TestAsciidoctorStubGuard` 新增 1 条（函数体不判 `ASCIIDOC_REQUIRED_PROCESSOR` 即报红）——
+#   故同源实取 1617（`check_specs_test` 1502 + `rules_engine_test` 78 + `check_effective_test` 37）。
+GUARD_TEST_BASELINE = 1617
 # 存量空壳用例名单（**本轮新掏空的会被拦**，名单里的放行）：
 # 判据是"这一节里没有任何断言"（见 `check_guard_manifest`）。空名单＝当前没有空壳；
 # 若某轮确实要保留一个"只跑不证"的用例（如纯冒烟），把它的名字登记到这里并说明理由——
@@ -11808,6 +11856,61 @@ def check_http_contract_guard():
         run_rule_guard("check_http_contract_guard")
 
 
+def check_split_history_ownership_guard():
+    """『一份变多份的历史归属』防线（**用户提出，Issue #215**）：同一次改动里
+    **既移动/重命名、又复制**的文件丢历史时，**继承历史的那一份按三级判据取**——
+    ① 内容相似度高者优先；② 相似度相同时**集中到一个模块**（不得跨模块各分几个）；
+    ③ 模块取**能继承数量最多者**，仍然相同则任选一个并固定。
+
+    判据本体唯一落点在通用层 `specs/general/git.adoc`「文件移动与重命名」的
+    「一份变多份的历史归属」条（该条是 `git mv` 铁律在"一份变多份"这一形态上的展开，
+    与 P1 同维度、不另立一套）；维护方不可降级清单 `specs-project-maintainer/priority.adoc`
+    的 P1 只留一行回指；加载门在 `AGENTS_COMMON.adoc`「git 操作」条（缺则判定"由哪一份
+    继承历史"这一场景不会加载 `git.adoc`，规则写了却读不到）。
+
+    失效形态：把历史按模块**平均分**（每一边丢几个），两边都只接上局部历史——
+    **每一条都看着"保留了历史"**，而同一批文件的历史归属被拆成了两处，
+    没有任何机械信号会报错。
+
+    **核对对象一律是条目/行自己的正文**（`bullet_tokens`，不是整节）：该条与相邻的
+    「强制核对（兜底）」「避免移动失效的识别」在同节相邻、字样相近，按整节核时
+    会把抽走的要点兜住。只钉「判据是否仍在」——「两个模块各算几个能继承的文件」
+    「哪一份的相似度更高」属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("一份变多份的历史归属防线检查")
+    rel = "specs/general/git.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——『一份变多份的历史归属』失去权威定义落点", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"^== 文件移动与重命名.*?(?=\n== |\Z)", text, re.M | re.S)
+    if m is None:
+        err(f"{rel} 未找到「文件移动与重命名」一节——git mv 铁律与其『一份变多份』"
+            "展开的权威定义落点丢失（最高关注项 P1 不得被删除或降级）", rel)
+        phase_done()
+        return
+    section = m.group(0)
+    if _bullet_text(section, "一份变多份的历史归属") is None:
+        err(f"{rel} 的「文件移动与重命名」缺少『一份变多份的历史归属』条目"
+            "——同类只让一份继承历史的裁决无处可查（用户提出的判据不得被删除或降级）", rel)
+    rel_pri = "specs-project-maintainer/priority.adoc"
+    pri_path = os.path.join(REPO_ROOT, *rel_pri.split("/"))
+    if not os.path.isfile(pri_path):
+        err(f"缺少 {rel_pri}——『一份变多份的历史归属』的不可降级登记无从核对", rel_pri)
+    # 加载门：调度器缺该识别特征时，代码活动不会加载 `git.adoc`——规则写了却没被加载，
+    # 与"规则被删"在执行侧等价（这里只判"调度器入口在不在"，识别特征由规则数据核）。
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少 {rel_common}——加载调度器不在时『git 操作』这条加载门无从核对"
+            "（该条写进规范却永远不会被加载）", rel_common)
+    run_rule_guard("check_split_history_ownership_guard")
+    phase_done()
+
+
 CHECKS = (
     check_refs_exist,
     check_link_refs,
@@ -11932,6 +12035,7 @@ CHECKS = (
     check_validation_entry_guard,
     check_http_contract_guard,
     check_baseline_sync_guard,
+    check_split_history_ownership_guard,
     check_value_binding_guard,
 )
 
