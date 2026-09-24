@@ -60,3 +60,87 @@ groups = [
 ]
 kind = "file_groups"
 message = "{file} 缺失硬超时要素 {missing}——{desc}；语义复核会再次卡死且无人负责"
+
+# 「改动后的 review」一节须保留一行指向本条的执行形态落点（两个方向都要能走到）
+[[guards.check_clean_subagent_review_guard]]
+kind = "section_groups"
+file = "specs/general/review.adoc"
+section = "改动后的 review（每次改完都得复核一次）"
+groups = [
+    [
+        "执行形态回指",
+        [
+            "review 时的干净子 agent 复核（强制）",
+            "本条只说",
+            "互不替代",
+        ],
+        "缺回指时按「改动后的 review」工作的执行者看不到「干净上下文怎么落成」；缺「互不替代」两处的触发面会被读成同一件事（一条被删另一条顶上）",
+    ],
+]
+
+# 「不是"开过一次子 agent"就算过关」：复核者的独立性不得被"复用上一次的上下文"顶替
+[[guards.check_clean_subagent_review_guard]]
+kind = "forbid_section"
+file = "specs/general/review.adoc"
+section = "review 时的干净子 agent 复核（强制）"
+forbidden = [
+    "复用上一次复核用过的上下文",
+]
+message = "review 时的干净子 agent 复核防线出现被放宽的写法 {hit}——本条要求每次复核另起干净上下文，\"复用上一次复核用过的上下文\"不得出现在许可语态里（如需强调，须写成禁止式）"
+
+# 必加载层入口：节点自查的「验证」节点须点出这条判据（缺则本要求不会在任务节点上被问起）
+[[guards.check_clean_subagent_review_guard]]
+kind = "file_groups"
+file = "specs/core/execution.adoc"
+groups = [
+    [
+        "验证节点自查",
+        [
+            "review 场景",
+            "干净子 agent 通道是否已实测",
+            "specs/general/review.adoc",
+        ],
+        "缺则「这次能不能拿到干净子 agent」不进任何节点的自查清单，本要求就只在专项提示词里存在",
+    ],
+]
+
+# 调度器：review 条目的识别特征须能被触发（要做评审 / 要判能不能拿到干净子 agent）
+[[guards.check_clean_subagent_review_guard]]
+kind = "file_groups"
+file = "AGENTS_COMMON.adoc"
+groups = [
+    [
+        "review 加载项识别特征",
+        [
+            "code review",
+            "干净子 agent",
+        ],
+        "缺识别特征时「这次要不要开干净子 agent 复核」想不到加载这一份，规则实际失效",
+    ],
+]
+
+# 维护方落点：本仓库侧只写「通道是什么」与「怎么实测」，不重列公共判据
+[[guards.check_clean_subagent_review_guard]]
+kind = "file_groups"
+file = "specs-project-maintainer/verify.adoc"
+groups = [
+    [
+        "维护方落点",
+        [
+            "review 时的干净子 agent 通道",
+            "能不能拿到",
+            "specs/general/review.adoc",
+        ],
+        "缺维护方落点则公共要求与本地动作之间断链（本仓库该怎么拿到干净上下文无从核对）",
+    ],
+]
+message = "{file} 缺失 {missing}——{desc}"
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——锚点清单是**纯数据**，删掉一项
+# 或整组时规范正文一字不少、上面那些步骤的 `miss` 是空集，"核过且通过"与"没核"无从区分。
+# 删清单须与调 `min` 一并发生，该动作于是出现在 diff 里。
+[[guards.check_clean_subagent_review_guard]]
+file = "specs/general/review.adoc"
+kind = "anchor_count"
+token_list = "CLEAN_SUBAGENT_REVIEW_ANCHORS"
+min = 33

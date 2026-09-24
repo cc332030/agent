@@ -372,10 +372,27 @@ def _step_bullet_tokens(rules, step):
 
 
 def _paired_bullet_token_count(rules, step) -> int:
-    """取本步所指的那条 `bullet_tokens` 步骤的锚点条数（同一防线、同 file + bullet）。"""
+    """取本步所指清单的锚点条数。
+
+    两种取法：① `token_list` 给出规则数据里的锚点清单名（`tokens` 段里的常量，形如
+    `[[组名, [锚点...], 理由], ...]`）——**按组内的锚点项数逐项累加**，这样删掉一项锚点
+    也会被本步接住（只取组数拦不住组内被削）；② `file` + `bullet` 指向同防线同位置的
+    那条 `bullet_tokens` 步骤，取其 `tokens` 条数。
+    """
     guard = step.get("_guard")
     if guard is None:
         return 0
+    named = step.get("token_list")
+    if named:
+        data = rules.ctx.tokens(named)
+        if not isinstance(data, (list, tuple)):
+            return 0
+        total = 0
+        for group in data:
+            if isinstance(group, (list, tuple)) and len(group) >= 2 \
+                    and isinstance(group[1], (list, tuple)):
+                total += len(group[1])
+        return total
     for other in rules.steps(guard):
         if (other is not step and other.get("kind") == "bullet_tokens"
                 and other.get("file") == step.get("file")
@@ -403,7 +420,8 @@ def _step_anchor_count(rules, step):
     if have < floor:
         ctx.err(_msg(step, "anchor_count_message")
                 .replace("{file}", step["file"]).replace("{have}", str(have))
-                .replace("{min}", str(floor)).replace("{bullet}", step["bullet"]),
+                .replace("{min}", str(floor))
+                .replace("{bullet}", step.get("bullet") or step.get("token_list", "")),
                 step["file"])
 
 
@@ -964,8 +982,8 @@ class Rules:
         `{"guards": {<防线名>: [<步骤>...]}}`，步骤的 `kind` 取值见 `KINDS`。
     ctx : object
         上下文对象，须提供 `err(msg, path="", line=0)`、`read(rel)`、`section(text, title)`、
-        `subsection(text, keyword)`（由调用方提供；本模块不直接依赖它，
-        便于单测注入夹具）。
+        `subsection(text, keyword)`、`tokens(name)`（`anchor_count` 按清单名取条数时用）
+        （由调用方提供；本模块不直接依赖它，便于单测注入夹具）。
     """
 
     def __init__(self, data, ctx):

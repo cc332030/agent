@@ -311,6 +311,11 @@ MECHANISMS = [
      "check_default_review_scope_guard 钉住**判据本体**三组要点（默认检查面 L1：三类问题清单 + 其余取向性要求对存量默认不查不报不整改／存量不动随动迁移、review 不得据此提出问题／唯一例外是主动声明且仅当次生效不得泛化），"
      "并钉两处**既有单项豁免已收敛为回指**——`specs/stack/java.adoc`「数据对象模板」与 `specs/general/coding.adoc`「成员与方法次序」各留一行指向全局真源，且旧单项措辞（review 不得据此提出问题／review 不是第三个生效面等）不得在原处复活（防第二真源）。"
      "『某条意见算不算取向性要求的缺失』『用户的声明算不算主动声明』语义判断（见 GUARD_CHECK_LIMITS）"),
+    ("review 时的干净子 agent 复核：强制开干净上下文、通道先实测后派发（用户点名，Issue #219）",
+     "specs/general/review.adoc「review 时的干净子 agent 复核（强制）」", "script/check_specs.py",
+     "check_clean_subagent_review_guard",
+     "check_clean_subagent_review_guard 钉住该节自己的正文（不是整份文件：同文件的「改动后的 review」一节含同样字样，按整份文件核会把抽走的要点兜住）：强制用与执行者相同的 Agent + 上下文干净（改动方不得以自己那次执行充当复核的上下文）／通道先实测后派发（取不到按不成立、可执行性与『不承载本次会话上下文』两条判据、对象钉定）／派发优先一次性·边界明确·可超时·不带工具、每次换一次干净上下文／硬超时与到点处置／不得换外部来源／降级路径（本人串行 + 标独立性边界或标悬置）／三态留证与『实际读到的上下文范围』（逐态取值回指 verify.adoc、不在本处重抄）；"
+     "另钉三处入口与一处放宽形态不得复活（『复用上一次复核用过的上下文』禁止出现在许可语态里）；**本条只钉要点文本仍在**——『这次到底有没有真开一次干净上下文、是不是沿用本次会话结论充当复核』属运行时事实与语义判断（见 GUARD_CHECK_LIMITS，交人/子 agent 复核）"),
     ("精炼性：同一描述只写一处（重复面是必查项、收敛形态、与内容不减少的边界）",
      "specs/general/review.adoc「精炼性（同一描述只写一处）」+ prompts/_common.txt `delivery` 片段",
      "script/check_specs.py",
