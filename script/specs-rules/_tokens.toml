@@ -243,18 +243,6 @@ DISPATCHER_DETAIL_MARKERS = [
     "唯一落点",
     "不得降级",
 ]
-FILLER_PLACEHOLDER_WORDS = [
-    "此处",
-    "本段",
-    "待补",
-    "待完善",
-    "待补充",
-    "后续补充",
-    "内容同上",
-    "详见上文",
-    "TODO",
-    "略",
-]
 GEN_EFF_ANCHORS = [
     [
         "先定完成判据（L1）",
