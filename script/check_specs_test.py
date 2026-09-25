@@ -42,6 +42,7 @@
 排序中相邻（check_specs.py 紧邻 check_specs_test.py）。
 """
 
+import copy
 import importlib.util
 import os
 import re
@@ -13199,25 +13200,28 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
     故反例逐条对应最易被精简掉的字句，并逐处覆盖三处落点。
     """
 
-    SECTION = (
-        "= Maven 规范\n\n== 构建并行度\n"
-        "* 默认启用多线程构建（L2）：未配置过并行度时默认开 `-T`，**取值＝当前构建设备的核心数**，"
-        "即命令形态 `mvn -T <核心数>`——**核心数怎么得到是执行动作，不写进规范**；"
-        "不写 `-T` 即默认单线程。\n"
-        "* 配置过即以配置为准（L2）：**项目级配置的落点**＝`.mvn/maven.config`，不得覆盖、不得重复追加。\n"
-        "* 并行度只到模块粒度（L1）：`-T` 作用于模块间，同一模块禁止并行构建。\n"
-        "* 测试并行与并行构建默认为两件事（L2）：`forkCount` 默认 `1`，`reuseForks` 须显式写，"
-        "默认只启用构建并行，不因本条去开测试并行。\n"
-        "* 构建产物不得因并行而退化（L2）：在该模块收窄并行度，不得整体退回单线程。\n"
-        "* 依据（标准名/编号）：Maven 官方命令行参考、Apache Maven Surefire 插件文档、"
-        "ISO/IEC/IEEE 25010。\n")
+    # 用例里的最小工件按防线的**要点清单自派生**——加一条要点只改一处，
+    # 用例不会因为"正面用例其实没写全要点"而静默测不到（旧写法是手抄一份平行文本）。
+    def _section(self):
+        parts = []
+        for name, tokens, _why in cm.MAVEN_PARALLEL_ANCHORS:
+            parts.append("* " + name + "：" + "；".join(tokens) + "。\n")
+        parts.append("* 依据（标准名/编号）：Maven 官方命令行参考、Apache Maven Surefire 插件文档、"
+                     "ISO/IEC/IEEE 25010。\n")
+        return "= Maven 规范\n\n== 构建并行度\n" + "".join(parts)
 
-    COMMON = (
-        "// tag::build-parallel[]\n"
-        "**构建并行度（仅限 Maven 多模块构建）**：只对 Maven 多模块构建生效；"
-        "**项目已配过并行度时以项目配置为准**，配过就一律沿用、不覆盖、不重复追加；没配过才在本次构建命令上补默认"
-        "并行参数（`mvn -T <核心数>`，核心数怎么得到是执行动作，**不得写死 `-T 1C`**）；并行到模块粒度为止。\n"
-        "// end::build-parallel[]\n")
+    def _common(self):
+        return ("// tag::build-parallel[]\n"
+                "**构建并行度（仅限 Maven 多模块构建）**：" + "；".join(cm.MAVEN_PARALLEL_PROMPT_ANCHORS) + "。\n"
+                "// end::build-parallel[]\n")
+
+    @property
+    def SECTION(self):
+        return self._section()
+
+    @property
+    def COMMON(self):
+        return self._common()
 
     def _fixture(self):
         self.write("specs/stack/maven.adoc", self.SECTION)
@@ -13226,10 +13230,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
                    "识别特征：**要跑 Maven 构建/测试时**——**构建并行度**"
                    "（`.mvn/maven.config` 优先）与**仓库与镜像**\n")
         self.write("library/sources.adoc",
-                   "== Maven 命令行与并行构建\n`-T,--threads Thread count`\n"
-                   "defining `.mvn/maven.config` file\n"
-                   "== Maven Surefire\nDefault : 1\n"
-                   "By default, Surefire does not execute tests in parallel\n")
+                   "== Maven 命令行与并行构建\n" + "\n".join(cm.MAVEN_PARALLEL_SOURCE_ANCHORS) + "\n")
         self.write("library/adoption.adoc",
                    "* **「Maven 默认启用多线程构建、以项目配置为准」是本站的判据化取舍**："
                    "官方只给机制与取值写法。\n")
@@ -13272,7 +13273,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         # 反例①-2：取值口径退回「写死的 1C」→ 取的不是当前设备核心数（用户点名）
         self._fixture()
         self.write("specs/stack/maven.adoc",
-                   self.SECTION.replace("**取值＝当前构建设备的核心数**", "取值一律 `--threads 1C`"))
+                   self.SECTION.replace("取值＝当前构建设备的核心数", "取值一律 `--threads 1C`"))
         cm.check_maven_parallel_guard()
         self.assertIn("取值＝当前构建设备的核心数", self.error_texts())
 
@@ -13291,9 +13292,85 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         # 反例①-3：片段又变回「命令行补 `-T 1C`」→ 执行侧按写死值开（取不到当前设备核心数）
         self._fixture()
         self.write("prompts/_common.txt",
-                   self.COMMON.replace("**不得写死 `-T 1C`**", "命令行补 `-T 1C`"))
+                   self.COMMON.replace("不得写死 `-T 1C`", "命令行补 `-T 1C`"))
         cm.check_maven_parallel_guard()
         self.assertIn("不得写死", self.error_texts())
+
+    def test_cmdline_carrier_removed_reports(self):
+        # 反例①-5：取值不再要求"写在命令行上"（改由环境变量一类载体传）→
+        # 参数看着加了、命令形态无从核对，换个版本就悄悄退回单线程且不报错
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("取值以命令行参数形态显式传（L1）", "取值可由环境变量或配置传入"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("命令行参数形态显式传", self.error_texts())
+
+    def test_prompt_cmdline_carrier_removed_reports(self):
+        # 反例①-6：执行侧片段抽掉"必须以命令行参数形态显式传"这一半
+        self._fixture()
+        self.write("prompts/_common.txt",
+                   self.COMMON.replace("取值必须以命令行参数形态显式传（L1）", "取值可用 `MAVEN_OPTS` 传"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("命令行参数形态显式传", self.error_texts())
+
+    def test_prompt_env_var_carrier_allowed_reports(self):
+        # 反例①-7：片段把 `MAVEN_OPTS` 一类载体放开（失效形态：参数不在命令行上、无从核对）
+        self._fixture()
+        self.write("prompts/_common.txt",
+                   self.COMMON.replace("不得改用 `MAVEN_OPTS` 一类环境变量载体", "允许用 `MAVEN_OPTS` 传"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("MAVEN_OPTS", self.error_texts())
+
+    def test_anchor_list_item_removed_reports(self):
+        # 反例①-8（**清单删项**）：锚点清单是纯数据、只被本条防线读取——删掉一项时
+        # 规范正文一字未动，那圈"逐 token 核现场文本"**一次都不报错**（"核过且通过"
+        # 与"没核"无从区分）。本条的新增要点只在这里登记过一次，故须有入场核拦它。
+        self._fixture()
+        saved = cm.MAVEN_PARALLEL_ANCHORS
+        reduced = copy.deepcopy(list(saved))
+        reduced[0][1] = [t for t in reduced[0][1]
+                         if t != "取值以命令行参数形态显式传（L1）"]
+        cm.MAVEN_PARALLEL_ANCHORS = reduced
+        try:
+            self.write("specs/stack/maven.adoc", self.SECTION)
+            cm.check_maven_parallel_guard()
+            self.assertIn("锚点条数从下限", self.error_texts())
+        finally:
+            cm.MAVEN_PARALLEL_ANCHORS = saved
+
+    def test_prompt_anchor_list_item_removed_reports(self):
+        # 反例①-9（**片段清单删项**）：与上一条同源——删掉执行侧那两条要求后，
+        # 片段一字未动、逐项核对全绿，而"取值须写在命令行上"就此失守
+        self._fixture()
+        saved = cm.MAVEN_PARALLEL_PROMPT_ANCHORS
+        cm.MAVEN_PARALLEL_PROMPT_ANCHORS = [
+            t for t in saved
+            if t not in ("取值必须以命令行参数形态显式传（L1）",
+                         "不得改用 `MAVEN_OPTS` 一类环境变量载体")]
+        try:
+            self.write("prompts/_common.txt", self.COMMON)
+            cm.check_maven_parallel_guard()
+            self.assertIn("锚点条数从下限", self.error_texts())
+        finally:
+            cm.MAVEN_PARALLEL_PROMPT_ANCHORS = saved
+
+    def test_spec_cmdline_scope_removed_reports(self):
+        # 反例②-2：覆盖口径的**取值句**被抽走（"取值相同也是覆盖"）而轴的标题仍在
+        # ——只核组名/轴名属防线空转，故锚点取到判据本体那一句
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("即使命令行传的取值与项目配置的完全相同", "取值相同时视为沿用"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("即使命令行传的取值与项目配置的完全相同", self.error_texts())
+
+    def test_spec_failure_mode_removed_reports(self):
+        # 反例②-3：新增条文的**失效形态**被抽走（"悄悄退回单线程"）——只剩"必须写在命令行上"
+        # 时读者不知道防的是什么，换个版本静默退化照旧发生
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("悄悄退回单线程", "可能不被识别"))
+        cm.check_maven_parallel_guard()
+        self.assertIn("悄悄退回单线程", self.error_texts())
 
     def test_config_priority_removed_reports(self):
         # 反例②：最易被精简掉的一半——"配过即沿用、不得覆盖"（缺则去改引用方配置）
@@ -13307,8 +13384,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         # 反例③：模块粒度被抽走 → "并行"被读成"模块内也并发"（与同一模块禁止并行构建冲突）
         self._fixture()
         self.write("specs/stack/maven.adoc",
-                   self.SECTION.replace("`-T` 作用于模块间，同一模块禁止并行构建",
-                                        "所有构建步骤都可以并行"))
+                   self.SECTION.replace("模块间", "所有构建步骤都可以并行"))
         cm.check_maven_parallel_guard()
         self.assertIn("模块间", self.error_texts())
 
@@ -13317,6 +13393,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         self._fixture()
         self.write("specs/stack/maven.adoc",
                    self.SECTION.replace("默认只启用构建并行，不因本条去开测试并行", "测试一并并行"))
+
         cm.check_maven_parallel_guard()
         self.assertIn("默认只启用构建并行", self.error_texts())
 
@@ -13341,7 +13418,7 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         self._fixture()
         self.write("library/sources.adoc", "== Maven\n什么都记不清了\n")
         cm.check_maven_parallel_guard()
-        self.assertIn("-T,--threads Thread count", self.error_texts())
+        self.assertIn(cm.MAVEN_PARALLEL_SOURCE_ANCHORS[0], self.error_texts())
 
     def test_library_adoption_anchor_removed_reports(self):
         # 反例⑧：图书馆未登记"本站取舍" → 读者把本站口径当成 Maven 官方要求
