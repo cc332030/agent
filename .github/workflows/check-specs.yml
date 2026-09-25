@@ -39,9 +39,14 @@ jobs:
   lint-specs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Action 版本随 runner 的 Node 运行时走：`checkout@v4` / `setup-python@v5` 面向
+      # Node 20，已被 GitHub 弃用（会被强制跑在 Node 24 上并打印 deprecation 告警）。
+      # 现取两者当前最新主版本 `v7`——各自的 `action.yml` 都声明 `runs.using: node24`，
+      # 且本工作流用到的入参未变（`python-version` 仍在、checkout 默认入参齐全）；
+      # 降回面向 Node 20 的主版本会重新引入该告警。
+      - uses: actions/checkout@v7
       # 运行环境与项目声明一致：规范里点名的脚本一律按 python3 跑（见 specs/stack/python.adoc）
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
       # AsciiDoc 处理器（确定项校验的依赖）：本步骤内装上并**就地校验装成了没有**——
@@ -69,7 +74,7 @@ jobs:
   effective-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run effectiveness check (self regression)
         run: python3 script/check_effective.py
       - name: Run effectiveness check unit tests
