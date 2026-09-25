@@ -55,6 +55,12 @@ NO_GRIP_DECLARED = "无机械抓手"
 # 且真的会被调用）；随规范分发的**工具文件**或配套测试文件等同理填其路径本身（须与 `grip`
 # 一致、文件真实存在）；无抓手条目填「无机械抓手」（对应 `grip=None`）。同一道防线钉住
 # 多条时逐条照写（不合并、不省略）。
+# **核对边界不在本表逐条复述**：机械核对覆盖不到的两类（`运行时事实`／`语义判断`）
+# 取其定义与「这两类一律交人/子 agent 复核、不得由机械判定」的处置，见
+# `script/check_specs.py` 的 `GUARD_CHECK_LIMITS`（唯一定义处）。本表的 `note` 列因此
+# 只写**该条独有的边界**（如"只覆盖本仓库自身侧那一半"）、抓手实际核到的面与它所属的
+# 真源；**凡 `note` 只给出"钉住什么"、未写边界的条目，其边界即上列两类之一**——
+# 逐条照抄那一句属同义反复（同一句写 90 遍），也把"边界是什么"绑在人的记性上。
 MECHANISMS = [
     ("规范调整后须真正验证（要点防线）",       "AGENTS.adoc",                 "script/check_specs.py",
      "check_principle_guard",      "check_specs 的 check_principle_guard 校验该条仍存在"),
@@ -68,8 +74,6 @@ MECHANISMS = [
      "check_forbidden_patterns",      "check_forbidden_patterns"),
     ("不保留无用的历史来源声明",                 "AGENTS.adoc",                 "script/check_specs.py",
      "check_historical_notes",      "check_historical_notes"),
-    ("禁止无意义/划水/凑字数的文档",            "specs/general/doc.adoc",           "script/check_specs.py",
-     "check_filler_docs",      "check_filler_docs（占位段/完全重复段）"),
     ("文档须高质量（准确/完整/可执行/有价值/简洁/可验证）", "specs/general/doc.adoc",   "script/check_specs.py",
      "check_refs_exist",      "可验证性由 check_refs_exist/check_link_refs/check_section_refs 兜底，其余交人 review"),
     ("入口模板代码块逐字保留（换行/空行不丢失）", "AGENTS_COMMON.adoc", "script/check_specs.py",
@@ -83,52 +87,52 @@ MECHANISMS = [
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",
      "check_section_refs", "check_section_refs 钉住「应当记录/不应当记录/条目书写」三节引用不悬空；条目内容的详略判断交人 review"),
     ("发现的问题/事项备注落点与表述按适用范围判定（全局性问题不进范围性落点，全局备注也不夹带范围性内容）", "specs/general/review.adoc", "script/check_specs.py",
-     "check_review_guard", "check_review_guard 钉住判据条与两个方向的约束（去限定词后仍成立=全局性 / 只有某一处能触发=范围性 / 全局性问题不得写进范围性落点 / 全局备注不夹带范围性内容 / 范围性问题不上升为全局规范）仍在，并要求必加载层执行原则与 doc-design「信息归属」两处引用未断；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_review_guard", "check_review_guard 钉住判据条与两个方向的约束（去限定词后仍成立=全局性 / 只有某一处能触发=范围性 / 全局性问题不得写进范围性落点 / 全局备注不夹带范围性内容 / 范围性问题不上升为全局规范）仍在，并要求必加载层执行原则与 doc-design「信息归属」两处引用未断"),
     ("文件移动/重命名必须 git mv（防历史断裂）", "specs/core/execution.adoc",       "script/check_specs.py",
      "check_git_mv_selfcheck",      "check_git_mv_selfcheck 覆盖**本仓库自身侧**（暂存区不得出现 delete+add 形态）；**引用方侧**本仓库看不到、仍靠遵守 + 各项目按 git 规范自检"),
     ("一份变多份的历史归属（同类只让一份继承历史，三级判据）", "specs/general/git.adoc", "script/check_specs.py",
-     "check_split_history_ownership_guard", "check_split_history_ownership_guard 钉住三级判据（相似度高者优先 / 相似度相同时集中到一个模块 / 模块取能继承数量最多者且一经选定即固定）、判定标准四条与不可降级清单回指仍在；加载门（AGENTS_COMMON.adoc「git 操作」的识别特征）一并核；『两个模块各算几个能继承的文件』『哪一份相似度更高』属运行时事实与语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核"),
+     "check_split_history_ownership_guard", "check_split_history_ownership_guard 钉住三级判据（相似度高者优先 / 相似度相同时集中到一个模块 / 模块取能继承数量最多者且一经选定即固定）、判定标准四条与不可降级清单回指仍在；加载门（AGENTS_COMMON.adoc「git 操作」的识别特征）一并核；『两个模块各算几个能继承的文件』『哪一份相似度更高』"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,
      "无机械抓手",
      "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
     ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py",
-     "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据"),
     ("Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）", "specs/stack/java-testing.adoc", "script/check_specs.py",
-     "check_java_test_naming", "check_java_test_naming 钉住规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不得滥拆」是单一语义，只剩一半即被读成『每个场景一个类』或『一个被测类一个类』；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_java_test_naming", "check_java_test_naming 钉住规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不得滥拆」是单一语义，只剩一半即被读成『每个场景一个类』或『一个被测类一个类』"),
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py",
-     "script/check_specs_test.py", "TestScopeStaysOnCommonContent 钉住 check_specs.py 不得读 git 工作区状态/HEAD"),
+     "script/check_specs_test.py", "TestScopeStaysOnCommonContent 钉住 check_specs.py 不得读 git 工作区状态/HEAD；『某次真的没看引用方项目』由该断言核"),
     ("最高关注项不得被删或降级（P1/P2/P3/P5/P6 条款 L1、P4 条款 L2、同列最高关注项）", "specs-project-maintainer/priority.adoc", "script/check_specs.py",
      "check_priority_guard", "check_priority_guard 钉住公共侧分级定义与最高关注项（含保留形态）、维护方侧 P1-P6 各自级别与『依据』行（P6 另钉正文口径：强制同 Agent 须在、旧口径『换外部来源』不得复活），以及 P1/读取/破坏性操作/来源真实性的必加载层落点；『条目级别是否与其实际后果相符』无机械抓手（等级越高验证越严：ISO/IEC Directives Part 2），由人/子 agent 复核承担"),
     ("定级口径（定级四问 + 条款类型判定表）不得被删", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
      "check_spec_admission_guard", "check_spec_admission_guard 钉住『如何给一条规范定级』『与条款类型一一对应』『归属谁』『归类举证』『级别变更与复盘』五个节仍在（口径被删则级别重新混乱）"),
     ("定级方法论与元规范不得涨回常驻层（常驻层只放 L1 底线与最高关注项）", "specs-project-maintainer/priority.adoc", "script/check_specs.py",
-     "check_priority_guard", "check_priority_guard 拦住常驻层再次出现『设级别』等定级方法论节；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_priority_guard", "check_priority_guard 拦住常驻层再次出现『设级别』等定级方法论节"),
     ("规范集合自身重构须按固定顺序（先判归属 → 再判层级 → 再判重复 → 压缩表述）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
      "check_spec_admission_guard", "check_spec_admission_guard 钉住重构顺序三要点仍在（顺序颠倒会把放错位置的内容直接删掉）"),
     ("同一条规则的两种读法（执行侧只给'怎么走'、依据与取舍归思考/决策侧）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
-     "check_spec_admission_guard", "check_spec_admission_guard 钉住「同一条规则有两种读法」节；常驻层侧由 check_priority_guard 钉住『怎么走』形态声明与各最高关注项的『依据』行（依据不得被整段删掉）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_spec_admission_guard", "check_spec_admission_guard 钉住「同一条规则有两种读法」节；常驻层侧由 check_priority_guard 钉住『怎么走』形态声明与各最高关注项的『依据』行（依据不得被整段删掉）"),
     ("重构后须核对规范有效性（两形态分离 / 可执行性不降级 / 可见性不丢）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
-     "check_spec_admission_guard", "check_spec_admission_guard 钉住「重构后须核对规范有效性」节；判据是否真未被压成口号语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_spec_admission_guard", "check_spec_admission_guard 钉住「重构后须核对规范有效性」节；判据是否真未被压成口号"),
     ("读取按最小必要、长会话简单任务在干净上下文执行（P4）", "specs/core/execution.adoc", "script/check_specs.py",
-     "check_priority_guard", "check_priority_guard 钉住 P4 存在性与 execution.adoc 对 context.adoc 的引用；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_priority_guard", "check_priority_guard 钉住 P4 存在性与 execution.adoc 对 context.adoc 的引用"),
     ("去重不得误删最高关注项的引用", "AGENTS.adoc", "script/check_specs.py",
      "check_priority_guard", "check_priority_guard：最高关注项的存在性机械钉住（引用是否被删由该防线兜底发现）"),
     ("从属者（子 agent/被引用方）加载由已加载入口驱动、不靠自报", "AGENTS_COMMON.adoc", "script/check_specs.py",
-     "check_delegation_guard", "check_delegation_guard 钉住『从属者』机制仍在（否则子 agent/被派发任务可'没被告知'为由跳过加载）；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_delegation_guard", "check_delegation_guard 钉住『从属者』机制仍在（否则子 agent/被派发任务可'没被告知'为由跳过加载）"),
     ("改完规范须验证三视角：①完整性 + ②有效性与认知质量 + ③接纳面（同一子 agent）", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_verify_guard", "check_verify_guard 钉住公共「验证总纲」「规范验证」「验证的效力等级」「验证的适用边界」「运行契约」各节、三视角与标准出处、②的判据、'三视角合用一个干净子 agent'、'每次验证换干净上下文'，并核对维护方落点两处口径一致；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_verify_guard", "check_verify_guard 钉住公共「验证总纲」「规范验证」「验证的效力等级」「验证的适用边界」「运行契约」各节、三视角与标准出处、②的判据、'三视角合用一个干净子 agent'、'每次验证换干净上下文'，并核对维护方落点两处口径一致"),
     ("验证须能枚举\"验了什么、怎么算过、依据哪个标准\"（防退化成跑绿脚本、慢慢脱离初衷）", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_verify_guard", "check_verify_guard 钉住「验证总纲」节与标准出处（ISO/IEC Directives Part 2 / RFC 2119 / ISO 10007 / ISO/IEC/IEEE 25010 / IEEE 1028 须在）；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_verify_guard", "check_verify_guard 钉住「验证总纲」节与标准出处（ISO/IEC Directives Part 2 / RFC 2119 / ISO 10007 / ISO/IEC/IEEE 25010 / IEEE 1028 须在）"),
     ("公共内容不得声明机械防线的存在（防线属维护方、随规范分发即宣称与实际不符）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
-     "check_no_mechanism_claims_in_public", "check_no_mechanism_claims_in_public 拦住『当前由某防线钉住』式声明句与裸防线名；该表述是否真在宣称防线由人/子 agent 复核"),
+     "check_no_mechanism_claims_in_public", "check_no_mechanism_claims_in_public 拦住『当前由某防线钉住』式声明句与裸防线名；该表述是否真在宣称机械防线随规范分发属语义判断"),
     ("公共内容须自足：不得引用引用方看不到的私有落点（一个文件可同时装公共与项目规则）", "AGENTS_COMMON.adoc + specs/", "script/check_specs.py",
-     "check_public_content_is_self_contained", "check_public_content_is_self_contained 机械拦住公共内容里指向维护方自查层（specs-project-maintainer/）的引用——该层不随公共内容分发，引用方读到的只是死链；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_public_content_is_self_contained", "check_public_content_is_self_contained 机械拦住公共内容里指向维护方自查层（specs-project-maintainer/）的引用——该层不随公共内容分发，引用方读到的只是死链"),
     ("公共内容被未知项目加载时的可控性（影响面/成本/可控性）", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_adoption_guard", "check_adoption_guard 钉住「运行契约」节、三维判据与维护方承接清单登记；另由 check_public_content_has_no_private_refs 机械拦住\"公共内容把本仓库私有物当抓手引用\"（引用方读到的死链）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_adoption_guard", "check_adoption_guard 钉住「运行契约」节、三维判据与维护方承接清单登记；另由 check_public_content_has_no_private_refs 拦住\"公共内容把本仓库私有物当抓手引用\"（引用方读到的死链）"),
     ("任务各节点须自查（提出/理解/方案/执行/验证/交付/复盘）", "specs/core/execution.adoc", "script/check_specs.py",
-     "check_lifecycle_guard", "check_lifecycle_guard 钉住节点清单以表格行存在、并钉住『哪些节点不设』的独立声明；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_lifecycle_guard", "check_lifecycle_guard 钉住节点清单以表格行存在、并钉住『哪些节点不设』的独立声明"),
     ("CI 校验链完整：流水线须跑全既定校验（含配套测试），测试文件须能被框架自动发现", "specs/general/ci-cd.adoc", "script/check_specs.py",
-     "check_ci_cd_guard", "check_ci_cd_guard 钉住「校验链完整」节与『只跑主校验脚本』『能被测试框架自动发现』两要点（实证：CI 只跑 check-specs.py，配套测试长期零执行、其中一个测试文件因命名无法被自动发现）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_ci_cd_guard", "check_ci_cd_guard 钉住「校验链完整」节与『只跑主校验脚本』『能被测试框架自动发现』两要点（实证：CI 只跑 check-specs.py，配套测试长期零执行、其中一个测试文件因命名无法被自动发现）"),
     ("校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（声明的校验手段不得『从未执行却报绿』）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_toolchain_present_guard",
@@ -138,28 +142,27 @@ MECHANISMS = [
      "没有 CI 级断言：实测把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); "
      "phase_done(); return 0` 后脚本仍报 OK、本道照样全绿（探测代码不在那个函数里）。"
      "新道把『函数体真的探测 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`』"
-     "与『CI 有一步真的执行 `check_specs.py`』变成可核对的；『某次 CI 里那 N 份 .adoc "
-     "真的都被编译了』仍属运行时事实，交人/子 agent 复核"),
+     "与『CI 有一步真的执行 `check_specs.py`』变成可核对的；『某次 CI 里那几份 .adoc 是否真的都被编译了』属运行时事实"),
     ("CI 触发路径须覆盖校验对象、上游依赖须实测可用、执行须有可判定超时", "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住「触发与作用范围」「依赖与外部资源可用性」「超时与资源」关键要点（实证：引用不存在的镜像在 Prepare 阶段失败、流水线长期 pending）；『具体取值是否合理』交人 review"),
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
-     "check_ci_cd_guard", "check_ci_cd_guard 钉住 CNB 侧『派发与复核须钉定 commit sha』『压缩提交/强推会替换对象』『git fetch -f』『派发前确认执行者实际可用』『流水线不无界挂起』与 collab 侧『派发对象须钉定 commit sha』『派发前确认执行者可执行』；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_ci_cd_guard", "check_ci_cd_guard 钉住 CNB 侧『派发与复核须钉定 commit sha』『压缩提交/强推会替换对象』『git fetch -f』『派发前确认执行者实际可用』『流水线不无界挂起』与 collab 侧『派发对象须钉定 commit sha』『派发前确认执行者可执行』"),
     ("验证须覆盖项目全部既定校验手段、验证对象须钉定 commit sha、按需验证不滥验证", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验，Issue #213）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验，Issue #213）"),
     ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py",
-     "check_checklist_guard", "check_checklist_guard 钉住『硬超时』『超时的处置』两要点仍在（否则“派了就一直等”重新出现，实证为外部评审卡 1h+ 未回传）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_checklist_guard", "check_checklist_guard 钉住『硬超时』『超时的处置』两要点仍在（否则“派了就一直等”重新出现，实证为外部评审卡 1h+ 未回传）"),
     ("子任务强制同 Agent、不得点名外部 Agent/NPC", "specs/general/collab.adoc", "script/check_specs.py",
-     "check_delegation_guard", "check_delegation_guard 钉住五处要求的多要素（同 Agent 判据 / 不得点名外部 NPC / 可核对的判定标准 / 同 Agent 不可用时的降级路径 / 优先一次性调用）仍在，并**双向**钉住口径：新口径须在、把外部来源重新放宽的旧口径措辞（备选/次选/(也)可换外部/优先同源）不得复活（含清单概览行与公共侧各落地处，禁止式表述与反例引用除外）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_delegation_guard", "check_delegation_guard 钉住五处要求的多要素（同 Agent 判据 / 不得点名外部 NPC / 可核对的判定标准 / 同 Agent 不可用时的降级路径 / 优先一次性调用）仍在，并**双向**钉住口径：新口径须在、把外部来源重新放宽的旧口径措辞（备选/次选/(也)可换外部/优先同源）不得复活（含清单概览行与公共侧各落地处，禁止式表述与反例引用除外）"),
     ("语义复核留证须是三态台账（通过 / 未发现问题 / 悬置，不得合并）", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_checklist_guard", "check_checklist_guard 钉住『三态』『悬置』两要点仍在；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_checklist_guard", "check_checklist_guard 钉住『三态』『悬置』两要点仍在"),
     ("验证按改动性质取值（代码类走机械判据、规范类才做三视角与全局核对）", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_lifecycle_guard", "check_lifecycle_guard 钉住「验证的适用边界」节、两类改动、唯一判据问句、『不得互串』『取更严的一侧』与『每次验证换干净上下文』；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_lifecycle_guard", "check_lifecycle_guard 钉住「验证的适用边界」节、两类改动、唯一判据问句、『不得互串』『取更严的一侧』与『每次验证换干净上下文』"),
     ("规范何时该拆分（默认不拆、三条硬条件、拆后逐项自洽核对）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
-     "check_lifecycle_guard", "check_lifecycle_guard 钉住「一条规范何时该拆分」与「拆分后的自洽核对」两节及三条硬条件、默认不拆、单独过准入九问；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_lifecycle_guard", "check_lifecycle_guard 钉住「一条规范何时该拆分」与「拆分后的自洽核对」两节及三条硬条件、默认不拆、单独过准入九问"),
     ("执行环境能力先自评、无机制走降级路径且不空自评", "specs/general/self-check.adoc", "script/check_specs.py",
-     "check_delegation_guard", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_delegation_guard", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）"),
     ("常驻层体积与调度器条目数不得无上限膨胀", "AGENTS_COMMON.adoc", "script/check_specs.py",
-     "check_budget_guard", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_budget_guard", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限"),
     ("单个规范文件的软阈值（超线只提醒、不强制拆分）",
      "specs-project-maintainer/spec-lifecycle.adoc「单个规范文件的软阈值」",
      "script/check_specs.py",
@@ -170,11 +173,11 @@ MECHANISMS = [
     ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py",
      "check_prompts_primary", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
     ("对外能力的可替换点须有唯一装配点、须有可用默认（接入成本是设计指标）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_abstraction_adoption_guard", "check_abstraction_adoption_guard 钉住「抽象与接入成本」节的两条 L1（唯一装配点、可替换点须有可用默认或显式必填声明）与其判定特征、四条要点齐全、L1/L2 级别标注、依据行在、Spring「配置」侧引用承接；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_abstraction_adoption_guard", "check_abstraction_adoption_guard 钉住「抽象与接入成本」节的两条 L1（唯一装配点、可替换点须有可用默认或显式必填声明）与其判定特征、四条要点齐全、L1/L2 级别标注、依据行在、Spring「配置」侧引用承接"),
     ("既有实现与先例优先（先查项目已有能力与先例，禁止手写原生写法绕过）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_reuse_precedent_guard", "check_reuse_precedent_guard 钉住通用层两条 L1 条文与典型反例（UUID 手写、集合判空手写）、Java 栈 java-syntax.adoc 优先级顺序（项目自有/已引入库须排在 JDK 之前）、java.adoc 的识别特征与 README 同步；『某次编码是否真的先查了先例』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_reuse_precedent_guard", "check_reuse_precedent_guard 钉住通用层两条 L1 条文与典型反例（UUID 手写、集合判空手写）、Java 栈 java-syntax.adoc 优先级顺序（项目自有/已引入库须排在 JDK 之前）、java.adoc 的识别特征与 README 同步；『某次编码是否真的先查了先例』"),
     ("跨语言执行脚本须放资源文件夹、扩展名取被调语言的扩展名，且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_external_script_guard", "check_external_script_guard 钉住通用层「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」的四条 L1（落点／扩展名取被调语言，无通用扩展名时取该技术支持的文件形式如 MyBatis 的 `*.xml`／按资源读取后执行／加载时机：性能敏感路径首次读取一次并缓存、需求要求内容可变的不适用缓存）、可逐条核对的判定标准与典型反例、依据行，以及 Java 落点（`sql`/`lua` 放 `src/main/resources/`、Redis 用 `DefaultRedisScript` 按静态常量声明、MyBatis 的 `${}` 白名单、`EVALSHA` 复用）与 Java 侧加载时机、Spring 引用承接、调度器两处登记与 README 同步；『某次编码是否真的把脚本放进了资源文件夹、是否真的只读一次』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_external_script_guard", "check_external_script_guard 钉住通用层「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」的四条 L1（落点／扩展名取被调语言，无通用扩展名时取该技术支持的文件形式如 MyBatis 的 `*.xml`／按资源读取后执行／加载时机：性能敏感路径首次读取一次并缓存、需求要求内容可变的不适用缓存）、可逐条核对的判定标准与典型反例、依据行，以及 Java 落点（`sql`/`lua` 放 `src/main/resources/`、Redis 用 `DefaultRedisScript` 按静态常量声明、MyBatis 的 `${}` 白名单、`EVALSHA` 复用）与 Java 侧加载时机、Spring 引用承接、调度器两处登记与 README 同步；『某次编码是否真的把脚本放进了资源文件夹、是否真的只读一次』"),
     ("本仓库 changelog 的默认动作是不新增、不修改：用户本次明确要求才写（不再要求『主动声明』这种额外声明），"
      "未要求时一律不写、不改；用户要求移除时删指定条目、保留其余与既有版本号不动、不得自造新版本号顶上",
      "AGENTS.adoc「版本与变更记录」", "script/check_specs.py",
@@ -189,8 +192,7 @@ MECHANISMS = [
      "AGENTS.adoc「规范组织与自身重构（本仓库落点）」", "script/check_specs.py",
      "check_rule_instance_separation_guard",
      "check_rule_instance_separation_guard 钉住本仓库该条（**规范保持通用**／默认动作是「不写」／实例的登记落点／失效形态与出处）"
-     "与它在 check_effective 的登记；『某条新加的判据里到底有没有夹带实例』属语义判断（实例是自由文本），"
-     "机械核不出来，交人/子 agent 复核"),
+     "与它在 check_effective 的登记"),
     ("规则以对象定义、不给具体操作：写规范时只定义「是什么、取什么值」（取值写成带占位符的形态，如 `mvn -T <核心数>`），"
      "「这个量怎么得到」属执行动作、不进规范；新增、修复、review 三类动作都按此判定，例外只在按定义做不出唯一动作时开口",
      "specs-project-maintainer/spec-lifecycle.adoc「以对象定义规则、不给具体操作」", "script/check_specs.py",
@@ -198,12 +200,12 @@ MECHANISMS = [
      "check_declarative_rule_guard 钉住本条判据本体（定义与取法的分界／只定义取值不定义取法含三条判定标准／"
      "兜底不写具体写法／例外只在有歧义时开口／生效面为新增·修复·review／抽掉专有名词的判定标准／依据行），"
      "并核两处已按新口径收敛的落点（`specs/stack/maven.adoc` 与 `prompts/_common.txt` 的 `build-parallel` 片段）；"
-     "『某条新写的规则里到底算不算多写了取法』属语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核"),
+     "『某条新写的规则里到底算不算多写了取法』"),
     ("Java 序列化：已实现 `Serializable` 的类型须显式声明 `serialVersionUID`（缺省 `1L`）、局部变量优先 `val`、链式调用一律换行",
      "specs/stack/java.adoc「序列化（`Serializable`）」+ specs/general/coding.adoc「表达式与调用写法」",
      "script/check_specs.py",
      "check_java_serial_guard",
-     "check_java_serial_guard 钉住三处判据本体（不是轴名——只核『这几节在不在』属防线空转）：① 序列化——已声明实现 `Serializable` 的类型**必须显式声明** `serialVersionUID`（含父类已实现）、`lombok.config` 实时取值、缺省 `1L`、`@Serial`（JDK 14+）、**不得为未实现者补字段或顺手加 `implements Serializable`**、不得以抑制代替显式声明、判定标准与存量口径、依据行含『1L 属本集合取值』；② 局部变量——**优先 `val`、确实可变才 `var`**（`var` 是例外档不是并列选项）、用 `var` 却没重新赋值即违规、例外与未引入 lombok 时按 `var` 兜底、字段不得使用、依据与『属本集合取值』定性；③ 链式调用——**一律换行、长度不是判据**、同行两处及以上环节即违规、例外、只改形态不改语义的边界、依据与『严于通行风格（按行宽）』定性；并钉调度器三处识别特征（含通用层『所有语言』）与图书馆两处依据落点。**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——裁量点（要不要加 UID / `val` 还是 `var` / 多短算短）留给临场发挥时，同一项目里会并存两种形态；『某个类该不该算已实现 `Serializable`、某条链是否真的拆到了每一环节』属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_java_serial_guard 钉住三处判据本体（不是轴名——只核『这几节在不在』属防线空转）：① 序列化——已声明实现 `Serializable` 的类型**必须显式声明** `serialVersionUID`（含父类已实现）、`lombok.config` 实时取值、缺省 `1L`、`@Serial`（JDK 14+）、**不得为未实现者补字段或顺手加 `implements Serializable`**、不得以抑制代替显式声明、判定标准与存量口径、依据行含『1L 属本集合取值』；② 局部变量——**优先 `val`、确实可变才 `var`**（`var` 是例外档不是并列选项）、用 `var` 却没重新赋值即违规、例外与未引入 lombok 时按 `var` 兜底、字段不得使用、依据与『属本集合取值』定性；③ 链式调用——**一律换行、长度不是判据**、同行两处及以上环节即违规、例外、只改形态不改语义的边界、依据与『严于通行风格（按行宽）』定性；并钉调度器三处识别特征（含通用层『所有语言』）与图书馆两处依据落点。**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——裁量点（要不要加 UID / `val` 还是 `var` / 多短算短）留给临场发挥时，同一项目里会并存两种形态；『某个类该不该算已实现 `Serializable`、某条链是否真的拆到了每一环节』"),
     ("不得新增只做条件取值的方法（没有现成工具方法就加一个通用方法、不就地抽专用方法）",
      "specs/general/coding.adoc「表达式与调用写法」+ specs/stack/java-syntax.adoc「工具类使用约定」",
      "script/check_specs.py",
@@ -213,7 +215,7 @@ MECHANISMS = [
      "例外与边界（已有先例／先加通用工具方法／响应式管线）与存量边界（既有此类方法不视为违规、不告警、不发动全库改造）；"
      "② 相邻条「判空/默认值兜底优先用工具方法」的去向——**没有现成工具方法时的去处是加一个通用工具方法、而不是就地抽专用方法**及其判定标准、例外、『本集合取舍』定性与依据名；"
      "③ Java 落点（`java-syntax.adoc`）——现成入口（hutool 三个方法）+ 补通用方法的落点是项目自有工具类。"
-     "**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——『某个方法算不算只做条件取值』『该处是否已有先例』属语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核"),
+     "**本条防的不是『没写规则』而是『写了规则却仍留裁量点』**——『某个方法算不算只做条件取值』『该处是否已有先例』"),
     ("弃用类/API 一律改用替代者（替代者优先取升级类/同名新类），且默认不动依赖与版本",
      "specs/general/coding.adoc「警告与弃用」+ specs/general/dependency.adoc「升级与废弃」",
      "script/check_specs.py",
@@ -225,11 +227,11 @@ MECHANISMS = [
      "② 依赖侧 `dependency.adoc`——**弃用迁移默认不动依赖面**并回指 `coding.adoc`、判定标准（改动里出现依赖清单/版本变化却未走升级流程即违规）；"
      "另**单独拦**『存量条（内部弃用不迁移）未写明不构成对新代码的豁免』——两条同处一节，后条抵消前条是最易发生的读法。"
      "**本条防的不是『没写规则』而是『替代者取向被抽掉、或借迁移顺手改依赖版本』**——"
-     "『某个类算不算被弃用、某个替代者是否等价』属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某个类算不算被弃用、某个替代者是否等价』"),
     ("Java 字段接口只加 get、不加 set（只约束接口；下游可能加 `@Accessors(chain = true)`，接口里的 setter 会让下游编译不过）",
      "specs/stack/java.adoc「编码」", "script/check_specs.py",
      "check_java_interface_accessor_guard",
-     "check_java_interface_accessor_guard 钉住 Java 栈「编码」的**判据本体**（不是轴名——只核『这一节在不在』属防线空转）：**只约束接口**（`interface` 与「类不适用本条」须同现——判定面被放大到类上会把正常的 lombok setter 判红）、**允许 get / 禁止 set** 两侧、**理由与后果**（下游可能加 `@Accessors(chain = true)` ⇒ **编译不过**——缺则读者不知道要防什么，遇到『接口不加 set 怎么写入』会把 setter 补回去）、**判定标准四条**（接口里声明了 set，含接口上的 lombok 访问器注解 / 以『没法写入』为由补 setter 而未走主动声明 / 自我豁免）、**存量口径**（用户点名『已经有的不管，也不告警』：不视违规、不告警、不整改、随动迁移）、**豁免面与范围**（除非主动声明、仅对该处生效、不得泛化）与依据行，并反向钉住通用层不得出现框架专名 `@Accessors`、技术栈层是判据的唯一落点；另钉调度器识别特征、README 同步与图书馆两处落点。**本条防的不是『没写规则』而是『判定面被放大或理由被抽掉』**——『某个接口算不算字段接口』属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_java_interface_accessor_guard 钉住 Java 栈「编码」的**判据本体**（不是轴名——只核『这一节在不在』属防线空转）：**只约束接口**（`interface` 与「类不适用本条」须同现——判定面被放大到类上会把正常的 lombok setter 判红）、**允许 get / 禁止 set** 两侧、**理由与后果**（下游可能加 `@Accessors(chain = true)` ⇒ **编译不过**——缺则读者不知道要防什么，遇到『接口不加 set 怎么写入』会把 setter 补回去）、**判定标准四条**（接口里声明了 set，含接口上的 lombok 访问器注解 / 以『没法写入』为由补 setter 而未走主动声明 / 自我豁免）、**存量口径**（用户点名『已经有的不管，也不告警』：不视违规、不告警、不整改、随动迁移）、**豁免面与范围**（除非主动声明、仅对该处生效、不得泛化）与依据行，并反向钉住通用层不得出现框架专名 `@Accessors`、技术栈层是判据的唯一落点；另钉调度器识别特征、README 同步与图书馆两处落点。**本条防的不是『没写规则』而是『判定面被放大或理由被抽掉』**——『某个接口算不算字段接口』"),
     ("Java 数据对象模板：新建时整段照抄；补注解时已提交的类默认不加 `@Accessors`、无参不加 `@AllArgsConstructor`、集合默认加 `@Singular`（review 不查存量缺注解属全局口径）",
      "specs/stack/java.adoc「编码」+ specs/stack/java-object.adoc（模板文件）", "script/check_specs.py",
      "check_java_object_template_guard",
@@ -243,8 +245,7 @@ MECHANISMS = [
      "依据行会兜住清单缺项——故取『条目正文』与『清单句』两级（`bullet_tokens` 的 `anchor`/`until`）；"
      "**模板侧另有反向核对**（`file_forbidden`）：机制、判定标准、取舍声明与两档生效面取值**不得**在模板侧再抄一份；"
      "③ 加载门（调度器技术栈层登记 + 识别特征）与 README 目录说明（须写条目名 + 『模板文件、非规范文件』，只留子串会被路径兜住）。"
-     "**本条防的是『模板文件被并回规范』『判据本体被抽走只剩一份清单』『取值在模板侧另抄一份』三种失效**——"
-     "『某个类算不算数据对象、代码里到底标没标这些注解、某个类提交没提交』属语义判断与运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "**本条防的是『模板文件被并回规范』『判据本体被抽走只剩一份清单』『取值在模板侧另抄一份』三种失效**"),
     ("Maven 未配置过仓库/镜像且外网出口 IP 在中国大陆时，须用指定中央仓库",
      "specs/stack/maven.adoc",
      "script/check_specs.py",
@@ -276,21 +277,21 @@ MECHANISMS = [
      "瓶颈归因与方向／结论落点与时效／优化不得改变行为）与两处落点（调度器加载项与识别特征、Java 栈的承载与执行边界）、"
      "以及图书馆依据主题 library/performance.adoc（JMH 与 ISO 编号＋本站取舍的分界锚点）；"
      "**本条只钉要点文本仍在**——『某次测试到底采了几次、成绩是不是真的可复现、有没有真的回头复测瓶颈』"
-     "语义判断（见 GUARD_CHECK_LIMITS）"),
+     ""),
     ("代码质量（新产出即高质）：十项逐条自检须可判定（坏味道/职责与嵌套/命名/可读性/失败与边界/资源/并发/性能退化/测试与文档/交付前自检）",
      "specs/general/coding.adoc「代码质量（新产出即高质）」",
      "script/check_specs.py",
      "check_quality_guard",
      "check_quality_guard 钉住该节仍在、十项要点与判定标准、存量边界与依据行，以及调度器识别特征与图书馆依据主题 library/quality.adoc（坏味道与可读性依据＋同义性差异与取样状态）；"
      "「失败与边界」那一项的**条件例外**（`Enum.valueOf` 一类查找式 API 允许空 `catch`：准入三条 + 两类扩大方向的排除）另由 `check_java_enum_valueof_catch_guard` 逐条钉住（判据本体在本条、Java 落点与加载门在那边）；"
-     "**本条只钉要点文本仍在**——『某次交付的代码质量到底过不过』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『某次交付的代码质量到底过不过』"),
     ("生成效率：先定完成判据、一次做对做完、延后验证一次到位、失败一次查根因、按需读取、不重做已做完的事",
      "specs/general/context.adoc「生成效率（同等质量下最少往返）」",
      "script/check_specs.py",
      "check_generation_efficiency_guard",
      "check_generation_efficiency_guard 钉住该节仍在、十条要点与其判定标准（含『本轮交付之后是否需要再改同一批文件』的运行判据）、"
      "**边界条『效率不得越过质量』**与调度器识别特征；"
-     "**本条只钉要点文本仍在**——『某次任务到底跑了几轮、有没有把可合并的动作拆开、有没有靠重试撞对』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『某次任务到底跑了几轮、有没有把可合并的动作拆开、有没有靠重试撞对』"),
     ("token 纪律：利用率与节省不是一回事；输入须被用到、约束放外部、少复述多引用、不重复读贴、只记结论与取值；以不损害功能完整性/代码质量/验证完整为前提",
      "specs/general/context.adoc「token 纪律（提高利用率与节省开销）」",
      "script/check_specs.py",
@@ -305,31 +306,31 @@ MECHANISMS = [
      "check_after_change_review_guard",
      "check_after_change_review_guard 钉住该节仍在、『每次』与『按性质取值』、改完即审的固定动作（跑机械手段／比基线／核原话／留证）、"
      "『规范类改动不得只跑机械手段』与复核者不可用时的处置，以及依据行（IEEE 1028 / ISO 10007）；"
-     "**本条只钉要点文本仍在**——『某次改动到底有没有复核、跑没跑机械手段』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『某次改动到底有没有复核、跑没跑机械手段』"),
     ("review 的默认检查面：只查问题（代码/文档/用例三类）、存量不动随动迁移、唯一例外是主动声明（用户点名，Issue #203）",
      "specs/general/review.adoc「review 的默认检查面（只查问题，不动存量）」", "script/check_specs.py",
      "check_default_review_scope_guard",
      "check_default_review_scope_guard 钉住**判据本体**三组要点（默认检查面 L1：三类问题清单 + 其余取向性要求对存量默认不查不报不整改／存量不动随动迁移、review 不得据此提出问题／唯一例外是主动声明且仅当次生效不得泛化），"
      "并钉两处**既有单项豁免已收敛为回指**——`specs/stack/java.adoc`「数据对象模板」与 `specs/general/coding.adoc`「成员与方法次序」各留一行指向全局真源，且旧单项措辞（review 不得据此提出问题／review 不是第三个生效面等）不得在原处复活（防第二真源）。"
-     "『某条意见算不算取向性要求的缺失』『用户的声明算不算主动声明』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某条意见算不算取向性要求的缺失』『用户的声明算不算主动声明』"),
     ("review 时的干净子 agent 复核：强制开干净上下文、通道先实测后派发（用户点名，Issue #219）",
      "specs/general/review.adoc「review 时的干净子 agent 复核（强制）」", "script/check_specs.py",
      "check_clean_subagent_review_guard",
      "check_clean_subagent_review_guard 钉住该节自己的正文（不是整份文件：同文件的「改动后的 review」一节含同样字样，按整份文件核会把抽走的要点兜住）：强制用与执行者相同的 Agent + 上下文干净（改动方不得以自己那次执行充当复核的上下文）／通道先实测后派发（取不到按不成立、可执行性与『不承载本次会话上下文』两条判据、对象钉定）／派发优先一次性·边界明确·可超时·不带工具、每次换一次干净上下文／硬超时与到点处置／不得换外部来源／降级路径（本人串行 + 标独立性边界或标悬置）／三态留证与『实际读到的上下文范围』（逐态取值回指 verify.adoc、不在本处重抄）；"
-     "另钉三处入口与一处放宽形态不得复活（『复用上一次复核用过的上下文』禁止出现在许可语态里）；**本条只钉要点文本仍在**——『这次到底有没有真开一次干净上下文、是不是沿用本次会话结论充当复核』属运行时事实与语义判断（见 GUARD_CHECK_LIMITS，交人/子 agent 复核）"),
+     "另钉三处入口与一处放宽形态不得复活（『复用上一次复核用过的上下文』禁止出现在许可语态里）；**本条只钉要点文本仍在**——『这次到底有没有真开一次干净上下文、是不是沿用本次会话结论充当复核』属运行时事实与语义判断"),
     ("精炼性：同一描述只写一处（重复面是必查项、收敛形态、与内容不减少的边界）",
      "specs/general/review.adoc「精炼性（同一描述只写一处）」+ prompts/_common.txt `delivery` 片段",
      "script/check_specs.py",
      "check_refinement_guard",
      "check_refinement_guard 钉住**判据本体**七组要点（重复面是必查项 L1 且与『没查过』分得清／判定标准『以完整表述出现』『改一处要记得改 N 处』／收敛形态『一处完整定义 + 其余位置只留一行引用』／与 P3 的边界『删的只能是重复表述、须留下可达的引用、无法确定的一律保留』／两类不得被当成重复收敛（最高关注项与其引用、各自的承接）／篇幅与重复是两件事／依据行 ISO 10007 与 ISO/IEC/IEEE 29148），并钉住**两处动作落点**——① 改完即审的固定动作里要真的核重复面（否则精炼性于每次改动都不生效）② 提示词公共片段 `delivery` 的「重复面的处理」（review/refactor 两个提示词都 include，一处维护两处生效）；"
      "**机械抓手两道**（都在 `script/specs-rules/duplicate.toml`，阈值与例外理由写在规则数据里）：`check_duplicate_scan_guard`（逐字重复扫描——全仓逐字重合超阈值即报红，**是下界**）与 `check_pointer_no_verbatim_guard`（**自称回指的行不得同时复述取值**——补前者的下界：阈值 40 只报『长度极显著』的重合，而回指句顺手抄取值的公共子串常只有二十几字，前者核不出来）；"
-     "**本条只钉要点文本仍在**——『这次到底查了几处、收敛了哪些、有没有把必要内容当重复删掉』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『这次到底查了几处、收敛了哪些、有没有把必要内容当重复删掉』"),
     ("信息密度：每句须承载（与「精炼性」的分工、判定标准、与 P3 的边界、适用面、依据行）",
      "specs/general/doc.adoc「信息密度（每句须承载）」+ library/sources.adoc「GB/T 7713 系列」",
      "script/check_specs.py",
      "check_info_density_guard",
      "check_info_density_guard 钉住**判据本体**七组要点（与「精炼性」的分工『同一描述有几处』对照『单处里有多少句是废话』且明写『仍可能通篇是废话』／每一句都要有承载 L2 含四条判定标准『复述·空话·同义反复·可有可无的铺垫』／限定语不得降格为表意不明／与 P3 的边界『内容不减少优先』『只有这一句没有承载才是』『压成口号属违反 P3』／适用面『不适用于代码与测试断言』／存量随动迁移／依据行 GB/T 7713.2-2022、GB/T 7713.1-2025、ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148），并钉住**两处入口互引**（`doc.adoc`「简洁」条正文里那半句、`review.adoc`「精炼性」的『与「信息密度」的分工』一行——只核节名不核这半句属防线空转）与**图书馆依据落点**（`library/sources.adoc` 的 GB/T 7713 系列主题段须含标准号、『已废止』换版关系与『同义性』取舍面）；"
-     "**本条只钉要点文本仍在**——『某次产出里到底有没有废话』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『某次产出里到底有没有废话』"),
     ("SQL 写法（同表同类操作合并、独立成文件、带库名）",
      "specs/general/sql.adoc「SQL 写法」（SQL 写法的唯一真源；SQL 是跨语言写法，不埋在技术栈文件里）",
      "script/check_specs.py",
@@ -347,14 +348,14 @@ MECHANISMS = [
      "`specs-project-maintainer/spec-lifecycle.adoc`「新增规范的提案校验」的"
      "「同一事项不得留两处真源」）；只核「有没有这条」属防线空转；"
      "**本条只钉要点文本仍在**——「某条迁移到底该不该合并、有没有真的按表合并输出、"
-     "某次改的是不是用户主动写的 DML」语义判断（见 GUARD_CHECK_LIMITS）"),
+     "某次改的是不是用户主动写的 DML」"),
     ("改完规范必做五件事：机械手段必跑全、干净子 agent 三视角复核不可漏（有了就忽略、没有就加）、三态台账、复核者不可用时的降级留证",
      "specs/general/verify.adoc「改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）」",
      "script/check_specs.py",
      "check_after_change_review_guard",
      "check_after_change_review_guard 钉住该节仍在、五件事逐条（①机械手段先跑且跑全含『报红就地修复』②干净子 agent 三视角不可漏含『有了就忽略、没有就加』③三视角一次读取分栏④三态台账『不得合并』⑤降级路径『不得跳过复核／不得换外部来源／标注独立性边界』）、"
      "**只对规范类改动的边界**，以及维护方两处落点（specs-project-maintainer/verify.adoc 与 AGENTS.adoc）；"
-     "**本条只钉要点文本仍在**——『某次到底跑没跑机械手段、有没有真的起一个干净子 agent、台账实际填没填』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "**本条只钉要点文本仍在**——『某次到底跑没跑机械手段、有没有真的起一个干净子 agent、台账实际填没填』"),
     ("执行吞吐：独立调用须合并（禁试探式往返）、构建与校验输出一次取到、长流程不零信息空转",
      "specs/general/context.adoc「执行吞吐」",
      "script/check_specs.py",
@@ -364,7 +365,7 @@ MECHANISMS = [
      "缓存与镜像就近且**已配置过即不覆盖不重配**／长流程不留零信息等待）、"
      "常驻层两处引用（最高关注项段落与「任务编排与上下文管理」）与调度器识别特征；"
      "**本条只钉要点文本仍在**——『某次任务到底往返了几轮、有没有把可合并的调用拆成多轮』"
-     "运行时事实（见 GUARD_CHECK_LIMITS）"),
+     ""),
     ("CNB 平台侧执行吞吐：一次唤起=一次完整加载、状态与用量按汇总先取再下钻、不空转等待",
      "specs/platform/cnb.adoc「执行吞吐（平台侧的两处特有代价）」",
      "script/check_specs.py",
@@ -372,11 +373,11 @@ MECHANISMS = [
      "check_throughput_guard 同时钉住平台侧该节仍在与四条要点（一次唤起=一次加载／"
      "状态先取汇总再下钻／不用零信息往返等长流程／AI 用量与请求明细是本平台的可观测面）；"
      "**本条只钉要点文本仍在**——『某次执行到底做了几轮状态查询、有没有空转等待』"
-     "运行时事实（见 GUARD_CHECK_LIMITS）"),
+     ""),
     ("文档中提及类型优先写类名 + import（不写类全名）", "specs/general/doc.adoc", "script/check_specs.py",
-     "check_doc_type_notation_guard", "check_doc_type_notation_guard 钉住通用层「注释与文档」下的该条（**L2**：先短类名、需要解析时在就近代码示例里写一条 import，不得用类全名充当标识）与三个必要情形（同名类冲突／无代码示例可承载 import／**该类型不在本仓库的 classpath 内**——即用户口径的『除非不在 classpath 才能写类全名』，写成『不在本仓库/本项目内』即偏严、classpath 内但属他仓/外部的类型会被误禁）、三个例外边界（路径与坐标不是类型名、字符串与配置里必须全限定的场合（@ConditionalOnClass 类名、main-class、反射按名加载、import 本身）、文档自身的文本引用）、不做存量一次性替换的口径；Java 栈「javadoc」的落点（含 {@link}/@see 成员引用与配置/反射照常全限定的边界）与调度器两处识别特征。**为 L2 且判据是语义的（java.util.UUID 一类外部类型全限定属合规），本防线只钉条文与判据仍在、不扫存量文档**——「某处到底该不该写全限定」交人/子 agent 复核"),
+     "check_doc_type_notation_guard", "check_doc_type_notation_guard 钉住通用层「注释与文档」下的该条（**L2**：先短类名、需要解析时在就近代码示例里写一条 import，不得用类全名充当标识）与三个必要情形（同名类冲突／无代码示例可承载 import／**该类型不在本仓库的 classpath 内**——即用户口径的『除非不在 classpath 才能写类全名』，写成『不在本仓库/本项目内』即偏严、classpath 内但属他仓/外部的类型会被误禁）、三个例外边界（路径与坐标不是类型名、字符串与配置里必须全限定的场合（@ConditionalOnClass 类名、main-class、反射按名加载、import 本身）、文档自身的文本引用）、不做存量一次性替换的口径；Java 栈「javadoc」的落点（含 {@link}/@see 成员引用与配置/反射照常全限定的边界）与调度器两处识别特征。**为 L2 且判据是语义的（java.util.UUID 一类外部类型全限定属合规），本防线只钉条文与判据仍在、不扫存量文档**——「某处到底该不该写全限定」"),
     ("无参/必参/全参构造优先用 lombok、不手写构造方法", "specs/stack/java.adoc", "script/check_specs.py",
-     "check_lombok_constructor_guard", "check_lombok_constructor_guard 钉住 Java 栈「编码」的条文与 L1、三种构造注解（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、并存写法、可逐条核对的判定标准、例外（注解表达不了的动作才可手写并写明原因）与存量边界，以及调度器识别特征与 README 同步；措辞回退成建议（尽量用/可手写）亦被拦下。『某个具体类该不该手写构造』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_lombok_constructor_guard", "check_lombok_constructor_guard 钉住 Java 栈「编码」的条文与 L1、三种构造注解（`@NoArgsConstructor`/`@RequiredArgsConstructor`/`@AllArgsConstructor`）、并存写法、可逐条核对的判定标准、例外（注解表达不了的动作才可手写并写明原因）与存量边界，以及调度器识别特征与 README 同步；措辞回退成建议（尽量用/可手写）亦被拦下。『某个具体类该不该手写构造』"),
     ("数据库实体类不得作为接口的请求/响应参数（L1，跨语言；用户声明可豁免、存量不管）",
      "specs/general/coding.adoc「数据契约的载体（数据库实体类不进对外契约）」",
      "script/check_specs.py",
@@ -392,54 +393,54 @@ MECHANISMS = [
      "**通用层不得出现框架专名**（`@Entity`/`MyBatis`，替换主语测试）、**技术栈层不得另立第二真源**；"
      "另钉调度器识别特征（须落在『要判定对外接口的请求/响应参数与返回值用什么类承载』这一可判读条件上，"
      "不得只写『数据契约』这类口号）与图书馆取向登记（本集合更严取舍、如实标注外部材料未规定）。"
-     "『某个接口算不算对外』『某次改动是否真的只动了新增接口』属语义判断与运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "『某个接口算不算对外』『某次改动是否真的只动了新增接口』属语义判断与"),
     ("多层嵌套对象转换优先声明式映射、JVM 下优先 MapStruct（建议、非强制）", "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
-     "check_conversion_guard", "check_conversion_guard 按**建议层口径**钉住通用层「对象转换（多层嵌套对象的转换）」——首选声明式映射、判据是**目标式**的（同一转换只有一处来源、结构变化不静默漏字段）、等价路径（深拷贝/序列化中转/手工构建器）同样合规、除主动声明外优选声明式映射且手写须备注原因、**无嵌套（单层）不在本条范围内**（且不得被抄窄成按字段数判）、例外与边界、存量随动迁移与依据行；**反向钉住条文与栈层不得被写成强制面**（「不允许手写转换代码」「一律用」），并反向钉住通用层不得出现框架专名（`MapStruct`/`@Mapper`/`@Mapping`——替换主语测试）；Java 栈「对象转换（MapStruct）」的优先 MapStruct/建议不手写、`@Mapper` 声明形态、嵌套/集合由映射方法表达、不并存两套写法、非强制与例外；调度器两处识别特征与 README 同步、图书馆取向与如实取样状态登记。'某个具体转换该不该用映射库、该结构能否由映射声明表达'语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_conversion_guard", "check_conversion_guard 按**建议层口径**钉住通用层「对象转换（多层嵌套对象的转换）」——首选声明式映射、判据是**目标式**的（同一转换只有一处来源、结构变化不静默漏字段）、等价路径（深拷贝/序列化中转/手工构建器）同样合规、除主动声明外优选声明式映射且手写须备注原因、**无嵌套（单层）不在本条范围内**（且不得被抄窄成按字段数判）、例外与边界、存量随动迁移与依据行；**反向钉住条文与栈层不得被写成强制面**（「不允许手写转换代码」「一律用」），并反向钉住通用层不得出现框架专名（`MapStruct`/`@Mapper`/`@Mapping`——替换主语测试）；Java 栈「对象转换（MapStruct）」的优先 MapStruct/建议不手写、`@Mapper` 声明形态、嵌套/集合由映射方法表达、不并存两套写法、非强制与例外；调度器两处识别特征与 README 同步、图书馆取向与如实取样状态登记。'某个具体转换该不该用映射库、该结构能否由映射声明表达'"),
     ("数据访问边界：IService 成员方法只许在本子类内用、实体 Mapper 只由其对应实体的 Service 调用、跨表业务另建 BizService、调库前先判空（集合返回空集合）", "specs/stack/java.adoc + specs/stack/spring.adoc", None,
      "无机械抓手",
-     "无机械抓手：判据是语义判断（某个调用点算不算跨类调 `IService` 成员方法、某次查询算不算补充性单表查询——见 GUARD_CHECK_LIMITS），机械只核文本会空转、且与 `check_persistence_access_guard` 成第二真源，故不设机械抓手，靠遵守 + 人/子 agent 复核。原 `check_orm_boundary_guard` 已删（删除记账见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，按次序留档）」）"),
+     "无机械抓手：判据是语义判断（某个调用点算不算跨类调 `IService` 成员方法、某次查询算不算补充性单表查询），机械只核文本会空转、且与 `check_persistence_access_guard` 成第二真源，故不设机械抓手，靠遵守 + 人/子 agent 复核。原 `check_orm_boundary_guard` 已删（删除记账见 `specs-project-maintainer/guards.adoc`「已删除的防线（删除记账，按次序留档）」）"),
     ("持久化访问强制走统一入口与类型安全查询构造 API（不 new 构造器、不用字符串写列名）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_persistence_access_guard", "check_persistence_access_guard 钉住通用层「持久化访问（数据库/缓存等）」的三条 L1（统一入口／优先类型安全·声明式查询构造 API／替代优先）、可逐条核对的判定标准（构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止 mapper `*.xml` 承载）、存量随动迁移与依据行；Java 栈「持久化访问（MyBatis-Plus / JPA 等）」的四个 `IService` 成员方法（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate`）、禁止面（`new QueryWrapper` 及其子类含 `new LambdaQueryWrapper`，**并入 `Wrappers` 一族静态构造方法**——`Wrappers.lambdaQuery()` 一类同样绕过统一入口）、`IService` 之外的落点（Mapper 注解/映射文件、Mapper 默认方法）与例外口径；调度器两处识别特征与 README 同步。『某个具体类该不该 new 构造器、该条件能否由 lambda 形态表达』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_persistence_access_guard", "check_persistence_access_guard 钉住通用层「持久化访问（数据库/缓存等）」的三条 L1（统一入口／优先类型安全·声明式查询构造 API／替代优先）、可逐条核对的判定标准（构造器 `new`／字符串写列名／绕过统一入口）、例外与边界（不禁止 mapper `*.xml` 承载）、存量随动迁移与依据行；Java 栈「持久化访问（MyBatis-Plus / JPA 等）」的四个 `IService` 成员方法（`lambdaQuery`/`lambdaUpdate`/`ktQuery`/`ktUpdate`）、禁止面（`new QueryWrapper` 及其子类含 `new LambdaQueryWrapper`，**并入 `Wrappers` 一族静态构造方法**——`Wrappers.lambdaQuery()` 一类同样绕过统一入口）、`IService` 之外的落点（Mapper 注解/映射文件、Mapper 默认方法）与例外口径；调度器两处识别特征与 README 同步。『某个具体类该不该 new 构造器、该条件能否由 lambda 形态表达』"),
     ("配置类不写逻辑（配置类只保持 POJO 基本功能、逻辑下沉 utils/service）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_config_class_guard", "check_config_class_guard 钉住通用层条文（含『任何情况都不允许』与去向）、判定标准、Java/Spring 识别特征与 README 同步；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_config_class_guard", "check_config_class_guard 钉住通用层条文（含『任何情况都不允许』与去向）、判定标准、Java/Spring 识别特征与 README 同步"),
     ("执行前自检（非平凡任务须逐项自检，防'加载了却没执行'）", "specs/general/self-check.adoc", "script/check_specs.py",
-     "check_self_check_guard", "check_self_check_guard 钉住自检规范文件、适用边界与 execution.adoc 必加载层落点；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_self_check_guard", "check_self_check_guard 钉住自检规范文件、适用边界与 execution.adoc 必加载层落点"),
     ("不得编造事实与来源（引用真实、标准不编、宁可不引）", "specs/general/source.adoc", "script/check_specs.py",
      "check_source_guard", "check_source_guard 钉住来源规范要点；引用存在性另由 check_refs_exist/check_section_refs 兜底"),
     ("不可逆操作先确认（删除/清空/强推，P5）", "specs/core/execution.adoc", "script/check_specs.py",
-     "check_priority_guard", "check_priority_guard 钉住 P5 存在性与「破坏性操作」落点；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_priority_guard", "check_priority_guard 钉住 P5 存在性与「破坏性操作」落点"),
     ("引用坐标不得靠位置（引用式写目标全名、位置式不得用）", "specs/general/source.adoc", "script/check_specs.py",
      "check_reference_coord_guard", "check_reference_coord_guard 钉住引用坐标的两类形态（位置式坐标 / 只写文件名的引用式坐标）；名称所指的节是否真实存在另由 check_section_refs 兜底（Issue #208 的 7 处失效里只有 1 处落在它覆盖面内，故本轮补了这道）"),
     ("skill 里的引用须就地落盘（指到兄弟文件的引用在目标项目里落空）", "specs/general/source.adoc", "script/check_specs.py",
-     "check_skill_ref_coord_guard", "check_skill_ref_coord_guard 钉住 skill 文档里指到 `references/`、`scripts/` 这类**兄弟文件**的引用（安装后真正落到落点的只有 `SKILL.md`）；配套文件怎么就地落盘属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_skill_ref_coord_guard", "check_skill_ref_coord_guard 钉住 skill 文档里指到 `references/`、`scripts/` 这类**兄弟文件**的引用（安装后真正落到落点的只有 `SKILL.md`）；配套文件怎么就地落盘"),
     ("换行符按解释器分流（LF 基准、.bat/.cmd 必须 CRLF、.gitattributes/.editorconfig 固定；仓库根缺这两个落盘口即补齐）", "specs/general/encoding.adoc", "script/check_specs.py",
      "check_line_ending_guard", "check_line_ending_guard 钉住编码规范的分流判据（LF 基准、`.bat`/`.cmd` CRLF、`core.autocrlf`/`.gitattributes`/`.editorconfig` 落盘口）与 bash/python/powershell 栈文件的行尾要求；某文件实际是否为 CRLF、仓库根是否已有 `.gitattributes`/`.editorconfig` 属引用方工作区状态，本仓库不可见，靠引用方 `git ls-files --eol` 自检"),
     ("代码安全底线（输入校验/输出编码/凭据不硬编码）", "specs/general/security.adoc", None,
      "无机械抓手",
-     "无机械抓手：具体实现语义判断（见 GUARD_CHECK_LIMITS）"),
+     "无机械抓手：具体实现属语义判断（输入校验/输出编码做得够不够）"),
     ("依据不得只剩名称：图书馆须可查到、可逐字核对、引用不悬空", "AGENTS.adoc", "script/check_specs.py",
-     "check_library_guard", "check_library_guard 钉住图书馆（仓库根 library/，不在默认引用面内）入口与主题文件存在且被项目规范入口登记、入口登记与实际主题双向一致、外部标准逐字引文锚点仍在、馆内引用可解析（悬空即依据链断在这里）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_library_guard", "check_library_guard 钉住图书馆（仓库根 library/，不在默认引用面内）入口与主题文件存在且被项目规范入口登记、入口登记与实际主题双向一致、外部标准逐字引文锚点仍在、馆内引用可解析（悬空即依据链断在这里）"),
     ("馆无体量上限：引用方不全量下载即准确定位依据（主键为内容、非路径）", "AGENTS.adoc", "script/check_specs.py",
-     "check_library_locating_guard", "check_library_locating_guard 钉住图书馆入口的『定位协议』要点（作者侧/取用侧之分、入口 = 常驻层的固定地址、三步取值、版本固化只是可选加固、不解析页面结构）、usage 侧的使用判据（取用侧只有 https、主键是内容不是路径、终止条件、不承载派生落点）、sources 侧的机制原文与如实取样状态（git 内容寻址 / RFC 7233，且须标站点与平台视图均未实测到 Range）、**『先取 commit 再拼地址』这一取用前置形态不得回退**、**馆内主题文件名不得过长（≤32 字符：名字不是检索键、却会被读进每次链接与目录列举）**、以及项目规范入口的口径；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_library_locating_guard", "check_library_locating_guard 钉住图书馆入口的『定位协议』要点（作者侧/取用侧之分、入口 = 常驻层的固定地址、三步取值、版本固化只是可选加固、不解析页面结构）、usage 侧的使用判据（取用侧只有 https、主键是内容不是路径、终止条件、不承载派生落点）、sources 侧的机制原文与如实取样状态（git 内容寻址 / RFC 7233，且须标站点与平台视图均未实测到 Range）、**『先取 commit 再拼地址』这一取用前置形态不得回退**、**馆内主题文件名不得过长（≤32 字符：名字不是检索键、却会被读进每次链接与目录列举）**、以及项目规范入口的口径"),
     ("依据该何时写、怎么反查（写入判据与关联协议）", "AGENTS.adoc", "script/check_specs.py",
-     "check_library_guard", "check_library_guard 钉住『依据的写入与关联』主题（library/usage.adoc）的要点锚点：写入触发特征、不写判据、入库必写项、关联协议与**只取一份不遍历**的反查解析算法、**默认引用面与非引用面**的边界；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_library_guard", "check_library_guard 钉住『依据的写入与关联』主题（library/usage.adoc）的要点锚点：写入触发特征、不写判据、入库必写项、关联协议与**只取一份不遍历**的反查解析算法、**默认引用面与非引用面**的边界"),
     ("落点口径须写对：不得把本仓库内容写成\"私有/不对外发布\"", "README.adoc", "script/check_specs.py",
      "check_ref_scope_wording_guard", "check_ref_scope_wording_guard 钉住本仓库维护范围内的 .adoc 不得出现\"本仓库私有…不随规范分发\"\"私有内容不随规范分发\"\"不随规范分发\"三类错误形态（平台事实：本仓库所有内容都会被发布，区别只在\"默认引用什么\"），并豁免引用/纠正该表述本身的句子与\"私有落点/私有抓手名\"这类自足性用语、豁免 CHANGELOG 历史条目；『某处该不该被引用方按入口加载』属判定"),
     ("引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断整份文档编译）", "AGENTS.adoc", "script/check_specs.py",
-     "check_quote_line_guard", "check_quote_line_guard 钉住仓库维护范围内全部 .adoc 的引文行形态：行首 `> ` 即命中（该形态被 AsciiDoc 的 `listdef-callout` 吃掉、`index` 取空串后在 `List.calc_style()` 里 `assert False`，整份文件编译失败；页面侧 Asciidoctor.js 渲染成引用块、看不出问题）；行内 `>`（比较运算符、shell 重定向）不误伤；写引文用 `[quote]` + 正文行；『某段确实该是引文还是该改写成正文』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_quote_line_guard", "check_quote_line_guard 钉住仓库维护范围内全部 .adoc 的引文行形态：行首 `> ` 即命中（该形态被 AsciiDoc 的 `listdef-callout` 吃掉、`index` 取空串后在 `List.calc_style()` 里 `assert False`，整份文件编译失败；页面侧 Asciidoctor.js 渲染成引用块、看不出问题）；行内 `>`（比较运算符、shell 重定向）不误伤；写引文用 `[quote]` + 正文行；『某段确实该是引文还是该改写成正文』"),
     ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）", "CHANGELOG.adoc", "script/check_specs.py",
-     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条不得超长（实证失效：日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连）；『条目是否记对了变更点、有没有漏记』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条不得超长（实证失效：日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连）；『条目是否记对了变更点、有没有漏记』"),
     ("变更日志排序方向恒为时间倒序（版本倒序即时间倒序）并以发布版本为一级分组、版本内按类型分组；两种条目形态（流水式/表格式）择一，表格式须有分组列/类型列/变更点/影响四列且影响列不得退化为变更点的同义重复、破坏性变更须逐行标注", "specs/general/changelog.adoc", "script/check_specs.py",
      "check_changelog_structure_guard",
-     "check_changelog_structure_guard 钉住三处：①组织形态（**排序方向恒为时间倒序、版本倒序即时间倒序**——版本单调递增时二者一致，故不存在『两种要择一的排序』、正序即错；按版本分组为默认、版本号即发布标识、两种分组口径择一且**不并存**、类型闭集、空分组不写）；②表格形态的判据（四列列义、判据依赖关系与三条反向禁令（不得用类型分级代替破坏性变更标注 / 不得把影响写成变更点的同义重复 / 影响列写不出读者要做的动作即说明不该记）、破坏性变更逐行标注、表格里一条=一个变更点、要素齐备底线四项（类型/变更点/影响/标记））；③图书馆依据（Keep a Changelog / Conventional Commits / Conventional Changelog 三者齐备，且**如实标注是业界约定而非标准**——Keep a Changelog 自述没有标准格式）。实证失效（用户报告）：一个版本改了很多东西时单行流水式日志不可检索，用户对比两个 tag 后要求「根据模块和功能分类，做成一个表格」；反向失效是**换成表格后把影响列省掉**、**用类型列代替破坏性变更标注**，以及**把排序方向写成正序**或把『版本倒序』与『时间倒序』读成两种可择一的排序（用户口径：排序方式还是时间倒序、版本是越来越大的、版本倒序和时间倒序是一样的）。『某条条目是否真的写清了影响、表格是否真的可检索』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_changelog_structure_guard 钉住三处：①组织形态（**排序方向恒为时间倒序、版本倒序即时间倒序**——版本单调递增时二者一致，故不存在『两种要择一的排序』、正序即错；按版本分组为默认、版本号即发布标识、两种分组口径择一且**不并存**、类型闭集、空分组不写）；②表格形态的判据（四列列义、判据依赖关系与三条反向禁令（不得用类型分级代替破坏性变更标注 / 不得把影响写成变更点的同义重复 / 影响列写不出读者要做的动作即说明不该记）、破坏性变更逐行标注、表格里一条=一个变更点、要素齐备底线四项（类型/变更点/影响/标记））；③图书馆依据（Keep a Changelog / Conventional Commits / Conventional Changelog 三者齐备，且**如实标注是业界约定而非标准**——Keep a Changelog 自述没有标准格式）。实证失效（用户报告）：一个版本改了很多东西时单行流水式日志不可检索，用户对比两个 tag 后要求「根据模块和功能分类，做成一个表格」；反向失效是**换成表格后把影响列省掉**、**用类型列代替破坏性变更标注**，以及**把排序方向写成正序**或把『版本倒序』与『时间倒序』读成两种可择一的排序（用户口径：排序方式还是时间倒序、版本是越来越大的、版本倒序和时间倒序是一样的）。『某条条目是否真的写清了影响、表格是否真的可检索』"),
     ("提交信息须带类型前缀、破坏性变更须显式标注（`!` 或 `BREAKING CHANGE:` 页脚）", "specs/general/git.adoc", "script/check_specs.py",
      "check_commit_message_guard", "check_commit_message_guard 钉住「提交信息」节的形态（`<type>[(scope)]: <subject>` + 类型固定闭集）、可逐条核对的判定标准（首行无类型前缀即不合规）、破坏性变更须 `!` + `BREAKING CHANGE:` 页脚且**不得把某个类型默认为破坏性的**、正文写「为什么」与边界、以及**如实标注依据是业界约定而非标准**（Conventional Commits 自述 a lightweight convention on top of commit messages）；缺口来源：本集合早已把 Conventional Commits 1.0.0 原文收进图书馆，却只用它支撑变更日志的展示形态——提交信息这一「上游」空着，变更日志的「按类型分组」只能人工归类。『某条提交信息是否真的写清了影响』属语义判断；『某次提交有没有带类型前缀』可由提交历史机械判定，属引用方项目的运行时事实（本仓库不可见），靠引用方的提交检查或人 review"),
     ("HTTP 方法与状态码按协议语义使用（安全方法不得产生状态变更、幂等与重试对齐、状态码不得一律包 200、错误响应可统一为 Problem Details）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_http_semantics_guard", "check_http_semantics_guard 钉住「HTTP 接口语义」三处：①条文与级别（安全方法不得产生状态变更 **L1**、幂等与状态码 **L2**、Problem Details **L3 可选**——级别不得被顺手改动）；②适用范围（无 HTTP 接口的项目不适用，避免高频误伤）；③图书馆依据（RFC 9110 安全方法/幂等/状态码与 RFC 9457 的**逐字**引文、以及「判据化取值 vs 标准原文」的同义性差异如实标注）。缺口来源：此前只覆盖路径命名风格，方法与状态码语义未覆盖（`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用；错误包成 `200` 会让重试、缓存、监控与网关策略全部失效）。『某个接口实际用的是哪个方法、返回什么状态码』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_http_semantics_guard", "check_http_semantics_guard 钉住「HTTP 接口语义」三处：①条文与级别（安全方法不得产生状态变更 **L1**、幂等与状态码 **L2**、Problem Details **L3 可选**——级别不得被顺手改动）；②适用范围（无 HTTP 接口的项目不适用，避免高频误伤）；③图书馆依据（RFC 9110 安全方法/幂等/状态码与 RFC 9457 的**逐字**引文、以及「判据化取值 vs 标准原文」的同义性差异如实标注）。缺口来源：此前只覆盖路径命名风格，方法与状态码语义未覆盖（`GET` 承载写操作会被爬虫/预取在无人操作时触发副作用；错误包成 `200` 会让重试、缓存、监控与网关策略全部失效）。『某个接口实际用的是哪个方法、返回什么状态码』"),
     ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py",
      "check_public_content_coverage", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定"),
     ("安装取文件须有随规范分发的抓手：清单从入口自身解析、一次取全（不手拼逐条下载命令）", "AGENTS_COMMON.adoc", "script/check_specs.py",
-     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步"),
     ("重新执行安装须能更新现有副本（安装脚本经常更新：以远程为准、内容不同才刷新，失败保留本地那一份）",
      "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
@@ -448,10 +449,10 @@ MECHANISMS = [
      "（不得把副本删掉换成没有），以及 AGENTS_COMMON/README 两处文档写明该语义——"
      "防退回「本地既有就跳过」：它把安装结果绑在「本地以前取过什么」上，远端修好了、加了一节规范，"
      "用户重跑安装仍旧什么都不做（用户实测诉求）；反向也拦「失败也把本地删掉」这把「没更新」"
-     "变成「没有」的形态。『某次重跑是否真的取到了最新内容』运行时事实（见 GUARD_CHECK_LIMITS）"
+     "变成「没有」的形态。『某次重跑是否真的取到了最新内容』"
      "靠实测与留证（本仓库按逐字节比对、`--keep`/刷新三态各跑一遍复核）"),
     ("多模块项目的模块间依赖须有完整依赖关系文档（UML 表述、查依赖先读它、缺失即新增、不重复声明）", "specs/general/doc-design.adoc", "script/check_specs.py",
-     "check_dependency_view_guard", "check_dependency_view_guard 钉住「依赖关系文档（模块间依赖的唯一视图）」节的要点（完整 / UML 优先 / 固定路径可直达 / 先查本文档 / 缺失即新增 / 同提交同步 / 不重复声明 / 与构建工具边界）与两处指向（加载调度器、依赖规范）；『某个项目的依赖视图是否真的完整、有没有过期』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_dependency_view_guard", "check_dependency_view_guard 钉住「依赖关系文档（模块间依赖的唯一视图）」节的要点（完整 / UML 优先 / 固定路径可直达 / 先查本文档 / 缺失即新增 / 同提交同步 / 不重复声明 / 与构建工具边界）与两处指向（加载调度器、依赖规范）；『某个项目的依赖视图是否真的完整、有没有过期』"),
     ("取规范副本的落点取完即只读、严禁任何项目改动它（不仅是规范里定义，文件本身也变只读）",
      "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_readonly_landing_guard",
@@ -495,17 +496,16 @@ MECHANISMS = [
      "删掉维持——删名字比删防线容易得多）；④脚本头部清单不得出现断号。"
      "实证失效（本轮实测复现）：一道防线被从 `main()` 摘掉、它的 8 条反例用例一并被删，"
      "`check_specs.py` 报 OK、单测全通过、台账上的『抓手数』也没变；台账里的防线名改成不存在的"
-     "名字仍报『有抓手』；清单两条被整条删掉仍报绿。『某次删除是否该被批准』语义判断（见 GUARD_CHECK_LIMITS）"
-     "交人/子 agent 复核"),
+     "名字仍报『有抓手』；清单两条被整条删掉仍报绿。『某次删除是否该被批准』"
+     ""),
     ("已被证否的旧口径不得写回：口径被现场实测证否后，描述该口径『旧错法』的特征措辞不得再写回脚本注释/文档字符串",
      "AGENTS.adoc（本仓库自身工具）", "script/check_specs.py",
      "check_stale_wording_guard",
      "`check_stale_wording_guard` 把**实测证否**的口径的**特征措辞**外置成规则数据"
      "（`script/specs-rules/_tokens.toml`）、逐条核『有没有被写回来』。失效形态：口径被证否后"
      "改掉的是**方向**，而『旧的错法长什么样』只留在改动记录里——下一个人照旧句子复述一遍就把"
-     "错口径带回注释（本仓库实证：`def test_` 的旧计数口径在被证否之后仍在多轮沿革里成串出现）。"
-     "效力边界：只核措辞形态，『这条口径今天还成不成立』属语义判断（见 GUARD_CHECK_LIMITS）、"
-     "交人/子 agent 复核"),
+     "错口径带回注释（本仓库实证：`def test_` 的旧计数口径在被证否之后仍在多轮沿革里成串出现）"
+     ""),
     ("入口文档须给『隔一次会话还认得回来』的清单：安装与取回口径的落点路径与取规范脚本路径、副本检索路径、取回与更新方式、要跨会话保留的本项目信息（落点只有用户家目录下的一处）",
      "specs/general/entry-doc.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_entry_doc_manifest",
@@ -532,7 +532,7 @@ MECHANISMS = [
      "写全，并核入口那一节**仍有落点与指向真源（及其部位）的回指**。用户口径是『这一节重复了』"
      "——同一件事实写两处即两处漂移，故判据**不得**再要求入口复述那些句子"
      "（要求复述=把重复判成合规）；反向：入口只剩指针、真源被抽空，两种形态都报红。"
-     "『某次安装是否真把项目信息写进入口文档』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "『某次安装是否真把项目信息写进入口文档』"),
     ("安装流程的幂等更新：用户手工编辑过的模板内容不自动改回（用户改过的以用户改过的为准）",
      "AGENTS_COMMON.adoc「安装与更新」的「本流程可重复执行、且以远程为准」", "script/check_specs.py",
      "check_install_repeat_update_guard",
@@ -541,7 +541,7 @@ MECHANISMS = [
      "更新为最新模板』会孤立生效。实证失效：上一轮实施据此把用户手工删掉的标题与三节『补』了回去，"
      "用户点名『我手动删的，你不要给我补上去』『以我的为准』——只在脚本注释里写『模板形态以用户"
      "手工编辑为准』挡不住下一次，实施者读的是安装流程本身。『某次安装是否真的没改回用户的手写』"
-     "运行时事实（见 GUARD_CHECK_LIMITS）"),
+     ""),
     ("模板类内容须单独归类：要么不读、要么读全部的内容（代码模板）不与规则混放、各自独立（例外：有关联性或内容不多暂不拆）",
      "specs-project-maintainer/spec-lifecycle.adoc + AGENTS.adoc + specs/general/context.adoc", "script/check_specs.py",
      "check_template_separation_guard",
@@ -551,7 +551,7 @@ MECHANISMS = [
      "③`specs/general/context.adoc`「生成效率」的公共侧一跳引用（公共侧只给方向、不写判据本体，"
      "避免同一条规则两处真源）。判据本体落在**维护方层**是归属判定：它描述的是『规范集合自己"
      "怎么组织』，对引用方项目不成立，写进公共内容即放错受众。"
-     "『某份内容到底算不算模板类内容』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某份内容到底算不算模板类内容』"),
     ("取规范入口的解释器兜底：不把「机器上有 python3」当前提，且入口不得代为安装运行时",
      "specs/general/script.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
@@ -567,9 +567,9 @@ MECHANISMS = [
      "反向钉住 `specs/general/script.adoc`「跨环境脚本」的边界条——**入口不得为「让逻辑跑起来」"
      "安装/下载/解压运行时**（改系统状态、要权限、对调用方不可预期；判据 ISO 9241-110），"
      "并钉住「可以做把逻辑层当命令直接跑的薄壳」这条，防把正当形态一并禁掉；"
-     "『某台机器上到底有没有解释器、装了哪一个』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "『某台机器上到底有没有解释器、装了哪一个』"),
     ("对外接口命名带所属域/项目前缀（Feign 接口的 `Api` 前须带该域固定前缀，先例优先、无先例取项目名词首组合）", "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
-     "check_api_naming_guard", "check_api_naming_guard 钉住通用层条文与 L1、先例优先、无先例取词规则与实例（`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`）、可逐条核对的判定标准与存量口径，以及 Java 栈落点（Feign、指向通用条）、加载调度器两处识别特征、README 目录说明与图书馆依据落点（含如实取样标注）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_api_naming_guard", "check_api_naming_guard 钉住通用层条文与 L1、先例优先、无先例取词规则与实例（`user-center` → `UcUserApi`、`open-user-center` → `OucUserApi`）、可逐条核对的判定标准与存量口径，以及 Java 栈落点（Feign、指向通用条）、加载调度器两处识别特征、README 目录说明与图书馆依据落点（含如实取样标注）"),
     ("分页查询的返回类型与转换（普通接口 `Result<IPage<Rsp>>`、Feign 接口 `Result<自定义Page<Rsp>>`、字段转换走 `page.convert` 而不是新建 page）",
      "specs/stack/java.adoc", "script/check_specs.py",
      "check_pagination_guard",
@@ -582,7 +582,7 @@ MECHANISMS = [
      "与相邻条目的分工（元素不得是实体类、字段转换优先声明式映射）与存量随动迁移、"
      "依据行须如实写明这是本集合的取舍。失效形态：同一项目并存两套分页模型；"
      "**新建 page 时漏搬总页数既不报错也不提示、只在运行期表现为翻页失效**。"
-     "『某个分页接口算不算普通接口、该处该不该用自定义 page』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某个分页接口算不算普通接口、该处该不该用自定义 page』"),
     ("方法名与逻辑删除的对应（查询方法名即删隐面）——默认面取该技术是否自动附加删除标志条件、非默认面须带特征词，同一实体同一删隐面不得并存两个名字",
      "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_logical_delete_naming_guard",
@@ -594,7 +594,7 @@ MECHANISMS = [
      "Java 落点只给框架专名（`@TableLogic` 自动附加、`@SQLDelete` 不自动附加）并把判据回指通用层；"
      "图书馆侧登记本集合取舍。失效形态：同一条 `list()` 在未启用逻辑删除的库里返回含已删数据、"
      "在启用的库里返回只含未删数据，**名字一个字都没变**。"
-     "『某个方法算不算按实体查询、这个名字算不算带了特征』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某个方法算不算按实体查询、这个名字算不算带了特征』"),
     ("成员与方法次序（新增成员按流程次序落点、可插前面或中间、重载相邻、数据转换方法跟随查询；只对新增成员生效）",
      "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_method_placement_guard",
@@ -607,7 +607,7 @@ MECHANISMS = [
      "调度器两处识别特征、README 目录说明与图书馆取舍登记一并钉住。失效形态：新增成员一律追加到"
      "类末尾（历史追加序成了第二个次序来源），**新增的位置不报错**、次序无声漂移；重载被别的成员"
      "隔开、转换方法跑到查询之前。"
-     "『某个方法的调用方与被调用方各是哪一个』『某次改动算不算新增』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某个方法的调用方与被调用方各是哪一个』『某次改动算不算新增』"),
     ("链式赋值顺序随字段顺序（链式调用里的赋值环节按字段顺序书写；实体类取映射表列序、其他类取成员次序，不另定一套顺序）",
      "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_chain_assignment_order_guard",
@@ -618,17 +618,17 @@ MECHANISMS = [
      "存量随动迁移与依据行（含本集合取舍声明）；Java 落点只给载体（链式 setter、builder 链）并把判据回指通用层；"
      "模板文件的照抄约定、调度器识别特征与图书馆取舍登记一并钉住。失效形态：赋值次序与字段次序各自成序，"
      "**只改了字段、忘了赋值处时不报错**，次序无声漂移。"
-     "『这次构建算不算同一处、这两次赋值的先后算不算语义相关』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『这次构建算不算同一处、这两次赋值的先后算不算语义相关』"),
     ("请求/响应类优先移动复用（给已有接口加内部调用接口时不新建一套，例外只有数据库实体类与含三方类型的类，本项目自身的依赖不算三方依赖）", "specs/general/coding.adoc", "script/check_specs.py",
-     "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住通用层条文与 L1、两种例外（数据库实体类除声明外不移动 / 类里引用了第三方类型）、边界（**本项目自身的依赖不算三方依赖**——该字句缺位等于给出一个随时可套用的豁免口）、「移动而非复制、同步更新原引用」的动作、可逐条核对的判定标准（另建同构类 / 同名或仅差包名 / 复制不改原引用 / 以「依赖本项目其他模块」为由拒绝移动 / 移动数据库实体类而无声明）、存量随动迁移与依据行，以及调度器识别特征与 README 同步；『某次是否真的移动了类、是否真的跟随了项目先例』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住通用层条文与 L1、两种例外（数据库实体类除声明外不移动 / 类里引用了第三方类型）、边界（**本项目自身的依赖不算三方依赖**——该字句缺位等于给出一个随时可套用的豁免口）、「移动而非复制、同步更新原引用」的动作、可逐条核对的判定标准（另建同构类 / 同名或仅差包名 / 复制不改原引用 / 以「依赖本项目其他模块」为由拒绝移动 / 移动数据库实体类而无声明）、存量随动迁移与依据行，以及调度器识别特征与 README 同步；『某次是否真的移动了类、是否真的跟随了项目先例』"),
     ("HTTP 接口路径优先用中划线（kebab-case）（不得用下划线或驼峰；服务路由/网关前缀与已发布对外路径照旧）", "specs/stack/spring.adoc", "script/check_specs.py",
-     "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住**唯一落点**（技术栈层 `spring.adoc`）的条文与 L1、禁止下划线与驼峰、两处照旧（服务路由/网关前缀、已发布且外部依赖的对外路径）、判定标准（出现 `_` / 路径片段用驼峰或大写 / 同一接口内混用）、存量随动迁移，以及**通用层不得出现「HTTP 接口路径」专条**（该判据只在 Web 框架语境下有定义）与调度器 Spring 条目的识别特征；『某个接口路径该怎么写、是否属两处照旧』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住**唯一落点**（技术栈层 `spring.adoc`）的条文与 L1、禁止下划线与驼峰、两处照旧（服务路由/网关前缀、已发布且外部依赖的对外路径）、判定标准（出现 `_` / 路径片段用驼峰或大写 / 同一接口内混用）、存量随动迁移，以及**通用层不得出现「HTTP 接口路径」专条**（该判据只在 Web 框架语境下有定义）与调度器 Spring 条目的识别特征；『某个接口路径该怎么写、是否属两处照旧』"),
     ("索引页只在目录已承载实质文档时要求，空目录不建、索引只做导航", "specs/general/doc.adoc", "script/check_specs.py",
-     "check_index_page_guard", "check_index_page_guard 钉住「索引页的触发判据」（已承载实质文档才建 / 空目录与仅有索引页自己的不建 / 索引只做导航不得复制上一级内容 / 模块级导航由模块 README 承担）与 specs/general/doc-module.adoc 的「按需」口径（doc/ 下有实质文档才放 README、无则不建）；实证失效：AI 把「每级目录须有索引页」读宽成「每个模块都建 doc/README.adoc」，批量生成 48 个同构空壳索引）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_index_page_guard", "check_index_page_guard 钉住「索引页的触发判据」（已承载实质文档才建 / 空目录与仅有索引页自己的不建 / 索引只做导航不得复制上一级内容 / 模块级导航由模块 README 承担）与 specs/general/doc-module.adoc 的「按需」口径（doc/ 下有实质文档才放 README、无则不建）；实证失效：AI 把「每级目录须有索引页」读宽成「每个模块都建 doc/README.adoc」，批量生成 48 个同构空壳索引）"),
     ("评论唤起新实例：评论即一次派发（要求须写清、可要求用干净上下文）", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
-     "check_comment_dispatch_guard", "check_comment_dispatch_guard 钉住四处要点（平台层「评论唤起新实例（平台侧的派发入口）」节：入口形态/不放宽任何派发约束/一次评论=一次派发/干净上下文须显式要求且不是保证/仅点名不构成派发；通用层「派发入口」节同口径；AGENTS_COMMON.adoc 两处识别特征；README 目录说明同步），**重点拦『把该入口写成可放宽派发判据或可点名外部 Agent』与『把干净上下文写成默认』两种降级**；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_comment_dispatch_guard", "check_comment_dispatch_guard 钉住四处要点（平台层「评论唤起新实例（平台侧的派发入口）」节：入口形态/不放宽任何派发约束/一次评论=一次派发/干净上下文须显式要求且不是保证/仅点名不构成派发；通用层「派发入口」节同口径；AGENTS_COMMON.adoc 两处识别特征；README 目录说明同步），**重点拦『把该入口写成可放宽派发判据或可点名外部 Agent』与『把干净上下文写成默认』两种降级**"),
     ("改动范围边界：只改当前工作空间/当前项目，未声明即拒绝越界改动（引用 ≠ 授权）", "specs/general/scope.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
-     "check_scope_boundary_guard", "check_scope_boundary_guard 钉住两层同口径（通用层 scope.adoc 的「工作空间边界」与「平台上的仓库边界」两节 + 平台层 cnb.adoc 的当前项目口径与指向）+ 提示词公共片段 `scope-boundary` 同口径且两个提示词代码块内都引入；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_scope_boundary_guard", "check_scope_boundary_guard 钉住两层同口径（通用层 scope.adoc 的「工作空间边界」与「平台上的仓库边界」两节 + 平台层 cnb.adoc 的当前项目口径与指向）+ 提示词公共片段 `scope-boundary` 同口径且两个提示词代码块内都引入"),
     ("机械防线的核对对象是判据本体、不是轴名（只核『要求/依据/判定标准』等轴名齐备即属防线空转）", "specs-project-maintainer/priority.adoc", "script/check_specs.py",
      "check_criteria_not_axis_guard",
      "check_criteria_not_axis_guard 钉住「机械防线的核对对象是**判据本体**，不是轴名（L1）」一节的四组要点仍在该节的**自身**正文里，"
@@ -637,9 +637,9 @@ MECHANISMS = [
      "④必配反例用例（『轴名齐全、判据被抽走』的改造下防线必须报红）。本轮实测：维护方最高关注项 P7 的『要求』被压成两句骨架，"
      "『要求/依据/判定标准』三个轴名都还在、防线全绿，而可核对的判据被整段抽掉；教训当时只写在 `script/check_specs.py` 与配套测试的注释里、"
      "**没有进规范正文**——下一个维护者读规范时看不到、只能靠翻脚本注释（判据存在但不可见=同构复发）。"
-     "『某道防线具体钉的是不是判据本体』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "『某道防线具体钉的是不是判据本体』"),
     ("压缩提交：用户可明确要求、执行者应当照做（内容零变化、**默认压成一个提交**、只动本源分支、规则本体工具无关；平台侧另含先确认无人在用旧对象、force-with-lease、声明新旧 sha 对应关系）", "specs/general/version-control.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
-     "check_squash_commit_guard", "check_squash_commit_guard 钉住平台层「压缩提交」的追加口径（节 / 作用域只动本源分支 / 禁止形态的平台侧追加 / 先确认无人在用旧对象 / `--force-with-lease` 与「一般强推口径不适用」 / 与「NPC 禁合并」互不豁免 / 新旧 sha 对应关系声明 + 对象钉定侧的『合规动作』标注）**并钉住规则归属**：通用层 `specs/general/version-control.adoc` 承载工具无关本体、平台层须指向它（用户口称『版本管理』、未点名 git/CNB，规则本体留在平台层会让非 CNB/非 git 的引用方读不到）；**两边的降级都拦**（把条文删掉/降成建议、以及把用户可要求的压缩提交读成「强推违规」）；『某次压缩是否真的内容零变化、是否真没人基于旧 sha 工作、是否真的用了带租约强推』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_squash_commit_guard", "check_squash_commit_guard 钉住平台层「压缩提交」的追加口径（节 / 作用域只动本源分支 / 禁止形态的平台侧追加 / 先确认无人在用旧对象 / `--force-with-lease` 与「一般强推口径不适用」 / 与「NPC 禁合并」互不豁免 / 新旧 sha 对应关系声明 + 对象钉定侧的『合规动作』标注）**并钉住规则归属**：通用层 `specs/general/version-control.adoc` 承载工具无关本体、平台层须指向它（用户口称『版本管理』、未点名 git/CNB，规则本体留在平台层会让非 CNB/非 git 的引用方读不到）；**两边的降级都拦**（把条文删掉/降成建议、以及把用户可要求的压缩提交读成「强推违规」）；『某次压缩是否真的内容零变化、是否真没人基于旧 sha 工作、是否真的用了带租约强推』"),
     ("重命名与内容修改须分两个提交（P7）；且『合并成一个提交/压缩提交』的请求**未点名本条**时不覆盖它（其余提交仍默认压成一个）", "specs/general/git.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
      "check_rename_split_guard", "check_rename_split_guard 钉住四处要点（git 规范「重命名与内容修改须分两个提交」整节的条目轴与要点、必加载层 `specs/core/execution.adoc` 的 P7 重申行、`AGENTS_COMMON.adoc`「最高优先级铁律」的登记、维护方清单 `specs-project-maintainer/priority.adoc` 的 P7 条目与级别），**并钉住与「压缩提交」的接口**：用户要求压缩提交/合并成一个提交而**未点名重命名与内容修改**时，其余提交默认压成一个、这两个提交**原样保留**（压缩后允许留下的唯一一组多提交；平台层「压缩提交」须写同口径，防平台侧自行把『要压缩』读成『压回一个』）；例外的『声明』须点名重命名与内容修改、须预先声明（只说合并/压缩不算）；**并按「条目自身」而非「整节关键词」核对**——边界条与平台层接口条的判据（未点名/临时中间提交/原样保留/判定标准）须在**该条自己的正文**里，被抽空或搬进相邻条目即报错（否则相邻条款的字样会兜住已消失的要求；本仓库实测：仅留轴标题、正文另议时旧法静默通过）；『某次是否真的分成了两个提交、压缩是否真的没把它们压掉』属运行时事实（git 记录），机械无法判定，交人/子 agent 用 `git log --follow --name-status`、`git diff <改名提交>^ <改名提交> -M --stat`、`git log --diff-filter=R -M --name-status` 复核"),
     ("压缩/解决冲突后须保留与目标分支的合并关系（目标分支仍是本分支的祖先、合并提交保留双亲、压缩不吞掉合并提交）", "specs/platform/cnb.adoc", "script/check_specs.py",
@@ -654,29 +654,29 @@ MECHANISMS = [
      "check_base_ancestor_guard 是**动作侧**（只读本仓库自身 git、不碰平台）：本次唤起时钉定的基点 sha **须是当前分支 HEAD 的祖先**——不是祖先即说明分支被重建成一条不再包含参照点的线，那正是『回退别人改动』的机械特征（与平台侧 `--is-ancestor <目标分支> <分支>` 为假是同一件事）。**用户口径（原话）：『靠 AI 自觉是不现实』**——故把『解冲突时两侧都留』从『自觉』落到**可核对的取值**上：内容侧天然看不出来（取一侧也编译得过、测试也全绿；规范要求的『两侧逐处并集』在被回退的工作区里已无迹可查），而『基点还是不是祖先』一句话能查、不依赖执行者记忆。与文本侧的 `check_merge_relationship_guard` **互不替代**（那条只核平台层条文写着，核不到本次动作）。**效力边界**：不给参照 sha（非 CNB 环境/平台未提供/该 sha 不在本仓库）时按**跳过**处理、绝不猜——那一半须靠平台侧保证。**本仓库实证**：一次『解冲突+压缩』把分支重建在更早基点上，`main` 上刚合入的一整批改动（8 文件 + 一整份规则文件 + 一道防线及其 23 条用例）被静默回退，而当时 `check_specs.py` OK、单测全通过、`check_effective.py` 缺失 0——全部防线都只读『工作区内容对不对』，没有一条读『基点对不对』"),
     ("冲突与压缩提交：先解冲突、再压缩（最终只有一个提交），且解冲突后须核查是否丢内容（**工具无关**——版本管理工具，不限 git/CNB）", "specs/general/version-control.adoc + specs/general/git.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
      "check_conflict_resolution_guard",
-     "check_conflict_resolution_guard 钉住三处（用户口称『版本管理』、未点名 git/CNB，故规则本体必须在通用层）：① **通用层 `specs/general/version-control.adoc`「冲突处理」**——三件要点（①先解冲突、再压缩、最终只有一个提交，含反向判据『拿还有冲突当不做压缩的理由』『拿要压缩当不解冲突的理由』；②**触发面写全**：『只被要求压缩、没被要求解决冲突也要先解冲突』——用户只要求压缩、没提解决冲突而分支实际有冲突时同样须先解冲突，含判定标准四态【用户本轮点名】；③解决冲突后须核查是否丢内容，含失效形态『整体取一侧收尾、不做逐处对照』与随对象定的三档核查判据）+ 工具无关性声明（点名 git 之外的版本管理工具如 SVN）+「压缩提交」节写明**压缩不等于解冲突**；② **git 层 `specs/general/git.adoc`「冲突与压缩提交（git 侧落地）」**（**按节取文本**——别处也提 `rename`、`--ours`，全文匹配会把『本节被掏空、命令搬到别处』读成齐备）——`--ours`/`--theirs` 取一侧这一失效、`git diff --name-status`/`rename` 强制核对、『最终只有一个提交』的 git 侧命令；③ **平台层 `specs/platform/cnb.adoc`**——只留追加口径且须**指向通用层规则本体**、交付形态按本平台表达，且**「冲突处理」与「压缩提交」两节都须写全触发面**（『只被要求压缩提交』时冲突处置不豁免、含祖先关系可核对判据与『解冲突不是合并』的边界；「压缩提交」节另须**按该节自己的正文**写明『先解冲突、不得留在原地只做压缩』的接口条——台账声明了本节写全触发面，那就得真的核到它）；另加调度器与 README 同步。**按节取文本**（同文件别处也提到『冲突』与『压缩』，全文匹配会把『条文从本节删了、别处还提了一句』读成齐备）；『某次解冲突是否真的两侧内容一条未丢、最终是否真的只有一个提交』属运行时事实（git 记录），机械只钉『要求文本仍在』，交人/子 agent 复核"),
+     "check_conflict_resolution_guard 钉住三处（用户口称『版本管理』、未点名 git/CNB，故规则本体必须在通用层）：① **通用层 `specs/general/version-control.adoc`「冲突处理」**——三件要点（①先解冲突、再压缩、最终只有一个提交，含反向判据『拿还有冲突当不做压缩的理由』『拿要压缩当不解冲突的理由』；②**触发面写全**：『只被要求压缩、没被要求解决冲突也要先解冲突』——用户只要求压缩、没提解决冲突而分支实际有冲突时同样须先解冲突，含判定标准四态【用户本轮点名】；③解决冲突后须核查是否丢内容，含失效形态『整体取一侧收尾、不做逐处对照』与随对象定的三档核查判据）+ 工具无关性声明（点名 git 之外的版本管理工具如 SVN）+「压缩提交」节写明**压缩不等于解冲突**；② **git 层 `specs/general/git.adoc`「冲突与压缩提交（git 侧落地）」**（**按节取文本**——别处也提 `rename`、`--ours`，全文匹配会把『本节被掏空、命令搬到别处』读成齐备）——`--ours`/`--theirs` 取一侧这一失效、`git diff --name-status`/`rename` 强制核对、『最终只有一个提交』的 git 侧命令；③ **平台层 `specs/platform/cnb.adoc`**——只留追加口径且须**指向通用层规则本体**、交付形态按本平台表达，且**「冲突处理」与「压缩提交」两节都须写全触发面**（『只被要求压缩提交』时冲突处置不豁免、含祖先关系可核对判据与『解冲突不是合并』的边界；「压缩提交」节另须**按该节自己的正文**写明『先解冲突、不得留在原地只做压缩』的接口条——台账声明了本节写全触发面，那就得真的核到它）；另加调度器与 README 同步。**按节取文本**（同文件别处也提到『冲突』与『压缩』，全文匹配会把『条文从本节删了、别处还提了一句』读成齐备）；『某次解冲突是否真的两侧内容一条未丢、最终是否真的只有一个提交』属运行时事实（git 记录），机械只钉『要求文本仍在』"),
     ("CNB NPC（CI/CD 执行者）严禁合并 PR、人工要求或直授也必须拒绝", "specs/platform/cnb.adoc", "script/check_specs.py",
-     "check_npc_merge_guard", "check_npc_merge_guard 钉住八处要点（禁令本体 / 无豁免含『授权不免除』 / 可逐条核对的判定标准含本平台实际合并入口 `cnb pulls merge-pull` / 与「冲突处理」不矛盾的边界 / **按执行环境保证**『与谁在跑无关、不得把「我知道这条规则」当保证、人以外的自动步骤不构成人工』 / **本仓库实证失效**记录与固定形态『最后一个动作的默认读法是交付到 PR 分支为止』 / 提示词公共片段 `delivery` 同口径 L1 条 / **题面开头 `intro-rules` 的『合并提交 = 把提交历史压成一个合规提交，不是合并 PR』** / 公开提示词入口 PROMPTS.adoc 同步）；**动作侧的 `check_merge_state_guard` 是第二道**（核**提交说明与分支状态**：提交说明里出现合并动作 + 已合并的话术即报红、源分支 HEAD 不等于并发唤起时钉定的 sha 即报红、本分支历史出现合并提交即报红）——这是本条**唯一**能覆盖『动作真没做』的一半：文本侧再全也只证规则写着。**本仓库实证**：曾把用户的『压缩提交』读成『合并 PR』、跳过其真正要求的那件事直接合并并回『已合并 ✅』，而当时三道文本防线**全部报 OK**；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_npc_merge_guard", "check_npc_merge_guard 钉住八处要点（禁令本体 / 无豁免含『授权不免除』 / 可逐条核对的判定标准含本平台实际合并入口 `cnb pulls merge-pull` / 与「冲突处理」不矛盾的边界 / **按执行环境保证**『与谁在跑无关、不得把「我知道这条规则」当保证、人以外的自动步骤不构成人工』 / **本仓库实证失效**记录与固定形态『最后一个动作的默认读法是交付到 PR 分支为止』 / 提示词公共片段 `delivery` 同口径 L1 条 / **题面开头 `intro-rules` 的『合并提交 = 把提交历史压成一个合规提交，不是合并 PR』** / 公开提示词入口 PROMPTS.adoc 同步）；**动作侧的 `check_merge_state_guard` 是第二道**（核**提交说明与分支状态**：提交说明里出现合并动作 + 已合并的话术即报红、源分支 HEAD 不等于并发唤起时钉定的 sha 即报红、本分支历史出现合并提交即报红）——这是本条**唯一**能覆盖『动作真没做』的一半：文本侧再全也只证规则写着。**本仓库实证**：曾把用户的『压缩提交』读成『合并 PR』、跳过其真正要求的那件事直接合并并回『已合并 ✅』，而当时三道文本防线**全部报 OK**"),
     ("提示词取值路径与装配状态：不得给『渲染视图下已展开』这类与路径绑不上的笼统说法", "PROMPTS.adoc + prompts/_common.txt", "script/check_specs.py",
      "check_prompt_delivery_surface_guard", "check_prompt_delivery_surface_guard 钉住公共片段「查看与复制方式」的按路径判据（装配过的：IDE 预览/asciidoctor/站点页面内渲染；未装配的：远程原始文件地址/本地读取——直出仓库字节、**逐字节一致**）、各提示词读取说明的判定口径、PROMPTS.adoc「取值路径与装配状态」的三行判据表与『不是三种版本的提示词』『L1 实证话术』两条、以及维护方入口的口径与抓手名；**本仓库实证**：把站点原始文件地址当渲染视图、据此以为片段已展开（实测该地址与工作区逐字节一致、指令仍在）；『某次取值实际是否装配过』属运行时事实，交人/子 agent 用 curl 原始文件地址逐字节比对复核"),
     ("不得自行发评论唤起自己：评论派发的\"下一次\"只能由人发起（防无限派发）", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
-     "check_self_dispatch_guard", "check_self_dispatch_guard 钉住五处要点（平台层「评论唤起新实例（平台侧的派发入口）」的 L1 本体与判定标准四态（新增评论指向本次唤起名 / 以\"分两步更清楚\"自我豁免 / 实际发出 / 转交他人代发）+ 判据钉在\"这条评论发出去没有\"+ 正当形态（先停 + 一次\"停下确认\"、由人另发评论）；通用层「派发入口」的同口径条；两个提示词代码块内的同口径步骤；PROMPTS.adoc 与 README.adoc 的登记同步；调度器两处识别特征），**并钉住该禁令的适用面**（用户澄清\"这个只适用于 cnb\"）：平台层须写明\"须由与执行者相同的 Agent 承担验证\"**只在本平台成立**、**本平台之外不适用**、环境不提供同 Agent 子执行者时**不得援引该条拒做或把任务停在中间**且**验证与交付不因此缺失**；通用层须写明\"**不是无条件成立的规则、以平台层写明为前提**\"；`specs/general/verify.adoc` 须标注\"**适用面由平台层限定**\"——**重点拦\"把禁令删掉/降级成建议\"、\"把转由他人代发删掉\"、\"把适用面删掉（该要求被外推成平台无关的强制前提）\"三种降级**；运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_self_dispatch_guard", "check_self_dispatch_guard 钉住五处要点（平台层「评论唤起新实例（平台侧的派发入口）」的 L1 本体与判定标准四态（新增评论指向本次唤起名 / 以\"分两步更清楚\"自我豁免 / 实际发出 / 转交他人代发）+ 判据钉在\"这条评论发出去没有\"+ 正当形态（先停 + 一次\"停下确认\"、由人另发评论）；通用层「派发入口」的同口径条；两个提示词代码块内的同口径步骤；PROMPTS.adoc 与 README.adoc 的登记同步；调度器两处识别特征），**并钉住该禁令的适用面**（用户澄清\"这个只适用于 cnb\"）：平台层须写明\"须由与执行者相同的 Agent 承担验证\"**只在本平台成立**、**本平台之外不适用**、环境不提供同 Agent 子执行者时**不得援引该条拒做或把任务停在中间**且**验证与交付不因此缺失**；通用层须写明\"**不是无条件成立的规则、以平台层写明为前提**\"；`specs/general/verify.adoc` 须标注\"**适用面由平台层限定**\"——**重点拦\"把禁令删掉/降级成建议\"、\"把转由他人代发删掉\"、\"把适用面删掉（该要求被外推成平台无关的强制前提）\"三种降级**"),
     ("动手改文件前先读要改的那一处（不得按记忆写入——该处可能已被改过、会把本地内容覆盖掉；核对对象只到要改的那一处、无关部分不必读）", "specs/general/planning.adoc「要改的那一处是否已实际读过（改动面按处读）」", "script/check_specs.py",
      "check_dev_flow_guard", "check_dev_flow_guard 钉住**本文本的判据本体**（核对对象「要改的那一处现状」、三条判定标准、**边界**「不得读成每个文件都要通读」）+ 必加载层那句底线的锚点 + **本条是否回指两处落点**（`specs/core/execution.adoc`、`specs/general/self-check.adoc`）。**回指只证明「这条要求自己声明了两处落点」**——两处落点各自的内容另行核：必加载层由 `check_dev_flow_guard` 的 `execution.adoc` 组核，自检关口那一问由 `check_self_check_guard` 核（该问与判据回指各一条锚点）；『某次到底读没读要改的那一处』属运行时事实（读取动作发生在会话里），机械核不出来，交人 review"),
     ("需求先找参照物：调整内容（含新增）时须先检索现成可参照的业界标准/通行设计范式/本项目先例，有更优的设计用更优的、查不到须说出查证方式并标未确证", "specs/general/planning.adoc", "script/check_specs.py",
-     "check_dev_flow_guard", "check_dev_flow_guard 钉住 planning.adoc「需求先找参照物（L1）」的条与三类判定标准（说不出参照物与检索动作 / 有标准可循却自造一套说法 / 有更优设计却按原口述照收且未说明理由）、必加载层的一行重申、公共片段 `baseline-and-compat` 与两个提示词题面的同口径句、PROMPTS 与 README 的登记；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_dev_flow_guard", "check_dev_flow_guard 钉住 planning.adoc「需求先找参照物（L1）」的条与三类判定标准（说不出参照物与检索动作 / 有标准可循却自造一套说法 / 有更优设计却按原口述照收且未说明理由）、必加载层的一行重申、公共片段 `baseline-and-compat` 与两个提示词题面的同口径句、PROMPTS 与 README 的登记"),
     ("规范收录侧须先找参照物、别自己造：提案校验须查现成业界标准与更优设计（存在比用户口述更优的设计时按更优的设计收）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
-     "check_spec_admission_guard", "check_spec_admission_guard 钉住「新增规范的提案校验」的三处要点（先找参照物、别自己造 / 存在比用户口述更优的设计时按更优的设计收 / 检查是否已有标准与本项目条目）；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_spec_admission_guard", "check_spec_admission_guard 钉住「新增规范的提案校验」的三处要点（先找参照物、别自己造 / 存在比用户口述更优的设计时按更优的设计收 / 检查是否已有标准与本项目条目）"),
     ("开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证、清单还要先核『够不够用』）、大范围改动先确认、不得绕开既有体系另写一套、老用例不得为迁就改动而改判", "specs/core/execution.adoc + specs/general/planning.adoc + specs/general/testing.adoc", "script/check_specs.py",
-     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素、**基线的适用边界**：规范类必做/代码类默认不做（除大规模重构或会改动大部分内容）/移动重命名不算）与生命周期两节点、通用层 planning.adoc 的展开与依据（含「基线的适用边界」条与基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』与『**汇报须与可核对的事实一致、不得狡辩**』（数字与实际统计一致 / 核对项全绿不得顶替直接回答 / 被质疑先复取值再答，外部实证 cc332030/ctool4j#102）、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素、**基线的适用边界**：规范类必做/代码类默认不做（除大规模重构或会改动大部分内容）/移动重命名不算）与生命周期两节点、通用层 planning.adoc 的展开与依据（含「基线的适用边界」条与基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』与『**汇报须与可核对的事实一致、不得狡辩**』（数字与实际统计一致 / 核对项全绿不得顶替直接回答 / 被质疑先复取值再答，外部实证 cc332030/ctool4j#102）、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记"),
     ("运行环境须与项目声明一致（jdk1.8、python2 等；换别的版本也能跑通也不得换，声明不可得时标未确证）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_runtime_env_guard",
-     "check_runtime_env_guard 钉住条文与 L1、判据两句、声明落点（不另立第二真源）、降级路径（未声明先确认 / 不可得标未确证不得记为通过）、依据行，以及必加载层、验证、基线三处引用与调度器识别特征、维护方与图书馆落点；『某次到底用了哪个版本』运行时事实（见 GUARD_CHECK_LIMITS）"),
+     "check_runtime_env_guard 钉住条文与 L1、判据两句、声明落点（不另立第二真源）、降级路径（未声明先确认 / 不可得标未确证不得记为通过）、依据行，以及必加载层、验证、基线三处引用与调度器识别特征、维护方与图书馆落点；『某次到底用了哪个版本』"),
     ("评论不得删除：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）",
      "specs/platform/cnb.adoc + specs/core/execution.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_comment_preservation_guard",
-     "check_comment_preservation_guard 钉住三处落点（平台层「评论不得删除（L1）」：禁令本体含 NPC 生成的评论、不可逆与留证落点的理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界；通用层「派发入口」的平台无关同口径条；必加载层「破坏性操作」写明本条**不是**『先确认即可执行』的一类）与调度器识别特征、README 目录说明同步；**重点拦『把禁令删掉』与『降级成先确认即可删』两种降级**；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_comment_preservation_guard 钉住三处落点（平台层「评论不得删除（L1）」：禁令本体含 NPC 生成的评论、不可逆与留证落点的理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界；通用层「派发入口」的平台无关同口径条；必加载层「破坏性操作」写明本条**不是**『先确认即可执行』的一类）与调度器识别特征、README 目录说明同步；**重点拦『把禁令删掉』与『降级成先确认即可删』两种降级**"),
     ("脚本头部注释（文档头）先行：动手先把用途/用法/参数/环境变量/行为边界/关键约定与设计决策写进文档头（细节不随维护丢失）",
      "specs/general/script.adoc", "script/check_specs.py",
      "check_script_header_guard",
@@ -684,26 +684,26 @@ MECHANISMS = [
     ("脚本文档的承载位置与协作粒度：脚本默认单打独斗、各脚本相互独立，文档随脚本落盘、不逐脚本另建独立文档（多行文档注释 → 多行块注释 → 普通注释）",
      "specs/general/script.adoc + specs/general/coding.adoc", "script/check_specs.py",
      "check_script_selfdoc_guard",
-     "check_script_selfdoc_guard 钉住「脚本文档的承载位置与协作粒度（默认写进脚本自身）」的五处要点（脚本默认单打独斗且多脚本彼此独立、承载方式的**三级优先级**、默认写在脚本里不另建独立文档、唯一例外是内容超容量时的移交并给判定标准、大规模团队式协作是例外不是默认）、`specs/general/coding.adoc`「注释」的脚本例外条（缺则原文会被读成'脚本也要按类/方法那套、文档另建'）、技术栈落点（python 模块 docstring 且单文件脚本同样不另建文档；bash/batch/powershell 三个无机制栈各写明用多行块注释承载、批处理限 `rem`；powershell 用基于注释的帮助）、调度器识别特征与 README 同步；**本条只钉要点文本仍在**——『某个项目的脚本实际把文档写在哪、有没有为单个脚本另建文档』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_script_selfdoc_guard 钉住「脚本文档的承载位置与协作粒度（默认写进脚本自身）」的五处要点（脚本默认单打独斗且多脚本彼此独立、承载方式的**三级优先级**、默认写在脚本里不另建独立文档、唯一例外是内容超容量时的移交并给判定标准、大规模团队式协作是例外不是默认）、`specs/general/coding.adoc`「注释」的脚本例外条（缺则原文会被读成'脚本也要按类/方法那套、文档另建'）、技术栈落点（python 模块 docstring 且单文件脚本同样不另建文档；bash/batch/powershell 三个无机制栈各写明用多行块注释承载、批处理限 `rem`；powershell 用基于注释的帮助）、调度器识别特征与 README 同步；**本条只钉要点文本仍在**——『某个项目的脚本实际把文档写在哪、有没有为单个脚本另建文档』"),
     ("跨环境脚本：一份跨平台逻辑 + 各平台薄壳入口（逻辑不得写两遍、入口不得承载逻辑、参数与退出码原样传递、不拿裸 shell 当逻辑层）",
      "specs/general/script.adoc", "script/check_specs.py",
      "check_cross_platform_script_guard",
-     "check_cross_platform_script_guard 钉住通用层「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」的要点（逻辑只写一份放跨平台逻辑脚本；入口层不得承载逻辑并给可判定判据；参数与退出码原样转交/原样返回；不得在另一平台重写逻辑；入口按各自平台规范落盘；实现语言取舍的默认优先级与『不拿裸 shell 当逻辑层』；不假设逻辑脚本所处目录；**入口与逻辑脚本同处一目录、主名相同**；**入口语言按平台默认具备者选**（Windows `.bat`/`.cmd`、Linux/macOS `.sh`）；**调用方不加前后命令**（只给脚本名即可跑，必要参数除外）；入口不设前置步骤、不得为跑逻辑自加命令或给逻辑脚本塞参数）与技术栈三个脚本栈文件的引用承接与各栈落点/命名/入口语言要点、调度器识别特征、README 同步、图书馆同义性差异；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_cross_platform_script_guard 钉住通用层「跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）」的要点（逻辑只写一份放跨平台逻辑脚本；入口层不得承载逻辑并给可判定判据；参数与退出码原样转交/原样返回；不得在另一平台重写逻辑；入口按各自平台规范落盘；实现语言取舍的默认优先级与『不拿裸 shell 当逻辑层』；不假设逻辑脚本所处目录；**入口与逻辑脚本同处一目录、主名相同**；**入口语言按平台默认具备者选**（Windows `.bat`/`.cmd`、Linux/macOS `.sh`）；**调用方不加前后命令**（只给脚本名即可跑，必要参数除外）；入口不设前置步骤、不得为跑逻辑自加命令或给逻辑脚本塞参数）与技术栈三个脚本栈文件的引用承接与各栈落点/命名/入口语言要点、调度器识别特征、README 同步、图书馆同义性差异"),
     ("Windows 批处理（`.bat`/`.cmd`）的专属规则有独立栈文件：行尾 CRLF、纯 ASCII 不写 BOM、块语句延迟展开、`exit /b %errorlevel%` 原样返回退出码、不混写 PowerShell 语法",
      "specs/stack/batch.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_cross_platform_script_guard",
-     "check_cross_platform_script_guard 钉住批处理栈文件存在、承载 BATCH_STACK_KEYS 全部要点（编码/行尾、薄壳与 `exit /b %errorlevel%`、延迟展开、引号与 `%~1`、`@echo off`、未定义变量、不混写 PowerShell 语法）、指向通用层「跨环境脚本」节，以及 powershell.adoc 反向指向它（引用不复制）与调度器技术栈层登记；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_cross_platform_script_guard 钉住批处理栈文件存在、承载 BATCH_STACK_KEYS 全部要点（编码/行尾、薄壳与 `exit /b %errorlevel%`、延迟展开、引号与 `%~1`、`@echo off`、未定义变量、不混写 PowerShell 语法）、指向通用层「跨环境脚本」节，以及 powershell.adoc 反向指向它（引用不复制）与调度器技术栈层登记"),
     ("数据字典按作用域归档、只引名称、新增与调整内容时即生效", "specs/general/terminology.adoc + AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_data_dictionary_guard",
-     "check_data_dictionary_guard 钉住通用层《数据字典》的判据本体（不是轴名——只核『这一节在不在』属防线空转）：只引名称不引定义、**作用域分档表逐档在表里**（判定按表行 `| <档位>`，含**当前文档档=定义写在该文档开头**——用户点名的那句）、每档只一处、分档判据可核对、条目形态照 ISO 1087 且定义与使用说明分列、反膨胀判定标准、**每次新增与调整内容时都须判定**（用户原话「每次新增、调整内容时都应该生效」）、图书馆等不在默认引用面内的落点按其自身规则走；并钉住四处落点同口径（调度器登记与识别特征、`doc.adoc`「文档组织与导航」与 `encoding.adoc`「术语统一」两处互引）；**本条防的不是『没写规则』而是『写了规则却仍然膨胀、仍然各写一遍』**——『某个名称到底该归哪一档、某处是否真的复述了定义』语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_data_dictionary_guard 钉住通用层《数据字典》的判据本体（不是轴名——只核『这一节在不在』属防线空转）：只引名称不引定义、**作用域分档表逐档在表里**（判定按表行 `| <档位>`，含**当前文档档=定义写在该文档开头**——用户点名的那句）、每档只一处、分档判据可核对、条目形态照 ISO 1087 且定义与使用说明分列、反膨胀判定标准、**每次新增与调整内容时都须判定**（用户原话「每次新增、调整内容时都应该生效」）、图书馆等不在默认引用面内的落点按其自身规则走；并钉住四处落点同口径（调度器登记与识别特征、`doc.adoc`「文档组织与导航」与 `encoding.adoc`「术语统一」两处互引）；**本条防的不是『没写规则』而是『写了规则却仍然膨胀、仍然各写一遍』**——『某个名称到底该归哪一档、某处是否真的复述了定义』"),
     ("交付形态与报告落点：不得只冒一句过程性叙述、不得只交付不汇报", "prompts/_common.txt + PROMPTS.adoc", "script/check_specs.py",
-     "check_delivery_guard", "check_delivery_guard 钉住 `delivery` 片段的报告落点（过程性叙述不得作为独立评论发出）+ **输出通道只有两条**（最终汇报 / 必须停下确认，且『除这两条之外的任何中间话一律不发』——只写例外形态不写默认动作时，执行者会自造第三条通道、判据回到执行者手里）与交付形态两态（有改动却未提交未推送 / 无改动却未说明）、两个提示词内的『交付即汇报』步骤（同含两条通道）、以及 PROMPTS.adoc 与 README.adoc 的登记同步、**`_common.txt` 的每个片段都须被某份提示词 `include`**（防『定义了但没人 include』的死内容——本轮实测：`no-self-dispatch` 片段写好、两个提示词只在末句复述其大意，include 一次都没有，该 L1 在装配层为空）；**本轮实测失效**：一轮 NPC 任务唯一对外的输出就是一句过程性叙述、既无汇报也无任何提交，旧版片段只写『有改动必须提交推送』、恰漏『无改动也是完成态』与『过程性叙述不得外发』；语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_delivery_guard", "check_delivery_guard 钉住 `delivery` 片段的报告落点（过程性叙述不得作为独立评论发出）+ **输出通道只有两条**（最终汇报 / 必须停下确认，且『除这两条之外的任何中间话一律不发』——只写例外形态不写默认动作时，执行者会自造第三条通道、判据回到执行者手里）与交付形态两态（有改动却未提交未推送 / 无改动却未说明）、两个提示词内的『交付即汇报』步骤（同含两条通道）、以及 PROMPTS.adoc 与 README.adoc 的登记同步、**`_common.txt` 的每个片段都须被某份提示词 `include`**（防『定义了但没人 include』的死内容——本轮实测：`no-self-dispatch` 片段写好、两个提示词只在末句复述其大意，include 一次都没有，该 L1 在装配层为空）；**本轮实测失效**：一轮 NPC 任务唯一对外的输出就是一句过程性叙述、既无汇报也无任何提交，旧版片段只写『有改动必须提交推送』、恰漏『无改动也是完成态』与『过程性叙述不得外发』"),
     ("方法参数不得以键值容器承载（须用具名对象）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_param_carrier_guard",
-     "check_param_carrier_guard 钉住通用层「数据契约的载体」的该条（条文、判定标准、例外与边界、存量口径、「本集合取舍」定性与依据名）以及调度器「任何代码活动」下的识别特征；「某个参数算不算本可由具名对象承载」属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_param_carrier_guard 钉住通用层「数据契约的载体」的该条（条文、判定标准、例外与边界、存量口径、「本集合取舍」定性与依据名）以及调度器「任何代码活动」下的识别特征；「某个参数算不算本可由具名对象承载」"),
     ("接口实现字段名与接口 getter 名不一致须手动桥接并忽略序列化", "specs/stack/java.adoc", "script/check_specs.py",
      "check_getter_bridge_guard",
-     "check_getter_bridge_guard 钉住 Java 栈「编码」的该条（条文与机制、判定标准、边界、存量口径与依据名）与调度器 Java 技术栈识别特征；「某个类是否已发布、序列化属性名是否真被外部依赖」属语义判断（见 GUARD_CHECK_LIMITS）"),
+     "check_getter_bridge_guard 钉住 Java 栈「编码」的该条（条文与机制、判定标准、边界、存量口径与依据名）与调度器 Java 技术栈识别特征；「某个类是否已发布、序列化属性名是否真被外部依赖」"),
     ("方法参数校验入口统一用 @Validated（@Valid 只作字段级联）", "specs/stack/spring.adoc", "script/check_specs.py",
      "check_validation_entry_guard",
      "check_validation_entry_guard 钉住 Spring 栈「参数校验」节（条文与级别、分工、判定标准、影响面与依据名）与调度器 Spring 技术栈识别特征"),
@@ -742,9 +742,8 @@ MECHANISMS = [
      "存量边界（既有这类继承不视为违规、不告警、不发动全库改造）；② Java 落点（`java-syntax.adoc`）——"
      "认类看命名与用法、`@UtilityClass` 自带私有构造器故不可被继承、不新起工具基类，"
      "并回指 `java.adoc`「命名」把 JDK 扩展类/补齐类排除在工具类之外。"
-     "**本条防的不是『没写规则』而是『判据被抽成一句口号』**——"
-     "『某个类算不算工具类』『某处继承是不是工具类之间的继承』属语义判断（见 GUARD_CHECK_LIMITS），"
-     "交人/子 agent 复核"),
+     "**本条防的不是『没写规则』而是『判据被抽成一句口号』**"
+     ""),
 ]
 
 

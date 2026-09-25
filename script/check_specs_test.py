@@ -9,7 +9,6 @@
   * check_stack_consistency—— 技术栈双向一致（正：登记且存在；反：漏登记 / 登记不存在）
   * check_dispatcher_layers—— 加载调度器分层结构（正：五层+维护层层头与条目齐备；反：层头被吞/空壳层头/节被改写）
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
-  * check_filler_docs      —— 文档注水兜底（正：简短条目/标题词+内容/纯格式行不误报；反：占位段/完全重复段）
   * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
   * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
   * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
@@ -1892,86 +1891,7 @@ class TestCheckInstallCodeblock(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
-# check_filler_docs（『禁止无意义/划水/凑字数文档』机械兜底）
-# --------------------------------------------------------------------------- #
-class TestCheckFillerDocs(CheckSpecsTestCase):
-    def test_substantive_content_passes(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write(
-            "specs/general/doc.adoc",
-            "= 文档规范\n\n"
-            "简短但有实质内容的一句话规则也必须保留（不因简短被判注水）。\n\n"
-            "* 条目一：必须写清边界与默认值\n"
-            "* 条目二：禁止写套话与复述结论\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
 
-    def test_placeholder_paragraph_reports(self):
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc", "= t\n\n此处待补充。\n")
-        cm.check_filler_docs()
-        self.assertIn("注水", self.error_texts())
-        self.assertIn("占位段", self.error_texts())
-
-    def test_repeated_paragraph_reports(self):
-        dup = ("* 必须保证条目承载可核对的事实与边界，不得堆砌同义反复的空话套话："
-               "凡无落点、无取值、无判定标准的说明一律不加，完全重复的段落一律合并去重不得保留。")
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc", f"= t\n\n{dup}\n\n{dup}\n")
-        cm.check_filler_docs()
-        self.assertIn("完全重复", self.error_texts())
-
-    def test_plain_summary_sentence_passes(self):
-        # 无列表结构的普通小结句不得误报
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/cnb.adoc",
-                   "= cnb\n\n以下规范适用于 CNB 平台上的任务开发与合并请求管理。\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
-
-    def test_heading_word_with_list_content_passes(self):
-        # 「示例/参考」类标题词后接列表内容属正常文档写法，不得误报（防误伤）
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc",
-                   "= t\n\n参考：\n\n* 示例一：说清核心即可\n* 示例二：不得长篇大论\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
-
-    def test_short_conclusion_sentence_passes(self):
-        # 简短但有核心的结论句不得因“篇幅短”被判注水（不得长篇大论 ≠ 不得写短句）
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc",
-                   "= t\n\n文档是给人读的，说清核心即可，不得长篇大论也不得凑字数。\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
-
-    def test_word_with_placeholder_char_not_reported(self):
-        # 『略』只作为『详略程度』等词的一部分时不得误报
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc",
-                   "= t\n\n判定依据：按内容范围区分，不按详略程度区分，范围大者进独立文档。\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
-
-    def test_format_only_line_passes(self):
-        # 纯格式行（`：`、`——`、`**`）无实质内容但属版式，不判注水（防误报）
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc", "= t\n\n：\n\n——\n\n**\n")
-        cm.check_filler_docs()
-        self.assertEqual(cm.errors, [])
-
-    def test_short_repeated_paragraph_reports(self):
-        # 短而完全逐字重复的段落同样应被拦（避免阈值过高导致抓手失效）
-        dup = "* 重复的短条目内容用以验证判定"
-        self.write("AGENTS_COMMON.adoc", "= t")
-        self.write("specs/general/doc.adoc", f"= t\n\n{dup}\n\n{dup}\n")
-        cm.check_filler_docs()
-        self.assertIn("完全重复", self.error_texts())
-
-
-# --------------------------------------------------------------------------- #
-# check_index_page_guard（『索引页触发判据防线』）
-# --------------------------------------------------------------------------- #
 class TestCheckIndexPageGuard(CheckSpecsTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -2850,7 +2770,7 @@ class TestScopeStaysOnCommonContent(CheckSpecsTestCase):
         self.write("specs/general/doc.adoc", "= 文档\n\n简短但有实质内容的一句话规则。\n")
         # 工作区存在未跟踪文件（模拟"delete+create 之类的工作区形态"）不得影响结论
         self.write("品牌新文件.adoc", "= x\n\n与本规范集合无关的内容。\n")
-        cm.check_filler_docs()
+        cm.check_link_refs()
         self.assertEqual(cm.errors, [])
 
 
@@ -3013,10 +2933,9 @@ class TestCheckLibraryGuard(CheckSpecsTestCase):
                    + "\n".join("- " + q for q in cm.LIBRARY_QUOTE_ANCHORS) + "\n")
 
     def test_root_level_name_link_form_dangling_reports(self):
-        # 反例：馆内以**根级文件名 + link: 写法**引用（`link:CHANGELOG.adoc[]`）而该文件不存在
-        # 依据：馆内引用一律按仓库根基准——根级名走 link: 形态**同样是引用写法**，
-        # 悬空即断链（原实现只按"本文件所在目录"解析 link: → 解析成 library/CHANGELOG.adoc，
-        # 与反引号形态的基准不一致：文件缺失时 link: 形态漏报、文件在时又误报）
+        # 反例：馆内以**根级文件名 + link: 写法**引用而该文件不存在——馆内引用一律按
+        # 仓库根基准，根级名走 link: 同样是引用写法、悬空即断链（按"本文件所在目录"解析时，
+        # 文件缺失漏报、文件在时又误报）
         self._write_valid()
         self._write_topic_body("变更历史见 link:CHANGELOG.adoc[]。")
         cm.check_library_guard()
@@ -4171,11 +4090,9 @@ class TestCheckPublicContentSelfContained(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
     def test_library_ref_in_public_specs_reports(self):
-        # 反例：**图书馆与维护方自查层同属"不在默认引用面内"的落点**，公共内容里指向
-        # `library/` 的路径同样是引用方读不到的死链。
-        # 本轮实测失效：新增的「包源与镜像源」条在 specs/general/ci-cd.adoc 等处写了
-        # link:../../library/mirrors.adoc[]，而当时三条防线全绿放过——本条此前只拦
-        # `specs-project-maintainer/`。
+        # 反例：图书馆与维护方自查层同属"不在默认引用面内"的落点，公共内容里指向
+        # `library/` 的路径同样是引用方读不到的死链（本条此前只拦
+        # `specs-project-maintainer/`，实测漏放过 `link:../../library/mirrors.adoc[]`）。
         self.write("AGENTS_COMMON.adoc", "= t")
         self.write("specs/general/dependency.adoc",
                    "= 依赖\n\n实测记录见 link:../../library/mirrors.adoc[]。\n")
@@ -5131,13 +5048,9 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.assertIn("『要改的那一处读过没有』不再有人问", self.error_texts())
 
     def test_unknown_placeholder_in_custom_message_rejected(self):
-        # 反例：规则数据的自定义文案里写了引擎不认的占位符（`{section}` 不在
-        # `PLACEHOLDERS` 里，同此前的 `{rel_exec}`）——`_msg` 填不进去，报错正文会
-        # 原样带着它（缺的是哪一节反而看不出来）。判据在**加载期**
-        # （`_check_placeholders`），**直接构造 `Rules` 也要过**：只挂在
-        # `load_rule_files` 上时，直接注入的规则数据仍能把它写进报错正文。
-        # 断言核的是**判据本身**（`可用的是` 那句只在拒绝路径上出现），
-        # 不得只断言 `{section}` 这几个字——那样改成放行也照样绿【复核实测踩过】。
+        # 反例：自定义文案里写了引擎不认的占位符——报错正文会原样带着它
+        # （缺的是哪一节反而看不出来）。判据在加载期，直接构造 `Rules` 也要过；
+        # 断言须核判据本身，只断言那几个字时改成放行也照样绿【复核实测踩过】。
         with self.assertRaises(rules_engine.RulesError) as ctx:
             rules_engine.Rules(
                 {"guards": {"g": [{"kind": "file_groups", "file": "a.adoc",
@@ -6887,10 +6800,8 @@ class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
                          "核对面须与规则数据逐项一致（改一处必须改另一处）")
 
     def test_scan_files_cover_all_adoc(self):
-        # **反面**：核对面里只列"当前已知会自称回指的那些文件"时，未列入的文件**永远不被扫描**
-        # ——防线静默少扫一层，读者却以为已覆盖（本轮实测：原清单只有 21 个文件，
-        # `specs/general/coding.adoc`、`prompts/*.adoc` 这类从未被扫过，而它们下一个改动里
-        # 完全可能写出"见别处"却顺手抄取值的行）。故核对面须**覆盖仓库里全部 .adoc**
+        # 反面：核对面只列"已知会自称回指的那些文件"时，未列入的文件永远不被扫描——
+        # 防线静默少扫一层而读者以为已覆盖。故核对面须覆盖仓库里全部 .adoc
         # （历史留痕 `CHANGELOG.adoc` 除外——它的职责就是逐字保留历史产物）。
         import subprocess
         repo = os.path.dirname(HERE)
@@ -11832,11 +11743,9 @@ class TestCheckWiringGuard(CheckSpecsTestCase):
         self.assertEqual(self.error_texts(), "")
 
     def test_closure_does_not_depend_on_first_definition(self):
-        # 反例④：闭包不得依赖"某个函数恰好定义在其他防线之前"。形态：被序列编排的
-        # `check_alpha` 体内调 `check_beta`，而 `check_beta` **定义在 `check_alpha` 之前**——
-        # `_fn_body` 按"本次匹配起点到下一个 `def` 行"取函数体，落在文件最后一个定义上时
-        # 会扫到文件尾，把后面的防线全算成"可达"。于是"模块里最后一个 `def`"这道防线
-        # 只要不接进序列，就能被**另一道防线前移**这种无关改动静默放过。
+        # 反例：`check_alpha` 体内调 `check_beta`，而 `check_beta` 定义在 `check_alpha` 之前——
+        # `_fn_body` 落在文件最后一个定义上时会扫到文件尾、把后面的防线全算成"可达"，
+        # 于是"模块里最后一个 `def`"不接进序列也能被无关改动静默放过。
         self.write("script/check_specs.py",
                    "def check_beta():\n"
                    "    \"\"\"B.\"\"\"\n"
@@ -16662,11 +16571,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertIn("重复", self.error_texts())
 
     def test_wiring_duplicate_hiding_removal_reports(self):
-        # 反例⑥（**重复登记判据自身的绕过路径**，本轮 review 复现）：把一道真防线连同
-        # 它的函数体、用例、台账声明一并删掉，再把**另一道仍存在的**防线重复登记一次，
-        # 使序列元素个数仍等于基线——此时"定义了却没被调用"那条报不出来（函数体已删）、
-        # "重复"那条又只说"写重了"，没有任何一条能指出"少了一道真防线"。
-        # 判据须让重复项**不计入**唯一防线数，故删一道 + 重复顶一道必然低于基线。
+        # 反例：删一道真防线（连同函数体、用例、台账声明）再把另一道重复登记一次，
+        # 序列元素个数仍等于基线——"定义了却没被调用"与"重复"两条都说不出"少了一道真防线"。
+        # 判据须让重复项**不计入**唯一防线数：删一道 + 重复顶一道必然低于基线。
         self._write_valid(src=self._SRC
                           .replace("    check_alpha_guard,\n", "")
                           .replace("def check_alpha_guard():\n"
@@ -16776,10 +16683,8 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertIn("check_specs.py", self.error_texts())
 
     def test_entry_block_in_middle_reports(self):
-        # 反例⑨（本轮 main 上实测的缺口）：测试文件的 `if __name__ == "__main__":` 落在
-        # **中段**，其后仍有缩进的 `def test_`（块内局部函数）——源码正则数得到、`unittest`
-        # 收集不到。本仓库祖先提交 `8802613` 的真实形态：`unittest.main` 在中段、其后 2 个
-        # 测试类从未执行，`Ran 897 tests` 而源码 899 个 `def test_`，脚本与基线全绿。
+        # 反例：`if __name__ == "__main__":` 落在**中段**、其后仍有缩进的 `def test_`
+        # （块内局部函数）——源码正则数得到、`unittest` 收集不到，脚本与基线全绿。
         self._write_valid(test_file=(
             "import unittest\n\n\nclass T(unittest.TestCase):\n"
             "    def test_case_0(self):\n        self.assertTrue(True)\n"
@@ -17306,12 +17211,9 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                     root = os.path.join(home, ".cache", "agent-specs")
                     self.assertFalse(os.stat(root).st_mode & stat.S_IWUSR)
                 else:
-                    # **win32 上不静默算通过**（本仓库口径：跳过不等于通过）。已按 CPython
-                    # `win32_chmod` 语义核对过：`os.chmod` 只认 `stat.S_IWRITE`，其效果是给
-                    # **文件**打 `FILE_ATTRIBUTE_READONLY`（文件那一半成立）；**目录的增删改名
-                    # 拦不住**（删除权来自父目录的 `DELETE_CHILD`，与目标目录属性无关）。
-                    # 故此处只核"文件已置只读"这一半，另一半靠规范约束——
-                    # 边界写在 `script/fetch-specs.py` 头部「已知限制」与本用例说明里。
+                    # win32 上只核得到"文件已置只读"这一半（`os.chmod` 只认
+                    # `stat.S_IWRITE`；目录的增删改名来自父目录的 `DELETE_CHILD`，
+                    # 与目标目录属性无关）；跳过不等于通过，故显式 skip 并写明边界。
                     self.skipTest("Windows 上目录的只读位拦不住增删改名（READONLY 属性对目录不阻止 "
                                   "DeleteFile/CreateFile）；本机只实测得到『文件已置只读』那一半，"
                                   "『目录不可增删改名』在 Windows 上未实测（跳过不等于通过，"
