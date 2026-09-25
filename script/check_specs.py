@@ -8506,10 +8506,20 @@ MAVEN_PARALLEL_ADOPTION_ANCHOR = "「Maven 默认启用多线程构建、以项�
 # 提示词公共片段（执行侧的开并行动作落点）与两个提示词的引入：
 MAVEN_PARALLEL_PROMPT_TAG = "build-parallel"
 MAVEN_PARALLEL_PROMPT_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_PROMPT_ANCHORS"]
+# 两条锚点清单的**条数下限**：`MAVEN_PARALLEL_*_ANCHORS` 是**纯数据**，删掉一项锚点时
+# 规范正文与片段一字未动、上面那圈"逐 token 核现场文本"全绿——`miss` 是空集，
+# "核过且通过"与"没核"看起来一模一样（本仓库实证：把 `MAVEN_PARALLEL_ANCHORS` 第 1 组里
+# 新增的 4 条要点整批删掉，`check_specs.py` 仍报 OK、单测 1551 条全通过）。
+# 而本条的**新增要点最容易从这里静默消失**——它只在规则数据的清单里被登记过一次。
+# 故核条数：低于下限即报错。`min` 取**当前条数**（不是理想条数），只拦"无声变少"；
+# 删清单须与调 `min` 一并发生，于是这个动作在 diff 里可见（同 `rules_engine._step_anchor_count`
+# 的既有口径；本条未走规则数据，故下限在此处常量化）。
+MAVEN_PARALLEL_ANCHOR_FLOOR = 30
+MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR = 11
 
 
 def check_maven_parallel_guard():
-    """Maven「构建并行度」防线：默认值口径、既有配置优先与三处落点不得被删改。
+    """Maven「构建并行度」防线：默认值口径（含命令行显式传参）、既有配置优先与三处落点不得被删改。
 
     本条只核**文本形态**：条款与其级别、判定标准、依据名仍在，且三处落点（调度器识别特征、
     图书馆的官方原文与本站取舍、提示词公共片段与两个提示词的引入）一处不少——
@@ -8532,6 +8542,17 @@ def check_maven_parallel_guard():
             "执行者会重新用单线程构建、或反过来覆盖引用方既有配置", rel)
         phase_done()
         return
+    # 入场核（与下面那圈成对）：先核**锚点清单自己的条数**——清单删项时现场一字不少、
+    # 下面那圈一次都不报错（那条"防线零证据"的形态）。
+    have = sum(len(tokens) for _name, tokens, _why in MAVEN_PARALLEL_ANCHORS)
+    if have < MAVEN_PARALLEL_ANCHOR_FLOOR:
+        err(f"`MAVEN_PARALLEL_ANCHORS` 锚点条数从下限 {MAVEN_PARALLEL_ANCHOR_FLOOR} 减到 {have}——"
+            "锚点清单是**纯数据**、只被本条防线读取，删掉一项时规范正文一字未动、"
+            "下面的逐项核对**一次都不报错**（本仓库实证：把新增的『取值以命令行参数形态"
+            "显式传』那组要点整批删掉，现场文档仍写着它、而防线与会报 OK）。"
+            "确实要删就得说明删了哪条、为什么删（并同步 `MAVEN_PARALLEL_ANCHOR_FLOOR`）",
+            "script/specs-rules/_tokens.toml")
+
     for name, tokens, why in MAVEN_PARALLEL_ANCHORS:
         for token in tokens:
             if token not in section:
@@ -8558,6 +8579,10 @@ def check_maven_parallel_guard():
                     "触发特征不全时，执行者不会在『要跑构建』时想到这条", "AGENTS_COMMON.adoc")
 
     # 落点②：图书馆（官方原文 + 本站取舍，两处都要有——只有名称无法核对"官方要没要求"）
+    # （本条另钉两处同源失效：取值须以命令行参数形态显式传——`MAVEN_OPTS`/`MAVEN_ARGS`
+    #  一类环境变量载体看着"加了参数"但命令形态无从核对、`MAVEN_ARGS` 自 3.9.0 才被读取，
+    #  结果是"参数加了却悄悄退回单线程而构建照旧成功"；以及命令行的覆盖口径——
+    #  命令行总是在项目配置文件之后生效，故再传一次 `-T` 就是覆盖，即使取值相同。）
     src_path = os.path.join(REPO_ROOT, "library", "sources.adoc")
     with open(src_path, encoding="utf-8") as fh:
         src_text = fh.read()
@@ -8584,6 +8609,14 @@ def check_maven_parallel_guard():
         err(f"prompts/_common.txt 缺少 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
             "执行侧没有『没配过就默认开并行、配过就用既有配置』的动作落点", "prompts/_common.txt")
     else:
+        have_p = len(MAVEN_PARALLEL_PROMPT_ANCHORS)
+        if have_p < MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR:
+            err(f"`MAVEN_PARALLEL_PROMPT_ANCHORS` 锚点条数从下限 "
+                f"{MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR} 减到 {have_p}——与上一条同源：清单删项时"
+                "（本仓库实证：把『取值必须以命令行参数形态显式传』与『不得改用 `MAVEN_OPTS` "
+                "一类环境变量载体』两条删掉）片段一字未动、下面的逐项核对一次都不报错，"
+                "而执行侧那两条要求就此失守。确实要删须说明删了哪条并同步下限",
+                "script/specs-rules/_tokens.toml")
         for token in MAVEN_PARALLEL_PROMPT_ANCHORS:
             if token not in tag_block.group(1):
                 err(f"`{MAVEN_PARALLEL_PROMPT_TAG}` 片段缺少要点 `{token}`——"
