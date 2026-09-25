@@ -17489,6 +17489,10 @@ class TestFetchSpecsPathBoundary(CheckSpecsTestCase):
         os.makedirs(os.path.join(stop, "specs"))
         os.makedirs(sibling)
         try:
+            # 注：下面那个下级目录必须在**收紧之前**建好——`0o555` 的目录里再 `makedirs`
+            # 会以 `PermissionError` 失败（CI 上实测：非 root 跑 linux runner 必红）；
+            # 那样测到的是"能不能在只读目录里建目录"，而不是本函数要防的静默放权。
+            os.makedirs(os.path.join(sibling, "specs"))
             os.chmod(sibling, 0o555)          # 邻居先收紧成只读
             before = _stat.S_IMODE(os.stat(sibling).st_mode)
             # ① 目标在落点内：邻居不得被碰
@@ -17500,7 +17504,6 @@ class TestFetchSpecsPathBoundary(CheckSpecsTestCase):
             # "不在落点内"，故它不得被补回写位——字符串前缀判据在这一档会误判为在内
             # （`/root/agent-specs-backup`.startswith(`/root/agent-specs`) 为真），
             # 于是给邻居补上写位；本函数要防的正是这次**静默放权**。
-            os.makedirs(os.path.join(sibling, "specs"), exist_ok=True)
             os.chmod(os.path.join(sibling, "specs"), 0o555)
             mod._ensure_writable(stop, os.path.join(sibling, "specs", "x.adoc"))
             self.assertEqual(before, _stat.S_IMODE(os.stat(sibling).st_mode),
