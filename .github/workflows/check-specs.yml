@@ -48,9 +48,14 @@ jobs:
       # 校验必须在同一步骤里判（`command -v` 不通过即整步失败），否则装失败会静默退回
       # "缺工具也绿"；而 `check_specs.py` 缺处理器时会直接报错，故校验失败必须让 action
       # 失败、不得继续往下跑（口径见 specs/general/ci-cd.adoc「校验链完整」）。
+      # 注：runner 上是**系统 Ruby**（`/usr/lib/ruby`），gem 目录 `/var/lib/gems/<版本>`
+      # 归 root 所有，普通用户执行 `gem install` 会以 `Gem::FilePermissionError` 失败
+      # （实测：`You don't have write permissions for the /var/lib/gems/3.2.0 directory`）。
+      # 故此处带 `sudo`（runner 上免密）；装出的可执行文件落在 `/usr/local/bin`（已在
+      # PATH 上），下面 `command -v asciidoctor` 与 `asciidoctor --version` 仍能就地校验。
       - name: Install and verify asciidoctor
         run: |
-          gem install asciidoctor --no-document
+          sudo gem install asciidoctor --no-document
           command -v asciidoctor
           asciidoctor --version
       - name: Run deterministic spec checks (incl. AsciiDoc syntax)
