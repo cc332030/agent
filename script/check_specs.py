@@ -3686,7 +3686,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 128
-GUARD_TEST_BASELINE = 1668
+GUARD_TEST_BASELINE = 1671
 GUARD_EMPTY_TEST_NAMES = set()
 
 

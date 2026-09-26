@@ -5649,9 +5649,17 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
                    "唯一落点＝`specs/general/verify.adoc`「验证的效力等级」的「三态台账」，"
                    "本文件不复述、只留落点。\n")
         self.write("specs/general/collab.adoc",
-                   "= 协作\n\n**硬超时**：到点即视为失联，**不得无限等待**；"
+                   "= 协作\n\n== 资源限制与感知\n\n**硬超时**：到点即视为失联，**不得无限等待**；"
                    "**超时的处置**：放弃该子 agent + 如实标悬置。"
-                   "**时限取值须有判据**，优先选**一次性、边界明确、可超时**的派发形式。\n")
+                   "**时限取值须有判据**，优先选**一次性、边界明确、可超时**的派发形式。\n\n"
+                   "== 操作超时与超时后的处置\n\n"
+                   "* **每一次操作自带可判定的时限（L1，防\"一直卡死\"）**：每一次操作都须"
+                   "**预估它的最长执行时间**并设可判定的时限；**没有进度输出的操作尤其适用**。\n"
+                   "* **超时后先排查、再换手段继续（L1）**：① **排查原因**；"
+                   "② **换一种手段继续**，并继续做不依赖该操作的其余部分，"
+                   "**不得把整条任务停在中间**；**不得把超时未完成的操作写成已完成**。\n"
+                   "* **与复核者超时的分工（L1）**："
+                   "**执行类操作没有这条约束**，超时后须换手段做完，**不得直接放弃该步骤**。\n")
         self.write("AGENTS.adoc", "= 项目入口\n\n由 `check_demo_guard` 钉住，见 `clean_tmp.py`。\n")
         self.write("README.adoc", "= 说明\n\n由 `check_demo_guard` 钉住。\n")
 
@@ -5659,6 +5667,48 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
         self._write_valid()
         cm.check_checklist_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_operation_timeout_keyword_only_reports(self):
+        # 反例（Issue #227）：只留"时限"字样、整条要求被抽掉——`hard timeout` 的既有锚点
+        # 只覆盖派发语境，没有这一条时"命令/构建/读取卡死"仍无人拦（假绿）。
+        self._write_valid()
+        self.write("specs/general/collab.adoc",
+                   "= 协作\n\n== 资源限制与感知\n\n**硬超时**：到点即视为失联，**不得无限等待**；"
+                   "**超时的处置**：放弃该子 agent + 如实标悬置。"
+                   "**时限取值须有判据**，优先选**一次性、边界明确、可超时**的派发形式。\n")
+        cm.check_checklist_guard()
+        self.assertIn("操作超时与超时后的处置", self.error_texts())
+
+    def test_operation_timeout_moved_out_of_section_reports(self):
+        # 反例（本次 review 实测）：条目**字面仍在**，但被挪出「操作超时与超时后的处置」节——
+        # 按整份文件核（`file_groups`）时此形态全绿，落点随之失效。
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "collab.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        moved = [ln for ln in text.splitlines(True)
+                 if ln.startswith("* **每一次操作自带可判定的时限")
+                 or ln.startswith("* **超时后先排查")
+                 or ln.startswith("* **与复核者超时的分工")]
+        self.assertEqual(len(moved), 3)
+        for ln in moved:
+            text = text.replace(ln, "")
+        self.write("specs/general/collab.adoc",
+                   text.rstrip() + "\n\n== 别处\n\n" + "".join(moved))
+        cm.check_checklist_guard()
+        self.assertIn("操作超时与超时后的处置", self.error_texts())
+
+    def test_timeout_without_recovery_reports(self):
+        # 反例：时限那一条还在（不再"一直卡死"），但**超时后的处置被抽掉**——
+        # 执行者会照"标一句未完成"收尾，而不是排查原因、换手段继续。
+        self._write_valid()
+        path = os.path.join(self.root, "specs", "general", "collab.adoc")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/general/collab.adoc",
+                   text.replace("**不得把整条任务停在中间**", "到此为止"))
+        cm.check_checklist_guard()
+        self.assertIn("不得把整条任务停在中间", self.error_texts())
 
     def test_admission_item_count_mismatch_reports(self):
         # 反例：清单被删一项而声明未同步（读者按声明核对会漏项）
@@ -5694,14 +5744,14 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("specs/general/collab.adoc", "= 协作\n\n子 agent 用于隔离上下文。\n")
         cm.check_checklist_guard()
-        self.assertIn("硬超时", self.error_texts())
+        self.assertIn("资源限制与感知", self.error_texts())
 
     def test_timeout_keyword_only_reports(self):
         # 反例：只留"硬超时"字样、整条要求被抽掉（防"关键词出现过一次"式假绿）
         self._write_valid()
         self.write("specs/general/collab.adoc", "= 协作\n\n硬超时：设个时限即可。\n")
         cm.check_checklist_guard()
-        self.assertIn("缺失硬超时要素", self.error_texts())
+        self.assertIn("缺少", self.error_texts())
 
     def test_ledger_keyword_only_reports(self):
         # 反例：只留"三态"字样、三态台账要求被抽掉
