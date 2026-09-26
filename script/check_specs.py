@@ -3688,8 +3688,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 130
-GUARD_TEST_BASELINE = 1711
+GUARD_WIRING_BASELINE = 131
+GUARD_TEST_BASELINE = 1730
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -10950,6 +10950,45 @@ def check_change_number_scope_guard():
     phase_done()
 
 
+def check_staged_delivery_guard():
+    """『分阶段交付（大任务）』防线（**用户提出**）：**大任务分阶段执行时分阶段提交与推送**，
+    以免中断后成果丢失。
+
+    判据本体唯一落点在通用层 `specs/general/git.adoc`「分阶段交付（大任务）」——大任务先分阶段、
+    先规范再执行；**每个阶段完成即把成果落到已提交并已推送的载体上**（判据＝该阶段产出的全部成果
+    都在已提交并已推送的载体里、工作区与暂存区不留未交付的成果）；阶段成果不得只存在于临时产物、
+    会话上下文或本地未提交的工作区；按执行环境分两端；中断后从最后一个已交付的阶段继续；
+    边界只到"提交 + 推送 + 建 PR"（不含合并）。
+
+    **与交付链另两半的分工**：`prompts/_common.txt` 的 `delivery` 片段管**收尾**的交付时机（提示词侧、
+    会被未知项目复制执行），本文件「重命名与内容修改须分两个提交」管**提交序列**，本节管**中途**的
+    交付时机——三者互不替代，任一处缺失都不可。
+
+    失效形态：阶段成果只在 `tmp/`、会话上下文或未提交的工作区里——**每一处看上去都"在做"**，
+    而临时环境一销毁、任务一中断，成果全部作废、下次从零重来。
+
+    只钉「判据是否仍在」——「这个任务算不算大任务」「某次操作算不算一个阶段」属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("分阶段交付（大任务）防线检查")
+    rel = "specs/general/git.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——『分阶段交付（大任务）』失去权威定义落点", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"^== 分阶段交付（大任务）.*?(?=\n== |\Z)", text, re.M | re.S)
+    if m is None:
+        err(f"{rel} 未找到「分阶段交付（大任务）」一节——大任务中途的成果交付判据无处可查"
+            "（用户提出的判据不得被删除或降级）", rel)
+        phase_done()
+        return
+    run_rule_guard("check_staged_delivery_guard")
+    phase_done()
+
+
 CHECKS = (
     check_refs_exist,
     check_link_refs,
@@ -11081,6 +11120,7 @@ CHECKS = (
     check_value_binding_guard,
     check_spec_optimize_guard,
     check_change_number_scope_guard,
+    check_staged_delivery_guard,
 )
 
 
