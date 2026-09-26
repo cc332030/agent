@@ -38,7 +38,7 @@
 | 23 | `check_git_mv_selfcheck` | 本仓库自身侧 git mv 自查——把最高关注项 P1 从"口号"变成本仓库可机械核对的一项
 | 24 | `check_budget_guard` | 常驻层体积上限——必加载层体积与调度器条目数不得无声膨胀
 | 25 | `check_file_size_hint` | 单个规范文件的软阈值——超线只提醒、不报错、不阻断（**刻意不用 err()**）
-| 26 | `check_delegation_guard` | 从属者与能力自评防线——两类"定义了却不会被执行"的机制要点必须仍在
+| 26 | `check_delegation_guard` | 从属者与能力自评防线——两类"定义了却不会被执行"的机制要点必须仍在；另一同主题要点（**每次操作自带可判定的时限、超时后先排查再换手段继续**，用户提出、Issue #227）由 `check_checklist_guard` 的锚点核 `specs/general/collab.adoc` 那一节（本处只记"哪一道在核"，不另写一份判据）
 | 27 | `check_verify_guard` | 规范验证防线——验证口径（三视角/效力等级/总纲/规范验证）与其维护方落点不得被删
 | 28 | `check_lifecycle_guard` | 任务生命周期防线——节点自查、验证边界与拆分判据不得被删或降级
 | 29 | `check_adoption_guard` | 接纳面防线——公共内容被未知项目加载时的可控性（运行契约）不得被删

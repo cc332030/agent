@@ -82,6 +82,8 @@ MECHANISMS = [
      "script/clean_tmp.py",        "存在清理脚本"),
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py",
      "script/check_specs_test.py", "20+ 用例"),
+    ("每次操作自带可判定的时限、超时后排查并换手段继续（不限于子 agent 派发）", "specs/general/collab.adoc", "script/check_specs.py",
+     "check_checklist_guard", "check_checklist_guard 核该条与『时限取值须有判据』『超时的处置』的多处要素仍在；「某次操作实际有没有设时限、超时后有没有真去排查」属运行时行为，交人/子 agent 复核"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py",
      "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",
