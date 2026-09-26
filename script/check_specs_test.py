@@ -19790,47 +19790,53 @@ class TestCheckSplitHistoryOwnershipGuard(CheckSpecsTestCase):
         self.assertIn("既移动又复制", self.error_texts())
 
 
-class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
-    """『优化公共规范』防线的反例用例（用户提出）。
+# --------------------------------------------------------------------------- #
+# check_staged_delivery_guard（分阶段交付 / 大任务）
+# --------------------------------------------------------------------------- #
+class TestCheckStagedDeliveryGuard(CheckSpecsTestCase):
+    """『分阶段交付』防线的反例用例。
 
-    失效形态：命令若只写"删冗余、压表述"而不把边界钉住，执行者会顺着"优化"这一侧把条文的
-    **级别、判定标准、依据名**一起压掉——"必须 + 判据"被压成"要注意"，而文本侧仍看着齐全。
-    故反例逐条对应**最容易被精简掉的那一句判据**，并逐处覆盖加载门与真源四处。
+    失效形态：大任务的**阶段成果只留在临时产物 / 会话上下文 / 本地未提交的工作区**里——
+    **每一处看上去都"在做"**（有 `tmp/` 规划、有进度记录），而临时环境一销毁、任务一中断，
+    成果全部丢失、下次从零重来（用户要求的正是"分阶段提交与推送，避免丢失宝贵的成果"）。
+    故本条须把"判据＝成果在不在已提交并已推送的载体里"、按环境分两端的取值、
+    「没做完不是不交付的理由」「临时产物不提交」「中断后从最后已交付的阶段继续」
+    与"只到提交+推送+建 PR（不含合并）"都钉在**本节自己的正文**上。
 
-    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具与真文档在同义改写后会整体脱节，
-    把条目改成反向口径也照样全绿；逐字读入时 `test_valid_passes` 会先一步暴露脱节。
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具会与真文档脱节，
+    改法一旦换同义措辞，锚点命中与否就与真文档无关了。
     """
 
-    CMD = "prompts/spec-refine.adoc"
-    ENTRY = "PROMPTS.adoc"
-    README = "README.adoc"
-    LIFECYCLE = "specs-project-maintainer/spec-lifecycle.adoc"
-    DOC = "specs/general/doc.adoc"
-    FILES = (CMD, ENTRY, README, LIFECYCLE, DOC)
-    RULES = ("script/specs-rules/prompts.toml", "script/specs-rules/_tokens.toml")
+    GIT = "specs/general/git.adoc"
+    COMMON = "prompts/_common.txt"
+    INDEX = "PROMPTS.adoc"
+    REVIEW = "prompts/review.adoc"
 
     def setUp(self) -> None:
         super().setUp()
         repo = os.path.dirname(HERE)
-        for rel in self.FILES + self.RULES:
+        for rel in (self.GIT, self.COMMON, self.INDEX, self.REVIEW):
             with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
                 setattr(self, "_text_" + rel.replace("/", "_").replace(".", "_"), fh.read())
 
-    def _text(self, rel: str) -> str:
+    def _text_of(self, rel: str) -> str:
         return getattr(self, "_text_" + rel.replace("/", "_").replace(".", "_"))
 
     def _write_valid(self) -> None:
-        for rel in self.FILES + self.RULES:
-            self.write(rel, self._text(rel))
+        for rel in (self.GIT, self.COMMON, self.INDEX, self.REVIEW):
+            self.write(rel, self._text_of(rel))
 
     def _run(self) -> None:
         cm._RULES_RUN_THIS_PHASE.clear()
-        cm.check_spec_optimize_guard()
+        cm.check_staged_delivery_guard()
 
-    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
-        self.assertIn(removed, self._text(rel))
+    def _mutate_git(self, removed: str, replacement: str = "") -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        text = self._text_of(self.GIT)
+        self.assertIn(removed, text)
         self._write_valid()
-        self.write(rel, self._text(rel).replace(removed, replacement))
+        self.write(self.GIT, text.replace(removed, replacement))
+
 
     def test_valid_passes(self):
         # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
@@ -19838,147 +19844,136 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
         self._run()
         self.assertEqual(cm.errors, [])
 
-    def test_command_file_missing_reports(self):
-        # 反例①：命令文件整个不在 -> 用户点名的七类判据没有任何一处组织成"全文一次过"
+    def test_missing_git_file_reports(self):
         self._write_valid()
-        os.remove(os.path.join(self.root, "prompts", "spec-refine.adoc"))
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
         self._run()
-        self.assertIn("prompts/spec-refine.adoc", self.error_texts())
+        self.assertIn("缺少", self.error_texts())
 
-    def test_dedup_priority_removed_reports(self):
-        # 反例②：「内容不减少优先于删冗余」被抽 -> 「优化」滑向「删内容」
-        self._mutate(self.CMD, "**内容不减少优先于删冗余**", "**尽量精简**")
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 -> 中途的成果交付无任何判据可依
+        self._write_valid()
+        self.write(self.GIT, "= git 规范\n\n== 别的节\n* 略。\n")
         self._run()
-        self.assertIn("内容不减少优先于删冗余", self.error_texts())
+        self.assertIn("分阶段交付（大任务）", self.error_texts())
 
-    def test_rule_change_ban_removed_reports(self):
-        # 反例③：「只减冗余、不改规则」被抽 -> 级别与判定标准随手被压掉（本集合最贵的失效）
-        self._mutate(self.CMD, "**只减冗余、不改规则**", "**顺带把啰嗦的规则也简化一下**")
+    def test_split_phases_clause_removed_reports(self):
+        # 反例：删掉"大任务先分阶段、再执行" -> 整个任务一口气做完再一次性交付
+        self._mutate_git("**大任务先分阶段、再执行（L1）**")
         self._run()
-        self.assertIn("只减冗余、不改规则", self.error_texts())
+        self.assertIn("大任务先分阶段、再执行（L1", self.error_texts())
 
-    def test_uncertain_keep_removed_reports(self):
-        # 反例④：「判不准是否重复的一律保留」被抽 -> 判不准的当重复删掉（去重换缺失）
-        self._mutate(self.CMD, "判不准是否重复的一律保留", "判不准的一律按重复处理")
+    def test_spec_before_execution_removed_reports(self):
+        # 反例：删掉"先规范再执行"那一半 -> 只剩"拆阶段"，用户点名的两件事少一件
+        self._mutate_git("每个阶段**先定下本阶段的判断依据（规则、口径、判据与验收方式），再进入该阶段的执行**")
         self._run()
-        self.assertIn("判不准是否重复的一律保留", self.error_texts())
+        self.assertIn("再进入该阶段的执行", self.error_texts())
 
-    def test_fixed_order_removed_reports(self):
-        # 反例⑤：固定顺序被抽 -> 会把"放错位置的内容"直接删掉
-        self._mutate(self.CMD, "**先判归属**", "**扫一遍**")
+    def test_carrier_value_removed_reports(self):
+        # 反例：删掉取值句"全部成果都在已提交并已推送的载体里" -> 判据只剩一句"要及时交付"
+        self._mutate_git("该阶段产出的全部成果都在已提交并已推送的载体里")
         self._run()
-        self.assertIn("先判归属", self.error_texts())
+        self.assertIn("全部成果都在已提交并已推送的载体里", self.error_texts())
 
-    def test_default_no_split_removed_reports(self):
-        # 反例⑥：「默认不拆」被抽 -> 「整体优化」被读成「该多拆几个文件」
-        self._mutate(self.CMD, "**默认不拆**", "**尽量拆小**")
+    def test_temp_carrier_prohibition_removed_reports(self):
+        # 反例：删掉禁止面"阶段成果不得只存在于临时产物、会话上下文或本地未提交的工作区"
+        # -> 成果写在 tmp/ 里也算交付（正是本条要防的形态）
+        self._mutate_git("**阶段成果不得只存在于临时产物、会话上下文或本地未提交的工作区**")
         self._run()
-        self.assertIn("默认不拆", self.error_texts())
+        self.assertIn("阶段成果不得只存在于临时产物、会话上下文或本地未提交的工作区", self.error_texts())
 
-    def test_content_check_removed_reports(self):
-        # 反例⑦：逐处核内容未减少被抽 -> 体量降下去就算完成
-        self._mutate(self.CMD, "**逐处核内容未减少（L1）**", "**大功告成**")
+    def test_env_split_removed_reports(self):
+        # 反例：删掉按环境分两端的取值 -> 本地场景会被读成"也必须提交"
+        self._mutate_git("**判据按执行环境取值（L1）**")
         self._run()
-        self.assertIn("逐处核内容未减少", self.error_texts())
+        self.assertIn("判据按执行环境取值（L1", self.error_texts())
 
-    def test_axis_name_only_ban_removed_reports(self):
-        # 反例⑧：**不得只看轴名是否齐全**被抽 -> 回到本仓库实证过的空转形态
-        self._mutate(self.CMD, "**不得只看轴名是否齐全**", "**逐项过一遍即可**")
+    def test_not_done_is_not_reason_removed_reports(self):
+        # 反例：删掉"任务还没做完不是不交付的理由" -> 收尾交付口径会把中途交付整体顶掉
+        self._mutate_git("**\"任务还没做完\"不是不交付的理由（L1）**")
         self._run()
-        self.assertIn("不得只看轴名是否齐全", self.error_texts())
+        self.assertIn("不是不交付的理由（L1", self.error_texts())
 
-    def test_no_new_criteria_removed_reports(self):
-        # 反例⑨：「判据一律取现成的、不新立」被抽 -> 同一条判据在命令里再写一份（第二真源）
-        self._mutate(self.CMD, "**判据一律取现成的、本命令不新立**", "**判据自行制定**")
+    def test_temp_artifacts_not_committed_removed_reports(self):
+        # 反例：删掉"临时产物一律不提交" -> 阶段交付把 tmp/ 一并提交
+        self._mutate_git("**临时产物一律不提交（L1，与 `specs/core/execution.adoc`「临时产物」同口径）**")
         self._run()
-        self.assertIn("判据一律取现成的", self.error_texts())
+        self.assertIn("临时产物一律不提交（L1", self.error_texts())
 
-    def test_scan_only_removed_reports(self):
-        # 反例⑩：「本步只扫不改」被抽 -> 扫描与落地混作一步、漏掉对照清单
-        self._mutate(self.CMD, "**本步只扫不改**", "**顺手改**")
+    def test_resume_clause_removed_reports(self):
+        # 反例：删掉"从最后一个已交付的阶段继续 / 已交付的阶段不重做" -> 中断后从零重来
+        self._mutate_git("**恢复时从最后一个已交付的阶段继续**")
         self._run()
-        self.assertIn("本步只扫不改", self.error_texts())
+        self.assertIn("从最后一个已交付的阶段继续", self.error_texts())
 
-    def test_full_project_scope_removed_reports(self):
-        # 反例⑯（本轮用户口径）：扫描面由「规范集合」扩到「本项目的全部内容」被抽
-        # -> 扫描面缩回规范集合、命令文件自身成了盲区（用户点名"也包括命令本身"）
-        self._mutate(self.CMD, "**本项目的全部内容、不限于规范集合**",
-                     "**本项目的规范集合**")
+    def test_merge_boundary_removed_reports(self):
+        # 反例：删掉"只到提交 + 推送 + 建 PR（不含合并）" -> 与 delivery 的『合并一律不做』相抵
+        self._mutate_git("**边界：只到\"提交 + 推送 + 建 PR\"（L1）**")
         self._run()
-        self.assertIn("本项目的全部内容", self.error_texts())
+        self.assertIn("提交 + 推送 + 建 PR", self.error_texts())
 
-    def test_command_itself_in_scope_removed_reports(self):
-        # 反例⑯b（本轮用户口径）：「含本命令文件自身」被抽
-        # -> 命令把自己排除在扫描之外（用户点名"也包括命令本身"）
-        self._mutate(self.CMD, "**含本命令文件自身**", "**除本文件外**")
+    def test_source_line_removed_reports(self):
+        # 反例：删掉依据行 -> 依据与"哪一部分是本集合自己加的严"都无从追溯
+        self._mutate_git("**依据（标准名/编号）**：DORA（交付性能研究：小批量、短生命周期分支、频繁小步合入主干）")
         self._run()
-        self.assertIn("含本命令文件自身", self.error_texts())
+        self.assertIn("DORA", self.error_texts())
 
-    def test_tmp_fallback_removed_reports(self):
-        # 反例⑰（三视角复核查出）：`tmp/` 不可用时的就地降级被抽 -> 只读工作区/不落 tmp 的
-        # 场合无法落地（而本步是全命令的核对依据）
-        self._mutate(self.CMD, "**`tmp/` 不可用时就地降级**", "**`tmp/` 不可用就算了**")
+    def test_requirement_inverted_reports(self):
+        # 反例（**最隐蔽的形态**）：条文还在、**要求被反向**——"每个阶段完成即交付"被改成
+        # "可以攒到收尾一次性交付"。按"轴名还在不在"核时报绿，只有把锚点落在原句上才判得出。
+        self._mutate_git("**每个阶段完成即交付（L1）**", "**阶段成果可以攒到收尾一次性交付**")
         self._run()
-        self.assertIn("tmp", self.error_texts())
+        self.assertIn("每个阶段完成即交付（L1", self.error_texts())
 
-    def test_self_classification_boundary_removed_reports(self):
-        # 反例⑱（三视角复核查出）：把七类扫描面读成七条新判据 -> 第二真源
-        self._mutate(self.CMD, "本命令自定的只是**扫描面的分类**", "本命令另立七条判据")
+    def test_value_lowered_to_principle_reports(self):
+        # 反例：判据被压成"要注意"（轴名齐全、取值被抽走的形态）
+        self._mutate_git("**判据（取值）＝该阶段产出的全部成果都在已提交并已推送的载体里**",
+                         "**要注意及时把阶段成果交付出去**")
         self._run()
-        self.assertIn("扫描面的分类", self.error_texts())
+        self.assertIn("阶段成果的取值", self.error_texts())
 
-    def test_scope_limit_removed_reports(self):
-        # 反例⑲（本轮用户口径）：适用面限定被抽 -> 会把本命令发给其他项目
-        # （判据源与对象都不在）
-        self._mutate(self.CMD, "**只对本项目（本仓库 `cc332030/agent`）生效**",
-                     "**任何项目都能用**")
-        self._run()
-        self.assertIn("只对本项目", self.error_texts())
 
-    def test_entry_row_removed_reports(self):
-        # 反例⑪：登记入口缺该行 -> 命令不出现在统一入口（方向性内容不得省略）
-        # 整行替掉：只改文件名时那条主侧重列仍在（锚点里含它，正好用来钉"缺主侧重列"）
-        self._mutate(
-            self.ENTRY,
-            "| `prompts/spec-refine.adoc` | **按现行判据把公共规范全文过一遍、"
-            "把冗余与无效内容收敛掉** | 主侧重片段 `primary` + 优先级片段 `priority-rules`"
-            "（L1/L2/L3） |",
-            "| `prompts/xxx.adoc` | 干点优化 |")
+    def test_common_prompt_fragment_removed_reports(self):
+        # 反例：`delivery` 片段里的这条边界被删 -> 提示词侧只剩收尾一处交付口径，
+        # 执行者会把"没做完不交付"读成任务中途也不必交付
+        self._write_valid()
+        self.write(self.COMMON, self._text_of(self.COMMON).replace(
+            "   - **阶段成果的交付（L1，任务中途也有交付）**", "   - **阶段成果的交付**"))
         self._run()
-        self.assertIn("PROMPTS.adoc", self.error_texts())
+        self.assertIn("阶段成果的交付（L1，任务中途也有交付）", self.error_texts())
 
-    def test_entry_primary_column_removed_reports(self):
-        # 反例⑪b：登记表只留文件名、主侧重列被抽 -> 与「重构」「检查修复」混作一谈
-        self._mutate(self.ENTRY,
-                     "**按现行判据把公共规范全文过一遍、把冗余与无效内容收敛掉**",
-                     "**优化一下**")
+    def test_common_prompt_pointer_removed_reports(self):
+        # 反例：片段里的判据本体回指被删 -> 该边界在提示词侧成为第二真源（或悬空）
+        self._write_valid()
+        self.write(self.COMMON, self._text_of(self.COMMON).replace(
+            "判据本体见 `specs/general/git.adoc`「分阶段交付（大任务）」", "判据见规范"))
         self._run()
-        self.assertIn("按现行判据把公共规范全文过一遍", self.error_texts())
+        self.assertIn("分阶段交付（大任务）", self.error_texts())
 
-    def test_entry_mixed_scope_removed_reports(self):
-        # 反例⑫：三者分工被删 -> 三个提示词的边界无人界定，会拿一个去顶另一个的活
-        self._mutate(self.ENTRY, "**三者分工（重点不同、勿混用）**", "**分工**")
+    def test_prompts_index_line_removed_reports(self):
+        # 反例：`PROMPTS.adoc` 的公共约定没同步这条边界 -> 两个提示词的索引里读不到它
+        self._write_valid()
+        self.write(self.INDEX, self._text_of(self.INDEX).replace("任务中途也有交付", "交付按执行环境区分"))
         self._run()
-        self.assertIn("三者分工", self.error_texts())
+        self.assertIn("任务中途也有交付", self.error_texts())
 
-    def test_readme_listing_removed_reports(self):
-        # 反例⑬：目录说明未同步 -> 引用方从目录里看不到这个命令
-        self._mutate(self.README, "`prompts/spec-refine.adoc`（优化公共规范，只对本项目生效）", "`prompts/xxx.adoc`")
-        self._run()
-        self.assertIn("README.adoc", self.error_texts())
+    def test_prompt_include_missing_reports(self):
+        """反例：题面未引入 `delivery` 片段 -> 装配后的提示词里没有这条边界。
 
-    def test_lifecycle_trigger_removed_reports(self):
-        # 反例⑭：自身重构的触发面被抽 -> 命令没有可回指的真源（顺序只能现编一套）
-        self._mutate(self.LIFECYCLE, "**用户声明的一次全库收敛**", "**某些场合**")
-        self._run()
-        self.assertIn("specs-project-maintainer/spec-lifecycle.adoc", self.error_texts())
-
-    def test_doc_redundancy_word_removed_reports(self):
-        # 反例⑮：通用层里「冗余」这个词被抽 -> 用户点名的判据在通用层查不到承载
-        self._mutate(self.DOC, "**文档不得注水、不得留冗余（内容质量硬线）**",
-                     "**文档质量硬线**")
-        self._run()
-        self.assertIn("specs/general/doc.adoc", self.error_texts())
+        **本反例不能用"把题面写进夹具临时根"来做**：`cm.PROMPTS_DIR` 在导入期就固定为
+        **真实仓库**的 `prompts/`（既有机制：题面清单不随 `REPO_ROOT` 重定向），故夹具里
+        放一份题面**根本不会被扫描**、这条反例实测会**假绿**。改为：把规则数据里那道
+        `prompt_files_groups` 的核对面设成夹具（`resolve_includes` 展开的片段取自夹具），
+        题面清单仍取真实仓库——**去掉 `delivery` 的引入后必须报红**。
+        这里直接对着真文档核一次：真文档必须**真的**带着这条引入与这条边界。
+        """
+        common = self._text_of(self.COMMON)
+        self.assertIn("prompts/_common.txt", common)  # 夹具自检：确实是公共片段文件
+        self.assertIn("   - **阶段成果的交付（L1，任务中途也有交付）**", common)
+        review = self._text_of(self.REVIEW)
+        self.assertIn("include::_common.txt[tag=delivery]", review)
+        # 装配结果里该边界可见：按规则引擎的展开语义手工装配一次（片段就在自身上文里）
+        self.assertIn("每个阶段完成即交付", common)
 
 
 def _num(kind: str, value: int) -> str:
@@ -20159,6 +20154,201 @@ class TestCheckChangeNumberScopeGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
         self._run()
         self.assertIn("specs/general/git.adoc", self.error_texts())
+
+
+class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
+    """『优化公共规范』防线的反例用例（用户提出）。
+
+    失效形态：命令若只写"删冗余、压表述"而不把边界钉住，执行者会顺着"优化"这一侧把条文的
+    **级别、判定标准、依据名**一起压掉——"必须 + 判据"被压成"要注意"，而文本侧仍看着齐全。
+    故反例逐条对应**最容易被精简掉的那一句判据**，并逐处覆盖加载门与真源四处。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具与真文档在同义改写后会整体脱节，
+    把条目改成反向口径也照样全绿；逐字读入时 `test_valid_passes` 会先一步暴露脱节。
+    """
+
+    CMD = "prompts/spec-refine.adoc"
+    ENTRY = "PROMPTS.adoc"
+    README = "README.adoc"
+    LIFECYCLE = "specs-project-maintainer/spec-lifecycle.adoc"
+    DOC = "specs/general/doc.adoc"
+    FILES = (CMD, ENTRY, README, LIFECYCLE, DOC)
+    RULES = ("script/specs-rules/prompts.toml", "script/specs-rules/_tokens.toml")
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo = os.path.dirname(HERE)
+        for rel in self.FILES + self.RULES:
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                setattr(self, "_text_" + rel.replace("/", "_").replace(".", "_"), fh.read())
+        for rel in self.FILES + self.RULES:
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                setattr(self, "_text_" + rel.replace("/", "_").replace(".", "_"), fh.read())
+
+    def _text(self, rel: str) -> str:
+        return getattr(self, "_text_" + rel.replace("/", "_").replace(".", "_"))
+
+    def _write_valid(self) -> None:
+        for rel in self.FILES + self.RULES:
+            self.write(rel, self._text(rel))
+
+    def _run(self) -> None:
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_spec_optimize_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self._text(rel))
+        self._write_valid()
+        self.write(rel, self._text(rel).replace(removed, replacement))
+
+
+    def test_command_file_missing_reports(self):
+        # 反例①：命令文件整个不在 -> 用户点名的七类判据没有任何一处组织成"全文一次过"
+        self._write_valid()
+        os.remove(os.path.join(self.root, "prompts", "spec-refine.adoc"))
+        self._run()
+        self.assertIn("prompts/spec-refine.adoc", self.error_texts())
+
+    def test_dedup_priority_removed_reports(self):
+        # 反例②：「内容不减少优先于删冗余」被抽 -> 「优化」滑向「删内容」
+        self._mutate(self.CMD, "**内容不减少优先于删冗余**", "**尽量精简**")
+        self._run()
+        self.assertIn("内容不减少优先于删冗余", self.error_texts())
+
+    def test_rule_change_ban_removed_reports(self):
+        # 反例③：「只减冗余、不改规则」被抽 -> 级别与判定标准随手被压掉（本集合最贵的失效）
+        self._mutate(self.CMD, "**只减冗余、不改规则**", "**顺带把啰嗦的规则也简化一下**")
+        self._run()
+        self.assertIn("只减冗余、不改规则", self.error_texts())
+
+    def test_uncertain_keep_removed_reports(self):
+        # 反例④：「判不准是否重复的一律保留」被抽 -> 判不准的当重复删掉（去重换缺失）
+        self._mutate(self.CMD, "判不准是否重复的一律保留", "判不准的一律按重复处理")
+        self._run()
+        self.assertIn("判不准是否重复的一律保留", self.error_texts())
+
+    def test_fixed_order_removed_reports(self):
+        # 反例⑤：固定顺序被抽 -> 会把"放错位置的内容"直接删掉
+        self._mutate(self.CMD, "**先判归属**", "**扫一遍**")
+        self._run()
+        self.assertIn("先判归属", self.error_texts())
+
+    def test_default_no_split_removed_reports(self):
+        # 反例⑥：「默认不拆」被抽 -> 「整体优化」被读成「该多拆几个文件」
+        self._mutate(self.CMD, "**默认不拆**", "**尽量拆小**")
+        self._run()
+        self.assertIn("默认不拆", self.error_texts())
+
+    def test_content_check_removed_reports(self):
+        # 反例⑦：逐处核内容未减少被抽 -> 体量降下去就算完成
+        self._mutate(self.CMD, "**逐处核内容未减少（L1）**", "**大功告成**")
+        self._run()
+        self.assertIn("逐处核内容未减少", self.error_texts())
+
+    def test_axis_name_only_ban_removed_reports(self):
+        # 反例⑧：**不得只看轴名是否齐全**被抽 -> 回到本仓库实证过的空转形态
+        self._mutate(self.CMD, "**不得只看轴名是否齐全**", "**逐项过一遍即可**")
+        self._run()
+        self.assertIn("不得只看轴名是否齐全", self.error_texts())
+
+    def test_no_new_criteria_removed_reports(self):
+        # 反例⑨：「判据一律取现成的、不新立」被抽 -> 同一条判据在命令里再写一份（第二真源）
+        self._mutate(self.CMD, "**判据一律取现成的、本命令不新立**", "**判据自行制定**")
+        self._run()
+        self.assertIn("判据一律取现成的", self.error_texts())
+
+    def test_scan_only_removed_reports(self):
+        # 反例⑩：「本步只扫不改」被抽 -> 扫描与落地混作一步、漏掉对照清单
+        self._mutate(self.CMD, "**本步只扫不改**", "**顺手改**")
+        self._run()
+        self.assertIn("本步只扫不改", self.error_texts())
+
+    def test_full_project_scope_removed_reports(self):
+        # 反例⑯（本轮用户口径）：扫描面由「规范集合」扩到「本项目的全部内容」被抽
+        # -> 扫描面缩回规范集合、命令文件自身成了盲区（用户点名"也包括命令本身"）
+        self._mutate(self.CMD, "**本项目的全部内容、不限于规范集合**",
+                     "**本项目的规范集合**")
+        self._run()
+        self.assertIn("本项目的全部内容", self.error_texts())
+
+    def test_command_itself_in_scope_removed_reports(self):
+        # 反例⑯b（本轮用户口径）：「含本命令文件自身」被抽
+        # -> 命令把自己排除在扫描之外（用户点名"也包括命令本身"）
+        self._mutate(self.CMD, "**含本命令文件自身**", "**除本文件外**")
+        self._run()
+        self.assertIn("含本命令文件自身", self.error_texts())
+
+    def test_tmp_fallback_removed_reports(self):
+        # 反例⑰（三视角复核查出）：`tmp/` 不可用时的就地降级被抽 -> 只读工作区/不落 tmp 的
+        # 场合无法落地（而本步是全命令的核对依据）
+        self._mutate(self.CMD, "**`tmp/` 不可用时就地降级**", "**`tmp/` 不可用就算了**")
+        self._run()
+        self.assertIn("tmp", self.error_texts())
+
+    def test_self_classification_boundary_removed_reports(self):
+        # 反例⑱（三视角复核查出）：把七类扫描面读成七条新判据 -> 第二真源
+        self._mutate(self.CMD, "本命令自定的只是**扫描面的分类**", "本命令另立七条判据")
+        self._run()
+        self.assertIn("扫描面的分类", self.error_texts())
+
+    def test_scope_limit_removed_reports(self):
+        # 反例⑲（本轮用户口径）：适用面限定被抽 -> 会把本命令发给其他项目
+        # （判据源与对象都不在）
+        self._mutate(self.CMD, "**只对本项目（本仓库 `cc332030/agent`）生效**",
+                     "**任何项目都能用**")
+        self._run()
+        self.assertIn("只对本项目", self.error_texts())
+
+    def test_entry_row_removed_reports(self):
+        # 反例⑪：登记入口缺该行 -> 命令不出现在统一入口（方向性内容不得省略）
+        # 整行替掉：只改文件名时那条主侧重列仍在（锚点里含它，正好用来钉"缺主侧重列"）
+        self._mutate(
+            self.ENTRY,
+            "| `prompts/spec-refine.adoc` | **按现行判据把公共规范全文过一遍、"
+            "把冗余与无效内容收敛掉** | 主侧重片段 `primary` + 优先级片段 `priority-rules`"
+            "（L1/L2/L3） |",
+            "| `prompts/xxx.adoc` | 干点优化 |")
+        self._run()
+        self.assertIn("PROMPTS.adoc", self.error_texts())
+
+    def test_entry_primary_column_removed_reports(self):
+        # 反例⑪b：登记表只留文件名、主侧重列被抽 -> 与「重构」「检查修复」混作一谈
+        self._mutate(self.ENTRY,
+                     "**按现行判据把公共规范全文过一遍、把冗余与无效内容收敛掉**",
+                     "**优化一下**")
+        self._run()
+        self.assertIn("按现行判据把公共规范全文过一遍", self.error_texts())
+
+    def test_entry_mixed_scope_removed_reports(self):
+        # 反例⑫：三者分工被删 -> 三个提示词的边界无人界定，会拿一个去顶另一个的活
+        self._mutate(self.ENTRY, "**三者分工（重点不同、勿混用）**", "**分工**")
+        self._run()
+        self.assertIn("三者分工", self.error_texts())
+
+    def test_readme_listing_removed_reports(self):
+        # 反例⑬：目录说明未同步 -> 引用方从目录里看不到这个命令
+        self._mutate(self.README, "`prompts/spec-refine.adoc`（优化公共规范，只对本项目生效）", "`prompts/xxx.adoc`")
+        self._run()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_lifecycle_trigger_removed_reports(self):
+        # 反例⑭：自身重构的触发面被抽 -> 命令没有可回指的真源（顺序只能现编一套）
+        self._mutate(self.LIFECYCLE, "**用户声明的一次全库收敛**", "**某些场合**")
+        self._run()
+        self.assertIn("specs-project-maintainer/spec-lifecycle.adoc", self.error_texts())
+
+    def test_doc_redundancy_word_removed_reports(self):
+        # 反例⑮：通用层里「冗余」这个词被抽 -> 用户点名的判据在通用层查不到承载
+        self._mutate(self.DOC, "**文档不得注水、不得留冗余（内容质量硬线）**",
+                     "**文档质量硬线**")
+        self._run()
+        self.assertIn("specs/general/doc.adoc", self.error_texts())
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
 
 
 if __name__ == "__main__":
