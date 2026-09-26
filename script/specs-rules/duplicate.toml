@@ -114,6 +114,7 @@ files = [
     "library/usage.adoc",
     "prompts/refactor.adoc",
     "prompts/review.adoc",
+    "prompts/spec-refine.adoc",
     "specs-project-maintainer/context.adoc",
     "specs-project-maintainer/guards.adoc",
     "specs-project-maintainer/priority.adoc",

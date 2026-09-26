@@ -242,7 +242,7 @@ tokens = [
     "没有单个元素入口",
     "存量不告警",
     # review 不查存量缺注解已升为全局口径（specs/general/review.adoc「review 的默认检查面」，
-    # 用户点名 Issue #203）：判据本体只留一行回指、不复述全局判定标准。
+    # 用户点名）：判据本体只留一行回指、不复述全局判定标准。
     "review 时对存量缺这套模板注解不提出问题",
     "specs/general/review.adoc",
 ]

@@ -162,7 +162,7 @@ kind = "line_tokens"
 message = "HTTP 接口契约防线被破坏：{file} 的 Spring 技术栈登记缺失 {missing}——缺该识别特征时，写 HTTP 方法映射与声明式客户端契约不会触发加载该节"
 tokens = ["**HTTP 方法映射**", "**声明式客户端契约**"]
 
-# 『配置项绑定』防线（PR #202：禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
+# 『配置项绑定』防线（禁用 `@Value`，配置项统一 `@ConfigurationProperties`）。
 # 该条对应用户提出的要求：外部配置**只允许**绑定到 `@ConfigurationProperties` 类、
 # **禁止使用 `@Value`**；存量随动迁移、code review 不对存量报。判据按**本条 bullet** 核
 # （`bullet_tokens`）：「配置」节里相邻条目含 `@ConfigurationProperties`、`@Configuration`、

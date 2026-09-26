@@ -1152,7 +1152,7 @@ def _check_placeholders(name: str, guard: str, steps) -> None:
 # ——例如『NPC 禁合并·动作侧』的措辞表（提交说明里哪些话术算"合并动作的痕迹"、哪些算
 # "记录禁令的放行标记"）是纯数据表，规则引擎不认它的结构。故允许它包在 `tokens` 里
 # 过纯度判据，再由本名单显式提到顶层。
-DATA_TABLE_KEYS = ("merge_state_guard",)
+DATA_TABLE_KEYS = ("merge_state_guard", "change_number_scope_guard")
 
 
 def _merge_file(name: str, data, merged: dict) -> None:
