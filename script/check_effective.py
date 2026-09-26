@@ -139,7 +139,7 @@ MECHANISMS = [
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_toolchain_present_guard",
      "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、**只装到降级实现（Python 版 `asciidoc`，无 `--failure-level`、拦不住 WARNING）时同样报错、不得记作通过**（条文的『降级实现不算通过』一句由锚点组钉住、函数体须按 `ASCIIDOC_REQUIRED_PROCESSOR` 判定合格实现是否就位）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；只装 Python 版时该段打一句告警就照常绿、告警级问题（含多余 `|` 造成的表格不完整）长期未被拦下（本轮实装 `asciidoctor` 后即报出并据以修复）；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）。"
-     "**本轮（Issue #173）补第二道**：`check_asciidoctor_stub_guard` 钉住『语法段不得只剩壳』"
+     "**本仓库实证补第二道**：`check_asciidoctor_stub_guard` 钉住『语法段不得只剩壳』"
      "——上面这道钉的是探测代码与 CI 安装步骤的**文本**，而『真的编了每一份 .adoc』本身"
      "没有 CI 级断言：实测把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); "
      "phase_done(); return 0` 后脚本仍报 OK、本道照样全绿（探测代码不在那个函数里）。"
@@ -150,7 +150,7 @@ MECHANISMS = [
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住 CNB 侧『派发与复核须钉定 commit sha』『压缩提交/强推会替换对象』『git fetch -f』『派发前确认执行者实际可用』『流水线不无界挂起』与 collab 侧『派发对象须钉定 commit sha』『派发前确认执行者可执行』"),
     ("验证须覆盖项目全部既定校验手段、验证对象须钉定 commit sha、按需验证不滥验证", "specs/general/verify.adoc", "script/check_specs.py",
-     "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验，Issue #213）"),
+     "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验）"),
     ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py",
      "check_checklist_guard", "check_checklist_guard 钉住『硬超时』『超时的处置』两要点仍在（否则“派了就一直等”重新出现，实证为外部评审卡 1h+ 未回传）"),
     ("子任务强制同 Agent、不得点名外部 Agent/NPC", "specs/general/collab.adoc", "script/check_specs.py",
@@ -309,17 +309,31 @@ MECHANISMS = [
      "check_after_change_review_guard 钉住该节仍在、『每次』与『按性质取值』、改完即审的固定动作（跑机械手段／比基线／核原话／留证）、"
      "『规范类改动不得只跑机械手段』与复核者不可用时的处置，以及依据行（IEEE 1028 / ISO 10007）；"
      "**本条只钉要点文本仍在**——『某次改动到底有没有复核、跑没跑机械手段』"),
-    ("review 的默认检查面：只查问题（代码/文档/用例三类）、存量不动随动迁移、唯一例外是主动声明（用户点名，Issue #203）",
+    ("review 的默认检查面：只查问题（代码/文档/用例三类）、存量不动随动迁移、唯一例外是主动声明（用户点名）",
      "specs/general/review.adoc「review 的默认检查面（只查问题，不动存量）」", "script/check_specs.py",
      "check_default_review_scope_guard",
      "check_default_review_scope_guard 钉住**判据本体**三组要点（默认检查面 L1：三类问题清单 + 其余取向性要求对存量默认不查不报不整改／存量不动随动迁移、review 不得据此提出问题／唯一例外是主动声明且仅当次生效不得泛化），"
      "并钉两处**既有单项豁免已收敛为回指**——`specs/stack/java.adoc`「数据对象模板」与 `specs/general/coding.adoc`「成员与方法次序」各留一行指向全局真源，且旧单项措辞（review 不得据此提出问题／review 不是第三个生效面等）不得在原处复活（防第二真源）。"
      "『某条意见算不算取向性要求的缺失』『用户的声明算不算主动声明』"),
-    ("review 时的干净子 agent 复核：强制开干净上下文、通道先实测后派发（用户点名，Issue #219）",
+    ("review 时的干净子 agent 复核：强制开干净上下文、通道先实测后派发（用户点名）",
      "specs/general/review.adoc「review 时的干净子 agent 复核（强制）」", "script/check_specs.py",
      "check_clean_subagent_review_guard",
      "check_clean_subagent_review_guard 钉住该节自己的正文（不是整份文件：同文件的「改动后的 review」一节含同样字样，按整份文件核会把抽走的要点兜住）：强制用与执行者相同的 Agent + 上下文干净（改动方不得以自己那次执行充当复核的上下文）／通道先实测后派发（取不到按不成立、可执行性与『不承载本次会话上下文』两条判据、对象钉定）／派发优先一次性·边界明确·可超时·不带工具、每次换一次干净上下文／硬超时与到点处置／不得换外部来源／降级路径（本人串行 + 标独立性边界或标悬置）／三态留证与『实际读到的上下文范围』（逐态取值回指 verify.adoc、不在本处重抄）；"
      "另钉三处入口与一处放宽形态不得复活（『复用上一次复核用过的上下文』禁止出现在许可语态里）；**本条只钉要点文本仍在**——『这次到底有没有真开一次干净上下文、是不是沿用本次会话结论充当复核』属运行时事实与语义判断"),
+    ("优化公共规范：命令照现行判据把公共规范全文过一遍、收敛冗余与无效内容（只对本项目生效 + 全项目范围含命令本身 + 七类扫描面 + 固定顺序 + 只减冗余不改规则）",
+     "prompts/spec-refine.adoc「本项目任务提示词：优化公共规范」",
+     "script/check_specs.py",
+     "check_spec_optimize_guard",
+     "check_spec_optimize_guard 钉住**判据本体**五组要点（边界的两个方向「内容不减少优先于删冗余」「只减冗余、不改规则」「判不准是否重复的一律保留」／固定顺序「先判归属→再判层级→再判重复→最后压缩表述」与「默认不拆」／**逐处核内容未减少**且**不得只看轴名是否齐全**／「判据一律取现成的、本命令不新立」与五处判据落点名（规范集合自身重构、条目准入与定级、精炼性、信息密度、数据字典）／主侧重与扫描步**只扫不改**）、**适用面两组**（只对本项目生效且不复制到其他项目／自定分类的边界）与 **`tmp/` 降级**一组，"
+     "另钉四处**加载门与真源**（`PROMPTS.adoc` 登记表的四列与**三者分工**、`README.adoc` 目录说明、维护方自查层「规范集合的自身重构」的**触发面**含「用户声明的一次全库收敛」、通用层里**「冗余」**这个词的承载处）；"
+     "**本条只钉要点文本仍在**——「某次优化到底删掉了什么、被判为重复的是不是真的重复、逐处核下来的对照清单对不对」属语义判断，交人/子 agent 复核"),
+    ("变更编号只出现在提交信息里：Issue / 合并请求的编号不得出现在项目内容中（唯一例外是变更日志）",
+     "specs/general/git.adoc「提交信息」",
+     "script/check_specs.py",
+     "check_change_number_scope_guard",
+     "check_change_number_scope_guard 钉住**判据本体**四组要点（「编号只允许出现在提交信息中、不得出现在项目内容里」＋变更日志是唯一例外／**项目内容**的范围（规范、文档与说明、代码与注释、脚本与规则数据、配置、站点与模板）／判定标准三条（本平台编号形态 ／ 以「某项目的 #N」引用外部仓库的编号 ／ 拿编号顶替来由的表述）／边界「编号即内容本身的载体」的例外）；"
+     "**机械侧另做项目内容的全文扫描**（扫描面与形态表外置在规则数据 `script/specs-rules/git.toml`：`scan_prefixes` / `scan_root_files` / `scan_suffixes` / `exempt_files` / `allow_patterns` / `number_patterns`——变更日志豁免、标准名里的编号（`PKCS #5`）与防线清单序号放行）；"
+     "**本条只钉「项目内容里没有变更编号」这一件可机械核对的事实**——复核条目见 `script/check_specs.py` 的 `GUARD_CHECK_LIMITS`"),
     ("精炼性：同一描述只写一处（重复面是必查项、收敛形态、与内容不减少的边界）",
      "specs/general/review.adoc「精炼性（同一描述只写一处）」+ prompts/_common.txt `delivery` 片段",
      "script/check_specs.py",
@@ -412,7 +426,7 @@ MECHANISMS = [
     ("不可逆操作先确认（删除/清空/强推，P5）", "specs/core/execution.adoc", "script/check_specs.py",
      "check_priority_guard", "check_priority_guard 钉住 P5 存在性与「破坏性操作」落点"),
     ("引用坐标不得靠位置（引用式写目标全名、位置式不得用）", "specs/general/source.adoc", "script/check_specs.py",
-     "check_reference_coord_guard", "check_reference_coord_guard 钉住引用坐标的两类形态（位置式坐标 / 只写文件名的引用式坐标）；名称所指的节是否真实存在另由 check_section_refs 兜底（Issue #208 的 7 处失效里只有 1 处落在它覆盖面内，故本轮补了这道）"),
+     "check_reference_coord_guard", "check_reference_coord_guard 钉住引用坐标的两类形态（位置式坐标 / 只写文件名的引用式坐标）；名称所指的节是否真实存在另由 check_section_refs 兜底（本仓库实测的 7 处失效里只有 1 处落在它覆盖面内，故本轮补了这道）"),
     ("skill 里的引用须就地落盘（指到兄弟文件的引用在目标项目里落空）", "specs/general/source.adoc", "script/check_specs.py",
      "check_skill_ref_coord_guard", "check_skill_ref_coord_guard 钉住 skill 文档里指到 `references/`、`scripts/` 这类**兄弟文件**的引用（安装后真正落到落点的只有 `SKILL.md`）；配套文件怎么就地落盘"),
     ("换行符按解释器分流（LF 基准、.bat/.cmd 必须 CRLF、.gitattributes/.editorconfig 固定；仓库根缺这两个落盘口即补齐）", "specs/general/encoding.adoc", "script/check_specs.py",
@@ -646,10 +660,10 @@ MECHANISMS = [
      "check_rename_split_guard", "check_rename_split_guard 钉住四处要点（git 规范「重命名与内容修改须分两个提交」整节的条目轴与要点、必加载层 `specs/core/execution.adoc` 的 P7 重申行、`AGENTS_COMMON.adoc`「最高优先级铁律」的登记、维护方清单 `specs-project-maintainer/priority.adoc` 的 P7 条目与级别），**并钉住与「压缩提交」的接口**：用户要求压缩提交/合并成一个提交而**未点名重命名与内容修改**时，其余提交默认压成一个、这两个提交**原样保留**（压缩后允许留下的唯一一组多提交；平台层「压缩提交」须写同口径，防平台侧自行把『要压缩』读成『压回一个』）；例外的『声明』须点名重命名与内容修改、须预先声明（只说合并/压缩不算）；**并按「条目自身」而非「整节关键词」核对**——边界条与平台层接口条的判据（未点名/临时中间提交/原样保留/判定标准）须在**该条自己的正文**里，被抽空或搬进相邻条目即报错（否则相邻条款的字样会兜住已消失的要求；本仓库实测：仅留轴标题、正文另议时旧法静默通过）；『某次是否真的分成了两个提交、压缩是否真的没把它们压掉』属运行时事实（git 记录），机械无法判定，交人/子 agent 用 `git log --follow --name-status`、`git diff <改名提交>^ <改名提交> -M --stat`、`git log --diff-filter=R -M --name-status` 复核"),
     ("压缩/解决冲突后须保留与目标分支的合并关系（目标分支仍是本分支的祖先、合并提交保留双亲、压缩不吞掉合并提交）", "specs/platform/cnb.adoc", "script/check_specs.py",
      "check_merge_relationship_guard", "check_merge_relationship_guard 钉住根因形态（照抄目标分支文件内容后另起单亲提交→目标分支不是祖先→平台仍报 code_conflict）、可核对判据（`git merge-base` 等于目标分支最新提交、`git merge --no-ff` 保留双亲 / `git rev-list --parents -n1`）、`--is-ancestor` 为假这一假绿信号、以及『压缩不吞掉合并提交（它是已并入的凭据）』；『某次合并是否真的建了双亲关系』属运行时事实（git 记录），机械无法在静态文本上判定，交人/子 agent 用 `git merge-base --is-ancestor` 与 `git rev-list --parents` 复核"),
-    ("**压缩前须先并入目标分支的最新改动**——否则'压缩一次'就是'删一次'（分支停在旧基点时，相对目标分支的差异里混着'目标分支后来新加的东西'；**P0，用户提出，Issue #198**）",
+    ("**压缩前须先并入目标分支的最新改动**——否则'压缩一次'就是'删一次'（分支停在旧基点时，相对目标分支的差异里混着'目标分支后来新加的东西'；**P0，用户提出**）",
      "specs/general/version-control.adoc + specs/general/git.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
      "check_baseline_sync_guard",
-     "check_baseline_sync_guard 钉住三处落点（**用户口称'版本管理'、未点名 git/CNB**，故判据本体在通用层）：① **通用层 `specs/general/version-control.adoc`「压缩提交」**——前置条（压缩前先确认已并入目标分支当前最新提交、未并入先并入再压缩、且这是压缩的**前置**）+ 可核对判定标准（一份为本分支算出的合并结果与仅按目标分支当前最新提交、同一基点算出的那份**逐条一致且为空**）+ **不得用'只把文件内容改成和目标分支一样'折衷**（内容上看不出来、而'已并入'并没发生过）+ 根因（差异里混进了目标分支后来新加的东西）+ 并入时**相对基线两侧核、不得整体取一侧**（含两档取值形态：文件级 / 内容级）+ **压缩前相对基线逐项核、两个方向都核**（目标分支在基线之后新增的一条不少 + 本分支在基线之后新增的一条不少）+ 与既有『解决冲突后须核查是否丢失内容』的**分工句**（那条核'冲突两侧'、本条核'分支自己的旧快照 vs 目标分支'，**另立一条不得互相替代**）+ 依据行（ISO 10007）；② **git 层**「冲突与压缩提交（git 侧落地）」——并入是否真实发生的**取值状态**、**'共同祖先恰好等于目标分支本身'时'目标分支是祖先'为真却不是'已并入最新'、不得以该关系为真顶掉本条**、相对基线的核对；③ **平台层**只补**本平台能观测到的后果**（既有关系判据与机械防线**全部报绿**、而压缩一次即整批删掉、且**随 PR 合并落进目标分支、不可逆**）+ 判定标准（交付说明里须给出取值、只说'分支是最新的'即不合规）+ 与既有条**互不替代**；另加 README 同步（公开面须点明既有那句关系判据在'没并入最新'的形态下**照样为真**、不能当凭据）。**失效形态（本仓库实证一次）**：PR `cc332030/ctool4j#101` 的源分支停在旧基点上、**从未同步过目标分支**，压缩一次即把目标分支上刚合入的两批改动带成删除（22 文件、+615/−1447）——而此时**全部既有文本防线与动作侧防线都报绿**（`git merge-base` 恰好等于目标分支本身，'目标分支是祖先'为真）；既有条文的前提'**若本分支此前已并过目标分支**'把这一形态**恰好排除在外**。**不得被判为既有条文的重复表述而合并**——两处各有分工句各钉一次。'某次压缩前到底并入过没有'属**运行时事实**（git 记录），机械只钉'要求文本仍在'，交人/子 agent 用 `git merge-base --is-ancestor <目标分支> HEAD`、按目标分支最新提交算出的差异检出复核"),
+     "check_baseline_sync_guard 钉住三处落点（**用户口称'版本管理'、未点名 git/CNB**，故判据本体在通用层）：① **通用层 `specs/general/version-control.adoc`「压缩提交」**——前置条（压缩前先确认已并入目标分支当前最新提交、未并入先并入再压缩、且这是压缩的**前置**）+ 可核对判定标准（一份为本分支算出的合并结果与仅按目标分支当前最新提交、同一基点算出的那份**逐条一致且为空**）+ **不得用'只把文件内容改成和目标分支一样'折衷**（内容上看不出来、而'已并入'并没发生过）+ 根因（差异里混进了目标分支后来新加的东西）+ 并入时**相对基线两侧核、不得整体取一侧**（含两档取值形态：文件级 / 内容级）+ **压缩前相对基线逐项核、两个方向都核**（目标分支在基线之后新增的一条不少 + 本分支在基线之后新增的一条不少）+ 与既有『解决冲突后须核查是否丢失内容』的**分工句**（那条核'冲突两侧'、本条核'分支自己的旧快照 vs 目标分支'，**另立一条不得互相替代**）+ 依据行（ISO 10007）；② **git 层**「冲突与压缩提交（git 侧落地）」——并入是否真实发生的**取值状态**、**'共同祖先恰好等于目标分支本身'时'目标分支是祖先'为真却不是'已并入最新'、不得以该关系为真顶掉本条**、相对基线的核对；③ **平台层**只补**本平台能观测到的后果**（既有关系判据与机械防线**全部报绿**、而压缩一次即整批删掉、且**随 PR 合并落进目标分支、不可逆**）+ 判定标准（交付说明里须给出取值、只说'分支是最新的'即不合规）+ 与既有条**互不替代**；另加 README 同步（公开面须点明既有那句关系判据在'没并入最新'的形态下**照样为真**、不能当凭据）。**失效形态（本仓库实证一次）**：一次外部实证里，源分支停在旧基点上、**从未同步过目标分支**，压缩一次即把目标分支上刚合入的两批改动带成删除（22 文件、+615/−1447）——而此时**全部既有文本防线与动作侧防线都报绿**（`git merge-base` 恰好等于目标分支本身，'目标分支是祖先'为真）；既有条文的前提'**若本分支此前已并过目标分支**'把这一形态**恰好排除在外**。**不得被判为既有条文的重复表述而合并**——两处各有分工句各钉一次。'某次压缩前到底并入过没有'属**运行时事实**（git 记录），机械只钉'要求文本仍在'，交人/子 agent 用 `git merge-base --is-ancestor <目标分支> HEAD`、按目标分支最新提交算出的差异检出复核"),
     ("本分支的返工基点须是目标分支的后代（`git merge-base --is-ancestor <基点> HEAD` 为真）——把分支重建在更早的分叉点上会**整批静默回退**基点之后合入的改动",
      "specs/general/git.adoc + specs/general/version-control.adoc", "script/check_specs.py",
      "check_base_ancestor_guard",
@@ -670,7 +684,7 @@ MECHANISMS = [
     ("规范收录侧须先找参照物、别自己造：提案校验须查现成业界标准与更优设计（存在比用户口述更优的设计时按更优的设计收）", "specs-project-maintainer/spec-lifecycle.adoc", "script/check_specs.py",
      "check_spec_admission_guard", "check_spec_admission_guard 钉住「新增规范的提案校验」的三处要点（先找参照物、别自己造 / 存在比用户口述更优的设计时按更优的设计收 / 检查是否已有标准与本项目条目）"),
     ("开发流程：先查现状/先调研最佳方案/先定基线（既有用例先跑通并留证、清单还要先核『够不够用』）、大范围改动先确认、不得绕开既有体系另写一套、老用例不得为迁就改动而改判", "specs/core/execution.adoc + specs/general/planning.adoc + specs/general/testing.adoc", "script/check_specs.py",
-     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素、**基线的适用边界**：规范类必做/代码类默认不做（除大规模重构或会改动大部分内容）/移动重命名不算）与生命周期两节点、通用层 planning.adoc 的展开与依据（含「基线的适用边界」条与基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』与『**汇报须与可核对的事实一致、不得狡辩**』（数字与实际统计一致 / 核对项全绿不得顶替直接回答 / 被质疑先复取值再答，外部实证 cc332030/ctool4j#102）、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记"),
+     "check_dev_flow_guard", "check_dev_flow_guard 钉住必加载层四条底线（动手前先摸清现状与最佳方案／不得绕开既有体系另写一套／大范围改动先确认／改动前先定基线，含『清单够不够用』的基线完整性要素、**基线的适用边界**：规范类必做/代码类默认不做（除大规模重构或会改动大部分内容）/移动重命名不算）与生命周期两节点、通用层 planning.adoc 的展开与依据（含「基线的适用边界」条与基线完整性 L2 条：先 review 既有用例、只补本次直接相关面、无关存量缺口不阻断）、verify.adoc 验证侧的『跑的那套够不够用』与『**汇报须与可核对的事实一致、不得狡辩**』（数字与实际统计一致 / 核对项全绿不得顶替直接回答 / 被质疑先复取值再答，外部实证）、testing.adoc 的『重构后须同时满足既有用例与新用例』『兼容性无法满足时先确认』『基线里的用例须按用例设计复核』、公共片段 `baseline-and-compat`/`compat` 与两个提示词的 include、调度器与 PROMPTS/README 登记"),
     ("运行环境须与项目声明一致（jdk1.8、python2 等；换别的版本也能跑通也不得换，声明不可得时标未确证）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_runtime_env_guard",

@@ -8,9 +8,9 @@
 
 将下方代码块内的文字**完整原样**复制给 AI 作为任务指令。
 
-**给 AI 的读取说明（保证内容完整，先做）**：本提示词正文不是自足全文，除本文各步外还须引入 `prompts/_common.txt` 的公共片段，**清单**：`primary` / `priority-rules` / `isolation` 是方向与观念的前提、最先读入，`intro-rules` / `env-guard` / `scope-boundary` / `baseline` / `baseline-and-compat` / `timeout` / `build-parallel` / `compat` / `final-verify` / `delivery` / `no-self-dispatch` 与本文各步随后（**清单齐全、漏列即漏读**）。
+**给 AI 的读取说明（保证内容完整，先做）**：本提示词正文不是自足全文，除本文各步外还须引入 `prompts/_common.txt` 的公共片段，**清单**：`primary` / `priority-rules` / `isolation` 是方向与观念的前提、最先读入，`intro-rules` / `env-guard` / `scope-boundary` / `baseline` / `baseline-and-compat` / `timeout` / `build-parallel` / `compat` / `final-verify` / `delivery` / `no-self-dispatch` / `no-self-dispatch-body` 与本文各步随后（**清单齐全、漏列即漏读**）。
 
-**先判"这份内容有没有被 AsciiDoc 处理器装配过"**：装配过的（预览、渲染输出）已把片段展开；**取到原始文件**时（远程原始文件地址、或工作区直接读该文件）`include\::` 指令**不会被展开**、只是普通文字——此时须按 `prompts/_common.txt` 顶部的「查看与复制方式」补齐后再执行。**不得**以"站点页面是渲染视图、片段已展开"为由**跳过补齐**（该说法在本仓库已被实测证否）。
+include::_common.txt[tag=assembly-check]
 
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『重构』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
@@ -42,7 +42,7 @@ include::_common.txt[tag=compat]
 include::_common.txt[tag=final-verify]
 include::_common.txt[tag=delivery]
 include::_common.txt[tag=no-self-dispatch]
-9. **不得自行发评论唤起自己（L1，防无限派发）**：**不得在本次执行中再发一条评论去点名本任务的实例名重新发起一次执行**（含转由他人/其他执行者代发）——**一次评论 = 一次派发**，**发起下一次是派发者的动作**；想分步就**先停**、只输出一次「必须停下确认」，由**人**另发一条评论决定；**不自派 ≠ 不许复核**（复核在本次执行内按降级路径补、交付照常）。完整口径见 `prompts/_common.txt` 的 `no-self-dispatch` 片段。
+include::_common.txt[tag=no-self-dispatch-body]
 include::_common.txt[tag=delivery-report-body]
 include::_common.txt[tag=report-tail]
 ----

@@ -1,4 +1,4 @@
-# 模板类内容的单独归类（Issue #169）——规则数据（纯数据 TOML），引擎在 script/rules_engine.py。
+# 模板类内容的单独归类（用户提出）——规则数据（纯数据 TOML），引擎在 script/rules_engine.py。
 #
 # 一类规则一个文件（本防线按"被测落点"切分，不与其他防线堆在一起）；加载侧按目录自动扫描。
 # 判据本体在维护方自查层（`specs-project-maintainer/spec-lifecycle.adoc`）——它描述的是

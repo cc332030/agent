@@ -471,6 +471,8 @@ JAVA_TEST_SPLIT_MARKERS = {
 # 登记与"目录里有没有漏登记的文件"都用它。写死两份名单会让"新增一个维护方文件"时
 # 一边记得、一边忘掉（本仓库实测：新增 `guards.adoc` 后校验报红，红的是漏登记的那一处）。
 MAINTAINER_LAYER_FILES = _RULES_TOKENS["MAINTAINER_LAYER_FILES"]
+# **只对本项目生效**的任务提示词（不受公共内容自足性约束；判据与清单见 `_tokens.toml`）
+PROJECT_LOCAL_PROMPTS = _RULES_TOKENS["PROJECT_LOCAL_PROMPTS"]
 
 CRITERIA_NOT_AXIS_SECTION = "机械防线的核对对象是"
 CRITERIA_NOT_AXIS_KEYS = (
@@ -1558,6 +1560,7 @@ POINTER_SCAN_FILES = (
     "library/usage.adoc",
     "prompts/refactor.adoc",
     "prompts/review.adoc",
+    "prompts/spec-refine.adoc",
     "specs-project-maintainer/context.adoc",
     "specs-project-maintainer/guards.adoc",
     "specs-project-maintainer/priority.adoc",
@@ -3685,8 +3688,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 128
-GUARD_TEST_BASELINE = 1671
+GUARD_WIRING_BASELINE = 130
+GUARD_TEST_BASELINE = 1711
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -4215,7 +4218,7 @@ def check_guard_manifest():
                 f"出现第 {nums[disorder]} 条——新条目被插到了编号更小的条目之前"
                 "（断号与重号两条判据都拦不住这种形态：集合仍是 1..N 齐备，只是次序错了）。"
                 "清单是给人按编号定位用的，须**按编号升序排列、与 `CHECKS`/台账的次序同源**；"
-                "新增条目要插到与它次序相符的位置（本仓库实测：PR 在 #154 那条之后追加新条目时，"
+                "新增条目要插到与它次序相符的位置（本仓库实测：在既有那条之后追加新条目时，"
                 "它被插到了第 60 条之前，清单次序与防线次序脱节）",
                 "script/check_specs.py")
     phase_done()
@@ -4457,7 +4460,7 @@ _ADOC_BASENAME_INDEX: dict = {}
 def check_reference_coord_guard():
     """『引用坐标』防线：指到仓库内某一处内容时，坐标须是**引用式**、不得是**位置式**。
 
-    失效形态（Issue #208 实测，7 处同形）：被指向的内容**一个字的正文都没改**，坏的是
+    失效形态（本仓库实测，7 处同形）：被指向的内容**一个字的正文都没改**，坏的是
     "去哪儿找"这一跳——① 位置式坐标随增删**必然漂移**（`README.adoc` 引"本文件第 41 条"
     而该节只剩 25 条；`library/sources.adoc` 按序号引 `guards.adoc` 第 94 条，那道防线早已
     被新防线挤到第 105 行）；② 引用式坐标的**目标不全**（`verify.adoc`「验证的适用边界」
@@ -5836,6 +5839,11 @@ def check_public_content_is_self_contained():
         # 自足受限集合 = ①会被入口取到的（AGENTS_COMMON.adoc + specs/**）
         #              ∪ ②会被复制到未知项目执行的（prompts/**）
         #              ∪ ③会被引用方阅读 / 在公开站点渲染的说明文档（README / PROMPTS）
+        if rel in PROJECT_LOCAL_PROMPTS:
+            # **只对本项目生效**的任务提示词：判据源与对象都在本仓库（维护方自查层、
+            # 图书馆、维护方索引），不以"会被复制到未知项目执行"为前提，故不受本条约束。
+            # 判据：正文明写「只对本项目（本仓库 …）生效」（用户口径）。
+            continue
         if rel != "AGENTS_COMMON.adoc" and not rel.startswith("specs/") \
                 and not rel.startswith("prompts/") and rel not in _PUBLIC_FACING_DOCS:
             continue  # 其余（library/ 等）不属本条的约束对象
@@ -5966,11 +5974,18 @@ PRIORITY_TERMS = {
 
 
 def _iter_prompt_files():
-    """列出公共任务提示词文档（`prompts/` 下非 `_` 前缀的 .adoc）。"""
-    if not os.path.isdir(PROMPTS_DIR):
+    """列出公共任务提示词文档（`prompts/` 下非 `_` 前缀的 .adoc）。
+
+    **目录按 `REPO_ROOT` 现取**、不用模块级常量 `PROMPTS_DIR`：后者在导入时绑定一次，
+    而单测夹具每个用例都换 `REPO_ROOT`——用常量取会读到**真实仓库**的提示词清单
+    （本仓库实测：新增第三个提示词后，两道"两个提示词都须引入该片段"的核对去遍历真实的
+    三份文件、而不是夹具里那两份，反例用例静默失败）。同源实现见 `collect_adoc_files`。
+    """
+    d = os.path.join(REPO_ROOT, "prompts")
+    if not os.path.isdir(d):
         return []
-    return sorted(os.path.join(PROMPTS_DIR, f)
-                  for f in os.listdir(PROMPTS_DIR)
+    return sorted(os.path.join(d, f)
+                  for f in os.listdir(d)
                   if f.endswith(".adoc") and not f.startswith("_"))
 
 
@@ -7803,6 +7818,57 @@ MAVEN_PARALLEL_PROMPT_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_PROMPT_ANCHORS"]
 # （`miss` 为空集）。`min` 取当前条数、只拦"无声变少"，删清单须与调 `min` 一并发生。
 MAVEN_PARALLEL_ANCHOR_FLOOR = 30
 MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR = 11
+# 「这份提示词要不要引 `build-parallel`」的判定词：正文里出现构建/测试类步骤即须引入，
+# 否则**不要求**（过度收紧会逼出一句与任务无关的构建说明——本轮实测）
+MAVEN_BUILD_WORDS = _RULES_TOKENS["MAVEN_BUILD_WORDS"]
+
+
+def _prompt_read_guide_span(body: str):
+    """定位提示词「给 AI 的读取说明」那一段，返回 `(起行号, 止行号)`；定位不到返回 `None`。
+
+    按**段**定而不按**行**定：该说明的开头可以被抽成公共片段
+    （`include::_common.txt[tag=read-guide-head]`）而独占一行——此时片段名清单落在
+    **下一行**上，按行定会把清单整段读丢、把"引入了就必须列进清单"误报成"没列"。
+    段界＝从含"给 AI 的读取说明"的那一行起，到第一个空行为止。
+    """
+    lines = body.splitlines()
+    start = next((i for i, ln in enumerate(lines)
+                  if "给 AI 的读取说明" in ln), None)
+    if start is None:
+        return None
+    end = start
+    while end + 1 < len(lines) and lines[end + 1].strip():
+        end += 1
+    return start, end
+
+
+def _prompt_read_guide_region(body: str) -> str:
+    """取「给 AI 的读取说明」那一段的正文（定位不到时退回全文）。
+
+    说明整段被抽走时退回全文：无从定位起点的形态交"引入了就必须列进清单"那一条报。
+    """
+    span = _prompt_read_guide_span(body)
+    if span is None:
+        return body
+    return "\n".join(body.splitlines()[span[0]:span[1] + 1])
+
+
+def _prompt_task_body(body: str) -> str:
+    """取提示词里**除「给 AI 的读取说明」那一段以外**的正文。
+
+    判"这份提示词的任务里有没有构建/测试步骤"时必须先剥掉说明段：说明段自己会写到
+    "构建/测试"（如"本命令不引 `build-parallel`——本任务不跑构建"），拿它当证据即自证
+    ——本仓库实测：一份明确"不跑构建"的提示词被自己那句话判成"含构建步骤"。
+
+    剥离口径与 `_prompt_read_guide_region` **同源**（共用 `_prompt_read_guide_span` 定段）：
+    按行剥只会剥掉首行，说明段其余行（说明被抽成独占一行的 `include::` 时，清单等落在
+    后面的行上）仍留在正文里自证。
+    """
+    span = _prompt_read_guide_span(body)
+    if span is None:
+        return body
+    lines = body.splitlines()
+    return "\n".join(lines[:span[0]] + lines[span[1] + 1:])
 
 
 def check_maven_parallel_guard():
@@ -7902,17 +7968,30 @@ def check_maven_parallel_guard():
                 err(f"`{MAVEN_PARALLEL_PROMPT_TAG}` 片段缺少要点 `{token}`——"
                     "缺『配过就沿用、不覆盖』这一半时，执行者会去改引用方既有配置（用户点名要防）",
                     "prompts/_common.txt")
-    for rel_p in ("prompts/review.adoc", "prompts/refactor.adoc"):
+    for rel_p in _iter_prompt_files():
+        rel_p = os.path.relpath(rel_p, REPO_ROOT).replace(os.sep, "/")
+
         with open(os.path.join(REPO_ROOT, *rel_p.split("/")), encoding="utf-8") as fh:
             body = fh.read()
-        if f"include::_common.txt[tag={MAVEN_PARALLEL_PROMPT_TAG}]" not in body:
-            err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
-                "该提示词的任务里构建并行度不会被启用（公共片段不等于被引用）", rel_p)
-        guide = next((ln for ln in body.splitlines()
-                      if "给 AI 的读取说明" in ln and "公共片段" in ln), "")
-        if not guide or MAVEN_PARALLEL_PROMPT_TAG not in guide:
+        # **按需引入**（本轮的过度收紧修正）：该片段自己写明"只适用于 Maven 构建、且只在多模块上开"，
+        # 故一份**不跑构建的**提示词（如"优化公共规范"——它只改项目文本）**不得**被要求引入它：
+        # 引进来只会让读者以为那一步要跑 Maven 构建，属白占上下文。判据因此是**两截**——
+        # ① **引入了就必须列进清单**（原始文件形态下读者按清单补齐片段，漏列即漏读）；
+        # ② 该提示词的正文里**出现构建/测试类步骤**时**必须**引入（那才是"构建并行度不会被启用"）。
+        # 原来的写法把①扩成了"逐份提示词都须引入"，把一份不跑构建的提示词也判为违规——
+        # **过度收紧**同样是一种失真（本仓库实测：新增第三份提示词后立刻报出这一条）。
+        # 「读取说明」可能被抽成片段（`include::_common.txt[tag=read-guide-head]`）而**独占一行**
+        # ——此时清单不在那一行上。故取的是**清单所在的那一段**：从含"给 AI 的读取说明"的行起，
+        # 到第一个空行为止（片段是独占一行的 include，展开后清单接在它后面）。
+        guide = _prompt_read_guide_region(body)
+        included = f"include::_common.txt[tag={MAVEN_PARALLEL_PROMPT_TAG}]" in body
+        if included and MAVEN_PARALLEL_PROMPT_TAG not in guide:
             err(f"{rel_p} 的「给 AI 的读取说明」未列出 `{MAVEN_PARALLEL_PROMPT_TAG}` 片段——"
                 "原始文件形态下读者按该清单补齐片段，漏列即漏读", rel_p)
+        runs_build = any(w in _prompt_task_body(body) for w in MAVEN_BUILD_WORDS)
+        if runs_build and not included:
+            err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
+                "该提示词的任务含构建/测试步骤，构建并行度不会被启用（公共片段不等于被引用）", rel_p)
     phase_done()
 
 
@@ -10138,12 +10217,40 @@ def check_value_binding_guard():
             "（`@Value`/`@ConfigurationProperties` 都是 Spring 语境下的概念，须落在技术栈层）", rel)
     else:
         run_rule_guard("check_value_binding_guard")
+    phase_done()
+
+
+def check_spec_optimize_guard():
+    """『优化公共规范』防线（用户提出）。
+
+    要治的失效：命令若只写"删冗余、压表述"而**不把边界钉住**，执行者会顺着"优化"这一侧
+    把条文的**级别、判定标准、依据名**一起压掉——那正是本集合最贵的失效（"必须 + 判据"
+    被压成"要注意"）。故本道钉的不是"命令里有几段话"，而是**判据本体**：内容不减少优先、
+    只减冗余不改规则、判不准一律保留、固定顺序、逐处核内容未减少（且**不得只看轴名**）、
+    判据一律取现成的不新立。
+
+    另钉四处**加载门与真源**：登记入口（`PROMPTS.adoc` 的四列）与三者分工、`README.adoc`
+    目录说明、维护方自查层里"自身重构"的触发面（含"用户声明的一次全库收敛"——命令要回指的
+    就是这一句）、以及通用层里"冗余"这个词的承载处。
+
+    「某次优化到底删掉了什么、被判为重复的是不是真的重复」属**语义判断**
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("优化公共规范防线检查")
+    rel = "prompts/spec-refine.adoc"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+        err(f"缺少 {rel}——『优化公共规范』这个命令不在，"
+            "用户点名的判据（重复 / 精炼性 / 信息密度 / 数据字典 / 多余 / 无效 / 不可达）"
+            "没有任何一处把它们组织成「全文一次过」的固定顺序", rel)
+    else:
+        run_rule_guard("check_spec_optimize_guard")
+    phase_done()
 
 
 def check_baseline_sync_guard():
     """『基线同步防线』：**压缩前须先并入目标分支的最新改动**，否则"压缩一次"就是"删一次"。
 
-    背景（用户提出，Issue #198，**P0 最高优先级**）：PR `cc332030/ctool4j#101` 的源分支
+    背景（用户提出，**P0 最高优先级**）：一次外部实证里，源分支
     停在旧基点上、**从未同步过目标分支**，压缩一次即把目标分支上刚合入的两批改动带成删除
     （22 文件、+615/−1447）。用户的原话："公司管理有一套规则，就叫不能靠人管理，要靠流程
     管理，git 管理也一样""我不希望再出现丢失内容，压缩前先合并 main 有用吗？尽所有可能
@@ -10220,7 +10327,7 @@ def check_base_ancestor_guard():
 
     背景（本 PR 实证失效一次，用户点名）：本轮"解决冲突 + 压缩提交"时，执行者把本分支
     **重建在更早的基点上**（`main` 已经前进了，本分支却从它之前的分叉点重来），于是
-    `main` 上**刚合入的整批改动（`#187` 的「落点取完即只读」）被静默回退**——8 个文件、
+    `main` 上**刚合入的整批改动（「落点取完即只读」那一条）被静默回退**——8 个文件、
     `readonly-landing.toml` 整份、`check_readonly_landing_guard` 及其 23 条用例。
     而**当时全部防线都报绿**：`check_specs.py` OK、单测全通过、`check_effective.py`
     130 条"缺失 0"。原因是**全部防线都只读"工作区内容对不对"，没有一条读"基点**对不对"**——
@@ -10559,7 +10666,7 @@ def check_param_carrier_guard():
 
 
 def check_tool_class_inheritance_guard():
-    """『工具类不继承另一个工具类』防线（**用户提出，Issue #217**）：判据本体不得被删或降级。
+    """『工具类不继承另一个工具类』防线（**用户提出**）：判据本体不得被删或降级。
 
     要治的失效：工具类之间
     以 `extends`（或各语言的继承语法）复用公共静态方法——**少写一次签名，换来一层隐藏的、
@@ -10589,7 +10696,7 @@ def check_tool_class_inheritance_guard():
 
 
 def check_ternary_extraction_guard():
-    """『不得新增只做条件取值的方法』防线（**用户提出，Issue #206「三元」**）：判据本体不得被删或降级。
+    """『不得新增只做条件取值的方法』防线（**用户提出**）：判据本体不得被删或降级。
 
         要治的失效是：**方法体只剩一处条件
     取值**——方法只为在一个表达式里挑一个值，**没有自己的语义**（名字只是把那次挑选复述一遍）、
@@ -10673,7 +10780,7 @@ def check_http_contract_guard():
 
 
 def check_split_history_ownership_guard():
-    """『一份变多份的历史归属』防线（**用户提出，Issue #215**）：同一次改动里
+    """『一份变多份的历史归属』防线（**用户提出**）：同一次改动里
     **既移动/重命名、又复制**的文件丢历史时，**继承历史的那一份按三级判据取**——
     ① 内容相似度高者优先；② 相似度相同时**集中到一个模块**（不得跨模块各分几个）；
     ③ 模块取**能继承数量最多者**，仍然相同则任选一个并固定。
@@ -10724,6 +10831,122 @@ def check_split_history_ownership_guard():
         err(f"缺少 {rel_common}——加载调度器不在时『git 操作』这条加载门无从核对"
             "（该条写进规范却永远不会被加载）", rel_common)
     run_rule_guard("check_split_history_ownership_guard")
+    phase_done()
+
+
+
+def _change_number_scope_rules():
+    """取『变更编号的作用面』的扫描口径与形态表（规则数据外置，改口径不动代码）。
+
+    规则数据缺失不是"没有可扫的形态"，而是整道防线无从执行——故回落到**空表**
+    并在阶段内如实报错，不得静默放行（与 `_merge_state_guard_rules` 同口径）。
+    """
+    try:
+        files = rules_engine.load_rule_files(_rules_spec())
+    except rules_engine.RulesError as exc:
+        err(f"规则数据不可读（{exc}）——『变更编号的作用面』的扫描口径无从取值，"
+            "本道防线不得静默跳过", "script/specs-rules")
+        return {}
+    return files.get("change_number_scope_guard", {}) or {}
+
+
+def _change_number_scope_files(data):
+    """按规则数据给出的扫描面收文件（`scan_prefixes` 递归 + `scan_root_files` 逐个）。"""
+    suffixes = tuple(data.get("scan_suffixes", ()) or ())
+    if not suffixes:
+        return []
+    found = []
+    for prefix in data.get("scan_prefixes", ()) or ():
+        base = os.path.join(REPO_ROOT, *prefix.rstrip("/").split("/"))
+        for root, dirs, names in os.walk(base):
+            # 隐藏目录与版本库不进扫描面（`.git/` 自带历史、非项目内容）。
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for name in names:
+                if name.endswith(suffixes):
+                    rel = os.path.relpath(os.path.join(root, name), REPO_ROOT)
+                    found.append(rel.replace(os.sep, "/"))
+    for rel in data.get("scan_root_files", ()) or ():
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if os.path.isfile(path):
+            found.append(rel)
+    return sorted(set(found))
+
+
+def check_change_number_scope_guard():
+    """『变更编号的作用面』防线（**用户提出**）：**Issue / 合并请求的编号只允许出现在
+    提交信息中，不得出现在项目内容里**（唯一例外是变更日志）。
+
+    判据本体落通用层 `specs/general/git.adoc`「提交信息」的**本条 bullet**（与"提交信息
+    怎么写"同节：一边定提交信息写什么、一边定编号只能落在这里）；由本道防线做**机械扫描**
+    ——扫描面与形态表外置在规则数据 `script/specs-rules/git.toml`（`scan_prefixes` /
+    `scan_root_files` / `scan_suffixes` / `exempt_files` / `allow_patterns` / `number_patterns`），
+    改口径不动代码。**扫描面是枚举、须随动维护**：新增一级目录或一级文件时同步加进规则数据，
+    否则那批内容静默漏扫（清单不够用即覆盖面不够用）。
+
+    要治的失效：编号（形态如「Issue #N」「PR #N」「某仓库#N」）顺着"记录改动来由"的惯性被写进
+    规范正文、代码注释与规则数据——它们是**平台侧的临时坐标**，项目内容的读者与执行者拿不到、
+    据此也找不到任何东西；换平台、迁移、改名即失效，而追溯的落点本是 git 历史（提交信息）。
+    本仓库实测存量 50 余处（规范、脚本注释、规则数据、防线清单四类落点都有）。
+
+    **豁免与放行是两回事**：① **豁免文件**（变更日志）按 `specs/general/changelog.adoc`
+    「可核对」条承载条目与需求的对应关系，是规则里点名的唯一例外；② **放行形态**
+    （`PKCS #5` 一类标准名里的编号、防线清单/隐患清单的序号）是**内容本身的载体**、
+    不是指向别处的平台坐标（参见 `check_reference_coord_guard` 的"编号即内容本身的载体"例外）。
+    **放行按出现处判、不按整行判**：先把放行形态从行里挖掉再找编号——按整行判时，
+    一行里同时出现 `PKCS #5` 与 `Issue #N` 会把真变更编号整体放过（review 实测的绕过路径）。
+
+    只钉"项目内容里没有变更编号"这一件**可机械核对的事实**——"某个编号是不是变更编号、
+    它是不是必要"属语义判断，交人/子 agent 复核。
+    """
+    phase("变更编号作用面检查")
+    rel = os.path.relpath(COMMIT_MESSAGE_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMIT_MESSAGE_FILE):
+        err(f"缺少 {rel}——『变更编号只出现在提交信息里』的判据无处承载", rel)
+        phase_done()
+        return
+    run_rule_guard("check_change_number_scope_guard")
+    data = _change_number_scope_rules()
+    patterns = [re.compile(p) for p in data.get("number_patterns", ()) or ()]
+    if not patterns:
+        err("『变更编号的作用面』的形态表为空——编号的形态没有一处可核对，"
+            "本道防线不得静默空转（规则数据 `script/specs-rules/git.toml`）",
+            "script/specs-rules/git.toml")
+        phase_done()
+        return
+    exempt = set(data.get("exempt_files", ()) or ())
+    # 放行形态：编号**本身**就是内容载体的那些写法（标准名里的编号、清单序号）。
+    # **按"整段形态"匹配、不按"同行共现"匹配**——只看"两个词同行出现"时，
+    # 一行里既有 `PKCS #5` 又有 `Issue #N` 会把真变更编号整体放过（本仓库 review 实测）。
+    allow_res = [re.compile(p) for p in data.get("allow_patterns", ()) or ()]
+    files = _change_number_scope_files(data)
+    scanned = 0
+    for rel_file in files:
+        if os.path.basename(rel_file) in exempt or rel_file in exempt:
+            continue
+        path = os.path.join(REPO_ROOT, *rel_file.split("/"))
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        scanned += 1
+        for lineno, line in enumerate(text.splitlines(), 1):
+            # 放行按**出现处**判、不按整行判：先把"编号本身即内容载体"的**整段形态**
+            # 从这一行里挖掉，再在余下的文本上找变更编号——否则一行里既有 `PKCS #5`
+            # 又有 `Issue #N` 时，整行被放行、真变更编号跟着漏过（review 实测）。
+            probe = line
+            for ar in allow_res:
+                probe = ar.sub("", probe)
+            for pat in patterns:
+                m = pat.search(probe)
+                if not m:
+                    continue
+                err(f"项目内容里出现变更编号 `{m.group(0)}`——Issue / 合并请求的编号"
+                    "只允许出现在**提交信息**里（变更日志是唯一例外）：项目内容随项目交付、"
+                    "会被他人读到或被执行，而这些编号是**平台侧的临时坐标**、读者拿不到也"
+                    "据此找不到任何东西；要说明来由就写事实（谁提出、什么场景、失效形态），"
+                    "编号留给提交信息", rel_file, lineno)
+    log(f"  扫描 {scanned} 个文件")
     phase_done()
 
 
@@ -10856,6 +11079,8 @@ CHECKS = (
     check_baseline_sync_guard,
     check_split_history_ownership_guard,
     check_value_binding_guard,
+    check_spec_optimize_guard,
+    check_change_number_scope_guard,
 )
 
 
