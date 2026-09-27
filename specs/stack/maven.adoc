@@ -1,6 +1,6 @@
 = Maven 规范（技术栈层）
 
-适用于 **Maven 构建**。加载触发特征：项目存在 `pom.xml`、`mvnw`/`mvnw.cmd`。构建/依赖调整前须加载本文件。Node 等其它构建工具按对应栈文件规范。
+适用于 **Maven 构建**。加载触发特征：项目存在 `pom.xml`、`mvnw`/`mvnw.cmd`。构建/依赖调整前须加载本文件。Gradle 按 `specs/stack/gradle.adoc`、其它构建工具按对应栈文件规范；**从 Maven 迁到别处（或反之）时还须加载** `specs/stack/build-tool-migration.adoc`——迁移后按目标构建工具的规范定义，**不把 Maven 特有形态（如父子关系）搬过去**。
 
 == 仓库与镜像
 

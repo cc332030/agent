@@ -150,6 +150,8 @@ files = [
     "specs/platform/cnb.adoc",
     "specs/stack/bash.adoc",
     "specs/stack/batch.adoc",
+    "specs/stack/build-tool-migration.adoc",
+    "specs/stack/gradle.adoc",
     "specs/stack/java-object.adoc",
     "specs/stack/java-syntax.adoc",
     "specs/stack/java-testing.adoc",

@@ -18989,6 +18989,186 @@ class TestCheckHttpContractGuard(_StackGuardTestCase):
         self.assertIn("声明式客户端契约", self.error_texts())
 
 
+class TestCheckBuildToolMigrationGuard(_StackGuardTestCase):
+    """钉住『构建工具迁移』（**用户提出**）。
+
+    用户原话要点："在效果不变的情况下，按照新构建工具的规范来定义……不强凑父子关系
+    ……适用于任一构建器迁移到任一构建器"。要治的失效：迁移做成"把旧构建工具的形态
+    翻译成新工具能跑的等价写法"，目标工具里多出一层只为对应源工具而存在的结构。
+    最易被读反的一句是「效果不变」——它指**构建结果**、不指形态，故单列一组钉住。
+    """
+
+    DOC = "specs/stack/build-tool-migration.adoc"
+    CONST = "BUILD_TOOL_MIGRATION_SPEC"
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_build_tool_migration_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_spec_target_basis_removed_reports(self):
+        # 反例①：基准口径被抽 -> 迁移退化成"能跑就行"，源工具形态成默认保留项
+        self._write_mutated("**按目标构建工具的规范定义**", "按习惯写法定义")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("按目标构建工具的规范定义", self.error_texts())
+
+    def test_effect_equals_result_removed_reports(self):
+        # 反例②：「效果不变指构建结果、不指形态」被抽 -> 反被用来保住源工具结构
+        self._write_mutated("**不是源构建工具的形态**", "以及形态")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("效果不变", self.error_texts())
+
+    def test_no_forcing_source_structure_removed_reports(self):
+        # 反例③：父子关系那一形态被删 -> 最常落地的形态无从判定
+        self._write_mutated("Maven 的父子关系是 Maven 的机制", "层级关系是要保留的")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("Maven 的父子关系", self.error_texts())
+
+    def test_metadata_invariance_removed_reports(self):
+        # 反例④：发布元数据不变被抽 -> 验收退化成"能编译过"
+        self._write_mutated("**发布元数据的内容不变（L1）**", "**发布元数据（L1）**")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("发布元数据", self.error_texts())
+
+    def test_no_side_effects_removed_reports(self):
+        # 反例⑤：不得顺手改动的面被抽 -> 迁移与依赖升级/结构重构混成一次改动
+        self._write_mutated("迁移**不是**重构", "迁移也顺带重构")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("重构", self.error_texts())
+
+    def test_baseline_removed_reports(self):
+        # 反例⑥：基线必做被抽 -> 元数据漂移在编译层看不出来
+        self._write_mutated("迁移**必做**基线", "迁移按需取基线")
+        cm.check_build_tool_migration_guard()
+        self.assertIn("基线", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑦：核心口径整节被删
+        self.write(self.DOC, "= 构建工具迁移规范\n\n== 别的\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_build_tool_migration_guard()
+        self.assertIn("核心口径", self.error_texts())
+
+
+class TestCheckGradleGuard(_StackGuardTestCase):
+    """钉住『Gradle 构建』（**用户提出**）。
+
+    用户点名的形态是"一个模块下多个源目录时各源目录代码**完全互斥**"；其余各条来自
+    一次 Maven → Gradle 迁移的实测（发布凭据为注册条件会让发布静默空跑、档位差异源码
+    目录不互斥会让漏选静默取错档等）。最易被冲掉的是**判定标准**与**取舍定性**。
+    """
+
+    DOC = "specs/stack/gradle.adoc"
+    CONST = "GRADLE_SPEC"
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_gradle_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_source_dir_exclusion_removed_reports(self):
+        # 反例①：档位差异源码目录须互斥被抽 -> 同一份实现落在多处、漏选静默取错档
+        self._write_mutated("**档位差异源码目录须互斥（L1）**", "**源码目录（L1）**")
+        cm.check_gradle_guard()
+        self.assertIn("源码目录", self.error_texts())
+
+    def test_publish_registration_condition_removed_reports(self):
+        # 反例②：注册条件被抽 -> 凭据缺了整段不注册、构建照旧成功
+        self._write_mutated("发布仓库须**只要地址配置了即注册**", "发布仓库须有凭据才注册")
+        cm.check_gradle_guard()
+        self.assertIn("凭据", self.error_texts())
+
+    def test_version_alignment_removed_reports(self):
+        # 反例③：项目的显式取值须压过上游 BOM 被抽
+        self._write_mutated("**项目的显式取值须压过上游 BOM（L1）**", "**项目的取值（L1）**")
+        cm.check_gradle_guard()
+        self.assertIn("显式取值", self.error_texts())
+
+    def test_local_repo_removed_reports(self):
+        # 反例④：不得默认使用本地仓库解析被抽 -> 构建不可重现
+        self._write_mutated("**不得默认使用本地仓库解析（L1）**", "**本地仓库（L1）**")
+        cm.check_gradle_guard()
+        self.assertIn("本地仓库", self.error_texts())
+
+    def test_section_missing_reports(self):
+        # 反例⑤：发布节被删
+        self.write(self.DOC, "= Gradle 规范\n\n== 依赖\n\n* 略。\n")
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+        cm.check_gradle_guard()
+        self.assertIn("发布", self.error_texts())
+
+
+class TestCheckMavenMigrationCrossRefGuard(CheckSpecsTestCase):
+    """钉住 `maven.adoc` **迁出侧的一跳引用**（**用户提出**）。
+
+    Gradle（及任何其它目标工具）侧写了"以目标构建工具的规范为基准"，而 Maven 侧
+    一个字都没提时，从 Maven 迁出的项目读 `maven.adoc` 看不到任何指引、照着源工具的
+    形态往下写——**这正是用户点名要治的形态**（把父子关系搬进 Gradle）。
+    一跳引用是**跨构建工具对**的，故逐对都须有；新增一对时清单须随动维护。
+    """
+
+    HEAD = ("适用于 **Maven 构建**。加载触发特征：项目存在 `pom.xml`、`mvnw`。"
+            "构建/依赖调整前须加载本文件。Gradle 按 `specs/stack/gradle.adoc`、"
+            "其它构建工具按对应栈文件规范；**从 Maven 迁到别处（或反之）时还须加载** "
+            "`specs/stack/build-tool-migration.adoc`——迁移后按目标构建工具的规范定义，"
+            "**不把 Maven 特有形态（如父子关系）搬过去**。\n")
+
+    def _fixture(self, head=None):
+        self.write("specs/stack/maven.adoc",
+                   "= Maven 规范（技术栈层）\n\n" + (self.HEAD if head is None else head)
+                   + "\n== 仓库与镜像\n\n* 略。\n")
+
+    def test_positive_passes(self):
+        self._fixture()
+        cm.check_maven_migration_crossref_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_target_spec_jump_removed_reports(self):
+        # 反例①：指向目标工具栈文件的那一跳没了 -> 从 Maven 迁出的项目不知道该读哪一份
+        self._fixture(self.HEAD.replace("Gradle 按 `specs/stack/gradle.adoc`、", ""))
+        cm.check_maven_migration_crossref_guard()
+        self.assertIn("specs/stack/gradle.adoc", self.error_texts())
+
+    def test_migration_spec_jump_removed_reports(self):
+        # 反例②：迁移规范的加载一跳没了 -> 迁移口径（不搬源工具形态）读不到
+        self._fixture(self.HEAD.replace(
+            "**从 Maven 迁到别处（或反之）时还须加载** `specs/stack/build-tool-migration.adoc`", ""))
+        cm.check_maven_migration_crossref_guard()
+        self.assertIn("specs/stack/build-tool-migration.adoc", self.error_texts())
+
+    def test_follow_up_link_removed_reports(self):
+        # 反例③：这一跳在"须加载"，但用户点名的形态（不把父子关系搬过去）没写出来
+        self._fixture(self.HEAD.replace("**不把 Maven 特有形态（如父子关系）搬过去**", "其余照旧"))
+        cm.check_maven_migration_crossref_guard()
+        self.assertIn("不把 Maven 特有形态", self.error_texts())
+
+    def test_head_line_missing_reports(self):
+        # 反例④：适用面行整行消失 -> 加载触发特征与迁出指引都无处核，不得静默放过
+        self._fixture("本文件适用于 Maven 构建。\n")
+        cm.check_maven_migration_crossref_guard()
+        self.assertIn("适用面行", self.error_texts())
+
+    def test_missing_spec_reports(self):
+        # 反例⑤：Maven 栈文件缺失（唯一落点）
+        self._fixture()
+        os.remove(os.path.join(self.root, "specs", "stack", "maven.adoc"))
+        cm.check_maven_migration_crossref_guard()
+        self.assertIn("specs/stack/maven.adoc", self.error_texts())
+
+    def test_list_item_removed_reports(self):
+        # 反例⑥（**清单删项**）：核对项清单是纯数据、只被本条防线读取——删一项时
+        # 现场文本一字未动、逐项核对全绿（"核过且通过"与"没核"无从区分）。
+        self._fixture(self.HEAD.replace("**不把 Maven 特有形态（如父子关系）搬过去**", "其余照旧"))
+        saved = cm._MAVEN_MIGRATION_CROSSREF_ANCHORS
+        cm._MAVEN_MIGRATION_CROSSREF_ANCHORS = [
+            a for a in saved if a[2] != "不把 Maven 特有形态"]
+        try:
+            cm.check_maven_migration_crossref_guard()
+            self.assertEqual([], cm.errors)
+        finally:
+            cm._MAVEN_MIGRATION_CROSSREF_ANCHORS = saved
+
+
 class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
     """钉住『不得新增只做条件取值的方法』（**用户提出**）。
 

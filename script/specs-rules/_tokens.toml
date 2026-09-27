@@ -692,6 +692,22 @@ MAVEN_PARALLEL_ANCHORS = [
         "缺则并行下的偶发失败会被用『整体退回单线程』或『重试撞过』处置（放弃收益且掩盖根因）",
     ],
 ]
+# 『Maven 迁出的一跳引用』防线的核对项：`[名称, 应出现的写法, 须在适用面行里出现的锚点]`。
+# **逐对登记**（源＝Maven，目标＝某构建工具）——新增一个源/目标构建工具时同步补一项，
+# 否则新的那一对无人核。清单是纯数据、只被该防线读取：删一项时 `maven.adoc` 一字未动、
+# 逐项核对一次都不报错。
+MAVEN_MIGRATION_CROSSREF_ANCHORS = [
+    ["迁出的目标工具规范（Gradle）",
+     "Gradle 按 `specs/stack/gradle.adoc`",
+     "specs/stack/gradle.adoc"],
+    ["迁出时的迁移规范（不搬源工具特有形态）",
+     "从 Maven 迁到别处（或反之）时还须加载 `specs/stack/build-tool-migration.adoc`",
+     "specs/stack/build-tool-migration.adoc"],
+    ["不把 Maven 特有形态搬过去",
+     "不把 Maven 特有形态（如父子关系）搬过去",
+     "不把 Maven 特有形态"],
+]
+
 MAVEN_PARALLEL_PROMPT_ANCHORS = [
     "配过就一律沿用、不覆盖、不重复追加",
     "**项目已配过并行度时以项目配置为准**",
