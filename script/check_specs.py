@@ -252,6 +252,17 @@
      由 `check_gradle_guard` 钉住；"某次解析实际取到哪个版本""某次发布到底上传了没有"
      属运行时事实，交人/子 agent 复核。
 
+ 85. 用户要求是第一优先级、不得降级防线（**用户提出**，最高关注项 P8）：判据本体唯一落点在
+     必加载层 `specs/core/execution.adoc`「指令执行」的那条 bullet——**用户要求排在其余一切
+     约束之前**、**做不到或做不全时终止当前方向并停下来问用户**、五条判定标准（交付弱于要求
+     而用户未同意 / 为使硬性限制成立而削掉或绕开 / 把降级说成已完成 / 同方向反复重试却不问 /
+     先宣告做不到而不做任何尝试）、与「歧义先问」的分工与依据；另两处是**登记**
+     （`AGENTS_COMMON.adoc`「最高优先级铁律」、`specs-project-maintainer/priority.adoc` 的 P8），
+     公共片段 `prompts/_common.txt` 的 `priority-rules` 侧带同口径半句。由
+     `check_user_requirement_guard` 钉住（按**条目自己的正文**核，不是整节——相邻条目字样相近）；
+     "某次交付是不是真的降级了、卡点是不是真的提给了用户"属运行时事实与语义判断，
+     交人/子 agent 复核。
+
 """
 
 import argparse
@@ -3784,7 +3795,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 136
-GUARD_TEST_BASELINE = 1770
+GUARD_TEST_BASELINE = 1776
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -11238,6 +11249,37 @@ def check_operation_timeout_guard():
     phase_done()
 
 
+def check_user_requirement_guard():
+    """『用户要求是第一优先级、不得降级』防线（**用户提出**，最高关注项 P8）。
+
+    失效形态（用户实测、反复发生）：执行者拿"保证用例全绿 / 让构建通过"这类**硬性限制**
+    当理由，**悄悄把用户明确提出的要求降一档**（少做一项、收窄范围、把"要有"降成"暂不支持"），
+    既不告知用户、也不在汇报里体现；用户按同一要求再提一次，再降一档。整个过程中**要求与交付
+    之间的差异既没有落进交付物、也没有落进汇报**，直到用户逐字追问才暴露。同族形态还有：
+    同一方向反复重试却不停下来问（重试被当成了"已尽力"）。
+
+    判据本体唯一落点在必加载层 `specs/core/execution.adoc`「指令执行」的那条 bullet；公共入口
+    「最高优先级铁律」与维护方不可降级清单 P8 是**登记**（不是第二份定义）。故本道核三处，
+    
+    **按 bullet 自己的正文核**（不是整节）：本节的相邻条目（「逐字执行用户指令」「歧义先问」
+    「每个任务都当尽力、严禁糊弄」）字样相近，按整节核会把被抽走的要点兜住。
+
+    只钉"判据是否仍在"——"某次交付是不是真的降级了、卡点是不是真的提给了用户、那次是不是
+    同一个方向反复重试"属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("用户要求是第一优先级、不得降级防线检查")
+    # 规则数据侧的步骤自己会报"文件缺失"（判据本体、三处登记各一步），故先让规则跑完——
+    # 本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "execution.toml")):
+        err("缺少 script/specs-rules/execution.toml——『用户要求是第一优先级、不得降级』"
+            "的锚点（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_user_requirement_guard")
+    phase_done()
+
+
 def check_staged_delivery_guard():
     """『分阶段交付（大任务）』防线（**用户提出**）：**大任务分阶段执行时分阶段提交与推送**，
     以免中断后成果丢失。
@@ -11414,6 +11456,7 @@ CHECKS = (
     check_gradle_guard,
     check_maven_migration_crossref_guard,
     check_operation_timeout_guard,
+    check_user_requirement_guard,
 )
 
 
@@ -11429,7 +11472,8 @@ def main(argv=None) -> int:
                     "换行符/Java 测试类命名/公共内容不得声明机械防线/图书馆/公共内容覆盖面/"
                     "环境标志与专用口径/配置类不写逻辑/CI-CD 与平台协作/"
                     "NPC 禁合并 + 改动范围边界（通用层 + 平台层）+ 跨语言执行脚本的落点 + "
-                    "运行环境须与项目声明一致 + Java 字段接口访问器 + AsciiDoc 语法）")
+                    "运行环境须与项目声明一致 + Java 字段接口访问器 + AsciiDoc 语法 + "
+                    "用户要求是第一优先级、不得降级）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
     args = parser.parse_args(argv)
