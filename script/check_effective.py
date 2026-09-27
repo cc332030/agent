@@ -120,6 +120,13 @@ MECHANISMS = [
      "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
     ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据"),
+    ("引用 javadoc 的文档路径基准按引用所在位置（项目根或模块根相对，推荐、不限制文档路径）", "specs/stack/java.adoc + specs/general/doc.adoc", "script/check_specs.py",
+     "check_javadoc_path_base_guard", "check_javadoc_path_base_guard 钉住两处同口径（Java 栈「javadoc」的推荐面 + 两条理由 + 双引号包裹与 failOnError；通用层「引用路径」的平台无关那一处），**反向拦「口径被改回强制、或推荐面被收窄成只剩一种」**——"
+     "强制面下项目里以仓库根为基准的既有 `@see` 只能靠搬文档处置（本条对应用户提出的真实偏差）；"
+     "『某条 `@see` 相对谁、路径层数对不对』属语义判断，交人/子 agent 复核"),
+    ("Java 测试类命名是推荐（允许自定义、AI 生成用默认名字；四类后缀非禁令，构建边界仍强）", "specs/stack/java-testing.adoc", "script/check_specs.py",
+     "check_java_test_naming_hint_guard", "check_java_test_naming_hint_guard 钉住命名口径的**级别与默认名字**（推荐、非必须 / AI 生成用默认名字 / 允许自定义类名且『自定义不是违规』）与后缀面（四类后缀是推荐、不是禁令；**构建配置一侧的取值仍为 L1**）；"
+     "与 `check_java_test_naming` 分工——那道核四类后缀与拆分裁决的判据仍在、本条核级别，**反向拦「强制面复活」**"),
     ("Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming", "check_java_test_naming 钉住规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不得滥拆」是单一语义，只剩一半即被读成『每个场景一个类』或『一个被测类一个类』"),
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py",

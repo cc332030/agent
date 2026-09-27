@@ -4527,6 +4527,209 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         self.assertIn("拆分裁决", self.error_texts())
 
 
+class TestCheckJavadocPathBaseGuard(CheckSpecsTestCase):
+    """钉住 `@see` 的路径基准是**推荐**、文档路径不受限制（用户口径：不限制文档路径、基准是推荐）。
+
+    失效形态：口径被改回"统一为相对模块根"的强制面——项目里以仓库根为基准的引用
+    只能靠搬文档处置；或推荐面被收窄成只剩一种基准（项目根那条被删）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_doc = cm.DOC_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.DOC_FILE = os.path.join(self.root, "specs", "general", "doc.adoc")
+
+    def tearDown(self) -> None:
+        cm.JAVA_STACK_FILE = self._orig_java
+        cm.DOC_FILE = self._orig_doc
+        super().tearDown()
+
+    JAVA_BULLET = (
+        "* **代码与设计文档双向引用**：类/方法的 javadoc 用 `@see \"..\"` 指向设计文档；"
+        "**路径基准**优先用\"项目根或模块根相对\"（推荐、非必须——**不限制文档路径**）；"
+        "**模块根相对**不受源文件所在包层级影响、**项目根相对**在 IDE 里可解析；"
+        "文档路径须用英文双引号包裹（裸 `@see doc/...adoc` 会被当作成员引用解析并报错，"
+        "`failOnError` 会中断构建）。\n")
+
+    def _write_valid(self):
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        # 通用层那一处只按**「引用路径」小节自己的正文**核（见 `_step_target`），
+        # 故夹具写成小节级形态——写在大节里的同形字样不构成"这一节的判据还在"。
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n== 文件格式与编码\n\n=== 引用路径（一切引用）\n"
+                   "* **代码注释中由 IDE/javadoc 工具解析的引用 → 项目根或模块根相对**"
+                   "（推荐、非必须，不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_javadoc_path_base_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_mandatory_base_reports(self):
+        # 反例：口径被改回强制面（"统一为相对模块根"），用户口径被推翻
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **代码与设计文档双向引用**：`@see \"..\"`；**路径基准统一为\"相对模块根\"**；"
+                   "文档路径须用英文双引号包裹，`failOnError` 会中断构建。\n")
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n=== 引用路径（一切引用）\n"
+                   "* 代码注释中的引用 → 项目根或模块根相对（推荐、非必须，"
+                   "不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_project_root_reason_dropped_reports(self):
+        # 反例：推荐面被收窄成只剩模块根（"项目根相对在 IDE 里可解析"这条理由被删）
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **代码与设计文档双向引用**：`@see \"..\"`；**路径基准**优先用"
+                   "\"项目根或模块根相对\"（推荐、非必须——**不限制文档路径**）；"
+                   "**模块根相对**不受源文件所在包层级影响；"
+                   "文档路径须用英文双引号包裹，`failOnError` 会中断构建。\n")
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n=== 引用路径（一切引用）\n"
+                   "* 代码注释中的引用 → 项目根或模块根相对（推荐、非必须，"
+                   "不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("项目根相对", self.error_texts())
+
+    def test_generic_layer_dropped_reports(self):
+        # 反例：通用层那一处被改回强制面（非 Java 语言与按通用文档规范加载的执行者学不到推荐）
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n=== 引用路径（一切引用）\n"
+                   "* **代码注释中由 IDE/javadoc 工具解析的引用 → 相对模块根**\n")
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("specs/general/doc.adoc", self.error_texts())
+
+    def test_missing_java_file_reports(self):
+        # 反例：Java 栈落点整体缺失
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n=== 引用路径（一切引用）\n"
+                   "* 代码注释中的引用 → 项目根或模块根相对（推荐、非必须，"
+                   "不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("缺少 specs/stack/java.adoc", self.error_texts())
+
+    def test_missing_generic_file_reports(self):
+        # 反例：通用层落点缺失
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("缺少 specs/general/doc.adoc", self.error_texts())
+
+    def test_generic_section_emptied_reports(self):
+        # 反例（**空转形态**）：通用层那一节被抽空、只留标题，而**文件别处**仍有同样的字样
+        # ——按整份文件核时这条报不出（本仓库实测的失效形态），故核对对象须是**这一节**。
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        self.write("specs/general/doc.adoc",
+                   "= 文档规范\n\n== 文件格式与编码\n\n=== 引用路径（一切引用）\n\n"
+                   "== 其他\n\n项目根或模块根相对（推荐、非必须，"
+                   "不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
+        cm.check_javadoc_path_base_guard()
+        self.assertIn("specs/general/doc.adoc", self.error_texts())
+
+
+class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
+    """钉住测试类命名是**推荐**、允许自定义、AI 生成用默认名字（用户口径：类名是推荐、允许自定义）。
+
+    失效形态：命名口径被改回"L1 强制 / 一律"——项目里已有的分类限定语命名
+    （`CCacheAspectCacheKeyTests`）会被读成违规，review 据此提问题。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_TEST_FILE
+        cm.JAVA_TEST_FILE = os.path.join(self.root, "specs", "stack", "java-testing.adoc")
+
+    def tearDown(self) -> None:
+        cm.JAVA_TEST_FILE = self._orig_java
+        super().tearDown()
+
+    VALID = ("= Java 测试规范\n\n== 测试类命名（推荐）\n"
+             "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
+             "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）、**自定义不是违规**。\n"
+             "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
+             "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+             "**构建配置一侧的取值不变（L1）**。\n")
+
+    def test_valid_passes(self):
+        self.write("specs/stack/java-testing.adoc", self.VALID)
+        cm.check_java_test_naming_hint_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_mandatory_wording_reports(self):
+        # 反例：口径被改回强制面（"测试类名一律…"）
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n== 测试类命名（L1 强制）\n"
+                   "测试类名一律为「被测类名 + 测试类型后缀」。\n"
+                   "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "**构建配置一侧的取值不变（L1）**。\n")
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("强制面", self.error_texts())
+
+    def test_ai_default_name_dropped_reports(self):
+        # 反例：AI 默认名字这一推荐被删（AI 生成时无落点）
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n== 测试类命名（推荐）\n"
+                   "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
+                   "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "**构建配置一侧的取值不变（L1）**。\n")
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("AI 生成时的默认名字", self.error_texts())
+
+    def test_custom_naming_dropped_reports(self):
+        # 反例：自定义的正当性被删（用户点名的形态无处安放）
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n== 测试类命名（推荐）\n"
+                   "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**。\n"
+                   "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "**构建配置一侧的取值不变（L1）**。\n")
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("类名允许自定义", self.error_texts())
+
+    def test_build_boundary_dropped_reports(self):
+        # 反例：执行边界被一起放宽（构建配置一侧的取值被删，自造后缀的测试会被 surefire 误跳过）
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n== 测试类命名（推荐）\n"
+                   "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
+                   "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
+                   "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**。\n")
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("构建配置一侧的取值不变（L1）", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例：Java 测试规范文件整体被删
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("缺少 specs/stack/java-testing.adoc", self.error_texts())
+
+    def test_section_level_wording_reports(self):
+        # 反例（**空转形态**）：节里正文一字未动、**只把节名改回强制面**——口径级别就在节名上，
+        # 原实现的形态判断把节名**排除在外**（取的是节名之后那段），故报不出（本仓库实测）。
+        self.write("specs/stack/java-testing.adoc",
+                   self.VALID.replace("== 测试类命名（推荐）", "== 测试类命名（L1 强制）"))
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("强制面", self.error_texts())
+
+    def test_section_body_emptied_reports(self):
+        # 反例（**空转形态**）：本节正文被抽空、只留标题，而**文件别处**仍有同样字样
+        # ——按整份文件核时这条报不出，故核对对象须是**这一节**。
+        self.write("specs/stack/java-testing.adoc",
+                   "= Java 测试规范\n\n== 测试类命名（推荐）\n\n"
+                   "== 其他\n\n测试类名**推荐**用；**推荐、非必须**；**类名允许自定义**"
+                   "（`CCacheAspectCacheKeyTests`）；**自定义不是违规**；"
+                   "**AI 生成时的默认名字**；AI 新建测试类**用默认名字**；"
+                   "**后缀沿用上表的四类（推荐）**；**这是推荐、不是禁令**；"
+                   "**构建配置一侧的取值不变（L1）**。\n")
+        cm.check_java_test_naming_hint_guard()
+        self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
+
+
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
     """钉住跨平台换行符规则（LF 基准 + Windows 批处理 CRLF）。
 
@@ -16700,6 +16903,67 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.check_guard_manifest()
         # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
         self.assertIn("防线接线数从基线", self.error_texts())
+
+    # 记账沿革（`guards.adoc` 的「新增防线的记账（按轮次）」）引用的两个基线值。
+    # 夹具里的现值跟着 `_write_valid` 设的两个基线常量走（`**2**` / `5`）——
+    # **正例的形就是"实取的两处与常量一致"**，故这里不能写死一套与夹具无关的数。
+    _MANIFEST = (
+        "= 机械防线清单\n\n"
+        "| 轮次 | 新增防线 | 接线数 | 承接了什么\n\n"
+        "| 本轮（甲） | `check_alpha_guard` | 1 → **2** | 用例数 `4 → 5`。\n"
+    )
+
+    def _write_manifest(self, text):
+        self.write("specs-project-maintainer/guards.adoc", text)
+
+    def test_manifest_baseline_refs_consistent_passes(self):
+        # 正例：本表引用的两个基线值 = 常量、记账表末行的接线数 = 常量
+        self._write_valid()
+        self._write_manifest(self._MANIFEST)
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_manifest_wiring_ref_drift_reports(self):
+        # 反例（本轮实测的空转）：**本表**引用的接线数被改（常量不动）——两个基线的核对
+        # 照常通过、没有任何防线会因此报红（本仓库实测：两处各改一个数即两边都绿）
+        self._write_valid()
+        self._write_manifest(self._MANIFEST.replace("1 → **2**", "1 → **1**"))
+        cm.check_guard_manifest()
+        self.assertIn("接线数", self.error_texts())
+
+    def test_manifest_test_ref_drift_reports(self):
+        # 反例：**本表**引用的用例数被改（常量不动）
+        self._write_valid()
+        self._write_manifest(self._MANIFEST.replace("用例数 `4 → 5`", "用例数 `4 → 9`"))
+        cm.check_guard_manifest()
+        self.assertIn("用例数", self.error_texts())
+
+    def test_manifest_ledger_row_missing_reports(self):
+        # 反例：本轮新增了防线、而「新增防线的记账（按轮次）」**没有记这一轮**——
+        # 记账表末行的接线数低于常量（本仓库实测：删掉两道新防线后，本表与脚本一样全绿）
+        self._write_valid()
+        self._write_manifest(self._MANIFEST.replace("1 → **2**", "0 → **1**"))
+        cm.check_guard_manifest()
+        self.assertIn("接线数", self.error_texts())
+
+    def test_changelog_wiring_ref_drift_reports(self):
+        # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法
+        self._write_valid()
+        self._write_manifest(self._MANIFEST)
+        self.write("CHANGELOG.adoc",
+                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **1**、其余不变。\n")
+        cm.check_guard_manifest()
+        self.assertIn("CHANGELOG.adoc", self.error_texts())
+
+    def test_changelog_wiring_ref_historic_entries_pass(self):
+        # 正例：旧条目记的是**当时**的基线（按定义不得改写）——只核最新那条
+        self._write_valid()
+        self._write_manifest(self._MANIFEST)
+        self.write("CHANGELOG.adoc",
+                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **2**、其余不变。\n"
+                   "- 9.8 | 2026-09-20 | 更早一轮：防线接线基线 0 → **1**。\n")
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
 
     def test_guard_unwired_reports(self):
         # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例

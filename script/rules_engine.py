@@ -206,29 +206,63 @@ def _step_subsection_groups(rules, step):
                   prefix=step.get("prefix", ""), template=step.get("message"))
 
 
-def _step_file_groups(rules, step):
-    """整份文件逐组核锚点（判据对象是全文，如"该文件里必须出现这几组要点"）。"""
+def _step_target(rules, step):
+    """取本步的**核对对象**：给了 `section` 时取该二级节的正文，否则取整份文件。
+
+    返回 `(文本, 落点描述)`；文件读不到、或 `section` 指定的节取不到时返回 `(None, 描述)`
+    并由调用方报错——**"核不到"与"核过且通过"必须分得清**（同 `_step_section_groups`）。
+
+    为什么要有这一个：按**整份文件**核"某小节里的要点还在不在"时，同一批字样在文件别处
+    也会出现（本仓库实测：`specs/general/doc.adoc` 的「引用路径」节被抽空、只留标题，
+    而别处仍有同样字样，检查全绿；`specs/stack/java-testing.adoc` 的节名与节内正文被改回
+    强制面时，取节名之前那一段同样全绿）。判据是"**这一节**里的要点还在不在"，
+    核对对象就必须是**这一节**。
+    """
     ctx = rules.ctx
     rel = step["file"]
     text = ctx.read(rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
+        return None, ""
+    section = step.get("section")
+    subsection = step.get("subsection")
+    if not section and not subsection:
+        return text, step.get("scope", "文件")
+    if subsection:
+        found = ctx.subsection(text, subsection)
+        title = subsection
+    else:
+        found = ctx.section(text, section)
+        title = section
+    if not found:
+        ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
+                .replace("{section}", title), rel)
+        return None, ""
+    return found, f"「{title}」节"
+
+
+def _step_file_groups(rules, step):
+    """整份文件（或 `section` 指定的二级节）逐组核锚点。
+
+    判据对象默认是全文（如"该文件里必须出现这几组要点"）；给出 `section` 时收窄到该节
+    （见 `_step_target`——按全文核"某节里的要点"会被别处的同形字样兜住）。
+    """
+    text, scope_desc = _step_target(rules, step)
+    if text is None:
         return
-    _check_groups(ctx.err, rel, step.get("scope", "文件"), text, step["groups"],
+    _check_groups(rules.ctx.err, step["file"], scope_desc, text, step["groups"],
                   prefix=step.get("prefix", ""), template=step.get("message"))
 
 
 def _step_file_tokens(rules, step):
-    """整份文件核一组平铺锚点（不分组，缺任一即报同一条说明）。"""
-    ctx = rules.ctx
-    rel = step["file"]
-    text = ctx.read(rel)
+    """整份文件（或 `section` 指定的二级节）核一组平铺锚点（不分组，缺任一即报同一条说明）。"""
+    text, _scope_desc = _step_target(rules, step)
     if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return
     miss = [t for t in step["tokens"] if t not in text]
     if miss:
-        ctx.err(step["message"].replace("{file}", rel).replace("{missing}", str(miss)), rel)
+        rules.ctx.err(step["message"].replace("{file}", step["file"])
+                      .replace("{missing}", str(miss)), step["file"])
 
 
 def _step_line_tokens(rules, step):

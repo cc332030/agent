@@ -3794,8 +3794,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 136
-GUARD_TEST_BASELINE = 1776
+GUARD_WIRING_BASELINE = 139
+GUARD_TEST_BASELINE = 1809
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -4091,6 +4091,66 @@ def _count_collectable_tests(module_name: str, src: str) -> int:
     return len(_test_cases(module_name, src))
 
 
+
+def _manifest_baseline_refs():
+    """从 `specs-project-maintainer/guards.adoc` 取三处**手写的基线引用值**。
+
+    返回 `(接线数引用值, 用例数引用值, 记账表末行接线数)`，取不到处为 `None`；
+    本表整体缺失时返回 `None`（由 `check_guard_order_guard` 报红）。
+
+    为什么需要它：本表「记账沿革」逐轮引用 `GUARD_WIRING_BASELINE` / `GUARD_TEST_BASELINE`，
+    那是**同一数值的第二份写法**——两个常量改了而这里没改（或反过来）时，
+    两个基线的核对全部照常通过，而读者按本表核到的数指向别处。
+    """
+    # 落点**现场推导**（与本文件里其它落点同口径）：模块级常量在 import 时就绑定了当时的
+    # 仓库根，夹具换根后 `PROJECT_SPECS_DIR` 可能仍指向真实仓库——那样反例会静默读到真文件、
+    # "本表改了数"这个形态永远报不出来（本仓库实测过的同类坑）。
+    # 路径按 `REPO_ROOT` 现算（夹具一致地重定向它），故这里也只用 `REPO_ROOT`。
+    path = os.path.join(REPO_ROOT, "specs-project-maintainer", "guards.adoc")
+    if not os.path.isfile(path):
+        return None
+    text = open(path, encoding="utf-8").read()
+    # 接线数现值：**按本表自己声明的形态取**——「新增防线的记账（按轮次）」逐行以
+    # `a → **b**` 记该轮结束时的现值，故末行的 b 就是现值。不另立"本表里最大的数"这类
+    # 取法：形态由本表决定，取法跟着它走。
+    rows = re.findall(r"(?m)^\| 本轮[^\n]*\|", text)
+    wiring = None
+    if rows:
+        m = re.search(r"\*\*(\d+)\*\*", rows[-1])
+        if m:
+            wiring = int(m.group(1))
+    # 用例数现值：本表记用例数沿革的既有写法是 `用例数 \`a → b\``
+    # （也有 `\`a → **b**\`` 与 `用例数回填为 **b**` 两种变体）——按这三种形态取
+    # 其中**最大的那个**：用例数只增不减，历史轮次留在正文里的数都比现值小，
+    # 故现值一定是最大者（取法只是读数的辅助，判据是与常量**等值**）。
+    wired = [int(n) for n in re.findall(
+        r"用例数\s*`?[^`\n]{0,20}?→\s*\*{0,2}(\d+)", text)]
+    wired += [int(n) for n in re.findall(r"用例数回填为 \*{0,2}(\d+)", text)]
+    tests = max(wired) if wired else None
+    return wiring, tests, wiring
+
+
+
+def _newest_changelog_wiring_ref():
+    """取 `CHANGELOG.adoc` **版本号最大的那条**里记的防线接线基线（取不到返回 `None`）。
+
+    条目按 `- <版本号> | <日期> | …` 逐行记；`CHANGELOG.adoc` 的排序方向恒为时间倒序、
+    最新在上（见 `specs/general/changelog.adoc`），故取第一条。旧条目记的是**当时**的基线，
+    按定义不得改写——本判据只核最新那条，不得回溯改历史。
+    """
+    path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
+    if not os.path.isfile(path):
+        return None
+    for line in open(path, encoding="utf-8"):
+        if not re.match(r"^-\s+[0-9]", line):
+            continue
+        m = re.search(r"防线接线基线[^。\n]*?→\s*\*{0,2}(\d+)", line)
+        if m:
+            return int(m.group(1))
+        return None                     # 最新那条没记接线数 → 不作判断（形态由条目自己定）
+    return None
+
+
 def check_guard_manifest():
     """『防线清单与删除记账』：防线的增删必须留下痕迹，清单本身的描述必须与实际一致。
 
@@ -4275,6 +4335,46 @@ def check_guard_manifest():
             err(f"台账条目『{name}』声明的防线 `{grip_name}` **定义了却没人调用**——"
                 "它看起来还在、却永远不会执行；台账与接线两处必须同口径",
                 "script/check_effective.py")
+
+    # **记账本表自己引用的两个基线值**：`specs-project-maintainer/guards.adoc`「记账沿革」
+    # 里逐轮引用了 `GUARD_WIRING_BASELINE` / `GUARD_TEST_BASELINE`，而那是**手写的数**——
+    # 本轮实测：把两个常量各改一个数（`1793 → 1800`）、旧轮次行里引用的数一并改掉，
+    # 脚本与本表都**全绿**（本表自身的引用值与"本轮新增了哪几道"没有任何核对）。
+    # 口径与既有的基线核对同源：**数要改就改常量，引用处随之**；改不成就报红、逼人核对。
+    manifest_test = _manifest_baseline_refs()
+    if manifest_test is not None:
+        ref_wiring, ref_test, last_row = manifest_test
+        if ref_wiring is not None and ref_wiring != GUARD_WIRING_BASELINE:
+            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用接线数 "
+                f"{ref_wiring}，而 `GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——"
+                "同一数值两处各写一份即第二真源（本仓库实测：两处各改一个数，脚本与本表"
+                "**都全绿**）。数要改就改常量、引用处随之",
+                "specs-project-maintainer/guards.adoc")
+        if ref_test is not None and ref_test != GUARD_TEST_BASELINE:
+            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用用例数 "
+                f"{ref_test}，而 `GUARD_TEST_BASELINE` 是 {GUARD_TEST_BASELINE}——"
+                "同一数值两处各写一份即第二真源；数要改就改常量、引用处随之",
+                "specs-project-maintainer/guards.adoc")
+    # **变更日志新版条目**里也记了这一轮的接线数（`防线接线基线 137 → **139**`）——
+    # 同一数值的第三处写法，同样须与常量一致（本仓库实测：条目里的数改了、脚本与本表
+    # 都全绿，因为两处都没核）。只在**版本号最大的那条**里核：旧条目记的是**当时**的
+    # 基线，按定义不得改写（`specs/general/changelog.adoc`）。
+    if manifest_test is not None:
+        newest = _newest_changelog_wiring_ref()
+        if newest is not None and newest != GUARD_WIRING_BASELINE:
+            err(f"CHANGELOG.adoc 新版条目里记的防线接线基线是 {newest}、而 "
+                f"`GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——同一数值第三处写法；"
+                "旧条目记的是**当时**的基线（按定义不得改写），故只在版本号最大的那条里核，"
+                "数要改就改常量、条目随之", "CHANGELOG.adoc")
+    if manifest_test is not None:
+        ref_wiring, ref_test, last_row = manifest_test
+        if ref_wiring is not None and last_row is not None and last_row < ref_wiring:
+            err(f"specs-project-maintainer/guards.adoc「新增防线的记账（按轮次）」最后一行"
+                f"的接线数是 {last_row}、低于 `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）"
+                "——**本轮新增了哪几道防线**这一行是「防线的增删必须留下痕迹」唯一的记账处，"
+                "低报说明有新增的防线没进这一列（本仓库实测：删掉两道新防线后，"
+                "本表与脚本一样全绿，因为两处都没核）",
+                "specs-project-maintainer/guards.adoc")
 
     # 脚本头部清单的编号：出现断号即说明有条目被整条删掉；出现**重号**即说明重排编号时
     # 把两条并成了同一个号（后者曾漏报：只核"有没有断号"时，重号与连通的两段编号都过）。
@@ -5112,6 +5212,74 @@ def check_java_test_naming():
                 "未写明「要新建或改动 Java 测试类」这一触发特征——"
                 "缺则写测试类时该文件不会被加载，其中的命名契约实际失效",
                 "AGENTS_COMMON.adoc")
+    phase_done()
+
+
+def check_javadoc_path_base_guard():
+    """『javadoc 文档路径基准』防线：基准是**推荐**、文档路径不受限制（用户口径）。
+
+    本条对应用户提出的一处真实偏差：`@see` 的路径基准此前写成"统一为相对模块根"的
+    **强制面**，而项目里已有 14 处以仓库根为基准的引用（core 6 / definition 4 / web 4）
+    ——按强制面读，这些引用是"不合规"，处置只剩"搬文档"这一条路；用户的口径是
+    **不限制文档路径、推荐放项目根与模块根两处**，于是落点改为推荐面、并写明两种写法
+    都推荐（理由各一：模块根相对不受包层级影响，项目根相对在 IDE 里可解析）。
+
+    钉两处（缺任一处即口径只剩一半）：
+      * `specs/stack/java.adoc`「javadoc」——Java 落点（推荐面 + 两条理由 + 双引号）；
+      * `specs/general/doc.adoc`「引用路径」——通用层（平台无关那一处，非 Java 语言与
+        按通用文档规范加载的执行者从这里学）。
+
+    效力边界：只核**条文与判据仍在**；"某条 `@see` 在语义上指对了没有、路径该写 4 个
+    `../` 还是 2 个"属语义判断，交人/子 agent 复核。
+    """
+    phase("javadoc 文档路径基准防线检查")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err("缺少 specs/stack/java.adoc——『javadoc 文档路径基准』的 Java 落点丢失"
+            "（推荐面与两条理由只在栈层说得清）", "specs/stack/java.adoc")
+    if not os.path.isfile(DOC_FILE):
+        err("缺少 specs/general/doc.adoc——『javadoc 文档路径基准』的通用层落点丢失"
+            "（引用方按通用文档规范加载时学不到这条推荐）", "specs/general/doc.adoc")
+    run_rule_guard("check_javadoc_path_base_guard")
+    phase_done()
+
+
+def check_java_test_naming_hint_guard():
+    """『Java 测试类命名（推荐面）』防线：类名是**推荐**、允许自定义、AI 用默认名字。
+
+    本条对应用户提出的第二处真实偏差：`java-testing.adoc` 的「测试类命名」写成
+    **L1 强制**（"一律为「被测类名 + 测试类型后缀」"），而用户口径是**推荐**——
+    **允许自定义类名**（如 `CCacheAspectCacheKeyTests`、`CBeanUtilsDeepCopyTests`）、
+    **AI 生成时用默认名字**。按强制面读，项目里已有的分类限定语命名会被当成"不合规"，
+    review 会据此提问题；落点改为推荐面后，该形态与默认名**两者都合规**。
+
+    与 `check_java_test_naming` 的分工：那道核**四类后缀与拆分裁决的判据仍在**
+    （`Tests`/`BootTests`/`PerfTests`/`IT` 与"可拆但不得滥拆"），本条核**级别与默认名字**
+    （推荐面 / 允许自定义 / AI 生成用默认名字 / 构建边界的 L1 不得一起放宽）——
+    两道不得互相替代：四类后缀判据齐备而口径被改回强制的形态，只有本条报得出。
+    """
+    phase("Java 测试类命名（推荐面）防线检查")
+    if not os.path.isfile(JAVA_TEST_FILE):
+        err("缺少 specs/stack/java-testing.adoc——『测试类命名』的落点丢失"
+            "（推荐面与 AI 默认名字无处承载）", "specs/stack/java-testing.adoc")
+    else:
+        # **节名本身是口径级别的一处落点**：`== 测试类命名（推荐）` 被改回
+        # `== 测试类命名（L1 强制）`时，本节正文可能一字未动，而读者看到的是强制面。
+        # 该判断原先取的是"节名**之后**那段、又截到'测试分类与执行边界'之前"的文本，
+        # 于是**恰好把节名本身排除在外**——把它改成强制面时报不出（本仓库实测）。
+        # 改为按**节标题行**取：标题里出现强制面的级别词即报红。
+        with open(JAVA_TEST_FILE, encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        title = next((ln for ln in lines if ln.startswith("== 测试类命名")), "")
+        if not title:
+            err("Java 测试类命名（推荐面）防线被破坏：specs/stack/java-testing.adoc 没有"
+                "「测试类命名」一节——本节是命名口径与 AI 默认名字的唯一落点",
+                "specs/stack/java-testing.adoc")
+        elif "L1 强制" in title or "强制" in title:
+            err("Java 测试类命名（推荐面）防线被破坏：specs/stack/java-testing.adoc 的"
+                "「测试类命名」节名仍是**强制面**（'L1 强制'）——用户口径是推荐，"
+                "允许自定义类名与分类限定语命名（如 `CCacheAspectCacheKeyTests`），"
+                "强制面会把这类合规定名读成违规", "specs/stack/java-testing.adoc")
+    run_rule_guard("check_java_test_naming_hint_guard")
     phase_done()
 
 
@@ -11444,6 +11612,8 @@ CHECKS = (
     check_declarative_rule_guard,
     check_param_carrier_guard,
     check_getter_bridge_guard,
+    check_javadoc_path_base_guard,
+    check_java_test_naming_hint_guard,
     check_validation_entry_guard,
     check_http_contract_guard,
     check_baseline_sync_guard,
