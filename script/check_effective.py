@@ -94,6 +94,17 @@ MECHANISMS = [
      "承担（正例＋反例：缺 step 时限 / 解析失败 / 无配置可核 / 卡住的命令到点被终止且保留已产出输出）；"
      "「某次操作实际有没有设时限、超时后有没有真去排查、卡住时有没有留下输出」属运行时事实，"
      "交人/子 agent 实跑复核"),
+    ("用户要求是第一优先级、不得降级；做不到或做不全时终止当前方向并停下来问用户",
+     "specs/core/execution.adoc + AGENTS_COMMON.adoc + specs-project-maintainer/priority.adoc",
+     "script/check_specs.py",
+     "check_user_requirement_guard",
+     "check_user_requirement_guard 按**条目自己的正文**核（不是整节：「指令执行」的相邻条目"
+     "「逐字执行用户指令」「歧义先问、不自行假设」「每个任务都当尽力、严禁糊弄」字样相近，"
+     "按整节核会把抽走的要点兜住）：判据本体（用户要求排在其余一切约束之前 + 做不到或做不全时"
+     "终止当前方向并把卡点与可选做法交给用户定 + 五条判定标准 + 与「歧义先问」的分工 + 依据）"
+     "在必加载层，另两处是登记（公共入口「最高优先级铁律」、维护方不可降级清单 P8）；"
+     "「某次交付是不是真的降级了、卡点是不是真的提给了用户」属运行时事实与语义判断，"
+     "交人/子 agent 复核"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py",
      "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",

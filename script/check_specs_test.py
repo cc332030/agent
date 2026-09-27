@@ -20861,5 +20861,201 @@ class TestCheckIntentAnswerGuard(CheckSpecsTestCase):
         self.assertIn("机械校验全绿", self.error_texts())
 
 
+# --------------------------------------------------------------------------- #
+# check_user_requirement_guard（用户要求是第一优先级、不得降级）
+# --------------------------------------------------------------------------- #
+class TestCheckUserRequirementGuard(CheckSpecsTestCase):
+    """『用户要求是第一优先级、不得降级』防线的反例用例。
+
+    失效形态（用户实测、反复发生）：执行者拿"保证用例全绿 / 让构建通过"这类硬性限制当理由，
+    **悄悄把用户明确提出的要求降一档**，既不告知、也不进汇报；用户按同一要求再提一次，
+    就再降一档，直到逐字追问才暴露。故本条须把**判据本体**（用户要求优先 + 做不到就停下来问 +
+    五条判定标准 + 与「歧义先问」的分工 + 依据）钉在 `specs/core/execution.adoc`「指令执行」
+    那条 bullet 的**自己的正文**上，并把两处登记（公共入口铁律、维护方 P8）一起核住——
+    只核"这条还在不在"会被相邻条目的字样兜住。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具会与真文档脱节，
+    改法一旦换同义措辞，锚点命中与否就与真文档无关了。
+    """
+
+    EXEC = "specs/core/execution.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PRIORITY = "specs-project-maintainer/priority.adoc"
+    FRAGMENT = "prompts/_common.txt"
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.EXEC, self.COMMON, self.PRIORITY, self.FRAGMENT):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+        # 规则数据是判据措辞的唯一来源：本道的锚点外置在 `script/specs-rules/`，夹具须把
+        # 规则**整份目录**按原样落进来（引擎按目录扫描加载，只落一份时模块级 `RULES`
+        # 就按那份残缺目录装配、其后的防线一律报「规则配置里没有防线 X」；本仓库在
+        # `CheckSpecsTestCase.write_rules_fixture` 已备好这个口径，不另抄）。
+        for rel in self._rules_files():
+            self.write(rel, self._rule_text(rel))
+
+    def _rules_files(self) -> list:
+        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。"""
+        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
+        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
+                if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
+    def _run(self) -> None:
+        # 夹具换过 `REPO_ROOT`（也换过规则数据），故须作废模块级 `RULES` 缓存——
+        # 否则读到的是上一个用例的规则数据（本仓库实测：锚点被删的用例把 18 项的那份
+        # 留在缓存里，其后的正例读到它、报出并不存在的缺项）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_user_requirement_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        self.assertIn(removed, self._texts[rel])
+        self._write_valid()
+        self.write(rel, self._texts[rel].replace(removed, replacement))
+
+    def tearDown(self) -> None:
+        # `RULES` 随夹具的 `REPO_ROOT` 装配、指向刚被删掉的临时目录，故须作废；
+        # 本处保留是**防回归**的最低成本写法（下一用例自己会清一次）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_exec_file_reports(self):
+        # 反例①：判据本体所在文件缺失 -> 该要求无任何落点
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "core", "execution.adoc"))
+        self._run()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_requirement_priority_clause_removed_reports(self):
+        # 反例②：删掉"用户要求排在其余一切约束之前" -> 用例全绿/编译通过又变成可降级的理由
+        self._mutate(self.EXEC, "排在其余一切约束之前")
+        self._run()
+        self.assertIn("排在其余一切约束之前", self.error_texts())
+
+    def test_stop_and_ask_clause_removed_reports(self):
+        # 反例③：删掉"终止当前方向、把可选做法与代价交给用户定" -> 做不到时没有应做动作
+        self._mutate(self.EXEC, "终止当前方向")
+        self._run()
+        self.assertIn("终止当前方向", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例④：把逐条判定标准压成一句原则 -> 只剩"要重视用户要求"
+        self._mutate(self.EXEC, "**判定标准（任一命中即违规）**", "**说明**")
+        self._run()
+        self.assertIn("任一命中即违规", self.error_texts())
+
+    def test_downgrade_judgement_removed_reports(self):
+        # 反例⑤：删掉"交付弱于用户要求而用户未同意"这一条判定 -> 静默降级的核心形态判不出
+        self._mutate(self.EXEC, "弱于")
+        self._run()
+        self.assertIn("弱于", self.error_texts())
+
+    def test_reported_as_done_clause_removed_reports(self):
+        # 反例⑥：删掉"把降级结果说成已完成/已知限制" -> 汇报侧不再可核
+        self._mutate(self.EXEC, "说成已完成/已按要求完成")
+        self._run()
+        self.assertIn("说成已完成/已按要求完成", self.error_texts())
+
+    def test_retry_without_asking_removed_reports(self):
+        # 反例⑦：删掉"反复重试却不停下来问" -> 重试被当成"已尽力"
+        self._mutate(self.EXEC, "反复重试")
+        self._run()
+        self.assertIn("反复重试", self.error_texts())
+
+    def test_predeclare_cannot_clause_removed_reports(self):
+        # 反例⑧：删掉"先宣告做不到而不做任何尝试" -> 与本条同族的糊弄形态漏掉
+        self._mutate(self.EXEC, "先宣告做不到而不做任何尝试")
+        self._run()
+        self.assertIn("先宣告做不到而不做任何尝试", self.error_texts())
+
+    def test_priority_list_entry_removed_reports(self):
+        # 反例⑨：最高关注项清单里 P8 的登记行被删 -> 重构/去重时无"不可降级"保护
+        self._mutate(self.EXEC, "用户要求是第一优先级、不得降级（L1 最高关注项 P8）")
+        self._run()
+        self.assertIn("用户要求是第一优先级、不得降级（L1 最高关注项 P8）", self.error_texts())
+
+    def test_iron_rule_entry_removed_reports(self):
+        # 反例⑩：公共入口「最高优先级铁律」的进门必读登记被删 -> 下次会话读不到
+        self._mutate(self.COMMON, "用户要求是第一优先级、不得降级（最高关注项 P8）")
+        self._run()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_iron_rule_action_removed_reports(self):
+        # 反例⑪：铁律行只留"用户要求优先"、抹掉"做不到就停下来问、不得自行降级"
+        # -> 铁律行读不出应对动作
+        self._mutate(self.COMMON, "不得自行把要求削掉、收窄或替换")
+        self._run()
+        self.assertIn("不得自行把要求削掉、收窄或替换", self.error_texts())
+
+    def test_iron_rule_pointer_removed_reports(self):
+        # 反例⑫：铁律行不再回指权威定义 -> 读者不知道判据在哪
+        self._mutate(self.COMMON, "`specs/core/execution.adoc`「指令执行」")
+        self._run()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_priority_p8_removed_reports(self):
+        # 反例⑬：维护方不可降级清单 P8 被删 -> 清单少列一项
+        self._mutate(self.PRIORITY, "=== P8. 用户要求是第一优先级、不得降级；做不到就停下来问")
+        self._run()
+        self.assertIn("specs-project-maintainer/priority.adoc", self.error_texts())
+
+    def test_priority_p8_criteria_removed_reports(self):
+        # 反例⑭：P8 正文被抽成一句原则 -> 本条自身也成了口号
+        self._mutate(self.PRIORITY, "做不到或做不全时不得自行收力")
+        self._run()
+        self.assertIn("做不到或做不全时不得自行收力", self.error_texts())
+
+    def test_priority_p8_failure_mode_removed_reports(self):
+        # 反例⑮：P8 的失效形态被删 -> 只剩"要重视用户要求"，重演时无人对得上
+        self._mutate(self.PRIORITY, "直到用户逐字追问才暴露")
+        self._run()
+        self.assertIn("直到用户逐字追问才暴露", self.error_texts())
+
+    def test_prompt_fragment_clause_removed_reports(self):
+        # 反例⑯：公共片段的同口径半句被删 -> 复制到未知项目的那份没有这条
+        common = "prompts/_common.txt"
+        repo = os.path.dirname(HERE)
+        with open(os.path.join(repo, *common.split("/")), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        self.write(common, text.replace("做不到或做不全时终止当前方向并停下来问用户",
+                                        "做不到就换个做法"))
+        self._run()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑰（锚点清单自身的条数）：删掉一条锚点、正文一字不少 -> 报绿与"核过且通过"无从区分
+        self._write_valid()
+        rules_path = os.path.join(self.root, "script", "specs-rules", "execution.toml")
+        with open(rules_path, encoding="utf-8") as fh:
+            rules = fh.read()
+        # 只删 `check_user_requirement_guard` 的 bullet 锚点清单里的一项（保留其后的 anchor_count 步）。
+        self.assertIn('    "与「歧义先问、不自行假设」的分工",\n', rules)
+        rules = rules.replace('    "与「歧义先问、不自行假设」的分工",\n', "", 1)
+        self.write("script/specs-rules/execution.toml", rules)
+        self._run()
+        self.assertIn("锚点", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()
