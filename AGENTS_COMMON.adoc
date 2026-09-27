@@ -104,6 +104,8 @@ https://agent.c332030.com/script/fetch-specs.py
 * **Java 数据对象模板**（识别特征：要新建数据对象、或出现 `@Singular`/`@Accessors(chain = true)` 一类字样时）→ `specs/stack/java-object.adoc`。**模板文件、不是规范文件**：判据本体在 `specs/stack/java.adoc`「编码」，该文件只把它们连成一份可直接复制的清单；不加载它不会有规则缺失
 * **Spring 项目**（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`（识别特征：要写/改 Spring 注解与分层代码、要写/改 `@RequestMapping`/`@GetMapping` 一类的**路由路径**、要写/改**配置项绑定注解**（`@Value`/`@ConfigurationProperties`）、要写/改**参数校验注解**、**HTTP 方法映射**与**声明式客户端契约**（含契约路径前缀））
 * **Maven 构建**（存在 `pom.xml`/`mvnw`）→ `specs/stack/maven.adoc`。识别特征：**要跑 Maven 构建/测试时**（裸 `mvn`、命令行构建）、要配置或排障**包源与镜像**、要判定**构建并行度**
+* **Gradle 构建**（存在 `settings.gradle`/`settings.gradle.kts`、`build.gradle`/`build.gradle.kts`、`gradlew`/`gradle-wrapper.properties`、`gradle/libs.versions.toml`）→ `specs/stack/gradle.adoc`。识别特征：**要跑 Gradle 构建/测试时**、要配置或排障**包源与镜像**、要调整**依赖版本落点/平台与 BOM/项目依赖**、要判定**构建产物目录与档位**、要配置或排障**发布仓库与凭据**
+* **构建工具迁移**（识别特征：要换构建工具、要对一次迁移做取舍判定或验收；源与目标**任一组合**皆适用）→ `specs/stack/build-tool-migration.adoc`
 * **Bash/Shell 脚本**（存在 `.sh`，或 shebang 为 bash/sh）→ `specs/stack/bash.adoc`
 * **Python 脚本**（以 `python3`/`python` 为 shebang 的 `.py`）→ `specs/stack/python.adoc`
 * **Windows 批处理**（存在 `.bat`/`.cmd`）→ `specs/stack/batch.adoc`

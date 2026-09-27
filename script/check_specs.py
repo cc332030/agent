@@ -234,6 +234,24 @@
      字样，按整节核会被兜住）。由 `check_tool_class_inheritance_guard` 钉住（接线数 124 → 125）；
      "某个类算不算工具类""某处继承是不是工具类之间的继承"属语义判断，交人/子 agent 复核。
 
+ 83. 构建工具迁移防线（**用户提出**）：判据本体落技术栈层 `specs/stack/build-tool-migration.adoc`
+     （公共内容，任一构建工具组合皆适用）——**以目标构建工具的规范为基准**（"效果不变"指
+     **构建结果**、不指形态；**不得强凑源构建工具的结构**，如把 Maven 的父子关系照搬进
+     Gradle）、**构建结果不变的验收面**（坐标 / 发布元数据 / 构建期行为 / 对外可见入口 /
+     运行环境声明 / 不得顺手改动的面）与**验收留证**（基线必做且逐项对照、"能编译过"不是
+     验收、未确证不得记作通过）。目标工具侧的展开在 `specs/stack/gradle.adoc`（另由其防线
+     核），两道各核一份、不互相替代。**失效形态**：迁移做成"把旧构建工具的形态翻译成新工具
+     能跑的等价写法"，项目从此有两个构建模型、改一处必漏另一处。
+
+ 84. Gradle 构建防线（**用户提出**）：判据本体落技术栈层 `specs/stack/gradle.adoc`——
+     依赖（版本落点唯一 / BOM 用平台表达且不落在参与发布的配置上 / **项目显式取值须压过
+     上游 BOM**——Gradle 默认取最高版本与"以 BOM 为准"不是一回事 / 模块间用项目依赖 /
+     **不得默认使用本地仓库解析**）、构建与产物（**产物目录按档位分家**、**档位差异源码目录
+     须互斥**、档位取值口径只认一处、专项测试按命名契约默认跳过）、发布（**注册条件是
+     "地址可用"、不是"凭据齐全"**——凭据缺了整段不注册、`publish` 变成空任务而构建照旧成功）。
+     由 `check_gradle_guard` 钉住；"某次解析实际取到哪个版本""某次发布到底上传了没有"
+     属运行时事实，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -1596,6 +1614,8 @@ POINTER_SCAN_FILES = (
     "specs/platform/cnb.adoc",
     "specs/stack/bash.adoc",
     "specs/stack/batch.adoc",
+    "specs/stack/build-tool-migration.adoc",
+    "specs/stack/gradle.adoc",
     "specs/stack/java-object.adoc",
     "specs/stack/java-syntax.adoc",
     "specs/stack/java-testing.adoc",
@@ -3688,8 +3708,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 131
-GUARD_TEST_BASELINE = 1730
+GUARD_WIRING_BASELINE = 134
+GUARD_TEST_BASELINE = 1632
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -7804,6 +7824,7 @@ def check_maven_mirror_guard():
 # 『Maven 构建并行度』防线的落点常量。
 # 单条规则的取向在 maven.adoc「构建并行度」节里；本处只列"去哪儿核"。
 MAVEN_SPEC = "specs/stack/maven.adoc"
+GRADLE_SPEC = "specs/stack/gradle.adoc"
 MAVEN_PARALLEL_SECTION = "构建并行度"
 MAVEN_PARALLEL_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_ANCHORS"]
 # 依据名（标准名/编号）须在节内可核对——「引用不替代规则本身」的前提是依据名还在
@@ -7817,6 +7838,10 @@ MAVEN_PARALLEL_PROMPT_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_PROMPT_ANCHORS"]
 # 锚点清单的**条数下限**：清单是纯数据，删项时现场文本一字未动、逐 token 核对全绿
 # （`miss` 为空集）。`min` 取当前条数、只拦"无声变少"，删清单须与调 `min` 一并发生。
 MAVEN_PARALLEL_ANCHOR_FLOOR = 30
+# 『Maven 迁出的一跳引用』防线的核对项：**每一对**（源＝Maven，目标＝某构建工具）都要有。
+# 清单是纯数据、必须随动维护：新增一个源/目标构建工具时同步补一项，否则新的那一对
+# 无人核（同 `POINTER_SCAN_FILES` 的教训——只列"当前已知的那几个"时，未列入者永远是盲区）。
+_MAVEN_MIGRATION_CROSSREF_ANCHORS = _RULES_TOKENS["MAVEN_MIGRATION_CROSSREF_ANCHORS"]
 MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR = 11
 # 「这份提示词要不要引 `build-parallel`」的判定词：正文里出现构建/测试类步骤即须引入，
 # 否则**不要求**（过度收紧会逼出一句与任务无关的构建说明——本轮实测）
@@ -7992,6 +8017,50 @@ def check_maven_parallel_guard():
         if runs_build and not included:
             err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
                 "该提示词的任务含构建/测试步骤，构建并行度不会被启用（公共片段不等于被引用）", rel_p)
+    phase_done()
+
+
+def check_maven_migration_crossref_guard():
+    """Maven 迁出的一跳引用防线：`maven.adoc` 的适用面行须把"迁出"指向迁移规范。
+
+    要治的失效：Gradle（及任何其它目标工具）侧写了「以目标构建工具的规范为基准」，
+    **而 Maven 侧一个字都没提**——从 Maven 迁出的项目读 `maven.adoc` 时看不到任何
+    指引，于是照着**源工具**的形态（父子关系、继承档）往下写，而这条正是用户点名
+    要治的形态。一跳引用是**跨构建工具对**的，故**逐对**都要有：新增一个源/目标
+    构建工具时须同步补上（`(源, 目标)` 的登记在 `script/specs-rules/maven.toml`）。
+
+    **与两道迁移/Gradle 防线的分工**：那两道核**判据本体**（迁移规范与 Gradle 规范
+    自己的三段），本条只核 `maven.adoc` **侧的那一跳**——判据本体丢了这三条都会报，
+    而只有本条能报出"本体在、Maven 侧的那一跳没了"。
+
+    机械只核"这一跳在不在"；"某次迁移该不该迁、迁到哪个目标"属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("Maven 迁出的一跳引用防线检查")
+    rel = MAVEN_SPEC
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    # 适用面行＝正文里引用 Maven 栈自身的加载落点那一行（与 `section_groups` 的
+    # 「文件首行即适用面」同源），只在其内找回指，不退化到全文。
+    head = next((ln for ln in text.splitlines() if "适用于 **Maven 构建**" in ln), "")
+    if not head:
+        err("maven.adoc 的适用面行不见了——加载触发特征与『从 Maven 迁出时读哪一份』"
+            "都在这一行上，缺则触发特征也无处核", rel)
+        phase_done()
+        return
+    missing = [lbl for lbl, _pat, tok in _MAVEN_MIGRATION_CROSSREF_ANCHORS
+               if tok not in head]
+    if missing:
+        bad = [a for a in _MAVEN_MIGRATION_CROSSREF_ANCHORS if a[0] in missing]
+        for lbl, pat, _tok in bad:
+            err(f"maven.adoc 的适用面行缺少「{lbl}」这一跳（应含 `{pat}`）——"
+                "缺则从 Maven 迁出的项目读不到『按目标构建工具的规范定义、"
+                "不把 Maven 特有形态搬过去』的指引，照着源工具的形态继续写", rel)
     phase_done()
 
 
@@ -10779,6 +10848,66 @@ def check_http_contract_guard():
         run_rule_guard("check_http_contract_guard")
 
 
+
+# 『构建工具迁移』防线的落点常量：判据本体所在文件（三段各一）。
+# 三段＝① 核心口径（含"不搬源工具结构"）② 构建结果不变的验收面 ③ 验收与留证。
+BUILD_TOOL_MIGRATION_SPEC = "specs/stack/build-tool-migration.adoc"
+
+
+def check_build_tool_migration_guard():
+    """『构建工具迁移』防线（**用户提出**）：判据本体不得被删或降级。
+
+    要治的失效：迁移被做成"把旧构建工具的形态翻译成新工具能跑的等价写法"——
+    目标工具里多出一层**只为对应源工具而存在、不承担任何构建职责**的结构
+    （用户点名的形态：Maven 有父子关系、迁到 Gradle 后照搬一套层级，而 Gradle 不需要它）。
+    此后项目同时有两个构建模型，改一处必漏另一处。
+
+    判据本体落**公共内容**（对任一构建工具组合成立）`specs/stack/build-tool-migration.adoc`；
+    目标工具侧的展开在 `specs/stack/gradle.adoc`，两道防线各核一份、不互相替代。
+    **用户口径里最容易被读反的一句**是「效果不变」——它指**构建结果**、不指形态，
+    故规则数据里把它单列一组钉住。
+
+    机械只核"判据本体在不在"（条款、级别、判定标准、依据名）；
+    "某个结构算不算只为对应源工具而存在""删掉它构建结果会不会变"属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。规则数据在
+    `script/specs-rules/build-tool-migration.toml`。
+    """
+    phase("构建工具迁移防线检查")
+    rel = BUILD_TOOL_MIGRATION_SPEC
+    if not os.path.isfile(rel if os.path.isabs(rel)
+                          else os.path.join(REPO_ROOT, *rel.split("/"))):
+        err(f"缺少文件 {rel}——『迁移按目标构建工具的规范定义、不搬源工具特有形态』"
+            "的判据本体丢失（该条对任一构建工具组合成立，须落在公共内容）", rel)
+    else:
+        run_rule_guard("check_build_tool_migration_guard")
+
+
+def check_gradle_guard():
+    """『Gradle 构建』防线：判据本体不得被删或降级。
+
+    要治的失效：把 Maven 的写法按字面翻译成 Gradle 脚本能跑的一版，于是
+    ① 依赖版本同时落在版本目录与模块脚本里（同一份数据两个来源）；
+    ② 发布仓库以凭据为注册条件——凭据缺了整段不注册，`publish` 变成无动作的空任务、
+    **构建照旧成功**（"构建成功但一个制品都没上传"）；
+    ③ 切档位构建时两档产物互相覆盖，两次构建都报成功；
+    ④ 档位差异源码目录不互斥——同一份实现落在多处、靠"当前选了哪一份"兜住，漏选**静默取错档**；
+    ⑤ 模块间依赖改用仓库坐标 → 取到上一次发布的旧产物。
+
+    判据本体落公共内容 `specs/stack/gradle.adoc`；**迁移**口径（不得强凑源工具结构）
+    在 `specs/stack/build-tool-migration.adoc`（由 `check_build_tool_migration_guard` 核），
+    两道各核一份、不互相替代。机械只核"判据本体在不在"——"某次解析实际取到哪个版本"
+    "某次发布到底上传了没有"属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    规则数据在 `script/specs-rules/gradle.toml`。
+    """
+    phase("Gradle 构建防线检查")
+    rel = GRADLE_SPEC
+    if not os.path.isfile(rel if os.path.isabs(rel)
+                          else os.path.join(REPO_ROOT, *rel.split("/"))):
+        err(f"缺少文件 {rel}——Gradle 构建规则的判据本体丢失", rel)
+    else:
+        run_rule_guard("check_gradle_guard")
+
+
 def check_split_history_ownership_guard():
     """『一份变多份的历史归属』防线（**用户提出**）：同一次改动里
     **既移动/重命名、又复制**的文件丢历史时，**继承历史的那一份按三级判据取**——
@@ -11121,6 +11250,9 @@ CHECKS = (
     check_spec_optimize_guard,
     check_change_number_scope_guard,
     check_staged_delivery_guard,
+    check_build_tool_migration_guard,
+    check_gradle_guard,
+    check_maven_migration_crossref_guard,
 )
 
 
