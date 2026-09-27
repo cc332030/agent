@@ -11079,6 +11079,58 @@ def check_change_number_scope_guard():
     phase_done()
 
 
+def check_operation_timeout_guard():
+    """『每一步执行都有可判定的时限』防线（**用户提出**）：把"任务频繁中断"里最常见、
+    也最可修的一类拦住——**某一步永远不返回**。
+
+    失效形态（用户实测）：agent 发起一次构建/测试/网络请求后，那一步**没有时限、也没有
+    进度输出**，工具层不见失败信号，于是**整轮停在那里直到人工介入**；用户看到的就是
+    "任务频繁中断"（现场一清理则前面的成果全丢、下次从零重来）。规范侧的两处取值落点是
+    `specs/general/collab.adoc`「操作超时与超时后的处置」（执行类操作）与
+    `specs/general/ci-cd.adoc`「超时与资源」（流水线的每个执行单位）。
+
+    **抓手必须真随规范分发、且真被跑**：只写一句"须设时限"而抓手不在（或指到引用方
+    取不到的私有落点）、或抓手在那儿却**没有任何地方跑它**，都是"声明了却没执行"——
+    与 `specs/general/ci-cd.adoc`「校验链完整」要治的失效同形。故本道同时核三件事：
+    ① 两处条文的要点仍在（由规则数据核）；② 抓手文件齐备（配置侧守卫、运行侧包装、
+    最小 YAML 子集解析器与其三份配套测试）；③ **本仓库 CI 里真有一步跑它**。
+
+    只钉"判据与抓手是否仍在"——"某次操作实际有没有设时限、超时后有没有真去排查、
+    某次卡住时是否真的留下了输出"属运行时行为（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("『每一步执行都有可判定的时限』防线检查")
+    for rel, desc in (
+            ("script/guard/check_pipeline_timeout.py", "配置侧守卫（逐执行单位核时限）"),
+            ("script/guard/run_with_timeout.py", "运行侧包装（给一次命令执行套墙钟时限）"),
+            ("script/guard/yaml_min.py", "最小 YAML 子集解析器（不引第三方依赖）"),
+            ("script/guard/check_pipeline_timeout_test.py", "配置侧守卫的配套测试"),
+            ("script/guard/run_with_timeout_test.py", "运行侧包装的配套测试"),
+            ("script/guard/yaml_min_test.py", "解析器的配套测试"),
+    ):
+        if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+            err(f"缺少 {rel}——{desc}；时限要求随即退回『靠记得加』，"
+                "而『某一步不返回即整轮停住』正是本条要治的失效（判据见 "
+                "`specs/general/collab.adoc`「操作超时与超时后的处置」）", rel)
+    # 抓手须真被跑：CI 里没有执行它的步骤时，"声明的校验手段从未执行、输出看起来是绿的"
+    # （`specs/general/ci-cd.adoc`「校验链完整」的判定标准①）会在这里重现。
+    rel_ci = ".github/workflows/check-specs.yml"
+    ci_path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(ci_path):
+        err(f"缺少 {rel_ci}——本仓库的确定性校验没有执行入口，"
+            "随规范分发的守卫也就没有任何地方跑它", rel_ci)
+    else:
+        with open(ci_path, encoding="utf-8") as fh:
+            ci_text = fh.read()
+        if "script/guard/check_pipeline_timeout.py" not in ci_text:
+            err(f"{rel_ci} 里没有任何一步执行配置侧守卫"
+                "（`script/guard/check_pipeline_timeout.py`）——抓手在那儿却没人跑它，"
+                "与『声明了校验手段却从未执行』同形；须把该守卫接进校验链，"
+                "并让它的失败使构建失败（不得只在文档里写『建议执行』）", rel_ci)
+    run_rule_guard("check_operation_timeout_guard")
+    phase_done()
+
+
 def check_staged_delivery_guard():
     """『分阶段交付（大任务）』防线（**用户提出**）：**大任务分阶段执行时分阶段提交与推送**，
     以免中断后成果丢失。
@@ -11253,6 +11305,7 @@ CHECKS = (
     check_build_tool_migration_guard,
     check_gradle_guard,
     check_maven_migration_crossref_guard,
+    check_operation_timeout_guard,
 )
 
 

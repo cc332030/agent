@@ -20531,5 +20531,108 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
 
 
 
+
+
+# --------------------------------------------------------------------------- #
+# check_operation_timeout_guard（每一步执行都有可判定的时限）
+# --------------------------------------------------------------------------- #
+class TestCheckOperationTimeoutGuard(CheckSpecsTestCase):
+    """『每一步执行都有可判定的时限』防线的反例用例。
+
+    用户实测的失效：**某一步永远不返回**（没有时限、也没有进度输出，工具层不见失败信号）
+    → **整轮停在那里直到人工介入**；现场一清理，前面的成果全丢、下次从零重来。
+    故本条须把两处取值（执行类操作 / 流水线的每个执行单位）、**抓手本身**与
+    **"抓手真被跑"**三件都钉住——只写一句"须设时限"而抓手不在、或抓手在那儿却没人跑它，
+    与 `specs/general/ci-cd.adoc`「校验链完整」要治的失效同形。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具会与真文档脱节，
+    改法一旦换同义措辞，锚点命中与否就与真文档无关了。
+    """
+
+    COLLAB = "specs/general/collab.adoc"
+    CICD = "specs/general/ci-cd.adoc"
+    CI = ".github/workflows/check-specs.yml"
+    GUARDS = (
+        "script/guard/check_pipeline_timeout.py",
+        "script/guard/run_with_timeout.py",
+        "script/guard/yaml_min.py",
+        "script/guard/check_pipeline_timeout_test.py",
+        "script/guard/run_with_timeout_test.py",
+        "script/guard/yaml_min_test.py",
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.COLLAB, self.CICD, self.CI):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+        for rel in self.GUARDS:
+            self.write(rel, "# 夹具占位\n")
+        # 规则数据是判据措辞的唯一来源：本道的锚点外置在 `script/specs-rules/`，
+        # 夹具须把那份规则文件**按原样**落进来（不手抄——手抄必然与现场漂移）。
+        self.write_real_file("script/specs-rules/execution.toml")
+
+    def _run(self) -> None:
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_operation_timeout_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        self.assertIn(removed, self._texts[rel])
+        self._write_valid()
+        self.write(rel, self._texts[rel].replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具、抓手齐备时防线必须报绿
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_tool_reports(self):
+        # 反例①：抓手文件缺失 -> 时限要求退回"靠记得加"
+        self._write_valid()
+        os.remove(os.path.join(self.root, *self.GUARDS[0].split("/")))
+        self._run()
+        self.assertIn("check_pipeline_timeout.py", self.error_texts())
+
+    def test_ci_does_not_run_the_guard_reports(self):
+        # 反例②：抓手在那儿却没人跑它——"声明了校验手段却从未执行"的同一形式
+        self._write_valid()
+        self.write(self.CI, self._texts[self.CI].replace(
+            "script/guard/check_pipeline_timeout.py", "别的东西"))
+        self._run()
+        self.assertIn("没有任何一步执行配置侧守卫", self.error_texts())
+
+    def test_mechanism_clause_removed_reports(self):
+        # 反例③：新条被删（只剩"记得加时限"那一句）
+        self._mutate(self.COLLAB, "时限须落到机械抓手、不靠", "时限另行约定")
+        self._run()
+        self.assertIn("specs/general/collab.adoc", self.error_texts())
+
+    def test_evidence_requirement_removed_reports(self):
+        # 反例④："超时后拿不出该次执行的输出"被抽 -> 排查变成一句口号
+        self._mutate(self.COLLAB, "拿不出该次执行的输出", "不太确定")
+        self._run()
+        self.assertIn("specs/general/collab.adoc", self.error_texts())
+
+    def test_per_unit_clause_removed_reports(self):
+        # 反例⑤：ci-cd 侧退回"整条流水线有个大致时限"即可满足
+        self._mutate(self.CICD, "执行单位即 job、stage、step 这三个层级", "一条流水线")
+        self._run()
+        self.assertIn("specs/general/ci-cd.adoc", self.error_texts())
+
+    def test_default_timeout_loophole_removed_reports(self):
+        # 反例⑥：拿"平台有默认时限"顶替本条的放行口子被抽
+        self._mutate(self.CICD, "平台有默认时限", "平台自己会管")
+        self._run()
+        self.assertIn("specs/general/ci-cd.adoc", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()

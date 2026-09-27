@@ -38,6 +38,7 @@ jobs:
   #    目标缺失）也能让检查返回非 0；Python 版 `asciidoc`（PyPI）没有这个开关。
   lint-specs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Action 版本随 runner 的 Node 运行时走：`checkout@v4` / `setup-python@v5` 面向
       # Node 20，已被 GitHub 弃用（会被强制跑在 Node 24 上并打印 deprecation 告警）。
@@ -67,12 +68,18 @@ jobs:
         run: python3 script/check_specs.py
       - name: Run spec-check unit tests
         run: python3 -m unittest discover -s script -p '*_test.py' -v
+      # 本仓库自己也要满足「每一步都须能查到时限」——本步骤就地核本工作流的每一个
+      # 执行单位（本仓库实证：此前 job/step 都没有时限，一条挂住的步骤即整轮停住）。
+      # 守卫自己也核本文件：缺时限时本步骤失败（不是"跳过"）。
+      - name: Check every pipeline step has a decidable timeout
+        run: python3 script/guard/check_pipeline_timeout.py --repo .
 
   # 2) “定义未执行”核验（工具自身回归）
   #    该工具主体为人工按需运行，CI 只跑一次输出核验清单，保证其自身不回归
   #    （含配套测试）。
   effective-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Run effectiveness check (self regression)
