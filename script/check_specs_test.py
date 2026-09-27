@@ -146,7 +146,9 @@ class CheckSpecsTestCase(unittest.TestCase):
     # 手抄版少一组锚点即产生假红）。规则文件由防线按仓库根相对路径读取，故夹具落点与
     # 现场一致即可。
     RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml",
-                           "script/specs-rules/verify.toml")
+                           "script/specs-rules/verify.toml",
+                           # 本道（问与答对齐）的规则数据按原地原样落进夹具——手抄必然漂移
+                           "script/specs-rules/intent-answer.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -20632,6 +20634,231 @@ class TestCheckOperationTimeoutGuard(CheckSpecsTestCase):
         self._mutate(self.CICD, "平台有默认时限", "平台自己会管")
         self._run()
         self.assertIn("specs/general/ci-cd.adoc", self.error_texts())
+
+
+class TestCheckIntentAnswerGuard(CheckSpecsTestCase):
+    """钉住『问与答对齐（防答非所问、漏下要求不提）』防线。
+
+    用户点名的真实失效：同一任务单下，执行者**答的是相邻的另一件事**（问他"六个源目录
+    怎么协作"，答的是"四个目录/依赖层次"）、**只做看得见的那一件、其余只字不提**、
+    **换了一条路就当中途结束**（"我再试另一种方式"之后即收尾，而被问的那件事一次都没被
+    回答）。既有的验收口径只写到"不得只冒一句过程性废话"——**能拦住"只冒一句"，拦不住
+    "答到了另一件事上"**。
+
+    用例覆盖三类形态：① **整节/整条被删**（落点丢失）；② **本节被抽空成一句空话**
+    （判据实体被抽走、标题还在）——这是本道最要紧的一条：按**整份文件**核时，同一批字样在
+    别处（`execution.adoc` 的「输出的对齐与唯一落点」、`same` 一节里的相邻条目）会把它兜住，
+    **抽空也不报红**（本 PR 内实测：`collab` 的「答什么由问句定」整条删成"注意别答偏"、
+    连同判定标准一起去掉，按整份文件核全绿）；③ 题面侧与统一入口两处被删。
+    """
+
+    EXECUTION = (
+        "== 指令执行\n\n"
+        "=== 指令的完整性（防“漏命令”）\n\n"
+        "* **取到指令的通道**：**任务评论/说明**（**逐条枚举**）\n"
+        "* **技能/流程/脚本的输出**：**每条命令都须落到实际执行**\n"
+        "* **不得跳步（L1）**：**已经在做**、**不构成不落地的理由**\n"
+        "* **收尾输出须逐条对照（L1）**：逐条对照（**已做 / 未做及原因**）\n\n"
+        "=== 输出的对齐与唯一落点（防“答非所问”）\n\n"
+        "* **输入与输出须指向同一件事（L1）**：**写进输出的结论须落在发起人的问句里**\n"
+        "* **一次执行只发一条输出（L1）**：**过程性叙述、自我确认、进展报告一律不发**\n"
+        "* **一次执行里可做几件事、输出仍只有一条（L1）**：**漏下没说与没做同判**、"
+        "**未说明的未完成项 = 没做**\n"
+        "* **不构成不做的理由**：**同一任务单下重复提出同一条要求**\n\n"
+        "== 一件事的定义与展开（防“答非所问”与“瞎处理”）\n\n"
+        "* **事做完才算做完（L1）**：**只做了一部分就不算回答**；**未说明的未完成项 = 没做**\n"
+        "* **替代不是完成（L1）**：**“顺手做了别的”不能顶替**“被问的那件”\n"
+        "* **展开属做法、不是第二件事（L1）**：不把“没做完”说成“分步”\n"
+        "* **一次执行 = 一件事、一次可核对的输出（L1）**：**下一次执行由人决定**\n"
+        "* **把一句话读开的正确形态（L1）**：**先拆成**“事”**再动手**\n"
+        "* **同一件事的重复表述不另计（L1）**：**不构成**“**已经说过了**”的豁免\n"
+    )
+
+    COMMON = (
+        "// tag::delivery[]\n"
+        '   - **输出侧须与发起人所问对齐（L1，防"只冒一句话"）**：**未说明的未完成项 = 没做**\n'
+        "   - **一次执行只发一条输出（L1）**：**执行结束时的那一条**\n"
+        "// end::delivery[]\n"
+    )
+
+    # 其余落点由规则数据按**节/小节**核对（`section_groups` / `subsection_groups`），
+    # 故夹具须给出**能取到那些节、且锚点逐字命中**的最小形态：缺它们时报的是"缺少节"、
+    # 与本节要核的要点无关，会把反例的报错顶掉。锚点措辞一律照规则数据（原地原样落进夹具
+    # 的那一份）抄，不另写一份——否则规则数据一改夹具即漂移。
+    OTHER_LANDINGS = {
+        "specs/general/collab.adoc": (
+            "== 任务的读懂（防“答非所问”与“漏下没说”）\n\n"
+            '* **先把"事"读出来（L1）**：须**逐条拆开**，也**不得只挑好做的一条**做\n'
+            "* **答什么由问句定（L1）**：**输出里答不上问句中任何一处即不属回答**\n"
+            '* **没做的事要说出来（L1）**：**"漏下没说"与"没做"同判**\n'
+            '* **重复提出不是豁免（L1）**：也不得因为"上一条评论里出现过"就当已办\n'
+            "* **同一件事分步做、不分步说（L1）**：想做下一件事须**另起一次派发**\n"),
+        "specs/platform/cnb.adoc": (
+            "== 执行吞吐\n\n"
+            '* **"一件事分步做"与"分步说"的代价不对称（L1）**：**本次执行内不许边走边说**\n'
+            '* **发起人反复问同一件事，是"上一轮没答到"，不是他啰嗦（L1，本平台实证）**：'
+            "**须先复读问句、再逐条答**\n"),
+        "specs/general/planning.adoc": (
+            "== 换一条路时的收尾与穷尽（防“瞎处理”）\n\n"
+            '* **换路后须收尾，不得只冒一句（L1）**：不得把"我又换了一条路"写成"事情已经处理好了"\n'
+            '* **"出路有限"不是"可以不做"（L1）**：那属**未尝试即放弃**\n'
+            "* **推断不是结论（L1）**：只能作为**待验证假设**，**须落到能证实/证伪的那一次动作**\n"
+            "* **看不出方向时先收缩、不瞎改（L1）**：**不得**在没弄清问题的前提下**顺手改动多个无关位置**\n"),
+        "specs/general/self-check.adoc": (
+            "== 执行前自检清单（动手前逐项过）\n\n"
+            "* **⑧ 回读（L1）**：① **有没有漏下的命令**？② **输出里有没有答不上问句中任何一处的结论**？\n\n"
+            "== 完成前自检（交付前逐项核）\n\n"
+            "=== 已完成项的复读（对“答复是否答到问句”的专项核对）\n\n"
+            "* **判据只有一条（L1）**：**“做完了”与“答上了”是两件事**\n"
+            "* **三问（L1）**：**这一点不得被“机械校验全绿”顶替**\n"
+            "* **边界**：本节的核对只针对**本次执行自己发出的那一条输出**；**不追认历史轮次**\n"),
+    }
+
+    def _write(self, execution: str = None, common: str = None, prompts: str = None,
+               override: dict = None) -> None:
+        # 落点**一并重定向到夹具根**（`EXECUTION_FILE` 是模块常量、`setUp` 不动它）：
+        # 判据侧的相对路径是**现场推导**的（`os.path.relpath(EXECUTION_FILE, REPO_ROOT)`），
+        # 所以本类改哪一份就核哪一份；若哪天有人把落点改成"与 `REPO_ROOT` 无关"的第二常量，
+        # 读的就是**真实仓库的那一份**、下面 `test_landing_is_the_fixture_being_verified`
+        # 会直接报红——正是本 PR 引入过、又修掉的那个形态。
+        self._orig_execution_file = cm.EXECUTION_FILE
+        cm.EXECUTION_FILE = os.path.join(self.root, "specs", "core", "execution.adoc")
+        self.write("specs/core/execution.adoc", execution or self.EXECUTION)
+        self.write("prompts/_common.txt", common if common is not None else self.COMMON)
+        self.write("PROMPTS.adoc",
+                   prompts if prompts is not None
+                   else "**输出侧须与发起人所问对齐**（展开见 `prompts/_common.txt`）\n")
+        for rel, body in self.OTHER_LANDINGS.items():
+            self.write(rel, (override or {}).get(rel, body))
+        # 规则数据（判据措辞的唯一来源）按**原地原样**落进夹具：手抄必然与现场漂移
+        self.write_rules_fixture()
+
+    def tearDown(self) -> None:
+        # `EXECUTION_FILE` 由本类在本类内重定向，基类的还原清单不含它——不还原会跨用例泄漏
+        # （本仓库实测：整类一起跑时后一个用例核的是前一个用例的夹具根）
+        cm.EXECUTION_FILE = getattr(self, "_orig_execution_file", cm.EXECUTION_FILE)
+        super().tearDown()
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_intent_answer_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_landing_is_the_fixture_being_verified(self):
+        """落点须是**本次被校验的那一份**（防"实际读的是真实仓库里的同名文件"）。
+
+        在本类里 `EXECUTION_FILE` 已被换成夹具根下的那一份；把 `REPO_ROOT` 换成另一个
+        临时根（夹具里没有 `specs/core/execution.adoc`）后，本道必须报"缺少落点"——
+        报不出即说明它读的不是推导出来的那一份（本 PR 引入过这个形态：落点被写成一个
+        与 `REPO_ROOT` 无关的常量，读的是真实仓库的文件，于是把夹具里的要点抽空**不报红**）。
+        """
+        self._write()
+        # 判据本体确实落在**夹具根下那一份**上（不是仓库里那份）
+        self.assertTrue(cm.EXECUTION_FILE.startswith(self.root), cm.EXECUTION_FILE)
+        # 把**落点**挪到一个空的临时根：若落点是"与 `REPO_ROOT` 无关"的第二常量，
+        # 这里仍会读到原来的夹具、报不出"缺少落点"；现场推导时必然报出。
+        other = tempfile.mkdtemp()
+        try:
+            cm.REPO_ROOT = other
+            cm.EXECUTION_FILE = os.path.join(other, "specs", "core", "execution.adoc")
+            cm.errors.clear()
+            cm._section_anchor_check(
+                os.path.relpath(cm.EXECUTION_FILE, cm.REPO_ROOT).replace("\\", "/"),
+                cm.DIRECTIVE_SECTION, cm.DIRECTIVE_ANCHORS, subsection=True)
+            self.assertTrue(any("缺少" in e for e in cm.errors), cm.errors)
+        finally:
+            shutil.rmtree(other, ignore_errors=True)
+            cm.REPO_ROOT = self.root
+
+    def test_output_alignment_removed_reports(self):
+        # 反例（用户点名的失效本体）：把"结论须落在发起人的问句里"压成一句口号
+        self._write(execution=self.EXECUTION.replace(
+            "**写进输出的结论须落在发起人的问句里**", "注意别答偏。"))
+        cm.check_intent_answer_guard()
+        self.assertIn("问句", self.error_texts())
+
+    def test_missing_requirement_rule_removed_reports(self):
+        # 反例：删掉"漏下没说与没做同判"——未完成项可以被静默带过（只做看得见的那一件）
+        self._write(execution=self.EXECUTION.replace(
+            "**漏下没说与没做同判**、**未说明的未完成项 = 没做**", "别漏。"))
+        cm.check_intent_answer_guard()
+        self.assertIn("漏下没说", self.error_texts())
+
+    def test_one_thing_section_removed_reports(self):
+        # 反例：整节被删 → 回到"没做完也可以说成完成"（用户点名的答非所问由此而来）
+        self._write(execution=self.EXECUTION.split("== 一件事的定义与展开")[0])
+        cm.check_intent_answer_guard()
+        self.assertIn("一件事", self.error_texts())
+
+    def test_substitute_not_completion_removed_reports(self):
+        # 反例：删掉"替代不是完成"——执行者用一件更省事的事顶替被问的那件并当成完成
+        self._write(execution=self.EXECUTION.replace(
+            "* **替代不是完成（L1）**：**“顺手做了别的”不能顶替**“被问的那件”\n", ""))
+        cm.check_intent_answer_guard()
+        self.assertIn("顶替", self.error_texts())
+
+    def test_command_completeness_removed_reports(self):
+        # 反例：删掉"漏命令"一节 → 技能/流程输出里说要跑的命令会被静默跳过
+        self._write(execution=self.EXECUTION.replace(
+            "=== 指令的完整性（防“漏命令”）\n\n", "").replace(
+            "* **取到指令的通道**：**任务评论/说明**（**逐条枚举**）\n", "").replace(
+            "* **技能/流程/脚本的输出**：**每条命令都须落到实际执行**\n", "").replace(
+            "* **不得跳步（L1）**：**已经在做**、**不构成不落地的理由**\n", "").replace(
+            "* **收尾输出须逐条对照（L1）**：逐条对照（**已做 / 未做及原因**）\n", ""))
+        cm.check_intent_answer_guard()
+        self.assertIn("指令的完整性", self.error_texts())
+
+    def test_prompt_fragment_clause_removed_reports(self):
+        # 反例：题面侧（会被复制到未知项目执行的公共片段）把这条边界删掉
+        self._write(common="// tag::delivery[]\n内容占位。\n// end::delivery[]\n")
+        cm.check_intent_answer_guard()
+        self.assertIn("输出侧须与发起人所问对齐", self.error_texts())
+
+    def test_prompts_index_removed_reports(self):
+        # 反例：统一入口的索引被删 → 登记处看不到这条边界（与 check_delivery_guard 同判据）
+        self._write(prompts="= 公共任务提示词\n\n什么也没有。\n")
+        cm.check_intent_answer_guard()
+        self.assertIn("PROMPTS.adoc", self.error_texts())
+
+    # 以下三条钉**本 PR 内实测的静默形态**：按整份文件核锚点时，"本节被抽空成一句空话"
+    # 报不出来——同一批字样在别处（`execution.adoc` 的「输出的对齐与唯一落点」等）会把它兜住。
+    # 故核对对象必须是**该节/该小节自己的正文**（`section_groups` / `subsection_groups`）。
+    def test_collab_clause_gutted_in_place_reports(self):
+        """反例：`collab` 的「答什么由问句定」条**只删正文、标题留着**（改为一句空话）。
+
+        按整份文件核时全绿：`**回答的必须是发起人这一问的那件事**` 在
+        `specs/core/execution.adoc`「输出的对齐与唯一落点」里另有一句。本用例钉住
+        "核对对象须是本节的正文"——它报红才说明判据实体被抽走后防线仍立得住。
+        """
+        self._write(override={"specs/general/collab.adoc": (
+            "== 任务的读懂（防“答非所问”与“漏下没说”）\n\n"
+            '* **先把"事"读出来（L1）**：须**逐条拆开**，也**不得只挑好做的一条**做\n'
+            "* **答什么由问句定（L1）**：注意别答偏。\n"
+            '* **没做的事要说出来（L1）**：**"漏下没说"与"没做"同判**\n'
+            '* **重复提出不是豁免（L1）**：也不得因为"上一条评论里出现过"就当已办\n'
+            "* **同一件事分步做、不分步说（L1）**：想做下一件事须**另起一次派发**\n")})
+        cm.check_intent_answer_guard()
+        self.assertIn("输出里答不上问句中任何一处即不属回答", self.error_texts())
+
+    def test_cnb_clause_gutted_in_place_reports(self):
+        """反例：`cnb`「执行吞吐」的"反复问同一件事"条只删正文、标题留着。"""
+        self._write(override={"specs/platform/cnb.adoc": (
+            "== 执行吞吐\n\n"
+            '* **"一件事分步做"与"分步说"的代价不对称（L1）**：**本次执行内不许边走边说**\n'
+            '* **发起人反复问同一件事，是"上一轮没答到"，不是他啰嗦（L1，本平台实证）**：他在催。\n')})
+        cm.check_intent_answer_guard()
+        self.assertIn("须先复读问句", self.error_texts())
+
+    def test_selfcheck_relist_gutted_in_place_reports(self):
+        """反例：「已完成项的复读」小节只删正文、标题留着（防"做完了"顶替"答上了"的那一句没了）。"""
+        self._write(override={"specs/general/self-check.adoc": (
+            "== 执行前自检清单（动手前逐项过）\n\n"
+            "* **⑧ 回读（L1）**：① **有没有漏下的命令**？② **输出里有没有答不上问句中任何一处的结论**？\n\n"
+            "=== 已完成项的复读\n\n"
+            "* 见上文。\n")})
+        cm.check_intent_answer_guard()
+        self.assertIn("做完了", self.error_texts())
+        self.assertIn("机械校验全绿", self.error_texts())
 
 
 if __name__ == "__main__":

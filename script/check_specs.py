@@ -492,6 +492,47 @@ MAINTAINER_LAYER_FILES = _RULES_TOKENS["MAINTAINER_LAYER_FILES"]
 # **只对本项目生效**的任务提示词（不受公共内容自足性约束；判据与清单见 `_tokens.toml`）
 PROJECT_LOCAL_PROMPTS = _RULES_TOKENS["PROJECT_LOCAL_PROMPTS"]
 
+# 『问与答对齐（防答非所问 / 漏命令）』的落点与要点（用户点名的失效）。
+# 三类失效各对应一段：「指令执行」的输出对齐小节（答的是相邻的另一件）、
+# 「一件事的定义与展开」（把几件事合并成一件、漏下不提）、
+# 「换了一条路就当中途结束」在 planning 与提示词侧另钉。
+DIRECTIVE_SECTION = "指令的完整性"
+DIRECTIVE_ANCHORS = (
+    ((("取到指令的通道", "任务评论/说明", "逐条枚举"),),
+     "缺该表时‘评论里的要求’没有逐条枚举的判据，漏一条也判不出来"),
+    ((("技能/流程/脚本的输出", "每条命令都须落到实际执行"),),
+     "缺该行时‘漏跑命令’这一形态没有判据（只说‘没跑’不算判据）"),
+    ((("不得跳步（L1）", "已经在做", "不构成不落地的理由"),),
+     "缺该条时执行者以‘我本来就在做这件事’为由不落地、也不写明"),
+    ((("收尾输出须逐条对照（L1）", "已做 / 未做及原因"),),
+     "缺该条时漏下的命令不会被摆到台面上（‘没跑’与‘跑了’在输出里看不出区别）"),
+)
+INTENT_SECTION = "输出的对齐与唯一落点"
+INTENT_ANCHORS = (
+    ((("输入与输出须指向同一件事（L1）", "写进输出的结论须落在发起人的问句里"),),
+     "缺该条时执行者会答到相邻的题目上（用户实证：问他‘六个命令’、答的是‘四个目录’）"),
+    ((("一次执行只发一条输出（L1）", "过程性叙述、自我确认、进展报告一律不发"),),
+     "缺该条时执行者把‘想清楚了一点’当成一次输出，发起人收到的是一串答非所问的评论"),
+    ((("一次执行里可做几件事、输出仍只有一条（L1）", "漏下没说与没做同判", "未说明的未完成项 = 没做"),),
+     "缺该条时执行者只做看得见的那一件、其余只字不提，而‘没做’与‘漏下没说’看不出区别"),
+    ((("不构成不做的理由", "同一任务单下重复提出同一条要求"),),
+     "缺该条时执行者把重复提出的要求读成‘他已经知道了’而跳过"),
+)
+ONE_THING_SECTION = "一件事的定义与展开"
+ONE_THING_ANCHORS = (
+    ((("事做完才算做完（L1）", "只做了一部分就不算回答", "未说明的未完成项 = 没做"),),
+     "缺该条时‘做了一半’与‘做完了’在文本上看不出区别——用户点名的‘答非所问’正由此而来"),
+    ((("替代不是完成（L1）", "顺手做了别的", "不能顶替"),),
+     "缺该条时执行者用一件更省事的事顶替被问的那件、并当成完成（用户实证的失效形态）"),
+    ((("展开属做法、不是第二件事（L1）", "不把"),),
+     "缺该条时‘分步做’被当成‘可以少做’或‘可以只冒一句话’的理由"),
+    ((("一次执行 = 一件事、一次可核对的输出（L1）", "下一次执行由人决定"),),
+     "缺该条时执行者把这次没做完的部分推给下一次执行，而‘下一次由谁发起’没有判据"),
+    ((("把一句话读开的正确形态（L1）", "先拆成", "再动手"),),
+     "缺该条时执行者把几句话合并成一件自己勾选的（用户实证：几条命令被并成一件）"),
+    ((("同一件事的重复表述不另计（L1）", "不构成", "已经说过了"),),
+     "缺该条时执行者把重复提出的要求当成‘已办’"),
+)
 CRITERIA_NOT_AXIS_SECTION = "机械防线的核对对象是"
 CRITERIA_NOT_AXIS_KEYS = (
     (("机械防线须钉**判据本体**", "判定标准里能拿去核对的那句话"),
@@ -1304,23 +1345,57 @@ def _subsection_text(text: str, keyword: str):
     return "\n".join(lines[start:]) if start is not None else ""
 
 
-def _section_anchor_check(rel, section_title, anchors):
-    """公共实现：某文件某节的要点锚点须齐（三节共用，避免三份各自漂移）。"""
+def _normalize_anchors(anchors):
+    """把锚点组归一成 `(名称, [锚点…], 说明)` 三元组。
+
+    组允许两种写法：`(名称, [锚点…], 说明)` 与 `((名称, 锚点…), 说明)`（后者是
+    `bullet_tokens` 风格的紧凑写法）。两种都收，故新增判据时不必记形态——**两种写法
+    混用时按同一套解包**，否则报的错是"解包失败"，红的是核对方式而不是规范
+    （本仓库实测：同一处三改三红）。
+    """
+    out = []
+    for group in anchors:
+        if len(group) == 3 and not isinstance(group[1], str):
+            out.append(group)
+            continue
+        if len(group) == 2 and isinstance(group[0], (list, tuple)):
+            tokens, why = group
+            if len(tokens) == 1 and isinstance(tokens[0], (list, tuple)):
+                tokens = tokens[0]
+            out.append((tokens[0], list(tokens), why))
+            continue
+        out.append(group)
+    return out
+
+
+def _section_anchor_check(rel, section_title, anchors, *, subsection=False):
+    """公共实现：某文件某节（或某三级小节）的要点锚点须齐。
+
+    `subsection=False` 按二级节取（`_section_text`），`subsection=True` 按三级小节取
+    （`_subsection_text`：**取法与 `RulesContext.subsection` 同源，一处实现**——各写一套正则
+    必然漂移）。**两者不是"两件事"，而是一件事的两种层级**：判据落在 `=== ` 三级小节上时
+    按二级节取一律取不到，报出来的是"缺少节"（红的是核对方式、不是规范，本仓库实测过），
+    故由同一个入参切换层级，不再各留一份实现（同一段落点核两遍属第二真源）。
+    """
     path = os.path.join(REPO_ROOT, *rel.split("/"))
     if not os.path.isfile(path):
         err(f"缺少 {rel}——「{section_title}」的判据无处承载", rel)
         return False
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    section = _section_text(text, section_title)
+    if subsection:
+        section = _subsection_text(text, section_title)
+    else:
+        section = _section_text(text, section_title)
+    level = "小节" if subsection else "节"
     if not section:
-        err(f"{rel} 缺少「{section_title}」节——该条失去落点"
+        err(f"{rel} 缺少「{section_title}」{level}——该条失去落点"
             "（缺条目时执行者按「能跑就行 / 能省则省」收敛）", rel)
         return False
-    for name, tokens, why in anchors:
+    for name, tokens, why in _normalize_anchors(anchors):
         for token in tokens:
             if token not in section:
-                err(f"「{section_title}」节缺少要点：{name}（应含 `{token}`）——{why}", rel)
+                err(f"「{section_title}」{level}缺少要点：{name}（应含 `{token}`）——{why}", rel)
     return True
 
 
@@ -3708,8 +3783,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 134
-GUARD_TEST_BASELINE = 1632
+GUARD_WIRING_BASELINE = 136
+GUARD_TEST_BASELINE = 1770
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -10484,6 +10559,38 @@ DELIVERY_GUARD_KEYS = (
 )
 
 
+def check_intent_answer_guard():
+    """『问与答对齐（防答非所问）』防线：把“答道没有”变成可机械核对的要点组。
+
+    对应用户点名的真实失效：一轮任务里**答的是相邻的另一件事**、**漏下要求不提**、
+    细节写了却**没有一个字碰他要的那件事**。判据本体在 `specs/core/execution.adoc`
+    「指令执行」与「一件事的定义与展开」，本防线只核**要点在不在**；“这次到底答没答到”
+    属语义判断，交复核（边界见 `GUARD_CHECK_LIMITS`）。
+    """
+    phase("问与答对齐防线检查")
+    # 落点**现场推导**（`os.path.relpath`，与 `check_lifecycle_guard` 等同一形态）：单测把
+    # `REPO_ROOT` 重定向到临时根、但不动 `EXECUTION_FILE` 时，推导值就是临时根下的相对路径
+    # ——若把落点另写成一个"与 `REPO_ROOT` 无关"的常量，被校验的就是**真实仓库的那一份**
+    # （`specs/` 下同名文件），夹具里抽空要点**不报红**：核的不是被校验的那一份。故同一处
+    # 文件只有一个名字（`EXECUTION_FILE`），落点不另立常量（本仓库实测：这正是
+    # `check_refinement_guard` 里"路径现场推导"那条注释所指的形态）。
+    rel_exec = os.path.relpath(EXECUTION_FILE, REPO_ROOT).replace("\\", "/")
+    # 两处判据落在**三级小节**上（`== 指令执行` 之下的两个 `===`）：按二级节取不到它，
+    # 故按 `subsection=True`（遍历 `===` 小节）核——按二级节取会一律报"缺少节"，
+    # 红的是核对方式、不是规范（本仓库实测过一次）。
+    _section_anchor_check(rel_exec, DIRECTIVE_SECTION, DIRECTIVE_ANCHORS, subsection=True)
+    _section_anchor_check(rel_exec, INTENT_SECTION, INTENT_ANCHORS, subsection=True)
+    # 「一件事的定义与展开」是**二级节**（不在 `== 指令执行` 之下）——按 `subsection=True`
+    # 取不到它（本仓库实测：三种取法各错一次，故两节各按自己的层级取）。
+    _section_anchor_check(rel_exec, ONE_THING_SECTION, ONE_THING_ANCHORS)
+    # 题面侧（`prompts/_common.txt` 的公共片段）与统一入口（`PROMPTS.adoc` 的索引）
+    # 的要点**一律走规则数据**（`script/specs-rules/intent-answer.toml`）——
+    # 这几处的措辞不在脚本里再写一份：脚本里写第二份就是"同一件事两处真源"，
+    # 改一条判据要动两处，且 `_common.txt` 一条会被核两遍（规则数据一条 + 脚本一条）。
+    run_rule_guard("check_intent_answer_guard")
+    phase_done()
+
+
 def check_delivery_guard():
     """『交付形态与报告落点防线』：不得中途冒过程性叙述、不得只交付不汇报。
 
@@ -11240,6 +11347,7 @@ CHECKS = (
     check_comment_dispatch_guard,
     check_self_dispatch_guard,
     check_delivery_guard,
+    check_intent_answer_guard,
     check_changelog_timing_guard,
     check_rule_instance_separation_guard,
     check_prompt_delivery_surface_guard,
