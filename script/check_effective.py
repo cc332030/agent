@@ -84,6 +84,16 @@ MECHANISMS = [
      "script/check_specs_test.py", "20+ 用例"),
     ("每次操作自带可判定的时限、超时后排查并换手段继续（不限于子 agent 派发）", "specs/general/collab.adoc", "script/check_specs.py",
      "check_checklist_guard", "check_checklist_guard 核该条与『时限取值须有判据』『超时的处置』的多处要素仍在；「某次操作实际有没有设时限、超时后有没有真去排查」属运行时行为，交人/子 agent 复核"),
+    ("每一步执行都须有可判定的时限，且须落到机械抓手（不靠临场记得加）："
+     "配置侧逐执行单位核时限 / 运行侧给每次命令执行套墙钟时限并保留已产出输出",
+     "specs/general/collab.adoc + specs/general/ci-cd.adoc", "script/guard/check_pipeline_timeout.py",
+     "check_operation_timeout_guard",
+     "check_operation_timeout_guard 钉住两处条文的要点、`script/guard/` 六份抓手文件的存在性，"
+     "以及**本仓库 CI 里真有一步执行配置侧守卫**（抓手在那儿却没人跑它＝"
+     "『声明了校验手段却从未执行』的同一形式）；抓手自身的判定力由 `script/guard/` 的三份配套测试"
+     "承担（正例＋反例：缺 step 时限 / 解析失败 / 无配置可核 / 卡住的命令到点被终止且保留已产出输出）；"
+     "「某次操作实际有没有设时限、超时后有没有真去排查、卡住时有没有留下输出」属运行时事实，"
+     "交人/子 agent 实跑复核"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py",
      "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",
