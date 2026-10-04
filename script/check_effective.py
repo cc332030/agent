@@ -105,6 +105,15 @@ MECHANISMS = [
      "在必加载层，另两处是登记（公共入口「最高优先级铁律」、维护方不可降级清单 P8）；"
      "「某次交付是不是真的降级了、卡点是不是真的提给了用户」属运行时事实与语义判断，"
      "交人/子 agent 复核"),
+    ("用户打错字不是他的真值：先纠正、按纠正后的意思做", "specs/core/execution.adoc + library/corrections.adoc", "script/check_specs.py",
+     "check_correction_guard",
+     "check_correction_guard 按**该条 bullet 自己的正文**核（不是整节：「逐字执行用户指令」带『明显打错字除外』、"
+     "「歧义先问、不自行假设」也讲『读不准』，字样相近，按整节核会把抽走的要点兜住）：判据本体"
+     "（不得把明显打错当真值照做 ＋ 先按能读出的正确词纠正再执行 ＋ 纠正须在输出里显式告知 ＋ "
+     "判定标准「照错写的那一处即违规」＋ 纠正方式属做法 ＋ 三条边界 ＋ 与『逐字执行』例外的接口 ＋ 依据行）"
+     "在必加载层，依据侧是图书馆主题 `library/corrections.adoc`（**不在默认引用面内**）＋ 入口「主题登记」表登记；"
+     "**机制边界如实标注**：「打错」与「故意这么输」在文本上不可判，故抓手只到文本要点；"
+     "「这次到底纠正了没有、纠正得对不对」属运行时事实与语义判断，交人/子 agent 复核"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py",
      "script/check_effective_test.py", "本工具的自测"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",

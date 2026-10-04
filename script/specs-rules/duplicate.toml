@@ -106,6 +106,7 @@ files = [
     "README.adoc",
     "library/README.adoc",
     "library/adoption.adoc",
+    "library/corrections.adoc",
     "library/mirrors.adoc",
     "library/performance.adoc",
     "library/quality.adoc",
