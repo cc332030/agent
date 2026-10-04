@@ -21321,5 +21321,189 @@ class TestCheckUserRequirementGuard(CheckSpecsTestCase):
         self.assertIn("锚点", self.error_texts())
 
 
+
+class TestCheckCorrectionGuard(CheckSpecsTestCase):
+    """『用户打错字不是他的真值：先纠正、按纠正后的意思做』防线的反例用例。
+
+    失效形态（**用户点名**）：用户把**标识符 / 路径 / 字典值**里的词打错，执行者**识别出了
+    却不纠正**，照错值写进代码、文档、路径与配置值，**既不纠正也不告知**——而"用户故意输的"
+    与"用户打错了"在文本上分辨不出来，执行者默认按前者静默照做。既有规范里只有
+    `specs/core/execution.adoc`「指令执行」里一句「明显打错字除外」，它**只解掉"必须照做"、
+    不构成"看出来了也不用管"**，故本条把"纠正"这一半钉在该条 bullet 的**自己的正文**上
+    （按整节核时，「逐字执行用户指令」带『明显打错字除外』、「歧义先问、不自行假设」也讲
+    『读不准』，会把被抽走的要点兜住）。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具会与真文档脱节，改法一旦换同义
+    措辞，锚点命中与否就与真文档无关了。
+    """
+
+    EXEC = "specs/core/execution.adoc"
+    LIBRARY = "library/corrections.adoc"
+    LIBRARY_INDEX = "library/README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.EXEC, self.LIBRARY, self.LIBRARY_INDEX):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _rules_files(self) -> list:
+        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。"""
+        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
+        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
+                if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+        # 规则数据是判据措辞的唯一来源：整份目录按原样落进来（引擎按目录扫描加载）。
+        for rel in self._rules_files():
+            self.write(rel, self._rule_text(rel))
+
+    def _run(self) -> None:
+        # 夹具换过 `REPO_ROOT`（也换过规则数据），故须作废模块级 `RULES` 缓存。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_correction_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        self.assertIn(removed, self._texts[rel])
+        self._write_valid()
+        self.write(rel, self._texts[rel].replace(removed, replacement))
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+    def test_valid_passes(self):
+        # 正例：真文档 + 真规则数据 -> 不报红
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_gutted_in_place_reports(self):
+        # 反例①（最要紧的一条）：标题留着、**判据实体被抽空**（改成一句空话）——
+        # 按整节核时相邻条目会把它兜住，故须按 bullet 自己的正文核。
+        self._write_valid()
+        text = self._texts[self.EXEC]
+        start = text.find("* **用户打错字不是他的真值")
+        end = text.find("\n* **命令执行**", start)
+        self.assertGreater(start, 0)
+        self.assertGreater(end, start)
+        self.write(self.EXEC, text[:start] + "* **用户打错字不是他的真值（L1）**：注意别抄错。\n"
+                   + text[end:])
+        self._run()
+        # 只核文件名不够：须落成**该道防线自己的文案**（"缺失要点 + 被判据句本身"），
+        # 否则"夹具里文件缺失"一类别的失败会冒充本反例通过。
+        self.assertIn("用户打错字防线被破坏", self.error_texts())
+        self.assertIn("不得当真值照做", self.error_texts())
+
+    def test_bullet_removed_reports(self):
+        # 反例②：整条 bullet 被删 -> 判据本体没有落点
+        self._write_valid()
+        text = self._texts[self.EXEC]
+        start = text.find("* **用户打错字不是他的真值")
+        end = text.find("\n* **命令执行**", start)
+        self.write(self.EXEC, text[:start] + text[end + 1:])
+        self._run()
+        # 整条被删时引擎报的是"缺少该条目"（`missing_bullet_message`），不是"缺失要点"——
+        # 两者都算本反例的判据：判据本体已无落点。
+        self.assertIn("用户打错字不是他的真值", self.error_texts())
+
+    def test_no_longer_treat_as_truth_clause_removed_reports(self):
+        # 反例③：「不得当真值照做」被删（只留"要纠正"）——本道的核心取值就是这一半
+        self._mutate(self.EXEC, "**不得当真值照做**", "**看着办**")
+        self._run()
+        self.assertIn("缺失要点 ['不得当真值照做']", self.error_texts())
+
+    def test_tell_user_clause_removed_reports(self):
+        # 反例④：纠正须告知这半句被删（改了却不说明就分辨不出来）
+        self._mutate(self.EXEC, "**须在输出里显式告知**", "**不必说**")
+        self._run()
+        self.assertIn("缺失要点 ['须在输出里显式告知']", self.error_texts())
+
+    def test_ambiguity_boundary_removed_reports(self):
+        # 反例⑤：与「歧义先问」的边界被删——读不出要哪个词时就会"猜一个改掉"
+        self._mutate(self.EXEC, "**读不出用户要的是哪个词**", "**读不出来就自己定**")
+        self._run()
+        self.assertIn("缺失要点 ['读不出用户要的是哪个词']", self.error_texts())
+
+    def test_existing_word_boundary_removed_reports(self):
+        # 反例⑫（接纳面）：**"工作区里已有的词不是错别字"**这半句被删——本条就会按
+        # "看着像打错"去改引用方项目里**故意那么写**的既有标识符（复核提出的擦边）。
+        self._mutate(self.EXEC, "工作区里已有的词不是错别字", "已有的词也可以改")
+        self._run()
+        self.assertIn(self.EXEC, self.error_texts())
+        self.assertIn("工作区里已有的词不是错别字", self.error_texts())
+
+    def test_defined_name_boundary_reversed_reports(self):
+        # 反例⑬：适用范围那句被**反转**（"与它是不是已定义的名称无关" -> "有关"）——
+        # 锚点若只取"与它是不是"这五个字，反转后仍命中、语义已反，防线空转。
+        self._mutate(self.EXEC, '与它是不是"已定义的名称"无关',
+                     '与它是不是"已定义的名称"有关')
+        self._run()
+        self.assertIn(self.EXEC, self.error_texts())
+        self.assertIn('与它是不是"已定义的名称"无关', self.error_texts())
+
+    def test_evidence_side_gutted_reports(self):
+        # 反例⑥：依据侧（图书馆）被抽成一句口号——日后无人能判"它今天还成立吗"
+        self._mutate(self.LIBRARY, "**外部材料只给方向与下限**", "**依据若干**")
+        self._run()
+        self.assertIn(self.LIBRARY, self.error_texts())
+        self.assertIn("外部材料只给方向与下限", self.error_texts())
+
+    def test_mechanism_boundary_removed_reports(self):
+        # 反例⑦：机制边界（"打错"与"故意这么输"在文本上不可判）被删 ->
+        # 读者会以为有机械抓手能判出一条错别字
+        self._mutate(self.LIBRARY, "在文本上不可判", "可以机械判定")
+        self._run()
+        self.assertIn(self.LIBRARY, self.error_texts())
+        self.assertIn("在文本上不可判", self.error_texts())
+
+    def test_library_index_row_removed_reports(self):
+        # 反例⑧：图书馆入口「主题登记」表那一行被删（"写文件"与"登记"是同一个动作）
+        self._mutate(self.LIBRARY_INDEX, "link:corrections.adoc[]", "link:other.adoc[]")
+        self._run()
+        self.assertIn(self.LIBRARY_INDEX, self.error_texts())
+        self.assertIn("link:corrections.adoc[]", self.error_texts())
+
+    def test_library_file_missing_reports(self):
+        # 反例⑨：依据侧文件整个缺失
+        self._write_valid()
+        self.write(self.LIBRARY, "")
+        self._run()
+        self.assertIn(self.LIBRARY, self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑩（锚点清单自身的条数）：删掉一条锚点、正文一字不少 ->
+        # 报绿与"核过且通过"无从区分
+        self._write_valid()
+        rules_path = os.path.join(self.root, "script", "specs-rules", "corrections.toml")
+        with open(rules_path, encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn('    "纠正方式属做法",\n', rules)
+        rules = rules.replace('    "纠正方式属做法",\n', "", 1)
+        self.write("script/specs-rules/corrections.toml", rules)
+        self._run()
+        self.assertIn("锚点", self.error_texts())
+
+    def test_missing_rules_file_reports(self):
+        # 反例⑪：规则数据整份缺失 -> 该道防线整批空转，须给直白的落点说明
+        self._write_valid()
+        self.write("script/specs-rules/corrections.toml", "")
+        os.remove(os.path.join(self.root, "script", "specs-rules", "corrections.toml"))
+        self._run()
+        self.assertIn("corrections.toml", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()

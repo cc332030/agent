@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 """
+86. 用户打错字不是他的真值：先纠正、按纠正后的意思做防线（**用户提出**）：判据本体唯一落点在
+     必加载层 `specs/core/execution.adoc`「指令执行」的那条 bullet（依据侧另在图书馆
+     `library/corrections.adoc`，入口「主题登记」表是登记、不是第二份定义）。核的是**该条
+     bullet 自己的正文**：不得把用户的明显打错**当真值照做**（不写出名字打错的标识符、不把
+     错字当成既有名称、不抄进路径与配置值）＋**先按能读出的正确词纠正再执行**＋**纠正须在输出里
+     显式告知**＋判定标准（**照错写的那一处即违规**；改了却不说明按未完成计）＋"纠正方式属做法"
+     （不要求为每次纠错发起确认）＋边界（只有明显的字面打错才是错别字；读不出要哪个词时按
+     「歧义先问」停下问；用户显式声明过的词以其声明为准）＋与「逐字执行用户指令」的"明显打错字
+     除外"的接口（那一处只解掉"必须照做"，不构成"看出来了也不用管"）＋依据行。
+     失效形态：用户把标识符/路径/字典值里的词打错，执行者识别出了却不纠正——照错值写进代码或
+     文档、既不纠正也不告知（"用户故意输的"与"用户打错了"在文本上分辨不出来）。
+     由 `check_correction_guard` 钉住；「这次到底纠正了没有、纠正得对不对」属运行时事实与
+     语义判断，交人/子 agent 复核。
+
 检查本规范集合的"规范性"（确定性检查，不依赖 AI）。
 
 检查项索引（**一份、连续编号**；每项对应一个或一组 `check_*` 函数）。
@@ -287,6 +301,7 @@ except AttributeError:
 # 隔离的动因：规则一变就要改脚本（措辞、节名、锚点散落在近百处防线函数体里），
 # 且同一套"取节 → 逐组核锚点 → 报错"的实现被复制了近百遍——改一处判据要改 N 处。
 # 判据与边界见 `specs/general/script.adoc`「规则与脚本的隔离（规则数据外置）」。
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rules_engine  # noqa: E402  （须先补 sys.path：本脚本可能按文件路径被加载）
 
@@ -1656,6 +1671,7 @@ POINTER_SCAN_FILES = (
     "README.adoc",
     "library/README.adoc",
     "library/adoption.adoc",
+    "library/corrections.adoc",
     "library/mirrors.adoc",
     "library/performance.adoc",
     "library/quality.adoc",
@@ -3795,7 +3811,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 139
-GUARD_TEST_BASELINE = 1809
+GUARD_TEST_BASELINE = 1822
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -11417,6 +11433,36 @@ def check_operation_timeout_guard():
     phase_done()
 
 
+def check_correction_guard():
+    """『用户打错字不是他的真值』防线（**用户提出**）：先纠正、按纠正后的意思做。
+
+    失效形态（用户点名）：用户把**标识符 / 路径 / 字典值**里的某个词打错（少一个字母、多一个
+    字母、形近字），执行者**识别出了"这是个打错的词"却不纠正**——照错值写进代码（生成名字打错的
+    标识符）、写进文档（把错字当成既有名称）、或抄进路径与配置值；**过程中既没有纠正、也没有
+    告知**，直到后来按正确名字检索不到才发现。该形态的特别之处是"用户故意输的"与"用户打错了"
+    **在文本上分辨不出来**，故执行者默认按前者处理、静默照做。
+
+    判据本体唯一落点在必加载层 `specs/core/execution.adoc`「指令执行」的那条 bullet（依据侧
+    另在图书馆 `library/corrections.adoc`，入口「主题登记」表是登记、不是第二份定义）。故本道
+    核三处，**按 bullet 自己的正文核**（不是整节）：同节的「逐字执行用户指令」带"明显打错字除外"、
+    「歧义先问、不自行假设」也讲"读不准"，字样相近，按整节核会把被抽走的要点兜住。
+
+    只钉「判据是否仍在」——"这次到底纠正了没有、纠正得对不对"属**运行时事实与语义判断**
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("用户打错字防线检查（先纠正、按纠正后的意思做）")
+    # 规则数据侧的步骤自己会报"文件缺失"（判据本体、依据侧、主题登记各一步），故先让规则跑完——
+    # 本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "corrections.toml")):
+        err("缺少 script/specs-rules/corrections.toml——『用户打错字不是他的真值』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_correction_guard")
+    phase_done()
+
+
 def check_user_requirement_guard():
     """『用户要求是第一优先级、不得降级』防线（**用户提出**，最高关注项 P8）。
 
@@ -11627,6 +11673,7 @@ CHECKS = (
     check_maven_migration_crossref_guard,
     check_operation_timeout_guard,
     check_user_requirement_guard,
+    check_correction_guard,
 )
 
 
