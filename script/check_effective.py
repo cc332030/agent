@@ -116,6 +116,15 @@ MECHANISMS = [
      "「这次到底纠正了没有、纠正得对不对」属运行时事实与语义判断，交人/子 agent 复核"),
     ("定义未执行核验配套测试",                   "AGENTS.adoc",                 "script/check_effective_test.py",
      "script/check_effective_test.py", "本工具的自测"),
+    ("专家与技能：默认按角色/技能逐段移交、主 agent 只编排；现行方式同样成立", "specs/general/collab.adoc", "script/check_specs.py",
+     "check_role_skill_handoff_guard", "check_role_skill_handoff_guard 钉住角色卡三问（职责 / 该读哪些落点 / 交出什么）、技能文档不造条文、"
+     "默认逐段移交、主 agent 只持编排表（不持有、不复述各角色的读本）、移交物可核对、自切换同样成立；"
+     "加载门（AGENTS_COMMON.adoc「多 agent 协作」的识别特征）、公开面与依据侧一并核；"
+     "『某次执行到底有没有按角色切开、读了哪些、移交物是不是真的可核对』属运行时事实与语义判断，交人/子 agent 复核"),
+    ("技能文档：单独成篇、不自成第二份判据、入口登记", "specs/general/collab.adoc", "script/check_specs.py",
+     "check_skill_doc_guard", "check_skill_doc_guard 钉住「专家与技能」的落点登记（技能文档按模板类内容单独成篇、写文件与登记是同一个动作）"
+     "与「技能文档不得自成第二份判据」两条，并核已抽象出的技能文档声明自己不是判据本体、回指规范，及其在维护方入口的登记；"
+     "「某份技能文档里的某句话算不算新造的条款」属语义判断，交人/子 agent 复核"),
     ("变更日志只记影响、不记过程（重点优先、拒细枝末节）", "specs/general/changelog.adoc", "script/check_specs.py",
      "check_section_refs", "check_section_refs 钉住「应当记录/不应当记录/条目书写」三节引用不悬空；条目内容的详略判断交人 review"),
     ("发现的问题/事项备注落点与表述按适用范围判定（全局性问题不进范围性落点，全局备注也不夹带范围性内容）", "specs/general/review.adoc", "script/check_specs.py",

@@ -85,7 +85,7 @@
 * `script/guard/` — 时限要求的两件抓手（配置侧守卫 / 运行侧包装），**随规范分发**、纯 stdlib，各带配套测试；用法写在各自文档头，判据见 `specs/general/collab.adoc`「操作超时与超时后的处置」与 `specs/general/ci-cd.adoc`「超时与资源」。
 * `script/check_effective.py` — "定义未执行"深度核验工具（配套测试同名 `_test`）。
 * `.github/workflows/check-specs.yml` — 本仓库 CI：在 push/PR 上运行上述校验及配套测试（**只做确定性校验**；语义审查交人 review，不在 CI 中调用外部 AI）。
-* 维护方自查层的登记（`specs-project-maintainer/`，五份）：`specs-project-maintainer/spec-lifecycle.adoc`（条目准入与定级、规范集合自身的重构与拆分）、`specs-project-maintainer/priority.adoc`（最高关注项的不可降级清单）、`specs-project-maintainer/verify.adoc`（维护方的验证义务）、`specs-project-maintainer/context.adoc`（公共内容被加载时的可控性）、`specs-project-maintainer/guards.adoc`（**防线清单**）。
+* 维护方自查层的登记（`specs-project-maintainer/`，五份，用途各见其文件头）：`specs-project-maintainer/spec-lifecycle.adoc`、`specs-project-maintainer/priority.adoc`、`specs-project-maintainer/verify.adoc`、`specs-project-maintainer/context.adoc`、`specs-project-maintainer/guards.adoc`；**技能文档**（按 `specs/general/collab.adoc`「专家与技能」单独成篇）在 `specs-project-maintainer/skills/`——判据本体各按其正文回指、**不做预建**。
 
 [quote]
 注：`script/` 下的 `clean_tmp.py`、`fetch-specs.py`（+ 同名入口）是**供引用方项目**使用、随通用规范分发的工具，虽在本仓库 `script/` 下，但**不属于**本项目自身规范；其落点与取回方式以 `AGENTS_COMMON.adoc`「取规范到本地副本」为唯一真源（本文件不复述）——规范副本与**下载来的安装脚本**都只落那一处（用户家目录下的一个路径），没有第二个落点。

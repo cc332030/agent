@@ -16976,6 +16976,31 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.check_guard_manifest()
         self.assertIn("接线数", self.error_texts())
 
+    def test_new_guard_without_baseline_refill_hides_later_removal(self):
+        # 反例（本轮实测的真实形态）：新增了一道防线、接线数**高出**基线，却没把基线抬到实取数。
+        # `check_guard_manifest` 只核「不得低于基线」，故"多出来的那道"此后**不在保护范围内**——
+        # 把它从 `CHECKS` 里删掉时，唯一防线数恰好回落到基线、一切照旧全绿，
+        # 正是本基线存在的理由（防"防线静默消失"）在这一格失效。
+        # 本 PR 实测：新增了 `check_skill_doc_guard`（唯一防线 2 道），而常量仍是 1——
+        # 此时删掉 `check_beta_guard` 仍报绿。
+        self._write_valid()
+        cm.GUARD_WIRING_BASELINE = 1           # 基线未随新增回填（＝本轮的真实形态）
+        src = self._SRC.replace("    check_beta_guard,\n", "")
+        self.write("script/check_specs.py", src)
+        cm.check_guard_manifest()
+        # 唯一防线数已回落到基线之上（2 → 1）：基线是**下限**、不回填就永远筛不出这一格
+        self.assertEqual(1, cm._guard_wiring_count(src))
+        self.assertNotIn("防线接线数", self.error_texts())
+
+    def test_baseline_refilled_after_new_guard_catches_later_removal(self):
+        # 正例（配套上一条）：新增防线后把基线抬到实取数，此后删掉任一道都会被拦下
+        self._write_valid()
+        src = self._SRC.replace("    check_beta_guard,\n", "")
+        cm.GUARD_WIRING_BASELINE = 2           # 按同源实取回填
+        self.write("script/check_specs.py", src)
+        cm.check_guard_manifest()
+        self.assertIn("防线接线数", self.error_texts())
+
     def test_changelog_wiring_ref_drift_reports(self):
         # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法
         self._write_valid()
@@ -21533,6 +21558,282 @@ class TestCheckCorrectionGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "script", "specs-rules", "corrections.toml"))
         self._run()
         self.assertIn("corrections.toml", self.error_texts())
+
+
+class TestCheckRoleSkillHandoffGuard(CheckSpecsTestCase):
+    """『专家与技能（默认按角色/技能移交，主 agent 只编排）』防线的反例用例。
+
+    失效形态（**用户点名**）：**什么内容都混在一起**——一个执行者开工前把"可能用到的全部内容"
+    一次读进来，而其中大部分在当下这一步并不需要；主 agent 也不该关心子 agent 怎么做、要读什么。
+    本道把"角色卡三问 / 技能文档不造条文 / 默认逐段移交 / 主 agent 只编排 / 移交物可核对 /
+    自切换同样成立"钉在 `specs/general/collab.adoc` 该节**自己的正文**上。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）：手抄夹具会与真文档脱节。
+    """
+
+    COLLAB = "specs/general/collab.adoc"
+    ADOPTION = "library/adoption.adoc"
+    SOURCES = "library/sources.adoc"
+    LIBRARY_INDEX = "library/README.adoc"
+    GENERIC = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 模块级 `RULES` 缓存跨用例共享（既有夹具依赖它）；本类换过 `REPO_ROOT` 与规则数据，
+        # 故须在用例内重建、**并在收尾还原**——直接置 `None` 会让**后续**用例的夹具暴露成假红。
+        self._orig_rules = cm.RULES
+        # 还原用 `addCleanup`：放在 `tearDown` 里时，用例体（或 `setUp` 的后半段）抛异常就
+        # 不会再执行，被污染的 `RULES` 缓存会渗到**后续**用例，把它们暴露成假红。
+        self.addCleanup(setattr, cm, "RULES", self._orig_rules)
+        self.addCleanup(cm._RULES_RUN_THIS_PHASE.clear)
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.COLLAB, self.ADOPTION, self.SOURCES, self.LIBRARY_INDEX,
+                    self.GENERIC, self.README):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _rules_files(self) -> list:
+        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
+        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
+                if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+        for rel in self._rules_files():
+            self.write(rel, self._rule_text(rel))
+
+    def _run(self) -> None:
+        cm.RULES = None
+        cm.check_role_skill_handoff_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self._texts[rel])
+        self._write_valid()
+        self.write(rel, self._texts[rel].replace(removed, replacement))
+
+    def _section_span(self) -> tuple:
+        text = self._texts[self.COLLAB]
+        start = text.index("== 专家与技能（")
+        return start, len(text)
+
+    def test_valid_passes(self):
+        # 正例：真文档 + 真规则数据 -> 不报红
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_gutted_in_place_reports(self):
+        # 反例①（最要紧的一条）：节标题留着、**判据实体被抽空**（改成一句空话）
+        self._write_valid()
+        text = self._texts[self.COLLAB]
+        start, _ = self._section_span()
+        self.write(self.COLLAB, text[:start] + "== 专家与技能（默认按角色/技能移交，主 agent 只编排）\n\n按角色分工即可。\n")
+        self._run()
+        self.assertIn("缺失", self.error_texts())
+
+    def test_role_card_three_questions_removed_reports(self):
+        # 反例②：角色卡三问里的"移交物"被删——下一段无从判断能不能开工
+        self._mutate(self.COLLAB, "**移交物**（**接手时**上一步给我什么、**交出时**我产出什么、交给谁）",
+                     "**其他**")
+        self._run()
+        self.assertIn("角色卡三问", self.error_texts())
+
+    def test_main_agent_only_orchestrates_removed_reports(self):
+        # 反例③：主 agent 只编排这半条被删——就会把子 agent 的读本一次读进自己上下文
+        self._mutate(self.COLLAB, "**主 agent 只编排（L1）**", "**主 agent 多读一点**")
+        self._run()
+        self.assertIn("主 agent 只编排", self.error_texts())
+
+    def test_self_switch_half_removed_reports(self):
+        # 反例④：现行方式（单执行者连续完成多段仍合法）被删——默认路径会把现行方式读成违规
+        self._mutate(self.COLLAB, "**单执行者连续完成多段仍合法（L1）**", "**必须逐段换人**")
+        self._run()
+        self.assertIn("现行方式同样成立", self.error_texts())
+
+    def test_dispatch_content_no_verbatim_removed_reports(self):
+        # 反例⑤：主 agent 不得复述规范正文这半句被删——"我已经传达了"的那一步就没有约束
+        self._mutate(self.COLLAB, "不得**把自己读到的规范正文抄进派发内容",
+                     "可以**顺手抄一份")
+        self._run()
+        self.assertIn("缺失要点", self.error_texts())
+
+    def test_library_index_row_removed_reports(self):
+        # 反例⑥：图书馆入口「主题登记」表那一行被删（"写依据"与"登记"是同一个动作）
+        self._mutate(self.LIBRARY_INDEX,
+                     "**专家与技能（默认按角色/技能逐段移交、主 agent 只编排、自切换同样成立）**",
+                     "**别的**")
+        self._run()
+        self.assertIn(self.LIBRARY_INDEX, self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例⑦：加载门的识别特征被删——该节永远不会被触发加载（规则在、但没人会按它加载）
+        self._mutate(self.GENERIC, "要按角色或技能把一段活切开",
+                     "要按模块把活切开")
+        self._run()
+        self.assertIn("加载门", self.error_texts())
+
+    def test_readme_line_removed_reports(self):
+        # 反例⑧：公开面目录说明那一行被删——读者找不到该节
+        self._mutate(self.README,
+                     "**专家与技能（角色卡与技能文档、默认按角色/技能逐段移交、主 agent 只编排，自切换同样成立）**",
+                     "**协作**")
+        self._run()
+        self.assertIn("README", self.error_texts())
+
+    def test_adoption_evidence_gutted_reports(self):
+        # 反例⑨：依据侧被抽成一句口号——日后无人能判"它今天还成立吗"
+        self._mutate(self.ADOPTION, "**「专家与技能」的三条取值", "**一些说明**")
+        self._run()
+        self.assertIn(self.ADOPTION, self.error_texts())
+
+    def test_sources_synonymy_removed_reports(self):
+        # 反例⑩：同义性说明被删——读者会把"渐进披露"直接读成"必须按角色切开"
+        self._mutate(self.SOURCES, "**须注意的语义差异（同义性，专家与技能）**",
+                     "**补充说明**")
+        self._run()
+        self.assertIn(self.SOURCES, self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑪（锚点清单自身的条数）：清单里被削掉一个锚点项 -> 按文档核的步骤全绿，
+        # 只有条数这一步报得出"核过且通过"与"没核"的区别。
+        # `_RULES_TOKENS` 是**导入期**读的（模块级常量），改了之后须还原。
+        self._write_valid()
+        original = cm._RULES_TOKENS["ROLE_SKILL_HANDOFF_ANCHORS"]
+        self.addCleanup(cm._RULES_TOKENS.__setitem__,
+                        "ROLE_SKILL_HANDOFF_ANCHORS", original)
+        anchors = [list(g) for g in original]
+        anchors[0][1] = anchors[0][1][:1]
+        cm._RULES_TOKENS["ROLE_SKILL_HANDOFF_ANCHORS"] = anchors
+        self._run()
+        self.assertIn("ROLE_SKILL_HANDOFF_ANCHORS", self.error_texts())
+        self.assertIn("锚点", self.error_texts())
+
+    def test_anchor_group_shape_broken_reports(self):
+        # 反例⑫：清单里掉一个 `[`（分组不是三项）-> 解包会崩、整道防线静默失效
+        self._write_valid()
+        original = cm._RULES_TOKENS["ROLE_SKILL_HANDOFF_ANCHORS"]
+        self.addCleanup(cm._RULES_TOKENS.__setitem__,
+                        "ROLE_SKILL_HANDOFF_ANCHORS", original)
+        cm._RULES_TOKENS["ROLE_SKILL_HANDOFF_ANCHORS"] = [["只有一项"]]
+        self._run()
+        self.assertIn("三项", self.error_texts())
+
+    def test_missing_rules_file_reports(self):
+        # 反例⑫：规则数据整份缺失 -> 该道防线整批空转，须给直白的落点说明
+        self._write_valid()
+        self.write("script/specs-rules/collab.toml", "")
+        os.remove(os.path.join(self.root, "script", "specs-rules", "collab.toml"))
+        self._run()
+        self.assertIn("collab.toml", self.error_texts())
+
+
+class TestCheckSkillDocGuard(CheckSpecsTestCase):
+    """『技能文档（单独成篇、不自成第二份判据、入口登记）』防线的反例用例。
+
+    失效形态：① 技能文档里新造「必须/不得」（规范里没有的）——绕过规范本体自成第二份判据；
+    ② 技能文档与规范各写一份判定标准；③ 建了技能文档却不在入口登记——"不会被加载、
+    其中内容实际失效"；④ 把题面按技能文档归类、或把题面自带的"必须/不得"抽进技能文档
+    （题面降格、边界掏空）。本道把「专家与技能」的**落点登记**、**技能文档不得自成第二份
+    判据**、**任务提示词不是技能文档**三条，以及两份已抽象出的技能文档的
+    "回指判据本体 + 入口登记"钉住。
+
+    **夹具＝真文档逐字读入**（现读，不另抄节选）。
+    """
+
+    COLLAB = "specs/general/collab.adoc"
+    AGENTS = "AGENTS.adoc"
+    SKILL_VERIFY = "specs-project-maintainer/skills/spec-change-verify.adoc"
+    SKILL_REFACTOR = "specs-project-maintainer/skills/spec-collection-refactor.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_rules = cm.RULES
+        self.addCleanup(setattr, cm, "RULES", self._orig_rules)
+        self.addCleanup(cm._RULES_RUN_THIS_PHASE.clear)
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.COLLAB, self.AGENTS, self.SKILL_VERIFY, self.SKILL_REFACTOR):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _rules_files(self) -> list:
+        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
+        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
+                if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+        for rel in self._rules_files():
+            self.write(rel, self._rule_text(rel))
+
+    def _run(self) -> None:
+        cm.RULES = None
+        cm.check_skill_doc_guard()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self._texts[rel])
+        self._write_valid()
+        self.write(rel, self._texts[rel].replace(removed, replacement))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_placement_registration_removed_reports(self):
+        # 反例①：落点登记条被删——技能文档没有落点，建成后会与规则混放或无人加载
+        self._mutate(self.COLLAB, "**落点登记（L1）**", "**落点随便**")
+        self._run()
+        self.assertIn("落点登记", self.error_texts())
+
+    def test_prompt_is_not_skill_doc_rule_removed_reports(self):
+        # 反例①之二：『任务提示词不是技能文档』这条被抽走——会把题面按技能文档归类、
+        # 把题面自带的"必须/不得"抽进技能文档（题面降格、边界掏空）
+        self._mutate(self.COLLAB, "**任务提示词不是技能文档（L1）**",
+                     "**提示词也能当技能文档**")
+        self._run()
+        self.assertIn("题面", self.error_texts())
+
+    def test_no_second_source_rule_removed_reports(self):
+        # 反例②：技能文档只作序、判据回指规范本体这条被抽走——技能文档会新造条款、绕过规范本体
+        self._mutate(self.COLLAB,
+                     "**每一步的\"必须/不得\"与判定标准一律回指规范本体**",
+                     "**细节自行把握**")
+        self._run()
+        self.assertIn("技能文档只作序", self.error_texts())
+
+    def test_agents_registration_removed_reports(self):
+        # 反例③：维护方入口登记被删——写文件与登记不是同一个动作了，技能不会被加载
+        self._mutate(self.AGENTS, "specs-project-maintainer/skills/", "specs-project-maintainer/")
+        self._run()
+        self.assertIn(self.AGENTS, self.error_texts())
+
+    def test_skill_doc_not_self_declared_reports(self):
+        # 反例④：技能文档没声明"判据本体不在这里"——读者会把它当成规范本体
+        self._mutate(self.SKILL_VERIFY, "判据本体不在这里", "本文件即判据本体")
+        self._run()
+        self.assertIn(self.SKILL_VERIFY, self.error_texts())
+
+    def test_skill_doc_refactor_backref_removed_reports(self):
+        # 反例⑤：另一份技能文档的回指被删——判据与技能脱钩
+        self._mutate(self.SKILL_REFACTOR, "specs-project-maintainer/spec-lifecycle.adoc",
+                     "别处")
+        self._run()
+        self.assertIn(self.SKILL_REFACTOR, self.error_texts())
 
 
 if __name__ == "__main__":

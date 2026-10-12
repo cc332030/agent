@@ -229,6 +229,7 @@
 * 材料：Anthropic 工程博客《Effective context engineering for AI agents》（公开文章，**官方网页已取回、仅题名与要点可逐字核对**）；Agent Skills 开放规范（**业界约定，非标准**，其 progressive disclosure 一节）。
 * 依据要点：**上下文是有限资源**——token 越多，信息召回与长程推理越差（业界称 *context rot*），故只加载必要的高信号内容；**每多一轮请求，整段上下文被重发一次**，故"轮次"既是成本也是注意力稀释的来源。
 * 用途：`specs/general/context.adoc`「读取范围」「执行吞吐」；`specs-project-maintainer/priority.adoc` P4 的业界依据。
+* **须注意的语义差异（同义性，专家与技能）**：上述材料的 progressive disclosure 讲的是**内容的加载粒度**（元数据常驻、正文按需），**未**规定"多步骤任务该按角色切开""主 agent 只编排、不持有子 agent 的读本""每段须有可核对的移交物"——这三条是本集合按现场用量判据化的取舍（见 `library/adoption.adoc`）。
 * **须注意的语义差异（同义性，执行吞吐）**：上述材料给的是**方向**（少读、按需披露、上下文越长越差），**未**规定"互相无依赖的调用必须一次批量发出""构建与校验的输出须一次取到"这类**执行侧判据**，也**未**给出"轮次成本"的量级；本集合按现场实测把"少绕"判据化的取舍与量级见 `library/throughput.adoc`。
 
 == The Twelve-Factor App

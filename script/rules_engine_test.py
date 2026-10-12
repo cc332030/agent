@@ -229,6 +229,32 @@ class TestSectionGroups(unittest.TestCase):
         self._run(ctx, groups=[["n", ["要点 B"], "why"]])
         self.assertEqual(len(ctx.errors), 1)
 
+    def test_token_list_is_the_only_source_of_anchors(self):
+        # `section_groups` 可按 `token_list` 引用规则数据里的**唯一一处**清单（不再抄第二份）
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        ctx._tokens["ANCHORS"] = [["n", ["要点 A"], "why"]]
+        step = {"kind": "section_groups", "file": "a.adoc", "section": "甲节",
+                "token_list": "ANCHORS"}
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(ctx.errors, [])
+
+    def test_token_list_anchors_actually_checked(self):
+        # 引用清单后**仍逐组核**：清单里的锚点不在节里即报红（不是"引了名就不核"）
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        ctx._tokens["ANCHORS"] = [["n", ["要点 B"], "why"]]
+        step = {"kind": "section_groups", "file": "a.adoc", "section": "甲节",
+                "token_list": "ANCHORS"}
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+
+    def test_token_list_missing_reports(self):
+        # 清单名取不到时**报错而非静默退化**（那会让整组锚点空转，"核过"与"没核"看起来一样）
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        step = {"kind": "section_groups", "file": "a.adoc", "section": "甲节",
+                "token_list": "NOT_REGISTERED"}
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertIn("NOT_REGISTERED", ctx.texts())
+
 
 class TestSubsectionGroups(unittest.TestCase):
     DOC = "= t\n\n== 甲\n\n=== 目标小节\n\n要点 A\n\n=== 别的小节\n\n要点 B\n"
