@@ -15346,6 +15346,8 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档，**判定标准**："
         "该移交而未移交。\n"
         "* **大规模团队式协作是例外，不是默认（L2）**。\n"
+        "* **外侧只登记\"这是干什么用的\"，不搬用途说明（L1）**：脚本的用法只在脚本自身的文档头里；"
+        "**外侧登记面**只允许写一句话用途 + 指向该脚本的链接。\n"
         "\n"
         "== 脚本头部注释（文档头）\n"
         "\n"
@@ -15386,6 +15388,14 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
                    "脚本 → `specs/general/script.adoc`（识别特征：要为脚本另建独立文档）。\n")
         self.write("README.adoc",
                    "目录：脚本（含**文档默认写进脚本自身**与**跨环境脚本**）。\n")
+        # `doc-design.adoc`「信息归属」的通用条：用法写在被使用的那一份里、外层登记只写这是干什么用的
+        # 通用条本体**逐字取自现场**（不手抄）：夹具里让它的标题落在行首——
+        # 现场的同一条就在这里换行（锚点若被拆进行中，`* **` 行锚缺失、本用例会假红）。
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档\n\n=== 信息归属（同一信息只写一处）\n"
+                   "* **用法与细节写在被使用的那一份里，外层登记只写\"这是干什么用的\"（L1）**：\n"
+                   "**外层登记面**只允许写一句话用途 + 链接；**边界**：只管位置、内容一条不少，"
+                   "超出容量时另建文档（对象自身留一行链接）。\n")
 
     def test_valid_script_selfdoc_guard_passes(self):
         self._write_valid()
@@ -15482,6 +15492,26 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         self.write("README.adoc", "目录：脚本。\n")
         cm.check_script_selfdoc_guard()
         self.assertIn("README.adoc", self.error_texts())
+
+    def test_outer_registry_only_clause_removed_reports(self):
+        # 反例：'外侧只登记用途、不搬用法'被抽 → 脚本头部有了用法、README 里再抄一份正文，
+        # 同一份契约两个来源（改脚本头部必漏外侧），本条要防的失效照旧
+        self._write_valid()
+        self.write("specs/general/script.adoc",
+                   self.SCRIPT.replace(
+                       "* **外侧只登记\"这是干什么用的\"，不搬用途说明（L1）**：脚本的用法只在脚本自身的文档头里；"
+                       "**外侧登记面**只允许写一句话用途 + 指向该脚本的链接。\n", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("外侧只登记", self.error_texts())
+
+    def test_doc_design_general_clause_removed_reports(self):
+        # 反例：通用条（用法写在被使用的那一份里、外层只登记）被抽空只留标题
+        # → '扩展到非脚本内容'失去落点，脚本/配置/工具的用法又跑进 README 或规范
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   "= 设计文档\n\n=== 信息归属（同一信息只写一处）\n* 随便写点。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("信息归属", self.error_texts())
 
 
 class TestCheckCommentPreservationGuard(CheckSpecsTestCase):
