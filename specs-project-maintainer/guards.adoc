@@ -76,7 +76,7 @@
 | 61 | `check_external_script_guard` | 跨语言执行脚本的落点防线——被执行的另一语言脚本须放资源文件夹、扩展名取被调语言
 | 62 | `check_cross_platform_script_guard` | 跨环境脚本防线——一份逻辑 + 薄入口不得被删或降级为"入口里也能写点逻辑"
 | 63 | `check_script_header_guard` | 脚本头部注释（文档头）防线——文档头先行与"细节不随维护丢失"的条文不得被删或降级
-| 64 | `check_script_selfdoc_guard` | 脚本自述文档防线——脚本默认单打独斗、文档随脚本落盘（不逐脚本另建独立文档）
+| 64 | `check_script_selfdoc_guard` | 脚本自述文档防线——脚本默认单打独斗、文档随脚本落盘（不逐脚本另建独立文档），且**用法只写在脚本自身的文档头里、外侧登记面只写一句话用途 + 链接**（`specs/general/doc-design.adoc`「信息归属」的通用条：用法写在被使用的那一份里，对代码/脚本/配置/工具一律成立）
 | 65 | `check_rule_script_separation_guard` | 规则与脚本的隔离防线——校验类脚本的规则数据须外置到独立配置文件（**纯数据 TOML**，标准库 `tomllib` 读）、脚本只留引擎与接线；配置缺失即报错不得静默空转；报错文案随规则数据走；本方自身的落点（`script/specs-rules/` 规则目录、`script/rules_engine.py`）须真实存在，且**一类规则一个文件、按目录自动扫描加载**（不把所有文件的规则堆进一个文件、脚本不登记文件名）
 | 66 | `check_comment_preservation_guard` | 评论不得删除防线——任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）
 | 67 | `check_comment_dispatch_guard` | 评论唤起新实例防线——评论即派发入口的要点不得被删或降级
