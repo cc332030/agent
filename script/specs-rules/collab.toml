@@ -1,0 +1,173 @@
+# 『专家与技能（默认按角色/技能移交，主 agent 只编排）』防线（用户点名：一个 agent 会读它
+# **需要**的全部内容，但一开始它并不需要知道这些；把"专家与技能"抽象出来，主 agent 不读那么多、
+# 也不关心子 agent 怎么做，子 agent 工作时只读自己需要的内容；现行方式（允许自己切换）同样保留）。
+#
+# 失效形态：① 角色卡缺"该读哪些落点"或"交出什么"——执行者只能"多读一点保险"，或下一段无从判断
+# 能不能开工；② 主 agent 把自己读到的规范正文抄进派发内容充当"我已经传达了"；③ 单个执行者
+# 自己一路做下来时**不声明角色**，于是"这一段到底读了没有"在交付里无从核对（自切换被当成
+# 免读的许可）；④ 角色卡/技能文档里另写一份判据，与规范各成一源。
+#
+# **判据本体的落点只有一个**：`specs/general/collab.adoc`「专家与技能」节。本文件只给
+# "要点在不在"。锚点一律取**判据句本身**（不取节名或轴名——按节名核时整节被掏空仍绿）。
+[[guards.check_role_skill_handoff_guard]]
+file = "specs/general/collab.adoc"
+section = "专家与技能（默认按角色/技能移交，主 agent 只编排）"
+kind = "section_groups"
+token_list = "ROLE_SKILL_HANDOFF_ANCHORS"
+# 入场核：核**锚点清单自己的条数**——清单被删项时该节一字不少、上面的步骤一次都不报错
+# （"核过且通过"与"没核"从此无从区分）。删锚点须与调 `min` 一并发生。
+[[guards.check_role_skill_handoff_guard]]
+file = "specs/general/collab.adoc"
+section = "专家与技能（默认按角色/技能移交，主 agent 只编排）"
+kind = "anchor_count"
+token_list = "ROLE_SKILL_HANDOFF_ANCHORS"
+min = 42
+
+# 依据侧（图书馆）：本条的"外部材料给到哪一层 + 本集合加了什么 + 要治的失效形态"须仍在——
+# 缺则本条只剩一句"要按角色切开"，日后无人能判"它今天还成立吗"。
+[[guards.check_role_skill_handoff_guard]]
+file = "library/adoption.adoc"
+kind = "file_groups"
+groups = [
+    [
+        "外部材料只给方向与下限",
+        [
+            "**「专家与技能」的三条取值",
+            "progressive disclosure",
+            "**没有任何材料规定**",
+            "**默认逐段移交**",
+            "**现行方式保留**",
+            "**不预建**",
+            "**本项目实证**",
+        ],
+        "依据侧被抽成一句口号时，本集合的取舍与它要治的失效都无从追溯",
+    ],
+]
+message = "『专家与技能』依据侧被破坏：library/adoption.adoc 缺失要点 {missing}（依据不是只存在名称——缺则本条日后无人能判它是否仍成立）"
+
+# 依据侧的同义性说明（sources.adoc）：外部材料讲的是加载粒度、不是编排取值。
+[[guards.check_role_skill_handoff_guard]]
+file = "library/sources.adoc"
+kind = "file_groups"
+groups = [
+    [
+        "同义性（专家与技能）",
+        [
+            "**须注意的语义差异（同义性，专家与技能）**",
+            "加载粒度",
+            "未**规定\"多步骤任务该按角色切开\"",
+            "是本集合按现场用量判据化的取舍",
+        ],
+        '同义性说明被删时，读者会把「渐进披露」直接读成「必须按角色切开」',
+    ],
+]
+
+# 图书馆入口「主题登记」表那一行（"写依据"与"登记"是同一个动作）。
+[[guards.check_role_skill_handoff_guard]]
+file = "library/README.adoc"
+kind = "file_tokens"
+tokens = [
+    "**专家与技能（默认按角色/技能逐段移交、主 agent 只编排、自切换同样成立）**",
+]
+message = "『专家与技能』依据侧未在图书馆入口登记：library/README.adoc 缺失 {missing}（写文件与登记是同一个动作，不登记则该依据无处可查）"
+
+# 加载门（调度器）：调度器只登记不抄条目——故只核那一行的**识别特征**里出现了角色/技能/移交物。
+[[guards.check_role_skill_handoff_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["多 agent 协作", "collab.adoc"]
+tokens = [
+    "按角色或技能把一段活切开",
+    "该读哪些落点、交出什么",
+    "逐段移交还是自己一路做下来",
+]
+message = "『专家与技能』的加载门被破坏：AGENTS_COMMON.adoc 的「多 agent 协作」登记行缺失 {missing}——缺则该节永远不被触发加载（规则在、但没人会按它加载）"
+
+# 公开面目录说明（读 README 的人须知道这一条在哪）。
+[[guards.check_role_skill_handoff_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "**专家与技能（角色卡与技能文档、默认按角色/技能逐段移交、主 agent 只编排，自切换同样成立）**",
+]
+message = "『专家与技能』未在 README 目录说明里登记：缺失 {missing}（公开面索引是读者找到该节的入口）"
+
+# ───────────────────────────────────────────────────────────────────────────
+# 『技能文档』防线（**本轮新增**）：技能文档按「专家与技能」单独成篇（要么不读、要么
+# 读全部）、**判据本体不落在技能文档里**（技能答步骤、不答规范），且**已抽象出的技能
+# 须在维护方入口登记**（写文件与登记是同一个动作）。
+#
+# 失效形态：① 技能文档里新造「必须/不得」（规范里没有的）——绕过规范本体自成第二份判据；
+# ② 技能文档与规范各写一份判定标准（不是一跳引用）；③ 建了技能文档却不在入口登记——
+# 「不会被加载、其中内容实际失效」，与只建文件不登记规则同形。
+#
+# 判据本体唯一落点在 `specs/general/collab.adoc`「专家与技能」的**落点登记**与
+# **技能文档不得自成第二份判据**两条；本文件只给"要点在不在"。
+[[guards.check_skill_doc_guard]]
+file = "specs/general/collab.adoc"
+section = "专家与技能（默认按角色/技能移交，主 agent 只编排）"
+kind = "section_groups"
+groups = [
+    [
+        "落点登记（技能文档按模板类内容单独成篇）",
+        [
+            "**落点登记（L1）**",
+            "复用既有的\"要么不读、要么读全部\"归类",
+            "技能文档按模板类内容单独成篇",
+            "写文件与登记加载落点是同一个动作",
+        ],
+        "落点登记条缺一则技能文档没有落点：建成后要么与规则混放、要么无人加载",
+    ],
+    [
+        "技能文档只作序、判据回指规范本体",
+        [
+            "**技能文档答步骤、不答规范（L1）**",
+            "只作序",
+            "每一步的\"必须/不得\"与判定标准一律回指规范本体",
+            "同一件事在技能文档与规范里各写一份判定标准",
+        ],
+        "该条缺一则技能文档会新造条款、绕过规范本体",
+    ],
+    [
+        "任务提示词（题面）不是技能文档",
+        [
+            "**任务提示词不是技能文档（L1）**",
+            "**即使它与技能文档同为\"整份复制照着做\"的取用形态**",
+            "题面**自带**它的\"必须/不得\"",
+            "也不得**把题面自带的\"必须/不得\"当成可从题面抽走、挪进技能文档的内容",
+            "把一份任务提示词登记/取用为技能文档",
+        ],
+        "该条缺一则会把题面按技能文档归类、或把题面自带的边界抽进技能文档（把题面降格、边界掏空）",
+    ],
+]
+
+# 维护方入口登记：已抽象出的技能文档逐份登记（写文件与登记是同一个动作）。
+[[guards.check_skill_doc_guard]]
+file = "AGENTS.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "specs-project-maintainer/skills/",
+]
+message = "『技能文档』未在维护方入口 AGENTS.adoc 登记：缺失 {missing}（写文件与登记是同一个动作，不登记则该技能不会被加载）"
+
+# 两份已抽象出的技能文档本身：只核它们**回指判据本体**、且**没有新造规范级别词**。
+[[guards.check_skill_doc_guard]]
+file = "specs-project-maintainer/skills/spec-change-verify.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "判据本体不在这里",
+    "specs/general/verify.adoc",
+]
+message = "技能文档 `spec-change-verify.adoc` 被破坏：缺失 {missing}（技能文档须声明自己不是判据本体、并把判据回指到规范）"
+
+[[guards.check_skill_doc_guard]]
+file = "specs-project-maintainer/skills/spec-collection-refactor.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "判据本体不在这里",
+    "specs-project-maintainer/spec-lifecycle.adoc",
+]
+message = "技能文档 `spec-collection-refactor.adoc` 被破坏：缺失 {missing}（技能文档须声明自己不是判据本体、并把判据回指到规范）"

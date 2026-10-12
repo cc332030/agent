@@ -119,6 +119,8 @@ files = [
     "specs-project-maintainer/context.adoc",
     "specs-project-maintainer/guards.adoc",
     "specs-project-maintainer/priority.adoc",
+    "specs-project-maintainer/skills/spec-change-verify.adoc",
+    "specs-project-maintainer/skills/spec-collection-refactor.adoc",
     "specs-project-maintainer/spec-lifecycle.adoc",
     "specs-project-maintainer/verify.adoc",
     "specs/core/execution.adoc",

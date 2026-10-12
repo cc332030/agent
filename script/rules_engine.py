@@ -184,8 +184,34 @@ def _step_section_groups(rules, step):
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["section"]), rel)
         return
-    _check_groups(ctx.err, rel, f"「{step['section']}」节", section, step["groups"],
+    groups = _groups_of(rules, step)
+    if groups is None:
+        return
+    _check_groups(ctx.err, rel, f"「{step['section']}」节", section, groups,
                   prefix=step.get("prefix", ""), template=step.get("message"))
+
+
+def _groups_of(rules, step):
+    """取本步的锚点组：给 `token_list` 时从规则数据的**唯一一处**清单取，否则用 `step["groups"]`。
+
+    **为什么要有它**：同一份锚点清单在 `section_groups` 里再抄一遍，就成了「同一数值的第二份
+    写法」——两处各自漂移时没有任何判据会发声（本仓库实测：改 `collab.toml` 里抄的那一份、
+    并把规范正文改成与它一致，`check_specs.py` 全绿；`anchor_count` 数的是 `_tokens.toml`
+    那份，两处从此各说各话）。故清单**只写一处**（`_tokens.toml`）、本步按名引用。
+
+    清单名取不到（未登记、写错）时**报错而非静默退化**：那会让整组锚点空转，而"核过且通过"
+    与"没核"看起来一样。
+    """
+    named = step.get("token_list")
+    if not named:
+        return step["groups"]
+    data = rules.ctx.tokens(named)
+    if not isinstance(data, (list, tuple)):
+        rules.ctx.err(f"规则数据里没有 `{named}`——本节各锚点的唯一来源缺失，"
+                      "该步整组空转（`section_groups` 引了 `token_list` 就必须取得到）",
+                      step["file"])
+        return None
+    return data
 
 
 def _step_subsection_groups(rules, step):
@@ -202,7 +228,10 @@ def _step_subsection_groups(rules, step):
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["subsection"]), rel)
         return
-    _check_groups(ctx.err, rel, f"「{step['subsection']}」小节", section, step["groups"],
+    groups = _groups_of(rules, step)
+    if groups is None:
+        return
+    _check_groups(ctx.err, rel, f"「{step['subsection']}」小节", section, groups,
                   prefix=step.get("prefix", ""), template=step.get("message"))
 
 

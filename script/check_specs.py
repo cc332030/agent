@@ -1684,6 +1684,8 @@ POINTER_SCAN_FILES = (
     "specs-project-maintainer/context.adoc",
     "specs-project-maintainer/guards.adoc",
     "specs-project-maintainer/priority.adoc",
+    "specs-project-maintainer/skills/spec-change-verify.adoc",
+    "specs-project-maintainer/skills/spec-collection-refactor.adoc",
     "specs-project-maintainer/spec-lifecycle.adoc",
     "specs-project-maintainer/verify.adoc",
     "specs/core/execution.adoc",
@@ -3810,8 +3812,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 139
-GUARD_TEST_BASELINE = 1822
+GUARD_WIRING_BASELINE = 142
+GUARD_TEST_BASELINE = 1851
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -11433,6 +11435,71 @@ def check_operation_timeout_guard():
     phase_done()
 
 
+def check_role_skill_handoff_guard():
+    """『专家与技能（默认按角色/技能移交，主 agent 只编排）』防线（**用户提出**）。
+
+    失效形态（用户点名）：**什么内容都混在一起**——一个执行者开工前把"可能用到的全部内容"
+    一次读进来，而其中大部分在当下这一步并不需要；同时**主 agent 也不该关心子 agent 怎么做、
+    要读什么**。本道把"专家＝角色（角色卡答职责/该读哪些落点/交出什么）、技能＝某类活怎么做
+    （技能文档）、默认逐段移交、主 agent 只编排"这几条钉住。
+
+    判据本体唯一落点在通用层 `specs/general/collab.adoc`「专家与技能（默认按角色/技能移交，
+    主 agent 只编排）」一节（依据侧另在图书馆 `library/adoption.adoc` / `library/sources.adoc`，
+    入口「主题登记」表是登记、不是第二份定义）。**按该节核**，不按整份文件核。
+
+    只钉「判据是否仍在」——「某次执行到底有没有按角色切开、读了哪些、移交物是不是真的可核对」
+    属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("专家与技能防线检查（默认按角色/技能移交、主 agent 只编排、自切换同样成立）")
+    # 锚点清单的分组形状先判：清单里掉一个 `[` 一类的手误会让解包直接崩（整道防线静默失效）。
+    # 清单是**纯数据**（`_tokens.toml`），形状坏了下面那些按文档核的步骤一个都不会发声。
+    anchors = _RULES_TOKENS.get("ROLE_SKILL_HANDOFF_ANCHORS")
+    if anchors is None:
+        err("规则数据里没有 `ROLE_SKILL_HANDOFF_ANCHORS`——该清单是『专家与技能』各锚点的"
+            "唯一来源，缺失即该道防线整批空转", "script/specs-rules/_tokens.toml")
+        phase_done()
+        return
+    groups = [g for g in anchors if isinstance(g, (list, tuple))]
+    for index, group in enumerate(groups, 1):
+        if len(group) != 3:
+            err(f"`ROLE_SKILL_HANDOFF_ANCHORS` 第 {index} 组不是"
+                "「组名 + 锚点清单 + 理由」三项——防线会因解包失败而整道不生效，"
+                f"当前形状：{group!r}", "script/specs-rules/_tokens.toml")
+            phase_done()
+            return
+    # 规则数据侧的步骤自己会报"文件缺失"（判据本体、依据侧、主题登记、加载门、目录说明各一步），
+    # 故先让规则跑完——本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "collab.toml")):
+        err("缺少 script/specs-rules/collab.toml——『专家与技能』的锚点（判据措辞）"
+            "失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_role_skill_handoff_guard")
+    phase_done()
+
+
+def check_skill_doc_guard():
+    """『技能文档』防线（**本轮新增**）。
+
+    技能文档＝某类活"怎么做"的可复用步骤集，按「专家与技能」的**落点取值**单独成篇
+    （**要么不读、要么读全部**）。本道钉三件事：① 技能文档**不自成第二份判据**（"必须/
+    不得"与判定标准一律回指规范本体）；② **任务提示词（题面）不是技能文档**（题面自带
+    它的"必须/不得"，即使同为"整份复制照着做"的取用形态也**不得**按技能文档归类）；
+    ③ 已抽象出的技能文档**在入口登记**（写文件与登记是同一个动作——不登记则"不会被加载、
+    其中内容实际失效"）。
+
+    判据本体唯一落点在通用层 `specs/general/collab.adoc`「专家与技能」的**落点登记**、
+    **技能文档不得自成第二份判据**、**任务提示词不是技能文档**三条；本文件只给"要点在不在"。
+
+    只钉「要点是否仍在」——「某份技能文档里的某句话算不算新造的条款」属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("技能文档防线检查（单独成篇、不自成判据、入口登记）")
+    run_rule_guard("check_skill_doc_guard")
+    phase_done()
+
+
 def check_correction_guard():
     """『用户打错字不是他的真值』防线（**用户提出**）：先纠正、按纠正后的意思做。
 
@@ -11674,6 +11741,8 @@ CHECKS = (
     check_operation_timeout_guard,
     check_user_requirement_guard,
     check_correction_guard,
+    check_role_skill_handoff_guard,
+    check_skill_doc_guard,
 )
 
 
