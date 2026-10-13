@@ -22356,5 +22356,107 @@ class TestCheckSkillDocGuard(CheckSpecsTestCase):
         self.assertIn(self.SKILL_REFACTOR, self.error_texts())
 
 
+class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
+    """『取规范脚本自更新』防线的反例用例（**用户提出**：先更新自身、避免有的没进索引）。
+
+    失效形态：清单从入口的调度器登记解析，而**解析口径在脚本自己手里**——远端改了脚本
+    （新增一类文件、换落点排布）时，跑着旧脚本的那一轮只会照旧口径取，新东西静默不进副本
+    （"看着取全了、其实少了几份"，且没有任何报错）。本道只核**脚本侧**三件事：有**取回自身**的
+    执行体；**当轮生效**（新版本落到真身、`os.execv` 重启）；换法**跨进程可见**（交接走文件
+    后缀常量，**不得**退回环境变量——子进程设的变量回不到调起它的壳，本仓库实证：壳那条路
+    永远读不到，机制形同没有）；换不动/留不下标记时**如实警告**、不得静默。
+
+    **公共入口不写这一条、本组也不核它**（用户口径：「fetch-specs.py 自己更新就行，不需要写
+    出来」）——脚本自己更新是脚本内部的事；夹具只读脚本，脚本里那几处被抽掉时本组必报红。
+    """
+
+    SCRIPT = "script/fetch-specs.py"
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo = os.path.dirname(HERE)
+        self._texts = {}
+        for rel in (self.SCRIPT,):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._texts[rel] = fh.read()
+
+    def _write_valid(self) -> None:
+        for rel, text in self._texts.items():
+            self.write(rel, text)
+
+    def _mutate(self, rel: str, old: str, new: str) -> None:
+        self.write(rel, self._texts[rel].replace(old, new))
+
+    def _run(self) -> None:
+        cm.check_fetch_self_update_guard()
+
+    def test_valid_fetch_self_update_guard_passes(self):
+        self._write_valid()
+        self._run()
+        self.assertEqual(self.error_texts(), "")
+
+    def test_self_fetch_body_deleted_reports(self):
+        # 反例①：取回自身的执行体被删 → 远端改了脚本、这一轮照旧按旧口径取（盲区回来了）
+        self._write_valid()
+        self._mutate(self.SCRIPT, "def update_self(base, out_dir, cwd):",
+                     "def something_else(base, out_dir, cwd):")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_handoff_note_removed_reports(self):
+        # 反例②：交接走环境变量（子进程设的变量回不到调起它的壳，本仓库实证）→ 换法失效
+        self._write_valid()
+        self._mutate(self.SCRIPT, "def hand_off_self():", "def not_used_anymore():")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_restart_removed_reports(self):
+        # 反例③：换上后不重启 → 本轮仍按旧脚本取，用户看不到"这一轮就取全"
+        self._write_valid()
+        self._mutate(self.SCRIPT, "os.execv", "os.getpid")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_silent_on_unwritable_reports(self):
+        # 反例④：留不下待换标记时不再警告 → 读者以为已是最新，实际仍按旧脚本的口径取
+        self._write_valid()
+        self._mutate(self.SCRIPT, "但留不下待换的标记", "跳过这一步")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_keep_gate_removed_reports(self):
+        # 反例⑤：`--keep` 的边界被抹掉 → 读者按"不动本地那份"跑，脚本却顺手换掉自己
+        self._write_valid()
+        for rel, text in self._texts.items():
+            self.write(rel, text.replace("`--keep`", "keep?").replace("`--list`", "list?"))
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_take_effect_this_round_deleted_reports(self):
+        # 反例⑥（**用户追问**："更新的时候，就要及时生效吧？还等下一次？"）："
+        # 当轮生效"的判据被删 → 退回"写个标记等下一轮"，更新要跑两次才生效
+        self._write_valid()
+        self._mutate(self.SCRIPT, "_real_script", "some_other_name")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_missing_script_reports(self):
+        # 反例⑦：脚本本身不在 → 自更新无从谈起（夹具只读脚本那一份）
+        self._write_valid()
+        os.remove(os.path.join(self.root, *self.SCRIPT.split("/")))
+        self._run()
+        self.assertIn("缺失", self.error_texts())
+
+    def test_single_target_write_reports(self):
+        # 反例⑧（review 实测）：落盘退回"先选一处、写不进去就放弃"——写位是估的、与真实
+        # 可写性不总一致（祖先可写而 `tmp/` 建不出来），只试第一处时兜底那几处等于没试，
+        # 本轮自更新静默落空（原 `_self_update_path` 只 return 首个候选，makedirs 失败即返回）
+        self._write_valid()
+        self._mutate(self.SCRIPT, "for target, why in _self_update_candidates(out_dir, cwd):",
+                     "for target, why in [_self_update_candidates(out_dir, cwd).__next__()]:")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()

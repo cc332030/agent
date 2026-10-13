@@ -762,7 +762,14 @@ def _step_pointer_no_verbatim(rules, step):
                 continue
             if any(ig in line for ig in ignores):
                 continue
-            refs = re.findall(r"[A-Za-z0-9_./-]*\.adoc", line)
+            # **被指文件不限于 `.adoc`**：回指的落点还可能是随规范分发的脚本/入口/规则数据
+            # （`.py`/`.sh`/`.bat`/`.ps1`/`.toml`），或提示词片段（`.txt`）——"真源在脚本头部
+            # 注释里"这类回指正属本条的核对面。原实现只认 `.adoc`，于是**指向脚本的回指整类漏检**：
+            # 本轮实测 `AGENTS_COMMON.adoc` 一行自称"真源是 `script/fetch-specs.py` 的头部注释、
+            # 本节不复述"，却把那脚本头部的开关/退出码/解释器次序逐字抄了一遍（35 字重合），
+            # 而遍历到的引用为空、直接跳过。扩展名按**可被回指的落点类型**取全，
+            # 但**不扩到任意扩展名**（图片/二进制一类既无正文、也不承载取值）。
+            refs = re.findall(r"[A-Za-z0-9_./-]*\.(?:adoc|py|sh|bat|cmd|ps1|toml|txt)", line)
             refs = [r for r in refs if r != os.path.basename(rel) and r not in exclude_refs]
             if not refs:
                 continue
