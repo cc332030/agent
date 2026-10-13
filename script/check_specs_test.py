@@ -18717,6 +18717,245 @@ class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
         self.assertIn("library/adoption.adoc", self.error_texts())
 
 
+class TestCheckObjectInitGuard(CheckSpecsTestCase):
+    """钉住『对象初始化（手动创建对象时的写法）』防线（用户提出）。
+
+    用户原话："对象手动初始化时，优先使用链式初始化（java 下 builder > set chain），
+    适用于所有语言，没有链式再用 set，严禁有参构造方法初始化（对象内构造方法调用构造方法除外）"。
+
+    该条要治的失效形态：逐条 `set` 把对象创建打散成多行、中间态可被跨行读到；**有参构造**
+    把参数位置的语义交给调用点，加字段/调顺序时**调用点无一报错**、错值运行期才现形。
+
+    **夹具＝真文档逐字**：四个落点各由现读取得，再按"删掉哪一截"构造反例——换成手抄版时，
+    锚点在同义改写后会整体与真文档脱节（锚点仍在、真文档已被改），防线照样报红却与本用例无关。
+
+    核对对象一律是**条目/行自己的正文**（`bullet_tokens`/`line_tokens`）：本条与相邻条目
+    共用「链式」「setter」「字段顺序」等字样，按整节/整份文件核时会把抽走的要点兜住。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    TEMPLATE = "specs/stack/java-object.adoc"
+    ADOPTION = "library/adoption.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+
+    def _src(self, rel: str) -> str:
+        with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
+            return fh.read()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        self.CODING_TEXT = self._src(self.CODING)
+        self.JAVA_TEXT = self._src(self.JAVA)
+        self.TEMPLATE_TEXT = self._src(self.TEMPLATE)
+        self.ADOPTION_TEXT = self._src(self.ADOPTION)
+        self.COMMON_TEXT = self._src(self.COMMON)
+        self.README_TEXT = self._src(self.README)
+        self.COMMON = os.path.relpath(cm.GENERIC_FILE, self.root)
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in ((self.CODING, self.CODING_TEXT), (self.JAVA, self.JAVA_TEXT),
+                          (self.TEMPLATE, self.TEMPLATE_TEXT),
+                          (self.ADOPTION, self.ADOPTION_TEXT),
+                          (self.COMMON, self.COMMON_TEXT),
+                          (self.README, self.README_TEXT)):
+            self.write(rel, text)
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard(self) -> None:
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_object_init_guard()
+
+    def _mutate(self, rel: str, text: str, old: str, new: str) -> None:
+        self.assertIn(old, text)
+        self._write_all_valid()
+        self.write(rel, text.replace(old, new, 1))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_all_valid()
+        cm.check_object_init_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：条文（链式优先 + L1）被抽 -> "顺序怎么写都行"重新成立
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "链式初始化优先、无链式才用 `set`、严禁有参构造初始化（L1）",
+                     "关于初始化")
+        self._run_guard()
+        self.assertIn("对象初始化", self.error_texts())
+
+    def test_constructor_ban_removed_reports(self):
+        # 反例②：**有参构造**那一半被抽 -> 只剩"优先链式"这句口径、禁止面没了
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     '**严禁**以"参数带着字段一起传"的**有参构造方法**',
+                     "关于构造方法")
+        self._run_guard()
+        self.assertIn("有参构造", self.error_texts())
+
+    def test_exception_dropped_reports(self):
+        # 反例③：唯一例外被删 -> 合法写法（对象内构造转发）被误判成违规
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "对象内的构造方法调用构造方法",
+                     "某些特殊情形")
+        self._run_guard()
+        self.assertIn("对象内的构造方法调用构造方法", self.error_texts())
+
+    def test_java_tier_reversed_reports(self):
+        # 反例④：Java 内分档被反向（builder 与链式 setter 同级）-> 须报
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "**优先用 builder 链**",
+                     "builder 与链式 setter 都行")
+        self._run_guard()
+        self.assertIn("**优先用 builder 链**", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        # （`**判定标准（任一命中即违规）**` 在本文件别处也出现，故替换点限定在本条 bullet 内）
+        i = self.CODING_TEXT.index("* **对象初始化：链式初始化优先")
+        j = self.CODING_TEXT.index("\n== 数据契约", i)
+        body = self.CODING_TEXT[i:j]
+        self.assertIn("**判定标准（任一命中即违规）**", body)
+        self.write(self.CODING, self.CODING_TEXT[:i]
+                   + body.replace("**判定标准（任一命中即违规）**", "补充说明", 1)
+                   + self.CODING_TEXT[j:])
+        self._run_guard()
+        self.assertIn("**判定标准（任一命中即违规）**", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑥：存量边界（不发动全库改写）被抽 -> 等于要求立刻批量改写既有创建语句
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "不发动全库改写",
+                     "视情况处理")
+        self._run_guard()
+        self.assertIn("不发动全库改写", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑦：依据行/取舍声明被抽 -> 读者把本集合取舍当成 Effective Java 的规定
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "是本集合的判据化取舍**——通行材料",
+                     "属通行做法**——外部材料")
+        self._run_guard()
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑧：Java 落点被抽 -> Java 执行者按栈文件学时仍会 `new X(...)`
+        self._mutate(self.JAVA, self.JAVA_TEXT,
+                     "对象初始化一律链式：builder > 链式 setter > set，严禁有参构造（L1，本文件是 Java 落点）",
+                     "关于对象创建")
+        self._run_guard()
+        self.assertIn("对象初始化一律链式", self.error_texts())
+
+    def test_java_constructor_ban_dropped_reports(self):
+        # 反例⑨：Java 落点的禁止面被抽（载体名仍在、禁止面没了）-> 须报
+        self._mutate(self.JAVA, self.JAVA_TEXT,
+                     "**严禁**以 `@AllArgsConstructor` 生成的全参构造或手写的位置参数构造**手动创建**",
+                     "构造方法怎么写都行")
+        self._run_guard()
+        self.assertIn("严禁", self.error_texts())
+
+    def test_template_convention_removed_reports(self):
+        # 反例⑩：模板侧照抄约定被抽 -> 新建对象时真正被读的那一份里丢掉该约定
+        self._mutate(self.TEMPLATE, self.TEMPLATE_TEXT,
+                     "手动创建时用链式、不用有参构造",
+                     "注意创建方式")
+        self._run_guard()
+        self.assertIn("手动创建时用链式、不用有参构造", self.error_texts())
+
+    def test_dispatcher_features_removed_reports(self):
+        # 反例⑪：调度器识别特征被抽 -> 手动创建对象不会触发加载该条
+        self._mutate(self.COMMON, self.COMMON_TEXT,
+                     "要**手动创建/初始化对象**",
+                     "要写代码")
+        self._run_guard()
+        self.assertIn("要**手动创建/初始化对象**", self.error_texts())
+
+    def test_readme_sync_removed_reports(self):
+        # 反例⑫：README 目录说明未同步 -> 读者按 README 学习时无从知道有这条规则
+        self._write_all_valid()
+        self.write(self.README, self.README_TEXT.replace(
+            "**对象初始化（手动创建对象时链式优先", "**对象初始化**（手动创建时"))
+        self._run_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_adoption_not_registered_reports(self):
+        # 反例⑬：图书馆未登记本集合取舍 -> 读者会把本站取舍读成标准规定
+        self._mutate(self.ADOPTION, self.ADOPTION_TEXT,
+                     "手动创建对象时优先链式初始化", "某条规则")
+        self._run_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_exception_entries_removed_reports(self):
+        """反例⑮：例外清单里的整条被抽 -> 须报。
+
+        实测（review 前）：例外 3/4/5（语言或框架没有链式形态、目标对象是第三方类型不可改、
+        语言惯用的具名构造即该语言的链式形态）各删一整条时，锚点清单里**一条都没覆盖**，
+        防线一律报绿——而这三条正是逐条 `set` / 具名参数两种写法的依据所在。
+
+        连同例外 2 的尾句（框架创建的构造"书写仍按各自规则"）一并核：抽掉即报。
+        """
+        # 例外 3/4/5：各自一整条被抽
+        for frag in ("  ** **语言或框架根本没有链式形态**",
+                     "  ** **目标对象是第三方类型、不可改**",
+                     "  ** **语言惯用的具名构造即该语言的链式形态**"):
+            lines = [ln for ln in self.CODING_TEXT.splitlines() if ln.startswith(frag)]
+            self.assertTrue(lines, frag)
+            self._write_all_valid()
+            self.write(self.CODING, self.CODING_TEXT.replace(lines[0] + "\n", "", 1))
+            self._run_guard()
+            self.assertIn(frag.replace("  ** **", "**"), self.error_texts())
+        # 例外 2 的尾句（框架创建的构造"书写仍按各自规则"）被换掉
+        clip = "这类构造的书写仍按各自规则"
+        self.assertIn(clip, self.CODING_TEXT)
+        self._write_all_valid()
+        self.write(self.CODING, self.CODING_TEXT.replace(clip, "相关构造另行处理", 1))
+        self._run_guard()
+        self.assertIn(clip, self.error_texts())
+
+    def test_template_tier_and_ban_removed_reports(self):
+        """反例⑯：模板里只抽掉**分档句**或**禁止面句** -> 须报。
+
+        实测（review 前）：模板组的三个锚点里没有这两句，把"有 builder 用 builder、没有才链式
+        setter、都不可得才逐条 `set`"换成"按情况选择写法"、把"严禁用 @AllArgsConstructor…手动创建"
+        换成"创建方式自便"，防线都报绿——而模板是新建对象时**真正被读的那一份**。
+
+        另钉一处已知边界：锚点清单自己少一项、同时把 `anchor_count` 的 `min` 同步调低时防线
+        报绿（`min` 是下限，只拦"无声变少"）——两个动作同时发生即记账在 diff 里可见，
+        此处不强行拦，只在用例里写明。
+        """
+        for frag in ("**有 builder 就用 builder**，没有 builder 才用链式 setter",
+                     "**严禁**用 `@AllArgsConstructor` 生成的全参构造或手写的位置参数构造去**手动创建**"):
+            self._write_all_valid()
+            self.write(self.TEMPLATE, self.TEMPLATE_TEXT.replace(frag, "创建方式自便", 1))
+            self._run_guard()
+            self.assertIn(frag, self.error_texts())
+
+    def test_adoption_rule_hollowed_reports(self):
+        """反例⑰：图书馆登记被掏空成一句空话 -> 须报。"""
+        self._write_all_valid()
+        idx = self.ADOPTION_TEXT.index("* **「手动创建对象时优先链式初始化")
+        end = self.ADOPTION_TEXT.index("\n\n", idx)
+        hollow = ("* **「手动创建对象时优先链式初始化（Java 内 builder > 链式 setter）」"
+                  "是本集合自己的判据化取舍**：手动创建对象时优先链式初始化，"
+                  "本集合自己的判据化取舍，没有任何材料规定。\n")
+        self.write(self.ADOPTION, self.ADOPTION_TEXT[:idx] + hollow
+                   + self.ADOPTION_TEXT[end + 1:])
+        self._run_guard()
+        self.assertIn("library/adoption.adoc", self.error_texts())
+
+
 class TestCheckPaginationGuard(CheckSpecsTestCase):
     """钉住『分页查询返回类型与转换』防线（用户提出）。
 
