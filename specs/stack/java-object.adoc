@@ -28,6 +28,7 @@ public class Xxx {
 * **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。
 * **集合字段默认加 `@Singular`**：照抄时按"每个集合字段都标"处理（"除非有问题"这一前提与判定标准见判据本体）。
 * **`lombok.config` 实时读取**：注解的实际生成行为按项目根 `lombok.config` 的**当前内容**执行（`specs/stack/java.adoc`「编码」）；模板只固定注解清单，不固化其配置项。
+* **手动创建时用链式、不用有参构造**：这类对象的**业务创建**走 builder 链（模板里的 `@SuperBuilder`）——**有 builder 就用 builder**，没有 builder 才用链式 setter（`@Accessors(chain = true)`），两者都不可得才逐条 `set`；**严禁**用 `@AllArgsConstructor` 生成的全参构造或手写的位置参数构造去**手动创建**（`new Xxx(a, b, c)`），**唯一例外是对象内的构造方法调用构造方法**。`@AllArgsConstructor` **仍按模板标注**（供框架注入/反序列化使用），但**业务创建不得依赖它**。判据本体、例外与存量口径见 `specs/stack/java.adoc`「编码」的「对象初始化一律链式」条与 `specs/general/coding.adoc`「对象初始化」，模板不重述。
 * **赋值时的顺序**：`.setXxx(...)` / `.xxx(...)` 这些**赋值环节按字段声明次序**书写（实体类即映射表列序）——判据与例外见 `specs/general/coding.adoc`「命名与代码质量」的「链式赋值顺序随字段顺序」，模板不重述。
 * **注解次序**：模板里的次序已按 `specs/general/coding.adoc`「命名与代码质量」的**注解排序**规则排好；该规则的细则**不在此重述**（本文件只回指、不重复判据），直接见那一节。
 

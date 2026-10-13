@@ -277,6 +277,15 @@
      "某次交付是不是真的降级了、卡点是不是真的提给了用户"属运行时事实与语义判断，
      交人/子 agent 复核。
 
+ 86. 变更日志新版条目里的接线数防线：`CHANGELOG.adoc` 版本号最大的那条里记的
+     "防线接线基线 a → **b**"是同一数值的**第三处写法**（另两处是常量与
+     `specs-project-maintainer/guards.adoc`「记账沿革」）。只在**版本号最大的那条**里核
+     箭头**右侧**（＝抬到的常量值）须等于 `GUARD_WIRING_BASELINE`——旧条目记的是**当时**的
+     基线、按定义不得改写，故不得回溯改历史。核的是右侧这一处取值：**左侧（抬之前的值）
+     无人核**，改错时不会报红（本仓库实测：把最新条目的 142 写成 143，脚本与本表都全绿）。
+     由 `check_guard_manifest` 里的这一核对钉住；"该不该补一条新条目、旧条目该不该动"
+     属维护方取舍，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -3812,8 +3821,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 142
-GUARD_TEST_BASELINE = 1851
+GUARD_WIRING_BASELINE = 143
+GUARD_TEST_BASELINE = 1868
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -4373,10 +4382,11 @@ def check_guard_manifest():
                 f"{ref_test}，而 `GUARD_TEST_BASELINE` 是 {GUARD_TEST_BASELINE}——"
                 "同一数值两处各写一份即第二真源；数要改就改常量、引用处随之",
                 "specs-project-maintainer/guards.adoc")
-    # **变更日志新版条目**里也记了这一轮的接线数（`防线接线基线 137 → **139**`）——
+    # **变更日志新版条目**里也记了这一轮的接线数（形如 `防线接线基线 139 → **142**`）——
     # 同一数值的第三处写法，同样须与常量一致（本仓库实测：条目里的数改了、脚本与本表
     # 都全绿，因为两处都没核）。只在**版本号最大的那条**里核：旧条目记的是**当时**的
-    # 基线，按定义不得改写（`specs/general/changelog.adoc`）。
+    # 基线，按定义不得改写（`specs/general/changelog.adoc`）；核的是箭头**右侧**（＝当时
+    # 抬到的常量值，`_newest_changelog_wiring_ref`），右侧与常量一致即该条记的取值对。
     if manifest_test is not None:
         newest = _newest_changelog_wiring_ref()
         if newest is not None and newest != GUARD_WIRING_BASELINE:
@@ -9952,6 +9962,33 @@ def check_chain_assignment_order_guard():
     phase_done()
 
 
+def check_object_init_guard():
+    """『对象初始化（手动创建对象时的写法）』防线（**用户提出**）：链式优先、严禁有参构造。
+
+        落点：判据**跨语言**（链式 setter、builder、具名参数都属"链式初始化"），故判据本体唯一
+    落点在 `specs/general/coding.adoc`「对象初始化」；Java 的**内部分档**（builder > 链式
+    setter）与载体落 `specs/stack/java.adoc`「编码」，模板文件的照抄约定落
+    `specs/stack/java-object.adoc`，调度器识别特征与 README 同步各一处，图书馆登记本集合取舍。
+
+    本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
+    "有没有这一条"属防线空转——链式优先、Java 内分档、**严禁有参构造**（本条的靶心）、
+    唯一例外（对象内构造转发）、判定标准、边界、存量边界与依据行任一被抽走时照样全绿。
+    故逐组核 `script/specs-rules/coding.toml` 里的锚点；"某个创建点算不算手动初始化 / 某个
+    类型有没有可用的链式形态"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("对象初始化防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「对象初始化」的判据无处承载"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——「对象初始化」的 Java 落点（builder > 链式 setter > set）"
+            "无处承载", rel_java)
+    run_rule_guard("check_object_init_guard")
+    phase_done()
+
+
 def check_persistence_access_guard():
     """『持久化访问防线』：通用层只留跨语言抽象、框架专名与禁止清单下沉到技术栈层。
 
@@ -11743,6 +11780,7 @@ CHECKS = (
     check_correction_guard,
     check_role_skill_handoff_guard,
     check_skill_doc_guard,
+    check_object_init_guard,
 )
 
 
