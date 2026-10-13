@@ -167,6 +167,26 @@ files = [
 # 阈值取 20：本轮实证的漏网形态是 21 字（`library/mirrors.adoc` 里"每级先实测可用、不跳级、
 # 不覆盖既有配置"），低于 20 的多为"文件基名/节名"这类本就该出现的词。
 min_overlap = 20
+# `exclude_refs`：**被引文件里不参与比对的**。取一组**规则数据文件**——回指的落点也可能是
+# 随规范分发的脚本/规则数据（`.py`/`.toml` 等，见引擎侧同一改动），此时"回指 + 复述取值"
+# 的对象是**脚本头部注释**、**规则数据自身的注释**。
+# 但 `specs-project-maintainer/guards.adoc` 是**防线清单**：它逐条说"这道防线钉住什么、
+# 规则数据在哪个文件"，与那份规则数据自己的头部注释讲的是**同一批事实**（分工已在
+# `guards.adoc` 开头写明：本文件答"有哪些防线、按什么次序跑"，台账答"某条规范有没有抓手"），
+# 逐字重合是这一层的**预期形态**而非第二真源——与 `duplicate_scan` 的 `ignore_units`
+# 把维护方自查层按"定位就是规则本体在别处、这里只补维护方口径"处理同源。
+# 判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」。
+exclude_refs = [
+    "script/specs-rules/_tokens.toml",
+    "script/specs-rules/build-tool-migration.toml",
+    "script/specs-rules/collab.toml",
+    "script/specs-rules/corrections.toml",
+    "script/specs-rules/duplicate.toml",
+    "script/specs-rules/execution.toml",
+    "script/specs-rules/git.toml",
+    "script/specs-rules/gradle.toml",
+    "script/specs-rules/intent-answer.toml",
+]
 # 依据行与标准名括注本就该逐字一致（`source.adoc`「外部引用」），排除在外——
 # 它们与 `duplicate_scan` 的 `ignore` 同口径，理由见上面的 `duplicate_scan` 规则数据。
 ignore = [
@@ -201,6 +221,16 @@ ignore = [
     # **主题名**（`决策记载（ADR/MADR/AWS Prescriptive Guidance）`）：图书馆的**主题登记名**，
     # 用于"引用方按依据名反查"（`library/README.adoc`「依据的定位协议」）——名字逐字一致才定位得到。
     "决策记载（ADR / MADR / AWS Prescriptive Guidance）",
+    # **自足提示词须内联的装配判据**（`prompts/review.adoc` 的「给 AI 的读取说明」）：
+    # 这一行指向 `prompts/_common.txt`（唯一落点＝其顶部的「查看与复制方式」），却又把那条
+    # 判据的措辞写了一遍——**这是刻意的**：`prompts/review.adoc` 属"会被复制到未知项目执行"
+    # 的自足交付物，读者可能在读到 `_common.txt` 之前就要按它判断该不该补齐；该内联口径由
+    # `check_prompt_delivery_surface_guard` **逐要点钉住**（含"内容有没有被 AsciiDoc 处理器
+    # 装配过""原始文件/不会被展开/补齐""不得/渲染视图/跳过补齐"三组），删掉即报红——即
+    # 它**不是**"同一件事写两遍"的收敛对象，而是自足性要求的必要重复（`review.adoc`「精炼性」
+    # 的「两类形态不得被当成重复收敛」同口径）。故按行豁免、不按文件豁免：
+    # `prompts/_common.txt` 仍是别处的核对面（如 `PROMPTS.adoc` 的回指行）。
+    "装配状态按内容判定",
     # **跨两栈同源的单一取值**（"不要求用户手动修改系统执行策略"）：批处理栈与 PowerShell 栈
     # **各自都要给出这一条**（两边都是"本栈的取值"，且**两边都必须让本栈读者直接读到**，
     # 不许把一方推给另一方）。它不是"同一件事写两遍"——两栈的读者是两批人，

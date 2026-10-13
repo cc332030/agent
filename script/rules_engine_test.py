@@ -816,6 +816,47 @@ class TestPointerNoVerbatim(unittest.TestCase):
                        "missing_file_message": "缺少 {file}"}]}, ctx).run("g")
         self.assertIn("缺少 a.adoc", ctx.texts())
 
+    def test_pointer_to_script_head_reports(self):
+        # **本轮实证形态**：回指的落点不限于 `.adoc`——`AGENTS_COMMON.adoc` 一行自称
+        # "真源是 `script/fetch-specs.py` 的头部注释、本节不复述"，却把那脚本头部的
+        # 退出码语义逐字抄了一遍（35 字重合）。原实现只认 `.adoc`，引用列表为空、直接
+        # 跳过，整类漏检。本条钉住扩展：指向脚本头部的回指同样要核。
+        py = ('"""\n用法：fetch-specs --keep\n'
+              '退出码：0 成功、1 有文件没取到、2 参数或前置条件错误——非 0 就别把副本当已就绪\n"""\n')
+        doc = ("* **取回口径真源是 `script/fetch-specs.py` 的头部注释**：本节不复述其取值"
+               "——退出码：0 成功、1 有文件没取到、2 参数或前置条件错误，"
+               "非 0 就别把副本当已就绪。\n")
+        errs = self._run({"doc.adoc": doc, "script/fetch-specs.py": py})
+        self.assertEqual(len(errs), 1)
+        self.assertIn("fetch-specs.py", errs[0][0] + errs[0][1])
+
+    def test_pointer_to_prompt_fragment_reports(self):
+        # `.txt`（提示词公共片段）同属可被回指的落点
+        frag = "* 每级先实测可用、不跳级、不覆盖既有配置，且不覆盖引用方配置。\n"
+        doc = ("* **取舍本体见 `prompts/_common.txt`**，本文件只给实测记录"
+               "——每级先实测可用、不跳级、不覆盖既有配置，且不覆盖引用方配置。\n")
+        self.assertEqual(len(self._run({"doc.adoc": doc, "prompts/_common.txt": frag})), 1)
+
+    def test_exclude_refs_skips_rule_data(self):
+        # `exclude_refs`：**被引文件里不参与比对的**——`guards.adoc` 是防线清单，它与那份
+        # **规则数据**自己的头部注释讲同一批事实（分工已在该文件开头写明），逐字重合是
+        # 该层的预期形态、不是第二真源（与 `duplicate_scan` 对维护方自查层的处理同源）。
+        toml = "# 本条防的失效：迁移被做成把旧工具的形态翻译成新工具的等价写法\n"
+        doc = ("* **`check_x_guard`**——迁移被做成把旧工具的形态翻译成新工具的等价写法；"
+               "规则数据在 `script/specs-rules/x.toml`，本处不复述其取值。\n")
+        files = {"doc.adoc": doc, "script/specs-rules/x.toml": toml}
+        self.assertEqual(len(self._run(files)), 1)
+        self.assertEqual(
+            self._run(files, exclude_refs=["script/specs-rules/x.toml"]), [])
+
+    def test_pointer_to_unknown_extension_not_checked(self):
+        # 只认**可被回指的落点类型**（`.adoc`/`.py`/`.sh`/`.bat`/`.cmd`/`.ps1`/`.toml`/`.txt`）——
+        # 图片/二进制一类既无正文、也不承载取值，不扩到任意扩展名
+        png = "* 每级先实测可用、不跳级、不覆盖既有配置，且不覆盖引用方配置。\n"
+        doc = ("* **取舍本体见 `assets/a.png`**，本文件只给实测记录"
+               "——每级先实测可用、不跳级、不覆盖既有配置，且不覆盖引用方配置。\n")
+        self.assertEqual(self._run({"doc.adoc": doc, "assets/a.png": png}), [])
+
 
 class TestSeparationInvariants(unittest.TestCase):
     """『规则与脚本的隔离』的确定项：规则数据是纯数据、一类规则一个文件、引擎不承载措辞。"""

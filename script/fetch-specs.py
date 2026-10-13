@@ -20,6 +20,22 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 
 取回与更新口径（**本节是「怎么取、怎么更新」的真源**——公共入口 `AGENTS_COMMON.adoc`
 「取规范到本地副本」只写落点那一处，其余回指本节；**同一句话不在两处各写一遍**）：
+  - **先更新自身、再照新清单取全（同一轮生效）**：清单来自入口（`AGENTS_COMMON.adoc`）的调度器
+    登记，而"怎么解析这份清单"是**本脚本自己**的取舍——清单解析口径改了、或新增的文件**不在旧清单
+    的形态里**（新文件类型、新落点排布）时，**跑着旧脚本的那一轮只会照旧口径取**，新东西静默不进
+    副本、也不报错（"看着取全了、其实少了几份"）。故每轮先取一次**远端的最新脚本自身**：与本轮
+    真身（`__file__`）逐字节比较，不同就把它落地、**当场换到自己身上、自己重启，再照新脚本的清单
+    口径取全**（原样参数、退出码来自重启后的那一轮，见 `hand_off_self`）——**一次运行即达成"更新
+    即是更新"**，不留"下一轮才生效"的空窗（用户口径：「更新的时候，就要及时生效吧？还等下一次？」）。
+    **按需中转、不留待换标记**：真身（`__file__`）可写时新版本**直接落到真身路径旁边的中转文件**
+    （`_self_update_candidates`），重启换的是它、不必再经交接文件；只有**读得到真身、却换不动它**（真身
+    目录只读、非属主）时才写下"待换的新版本在哪"（`hand_off_self` 消费的那个文件），**下一轮运行**
+    读到即自己换、自己重启——这一步是**兜底**，不是常规路径。故**壳什么都不必做、仍是薄壳**
+    （职责边界见 `specs/general/script.adoc`「跨环境脚本」）。**走文件而不是环境变量**：**子进程设
+    的环境变量回不到调起它的父壳**（本仓库实证：交接当初走 `STALE_SELF_PATH`，壳那条路永远读不到、
+    机制形同没有）。换不动/留不下标记时**如实警告**、不得静默（同「落点只读」那条的效力边界口径）；
+    **"取最新脚本"因此是每轮必然的一步**：它不另立第二套真源、也不引入校验和——更新的判据与
+    规范副本**同一条**（取回的字节与本地逐字节比较），只是对象换成了本脚本自己；
   - **一次取全**：一次运行把入口与其 `specs/` 全部取回，调用方不必手拼逐条下载命令
     （清单从入口自身解析，见上「文件清单」）；
   - **默认以远程为准**：每份文件按"取回的字节与本地不同才落盘"核对，远端改过就刷新，
@@ -37,6 +53,11 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 
 环境变量：
   AGENT_SPECS_BASE   规范来源地址，等价于 --base（默认取仓库站点）
+  STALE_SELF_PATH    已撤掉的旧形态（**留作反例，不再使用**）：本轮取到的新版本路径当时靠环境
+                     变量交给调用方的壳——**子进程设的环境变量回不到调起它的父壳**（本仓库实证：
+                     壳那条路永远读不到），故改成走文件：路径写在本脚本自己的路径 + `.handoff`
+                     后缀的那个文件里，换不动真身时由下一次运行自己读、自己换、自己重启
+                     （见下「交接文件」）。
 
 落点（**只有一处**：用户家目录下的 `<落点父目录>/<落点名>`＝`CACHE_HOME_DIR`/`CACHE_APP_DIR`）：
   - 落点**不按平台取目录**：不管什么系统、什么环境都是用户家目录下的这一个路径（用户口径），
@@ -48,6 +69,10 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：规范副本进来源槽，取规范脚本与本脚本
     配套的 `clean_tmp.py` 落**落点根下**——跨来源共用一份，下次重装直接跑落点里的入口，
     不必再手工下载一遍（用户口径：下载的文件一律只落这一个地方）。
+  - **交接文件也落在脚本旁边**（`<脚本路径>.handoff`，见 `hand_off_self`）：它记着"待换的新版本
+    在哪"，是**本脚本自己的状态**、不是规范副本；换完即删，且不参与落点的只读收紧那一套
+    （它就在本脚本旁边，跟着脚本自己的可写性走）。**它只在换不动真身时才出现**——真身可写时
+    新版本直接落在真身旁、同一轮就换上，不写标记（见上「取回与更新口径」）；
   - **落点取完即只读**（见 `_make_read_only`）：下载完把落点里的**目录去掉写位、文件
     只留读位**（取值即 `_READ_ONLY_DIR_MODE`/`_READ_ONLY_FILE_MODE`）——规范副本是**只读的
     参考物**，不是可改的工作区；只读让"落点被就地改过"从"看不出来"变成"当场失败"
@@ -69,11 +94,16 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - `--keep` 反过来：本地已有且非空即不动（只补缺失项），要最新内容就别加它；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
+  - **临时产物留在工作目录 `tmp/` 下**（见 `specs/core/execution.adoc`「临时产物」）：新版本
+    脚本在真身与落点都不可写时中转落在这里；运行前已存在的旧副本由本脚本自己按项目清理脚本
+    的用法清掉（`_clean_self_tmp`），本轮新写的那几份留着——调用方可能还要读它们；
   - `--keep` 之外**不做备份**：落点是那份文件自己的位置，被改动过的副本按"以远程为准"覆盖掉
     ——**须留本地改动时用 `--keep`**；
   - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满；
   - 落盘完成后把落点收紧为**只读**（`_make_read_only`；本脚本为落盘所需的最小写位由
     `_ensure_writable` 临时恢复，之后重新收紧）——落点是只读的参考物，见上「落点」。
+  - **"更新自身"会重跑一次**：换上新版脚本后当轮就 `os.execv` 重启（挂 `--self-updated` 作刹车，
+    见 `_restart_with`）——重启后的那一轮按新脚本的清单口径取，用户侧看到的仍是**一次运行**。
 
 安全保证：
   - **只读远端、只写落点目录内**：落点不是调用方给的路径，而是本脚本按本机用户目录算出来的
@@ -87,7 +117,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 已知限制：
   - 不做时间维度的过期判断：判据是**内容**而不是时间——每份文件都先把远端内容取到内存、
     与本地逐字节比较后才决定落不落盘，故没有"本地那份看起来还新、实际已经过期"这条失效；
-    代价是每次运行都要把清单内文件取一遍；
+    代价是每次运行都要把清单内文件（含本脚本自身）取一遍；
   - `--keep` 下本地副本可能落后于远端，此时**以落点里的旧副本为读到的内容**——是否要最新
     由调用方按任务判（入口「安装与更新」的流程一律按默认的"以远程为准"走）；
   - 内容比对只看字节：远端对同一份规范做格式等价改写（如仅换行/顺序）同样会落盘刷新；
@@ -106,6 +136,10 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     POSIX（Linux/macOS）成立**，Windows 上"严禁项目改动落点"靠**规范约束**而非文件系统
     （这正是把本条 L1 写进 `AGENTS_COMMON.adoc`「取规范到本地副本」的原因之一）。
     同理，`_ensure_executable` 补的执行位在 Windows 上无对应语义（`.bat` 按关联执行，属预期）。
+  - **自更新在"读不到真身"这种跑法下换不动**（非属主 / 只读挂载 / 权限）：新版本照旧落地
+    （落点根下那份就是"下次运行会读到的真身"），但**本轮这份脚本改不了**，故**如实警告**
+    并留下待换标记，由下一轮接上（见 `_take_over_self`）。这是本机权限边界，不是脚本能绕的
+    那一层——"看着换上了、其实没换"因此在这里被明确报出来，而不是静默。
 """
 
 import argparse
@@ -113,7 +147,9 @@ import concurrent.futures
 import http.client
 import os
 import re
+import shutil
 import stat
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -138,6 +174,15 @@ ENTRY_SCRIPTS = ("script/fetch-specs.sh", "script/fetch-specs.bat")
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
 TIMEOUT_SECONDS = 30
 DEFAULT_WORKERS = 4
+# "待换的新版本在哪"的交接文件后缀（写在**本脚本自己的路径**之后）：见 `hand_off_self`。
+# 走文件而不是环境变量：**子进程设的环境变量回不到调起它的壳**（本仓库实证），
+# 而"换掉自己并且还能接着跑"这件事必须跨进程可见。
+SELF_HANDOFF_SUFFIX = ".handoff"
+# 更新自身的工作目录：`tmp/` 下（临时产物见 specs/core/execution.adoc「临时产物」）。
+SELF_TMP_DIR = "tmp"
+# 新版本脚本的文件名后缀（与本轮真身同名不同后缀，见 `_self_update_candidates`）
+SELF_UPDATE_SUFFIX = ".update"
+CLEAN_TMP_SCRIPT = "clean_tmp.py"
 # 落点取完即**只读**：目录只留"进入 + 列出 + 读"（5=rwx+r-x），文件只留读位（4=r--）。
 # 用绝对值（两个独立的十进制常量）而不是 `0o` 字面量：权限位取值是**本脚本的取舍**，
 # 写成常量便于核对与单测（见 specs/general/script.adoc「注释里的取值：写常量名」）。
@@ -165,11 +210,16 @@ def parse_args(argv=None):
     parser.add_argument("--force", action="store_true",
                         help="忽略本地副本、强制重取（与 --keep 相反，即默认行为）")
     parser.add_argument("--no-scripts", action="store_true",
-                        help="只取规范副本，不把安装脚本（本脚本与其平台入口、清理脚本）取到落点")
+                        help="只取规范副本，不把安装脚本（本脚本与其平台入口、清理脚本）取到落点"
+                             "（脚本的**自身更新**不受它影响：那一件是本脚本自己、不是落点里的物）")
     parser.add_argument("--list", action="store_true",
                         help="只打印将要取的文件清单，不下载")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                         help="并发请求数（默认 4）")
+    # 内部开关（不是给调用方用的参数）：自更新"换上了、自己重启"后由**本脚本自己**挂在
+    # 命令行末尾，作为重启链上的刹车——`hand_off_self` 见到它就不再换、不再重启（防无限套娃）。
+    # 写法隐去、不进 `--help`：它是实现细节，调用方加它只会跳过自更新这一版（见 `_restart_with`）。
+    parser.add_argument("--self-updated", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -247,6 +297,348 @@ def local_bytes(dest):
             return fh.read()
     except OSError:
         return b""
+
+
+def update_self(base, out_dir, cwd):
+    """把**本脚本自身的最新版**取回来并**当场换上去、接着由它干完这一轮**。
+
+    **本函数只在"换上了"时回来**（新版本已落到真身路径、作为真身真的跑起来了）；没换成、
+    或远端那份与本轮一致时返回 `None`——调用方照本地这一份继续。
+
+    为什么要有这一步（"清单从入口解析"这件事的自身盲区）：清单来自入口的调度器登记，
+    而**解析口径**在本脚本里——远端若改了脚本（新文件类型、新落点排布），跑着旧脚本的那一轮
+    只会照旧口径取，新东西静默不进副本（用户口径：更新自身，避免有的没进索引）。
+    故每轮先取一次"远端的最新脚本"，与本地这份（`__file__`，即本轮真身）逐字节比较：
+    内容一致即当轮无事；不同则把取到的那份**落盘**并**立刻生效**。
+
+    **怎么算"立刻"（用户口径：「更新的时候，就要及时生效吧？还等下一次？」）**：分两步——
+      1. **先办正事**（每一轮、任何跑法都成立）：新版本被**落到本次真正在跑的那份脚本的路径**
+         （真身可写时就是真身自己旁边；真身读不到时＝"调用方手里这份就是真身"，落点根下那份
+         即它的真身），且**写到"真身那一份"上去**——故**无论有没有重启**，"这一轮接下来按哪份
+         清单取"已经是新版（壳再次调起、或本脚本下次被跑，读到的都是它）；
+      2. **再换本身**（本轮就把新脚本跑起来）：换得动真身、且真身就是本轮这份文件，则立即
+         `os.execv` 重启（原样参数、退出码来自重启后的那一轮，见 `_restart_with`）——本轮就
+         按新脚本的清单口径取全，不留"下一轮才生效"的空窗。两个平台入口都用 `exec`/绝对路径
+         把这份逻辑代码当命令直接跑，故"**本轮这份文件**"与"**真身**"
+         在正常跑法下**是同一个文件**（见 `_real_script`）——直跑与经壳调起都走这一条；
+         只有 `sys.argv[0]` 确实指向别处（如 `python3 - < x.py`）时才**不在脚本里重启**
+         （那时“代真身重启”会把调用方的排布改掉）。
+    读不到真身（非属主 / 只读挂载 / 权限）时**换不动**：新版本照旧落地（落点根下那份**就是**
+    "下次运行会读到的真身"），并**如实警告**"这一轮仍按旧口径取"（见下，不得静默）。
+
+    **落盘路径按写位取**（判据不是平台名，见 `_self_update_candidates`）：
+      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.<pid>.update`）——直接跑
+        `python3 fetch-specs.py`、或经壳调起时都在这一处，换起来不必跨目录；
+      * 只有**落点根下**可写（`<落点根>/fetch-specs.py` 是本脚本自己写的那份）→ 落在落点根下
+        的**真身同名文件**——它本身就是"下次运行会读到的真身"，故拷过去即已成事；
+      * 两处都不可写（只读挂载、非属主）→ 还有工作目录 `tmp/` 兜底；连它也不可写时
+        **不落盘、如实警告并继续**：更新自身取不到就别取，本轮照旧把规范副本取到手
+        （不得把一个可以自愈的情形报成整批失败）。
+    写位在真正落盘时才探测（`_first_writable_dir`）——**只读的 `/usr/local/bin`** 这种
+    "看着能写、实际不能"的目录不会留下一串报错。
+
+    **读得到却换不动时**（只读目录、非属主）才写下待换标记（`_leave_handoff_note`），
+    由**下一轮运行**消费——那时"下一轮"是唯一可行的路，且警告里如实说明。此时**也不覆盖
+    真身**（写不进去）；落点根下那份（"下次的真身"）已换成功。
+
+    只在**非 `--keep`、非 `--list`** 时调用（两者的语义分别是"不动本地那份"与"只看清单、不下载"，
+    换上刚取到的新脚本与之相抵；真要最新脚本时不加它——与规范副本同一条口径）。
+    """
+    local = os.path.abspath(__file__)
+    try:
+        data = fetch_text(base, INSTALL_SCRIPTS[0]).encode("utf-8")
+    except (OSError, http.client.HTTPException) as e:
+        print(f"警告: 取回最新脚本失败({e})——本轮照旧按本地这一份的清单口径取", file=sys.stderr)
+        return None
+    try:
+        with open(local, "rb") as fh:
+            if fh.read() == data:
+                return None
+    except OSError:
+        pass                        # 读不到本地那份（权限等）：照"不同"处理，取回的那份仍写出去
+    # 落盘**逐处试**（不是先选一处、写不进去就放弃）：写位是按 `os.access`/"最近可写的祖先"
+    # 估的，而真实可写性与它不总一致（ACL、只读挂载、祖先可写而这一级建不出来）——第一处
+    # 写失败时后面那几处**可能写得进去**，那时"无处落盘"是假结论、待换标记也就白丢了。
+    failed = None
+    for target, why in _self_update_candidates(out_dir, cwd):
+        try:
+            _ensure_writable(out_dir, target)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "wb") as fh:
+                fh.write(data)
+            _chmod_report(target, _WRITABLE_FILE_MODE | stat.S_IXUSR)
+        except OSError as e:
+            failed = e
+            continue
+        print(f"更新: 已取到更新的取规范脚本 {os.path.getsize(target)} B（{why}）", file=sys.stderr)
+        return _take_over_self(local, target)
+    if failed is None:
+        print("警告: 最新脚本已取到、但无处落盘——本轮照旧按本地这一份的清单口径取",
+              file=sys.stderr)
+    else:
+        print(f"警告: 最新脚本已取到、但无处落盘({failed})——本轮照旧按本地这一份的清单口径取",
+              file=sys.stderr)
+    return None
+
+
+def _take_over_self(local, target):
+    """把刚落盘的新版本**换到正在跑的这份脚本身上**：成事即回来（此函数不返回），
+    换不动则**如实警告 + 留下待换标记**（`hand_off_self` 消费）并返回 `None`。
+
+    三条判据（"读得到真身"是自更新这件事的**能力边界**，做不到就明说）：
+
+      * **读不到真身**（非属主 / 只读 / 权限）：既比不出差异、也换不动——只留下待换标记
+        并如实警告"这一轮仍按旧口径取，重跑一次即用上"（`os.access` 只是**尝**
+        ——ACL/只读挂载在权限位上仍显可写，真写才失败，见 `_first_writable_dir`）；
+      * **真身不在本轮这个文件上**（`sys.argv[0]` 指向别处）——**这个进程不是它**，别人那份
+        动不得（真写上去会把调用方自己的排布改掉），只留标记、不换不发：真身那一份已经由
+        上一处的落盘换成了新版（`_self_update_candidates` 按 `sys.argv[0]` 定落点），它下次跑起来
+        就是新版；
+      * **真身就是本轮这个文件**：拷上去、`os.execv` **当轮重启**——换得动即本函数不返回，
+        换不动（只读目录、非属主）则退回"留标记 + 如实警告"。
+
+    **换成功这条路上没有交接文件**：真身已经换成新版、本轮已由新版接着跑完，下一轮读到它
+    就是新版，标记只会白留一份（故这条路上顺手清掉既有的那份）。
+    """
+    real = _real_script()
+    if real is None:
+        print("警告: 已取到更新的取规范脚本，但读不到真身、这一轮换不上去——本轮仍按旧口径取；"
+              "重跑一次即用上（见 specs/general/script.adoc「跨环境脚本」）", file=sys.stderr)
+    elif os.path.abspath(real) != local:
+        print(f"警告: 已取到更新的取规范脚本，但真身是 {real}（本轮这份是壳另起的临时副本）"
+              "——不在脚本里代它重启；重跑一次即由真身接上", file=sys.stderr)
+    else:
+        try:
+            shutil.copyfile(target, local)
+            os.chmod(local, os.stat(local).st_mode | stat.S_IXUSR)
+        except OSError as e:
+            print(f"警告: 已取到更新的取规范脚本({target})，但换不上去({e})——本轮按本地这一份继续；"
+                  "重跑一次、或手工把它换过来即用上（见 specs/general/script.adoc「跨环境脚本」）",
+                  file=sys.stderr)
+        else:
+            _discard_handoff_note(f"{local}{SELF_HANDOFF_SUFFIX}")
+            print("更新: 已就地换上新版取规范脚本，本轮即按它的清单口径取全", file=sys.stderr)
+            _restart_with(local, "--self-updated")     # 成事即不返回
+    _leave_handoff_note(target)
+    return None
+
+
+def _real_script():
+    """**真正的脚本文件**在哪：`sys.argv[0]` 指向的那个（读不到时返回 None）。
+
+    为什么与 `__file__` 分开：两者在本脚本的正常跑法下**是同一个文件**（两个平台入口都用
+    `exec`/绝对路径把这份逻辑代码当命令直接跑，`sys.argv[0]` 即它自己），但**不保证相等**
+    ——`python3 - < x.py`、或调用方自己拷一份到别处再跑时，`sys.argv[0]` 才是"调用方手里
+    那一份"。"换完能不能当场接着跑"取决于这两者是不是同一个文件（见 `_take_over_self`）。
+    """
+    try:
+        argv0 = sys.argv[0]
+    except (IndexError, AttributeError):
+        return None
+    if not argv0 or not os.path.isfile(argv0):
+        return None                 # 读不到"调用方手里那一份"：换不动它，别猜
+    return os.path.abspath(argv0)
+
+
+def _restart_with(script, *extra):
+    """用**当前解释器**把 `script` 与**原样的参数**重新跑起来（退出码来自重启后的那一轮）。
+
+    `--self-updated` 是这条链上的刹车：带上它即表示"这一轮已经是重启后的新一轮"，
+    `hand_off_self` 见到就不再换、不再重启（否则收尾那份标记会让重启无限套娃）。
+    重启起不来（解释器不可执行等）时**如实警告并继续**——那一轮按**已经换好的**新脚本继续跑
+    本来也对，不得把一次重启失败报成整批失败。
+    """
+    try:
+        os.execv(sys.executable, [sys.executable, script, *sys.argv[1:], *extra])
+    except OSError as e:
+        print(f"警告: 已换上新版取规范脚本，但重启失败({e})——本轮的取文件照旧、按已换上的新版继续",
+              file=sys.stderr)
+
+
+def _leave_handoff_note(target):
+    """把"待换的新版本在这儿"留给**下一次运行**（判定与消费见 `hand_off_self`）。
+
+    **只在换不动真身时才写这条标记**：真身与 `target` 同一个目录时它压根不写（那种情形本脚本
+    自己就换得动，`_take_over_self` 已就地换成、并当场重启）；真身读不到/不是本轮这份文件、
+    或真身只读换不动时，新版本也只能落在别处（落点根下、`tmp/`），才需要下一轮来接这一棒。
+    """
+    note = f"{os.path.abspath(__file__)}{SELF_HANDOFF_SUFFIX}"
+    try:
+        _ensure_writable(os.path.dirname(note), note)
+        with open(note, "w", encoding="utf-8") as fh:
+            fh.write(target + "\n")
+        _chmod_report(note, _WRITABLE_FILE_MODE)
+    except OSError as e:
+        print(f"警告: 新版本已取到，但留不下待换的标记({e})——本轮的取文件照旧；"
+              f"手工把 {target} 换过来即用上", file=sys.stderr)
+        return
+    print(f"说明: 新版本落在一处、但换不动本轮这份脚本，标记已留在 {note}；"
+          "下一轮运行读到它即自动换上并按新脚本的清单口径取全", file=sys.stderr)
+
+
+def _self_update_candidates(out_dir, cwd):
+    """新版本脚本**可以落在哪几处**，按次序产出 `(落盘路径, 说明)`。
+
+    说明里带后缀 `（= 真身）` 表示**它本身就是真身**——那种落法拷过去即已成事
+    （见 `_take_over_self`），不必再经交接文件这一棒。
+
+    **按次序**取，**先看真身**：
+
+    判据是**写位**而不是"这是哪个平台的哪个目录"：同一条规则在两种跑法下都成立
+    （项目里的源码、与落点里那份入口），而平台名一写进来就变成环境相关的事实
+    （见 `shared_cache_dir` 对"落点只有一处"的同一层取舍）。
+
+      * **真身那份（`sys.argv[0]`）所在的目录可写** → 落在它旁边
+        （`.<真身名>.<pid>.update`）：这是"下一轮会读到的那份"自己，最快也最合适的一处
+        （直接跑、经壳调起都走这一条：两个入口都用 `exec`/绝对路径调这份逻辑代码，
+        `sys.argv[0]` 就是真身——见 `specs/general/script.adoc`「跨环境脚本」）；
+      * **真身读不到**（`sys.argv[0]` 不是一份真实文件、如 `python3 - < x.py` 或壳给的临时副本）
+        ——那时的真身是落点根下那份，故**直接落在落点根下，用它的文件名**：拷过去即已成事；
+      * 前两处都不可写（只读挂载、非属主）→ 工作目录 `tmp/` 兜底；三处都不可写才返回 None，
+        那时**不落盘、如实警告**，本轮照旧把规范副本取到手。
+
+    第二、三处**都不是真身**，故要留交接标记（`_leave_handoff_note`）交下一轮去换。
+
+    **只产出"看着能写"的那几处**（判据同下）；写位是按 `os.access`/"最近可写的祖先"估的，
+    与真实可写性不总一致，故**真正落盘由 `update_self` 逐处试**——第一处写失败时后面那几处
+    可能写得进去（本仓库实证：祖先可写、而 `tmp/` 这一级建不出来），那时"无处落盘"是假结论。
+    """
+    real = _real_script()
+    candidates = []
+    if real:
+        candidates.append((os.path.dirname(os.path.abspath(real)), os.path.basename(real), True,
+                           "真身所在目录"))
+    candidates.append((install_scripts_dir(), os.path.basename(INSTALL_SCRIPTS[0]), real is None,
+                       "落点根下"))
+    candidates.append((os.path.join(cwd, SELF_TMP_DIR), os.path.basename(INSTALL_SCRIPTS[0]), False,
+                       "工作目录 tmp/ 下"))
+    for on_dir, name, is_real, kind in candidates:
+        # 判据是**这一处自己**写不写得进去，而**落盘仍落在本来的位置**——借祖先的写位把文件
+        # 落到祖先里，等于把"下一次会读到的那份"放到一个谁也不会去读的地方。
+        #
+        # `_first_writable_dir` 用来判"**已经存在**的那一段"可写（`/usr/local/bin` 那种
+        # 看着能写、实际不能的目录由此挡掉），而这一处**可能还没建出来**（落点根下、`tmp/`
+        # 都是本轮现建的）：未建出来时按"最近的已存在祖先可写即算这一处可写"判——建不建得成
+        # 由真正落盘那一步说了算（失败即如实警告，见 `update_self`）。
+        if os.path.isdir(on_dir):
+            writable = os.access(on_dir, os.W_OK)
+        else:
+            writable = _first_writable_dir(on_dir) is not None
+        if not writable:
+            continue
+        suffix = f".{name}.{os.getpid()}{SELF_UPDATE_SUFFIX}" if is_real else name
+        where = f"{kind}（= 真身）" if is_real else kind
+        yield os.path.join(on_dir, suffix), where
+
+
+def _first_writable_dir(directory):
+    """`directory` 及其最近的已存在祖先里**第一个当前可写**的（没有则 None）。
+
+    写位在**真正要落盘时**才探测：文件系统级只读（`/usr/local/bin` 一类）不靠权限位体现，
+    看权限位会以为写得进去、真写时才失败（那条失败会以警告的形式出现在每一次运行里）。
+    """
+    node = os.path.abspath(directory)
+    while True:
+        if os.path.isdir(node) and os.access(node, os.W_OK):
+            return node
+        parent = os.path.dirname(node)
+        if parent == node:
+            return None
+        node = parent
+
+
+def hand_off_self():
+    """把**上一轮留下的新版本**换成自己，然后照旧跑下去（带上原样的参数与退出码）。
+
+    这是自更新的**兜底路径**，不是常规路径：常规路径里脚本自己就换得动、当轮即重启（见
+    `_take_over_self`），压根不写这条标记；只有**真身读不到、或真身换不动**（只读挂载、非属主）
+    时才留下标记，由"能写的下一次"来接这一棒。
+
+    新版本在哪不用环境变量传（**子进程改了环境变量，调起它的壳读不到**——本仓库实证：
+    壳那条路读 `STALE_SELF_PATH` 永远为空）：本脚本把自己的路径 + 后缀（`SELF_HANDOFF_SUFFIX`）
+    写成一个**同目录的文件**，下一次运行（无论是壳再调一次、还是本脚本自己重启）读到它即换。
+    写成文件还有个副作用是对的——"待换的新版本"这件事因此**跨进程可见**，重跑一次就能接上。
+
+    判据是 `os.replace`/拷贝换得动：换不动（只读挂载、非属主）就**如实警告并继续**，守住既有口径
+    ——"文件已取到"与"权限改不动"是两件事，不得把一个可自愈的情形报成失败（同 `_make_read_only`）。
+    """
+    note = f"{os.path.abspath(__file__)}{SELF_HANDOFF_SUFFIX}"
+    if not os.path.isfile(note):
+        return
+    try:
+        with open(note, encoding="utf-8") as fh:
+            fresh = fh.read().strip()
+    except OSError as e:
+        print(f"警告: 读不到上一轮留下的新版本路径({note}): {e}", file=sys.stderr)
+        return
+    if not fresh or not os.path.isfile(fresh):
+        _discard_handoff_note(note)
+        return
+    if "--self-updated" in sys.argv:
+        # 重启过来的这一轮：文件已经换过，剩下的"新版本路径"记一笔提示即可
+        _discard_handoff_note(note)
+        return
+    if _real_script() != os.path.abspath(__file__):
+        # 真身不是本轮这个文件：**不在脚本里代它重启**——那会把调用方的排布改掉
+        # （见 `_take_over_self`）。标记留着，真身下次跑起来自然接上。
+        print(f"说明: 新版本({fresh})等真身下次跑起来时自己接上——本轮这一份不是它在用的那一份，"
+              "不在脚本里代它重启", file=sys.stderr)
+        return
+    try:
+        shutil.copyfile(fresh, os.path.abspath(__file__))
+        os.chmod(os.path.abspath(__file__), os.stat(os.path.abspath(__file__)).st_mode | stat.S_IXUSR)
+    except OSError as e:
+        print(f"警告: 已取到更新的取规范脚本({fresh})，但换不上去({e})——本轮按本地这一份继续；"
+              f"重跑一次、或手工把它换过来即用上（见 specs/general/script.adoc「跨环境脚本」）",
+              file=sys.stderr)
+        return
+    _discard_handoff_note(note)
+    print("更新: 已换成上一轮取到的新版取规范脚本，本轮按它的清单口径取全", file=sys.stderr)
+    _restart_with(os.path.abspath(__file__), "--self-updated")
+
+
+def _discard_handoff_note(note):
+    """用过即清（读不到/删不掉都只当它不在，不得因此中断一轮取文件）。"""
+    try:
+        os.remove(note)
+    except OSError:
+        pass
+
+
+def _clean_self_tmp(cwd):
+    """把上次"更新自身"留在工作目录 `tmp/` 里的旧副本清掉。
+
+    清理**只碰本脚本自己放进去的那几种名字**（`SELF_UPDATE_SUFFIX` 结尾的文件、与取规范脚本
+    同名的中转文件）：清理本身是破坏性动作，脚本不做"顺手清空 `tmp/`"这种事（见
+    specs/core/execution.adoc「破坏性操作」）。清理方式按项目提供的清理脚本走
+    （见 specs/general/script.adoc「临时产物清理」）：它按**当前工作目录**当项目根、收相对路径，
+    故本函数以 `cwd` 起 `subprocess`；清理脚本不在 `tmp/` 里（调用方可能并没有把它取下来）时
+    自己删——**判据与清理脚本同一条**（目标必须落在 `tmp/` 内、名字在白名单里）。
+
+    **本轮新写的那几份不清**：它们可能就是调用方的壳正要换上去的源（删了等于把刚做好的事抹了），
+    故本函数只清**运行前已存在**的旧副本——由调用方在进入本轮、取回新版本**之前**调用。
+    """
+    tmp = os.path.join(cwd, SELF_TMP_DIR)
+    if not os.path.isdir(tmp):
+        return
+    victims = [name for name in os.listdir(tmp)
+               if name.endswith(SELF_UPDATE_SUFFIX)
+               or name == os.path.basename(INSTALL_SCRIPTS[0])]
+    if not victims:
+        return
+    cleaner = os.path.join(cwd, SELF_TMP_DIR, CLEAN_TMP_SCRIPT)
+    if os.path.isfile(cleaner):
+        try:
+            subprocess.run([sys.executable, cleaner, *[f"{SELF_TMP_DIR}/{n}" for n in victims]],
+                           cwd=cwd, capture_output=True, timeout=TIMEOUT_SECONDS)
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass                    # 清理脚本跑不起来（解释器/权限）：退回自己删，判据不变
+    for name in victims:
+        try:
+            os.remove(os.path.join(tmp, name))
+        except OSError:
+            pass
 
 
 def download_one(base, rel, out_dir, keep):
@@ -559,6 +951,8 @@ def resolve_out_dir(args):
 
 def main(argv=None):
     args = parse_args(argv)
+    # 上一轮留下的新版本：先换上它、再照它的清单口径干活（见 `hand_off_self`）
+    hand_off_self()
     try:
         out_dir = resolve_out_dir(args)
     except ValueError as e:
@@ -570,6 +964,17 @@ def main(argv=None):
         return EXIT_USAGE
 
     base = args.base
+    # **先更新自身、再照新清单取全**（见头部「取回与更新口径」）：脚本自己的清单解析口径若在
+    # 远端变过，跑着旧脚本的这一轮只会照旧口径取——新东西静默不进副本（用户口径："更新自身
+    # 避免有的没进索引"）。故这一步在**取清单之前**，且**换上了就当场重启、当轮即生效**
+    # （用户口径：「更新的时候，就要及时生效吧？还等下一次？」）——`update_self` 只在
+    # **没换成**（远端一致 / 真身换不动 / 无处落盘）时返回，那几种情形它已各自如实警告完毕。
+    # 只在非 `--keep` 与 `--list` 时做（`--list` 是"只看清单、不下载"）。
+    if not args.keep and not args.list:
+        # 先清掉**上一轮**留下的旧副本（本轮的还没写，见 `_clean_self_tmp`）
+        _clean_self_tmp(os.getcwd())
+        update_self(base, out_dir, os.getcwd())
+
     try:
         targets, optional = manifest_targets(base)
     except Exception as e:                                  # noqa: BLE001 - 网络与解析都按同一路径报错
