@@ -3821,8 +3821,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 143
-GUARD_TEST_BASELINE = 1868
+GUARD_WIRING_BASELINE = 144
+GUARD_TEST_BASELINE = 1885
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -9879,6 +9879,32 @@ def check_deprecated_api_guard():
     phase_done()
 
 
+def check_compat_preference_guard():
+    """『取兼容性更好的那一个』防线（用户提出：同一能力两个及以上等价入口并存时取兼容性更好的一个，**适用所有语言、不限编程**）。
+
+    要治的失效是**候选之间的裁量点**：同一能力并存两个等价入口时，取哪一个没有判据，
+    于是"旧写法也能跑""新写法不熟""记不清是哪一代的名字"都能当理由，同一项目里并存两种形态
+    （典型的形态是同版本区间内换过包名/命名空间的 API——旧名形态向后不兼容）。
+    故本条钉**判据本体**（取值口径三条 + 适用范围"效果相同" + 完整能力面是取用前提 +
+    判定标准四条 + 例外三档），不钉轴名：只核「警告与弃用」这一节在不在属防线空转。
+    栈侧（`specs/stack/spring.adoc`「参数校验」）是**一跳引用**，只给本栈的取用方向与
+    "不得把 `javax` 说成被弃用"这一处实证失效形态；取值口径不在栈侧再写一份。
+    加载门两处（调度器「任何代码活动」条与 Spring 技术栈条）——缺则写这类取舍时走不到本文件。
+    「某两个入口算不算等价」「效果有没有差异」属语义判断，交人/子 agent 复核。
+    """
+    phase("取兼容性更好的那一个防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「取兼容性更好的那一个」的通用层落点丢失"
+            "（该条跨语言、不限编程，须收在通用编码规范而非某一技术栈）", rel_coding)
+    if not os.path.isfile(SPRING_STACK_FILE):
+        err(f"缺少文件 {rel_spring}——该条在 Spring 侧的取值落点丢失"
+            "（`javax`/`jakarta` 两代命名空间的选举是本栈的形态，判据本体仍在通用层）", rel_spring)
+    run_rule_guard("check_compat_preference_guard")
+    phase_done()
+
+
 def check_readonly_landing_guard():
     """『落点只读防线』：取规范副本的落点取完即**只读**，任何项目不得改动它。
 
@@ -11721,6 +11747,7 @@ CHECKS = (
     check_chain_assignment_order_guard,
     check_persistence_access_guard,
     check_deprecated_api_guard,
+    check_compat_preference_guard,
     check_conversion_guard,
     check_entity_dto_guard,
     check_lombok_constructor_guard,

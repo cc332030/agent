@@ -136,6 +136,13 @@
 ** **日期口径**：Keep a Changelog 只要求"显示发布日期"并推荐 ISO 8601；**未**规定"日期取 tag 创建日还是版本号内嵌日期"——本集合取**发布日期**，属判据化取值（**tag 创建日优先**）。
 * **取样方式（可复取）**：`curl -sL https://keepachangelog.com/en/1.1.0/`、`curl -sL https://www.conventionalcommits.org/en/v1.0.0/`；Conventional Changelog 侧取 `raw.githubusercontent.com/conventional-changelog/conventional-changelog/master/packages/conventional-changelog-conventionalcommits/src/constants.js` 与 `packages/template/src/templates.ts`（比对时先做空白归一化）。
 
+== 约束注解的两代命名空间（Jakarta Bean Validation 2.0 的 `javax` 版 javadoc）
+
+* 出处：Jakarta Bean Validation 2.0.2 的官方 javadoc（`javax` 命名空间那一版）的 Deprecated List 页（`https://jakarta.ee/specifications/bean-validation/2.0/apidocs/deprecated-list.html`）。**逐字摘**（正文）："Deprecated Methods"一栏只列四项，全部是 `javax.validation.ConstraintValidatorContext.ConstraintViolationBuilder` 及其三个内层上下文的 `addNode(String)`（"since 1.1 - replaced by ... addPropertyNode(String) ... addBeanNode() ... addParameterNode(int)"）。
+* **已实测取回**：该页的 Deprecated 列表里**没有**任何约束注解（`@NotNull`、`@NotBlank`、`@Valid` 等均不在列）；`jakarta.validation.constraints.NotNull`（现行 3.x 源码）本身也**没有** `@Deprecated`。故"`javax.validation` 已被标记弃用""`javax` 的 `@Valid` 已弃用"这类说法**不成立**——准确的说法是**标准在 3.0 换到了 `jakarta` 命名空间**（包名变更属破坏性变更），以及**标准方的自述是"2.0 只是把 `javax` 改成 `jakarta` 的重新发布"**（一句可核对的定性）。**未确证**：标准方没有发布过一份"`javax.validation` 自某版本起弃用"的声明（本条只说"未确证到"，不作"标准方否认"的断言）。
+* 用途：`specs/general/coding.adoc`「警告与弃用」的「取兼容性更好的那一个」（**按"标准已是上一代命名空间"落条，不按"`javax` 被弃用"落条**）与 `specs/stack/spring.adoc`「参数校验」（本栈取用方向、以及"不得把旧命名空间说成被弃用"这一处实证失效形态）。
+* 与本条相反的**已确证事实**（同一处核对里的另一半）：`org.springframework.validation.annotation.Validated`（Spring Framework 现行源码）**没有** `@Deprecated`、其 javadoc 自述为 "Variant of JSR-303's {@link jakarta.validation.Valid}, supporting the specification of validation groups"——故 `@Validated` 与 `@Valid` 的取舍**不在"弃用 vs 未弃用"这一层上**，而在"候选之间谁兼容性更好"（本条）与"哪个能指定分组"（`specs/stack/spring.adoc`「参数校验」）这两条判据上。
+
 == PEP 8 / PEP 20 / PEP 257（Python 风格）
 
 * PEP 8：Style Guide for Python Code（标题逐字）。用途：`specs/stack/python.adoc` 的命名、缩进、可读性等风格依据。
