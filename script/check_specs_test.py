@@ -11613,6 +11613,287 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         self.assertIn("弃用类/API 的迁移默认不动依赖面（L1）", self.error_texts())
 
 
+class TestCheckCompatPreferenceGuard(CheckSpecsTestCase):
+    """钉住『取兼容性更好的那一个』防线（**用户提出**，适用所有语言、不限编程）。
+
+    该条对应用户明确提出的规范：**同一能力两个及以上等价入口并存时，取兼容性更好的那一个**
+    （原话给的例子是 Spring `@Validated` 与 `javax` `@Valid`——效果一样时取 Spring 的，因为
+    `javax` 已被改成 `jakarta`、迁移时会引兼容性问题；**适用于所有相似的场景，不仅限编程、
+    不限语言**）。用户报告的失效形态：同一能力并存两条等价入口时「取哪个」没有判据。
+
+    最易被冲掉的五件事（故本组用例逐一覆盖）：
+      * **整条被删** —— 回到"取哪个全凭临场"；
+      * **级别被降级成建议** —— 可直接沿用旧写法；
+      * **取值口径三条或其次序被抽走** —— 「兼容性更好」退回各自理解（判不出来）；
+      * **适用范围/完整能力面前提被抽走** —— 被读成"凡新的就取"、或拿更兼容的形态替掉效果不同的那个；
+      * **例外第三档被删** —— 符合标准的既有形态（`jakarta`/新命名空间形态）被误读成必须换掉。
+
+    栈侧（`specs/stack/spring.adoc`「参数校验」）是**一跳引用**：取值口径不在那边再写一份，
+    但本栈取用方向与「`javax` 并未被标记弃用」这一句不得被删（把旧命名空间说成"被弃用"
+    是本集合实证过的失效形态）。加载门两处（调度器「任何代码活动」与 Spring 技术栈条）一并核。
+    """
+
+    BULLET = "取兼容性更好的那一个（L1，跨语言）"
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        "== 警告与弃用\n"
+        "* **警告处理（L1）**：新代码不得引入警告。\n"
+        "* **不得使用被弃用的类/API，改用替代者（L1）**：被标记弃用的类/方法/接口/字段"
+        "一律不得在新代码里使用，须改用替代者。\n"
+        "* **取兼容性更好的那一个（L1，跨语言）**：同一能力存在**两个及以上等价入口**"
+        "（类、方法、注解、API、库、以及任何其他可互换的形态）时，**取兼容性更好的那一个**；"
+        "只在**效果相同**时适用——效果确有差异时按差异本身取舍，本条不介入。"
+        "**\"完整能力面\"是取用前提**：候选者**取不到你想要的那个能力**时不得选它"
+        "（少一个开关、少一层控制、少一个重载即为取不到），仍按效果差异取。\n"
+        "\n"
+        "  **\"兼容性更好\"的取值（三条，从先到后，取最先成立的那一条）**："
+        "① **迁移风险更小**——它的既有用法将来不需要按技术栈现行取向整体改名或换包；"
+        "② **它同时被两代以上技术栈版本支持**（新旧版本并存期无需二选一、无需按版本配置）；"
+        "③ **它的技术支持方是标准组织**。以上均不能判定时，**按其既有依赖面的先例取**"
+        "——先例优先，不另立一套。"
+        "**判据形态是\"同一组条件下两个候选各自成立\"**，**不是\"谁写起来更短\"**。\n"
+        "\n"
+        "  **判定标准（任一命中即违规）**：① 同一能力在同一处代码里并存两种等价形态；"
+        "② 以「旧写法也能跑」「新写法不熟」「这样写更短」为由取兼容性更差的一方；"
+        "③ 把\"取兼容性更好的\"读成\"**凡是新的就取**\"——**新不等于兼容**；"
+        "④ 把本条读成\"可以拿更兼容的形态去**替掉效果不同的那个**\"。\n"
+        "\n"
+        "  **例外（L2，须写清理由并说明用了哪一条）**：① 效果确有差异（含\"你要的能力只有一方提供\"）；"
+        "② 兼容性更好的一方**在当前依赖面内取不到**；"
+        "③ **符合标准的既有形态**与另一候选等价时，**既有形态优先**。"
+        "**这一档只保「在当前技术栈版本下仍被兼容」的既有形态**——"
+        "\"当前版本已不兼容的那个\"不在本档内。"
+        "**边界**：只规定取哪一个，**不规定怎么改**。"
+        "**依据（标准名/编号）**：ISO/IEC 25010、ISO/IEC/IEEE 29148、Semantic Versioning 2.0.0。"
+        "**「同一能力取兼容性更好的一个」是本集合的判据化取舍**。\n"
+        "* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者**不得**顺带改依赖清单。\n"
+        "\n== 表达式与调用写法\n"
+        "* 略。\n"
+    )
+
+    SPRING = (
+        "= Spring 规范（技术栈层）\n\n"
+        "== 参数校验\n"
+        "* **校验注解的候选之间取兼容性更好的一方（L1）**：方法参数校验入口取 `@Validated` "
+        "一类**框架自有入口**；**对象内部字段的级联与约束注解**在候选等价时，"
+        "取 **`jakarta`/新命名空间形态**，不取 `javax` 旧形态"
+        "（口径见 `specs/general/coding.adoc`「取兼容性更好的那一个」"
+        "——**`javax.validation` 在本栈已不构成正当候选**："
+        "**已不兼容 `javax` 形态**，取它即引编译或运行问题；"
+        "**「未被标记弃用」与「还可用」不是一回事**）。"
+        "框架提供的约束注解在**效果相同**时同样取其一，不并存。\n"
+        "* **方法参数校验统一用 `@Validated`（L2）**：方法参数校验入口统一用 `@Validated`。\n"
+    )
+
+    COMMON = (
+        "= AGENT 执行规范\n\n"
+        "== 分类与懒加载（加载调度器）\n\n"
+        "=== 通用层（涉及对应活动时加载）\n"
+        "* **任何代码活动**（要写新代码、要改既有代码）：要**使用或替换被弃用的类/API**"
+        "（出现 `@Deprecated`、`deprecated` 字样时）；"
+        "要**在多个等价入口之间取一个**（同一能力的两个及以上候选并存——两代命名空间的同名类型、"
+        "框架自有入口与该能力接口、新旧两版 API 等——要判定取哪一个时）"
+        " → `specs/general/coding.adoc`\n"
+        "\n=== 技术栈层（检测到即加载，不得遗漏）\n"
+        "* **Spring 项目**（存在 Spring 依赖/注解）→ `specs/stack/spring.adoc`"
+        "（识别特征：要写/改**参数校验注解**、**校验注解的候选取舍**"
+        "（`javax`/`jakarta` 两代命名空间并存、要定用哪一代时））\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_spring = cm.SPRING_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.SPRING_STACK_FILE = os.path.join(self.root, "specs", "stack", "spring.adoc")
+
+    def tearDown(self) -> None:
+        (cm.CODING_FILE, cm.SPRING_STACK_FILE) = (self._orig_coding, self._orig_spring)
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/stack/spring.adoc", self.SPRING)
+        self.write("AGENTS_COMMON.adoc", self.COMMON)
+
+    def test_valid_compat_preference_guard_passes(self):
+        self._write_valid()
+        cm.check_compat_preference_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_clause_deleted_reports(self):
+        # 反例：整条被删 → 回到"取哪个全凭临场"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 表达式与调用写法\n* 略。\n")
+        cm.check_compat_preference_guard()
+        self.assertIn("警告与弃用", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：级别被降级成建议 → 可直接沿用旧写法
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(self.BULLET, "取兼容性更好的那一个（L2，建议）"))
+        cm.check_compat_preference_guard()
+        self.assertIn(self.BULLET, self.error_texts())
+
+    def test_axis_only_reports(self):
+        # 反例（本集合的「防线空转」形态）：标题留着、判据被抽空 → 必须报红
+        self._write_valid()
+        stripped = ("= 通用编码规范\n\n== 警告与弃用\n"
+                    f"* **{self.BULLET}**：注意兼容性。\n")
+        self.write("specs/general/coding.adoc", stripped)
+        cm.check_compat_preference_guard()
+        texts = self.error_texts()
+        self.assertIn(self.BULLET, texts)
+        self.assertIn("完整能力面", texts)
+
+    def test_value_order_removed_reports(self):
+        # 反例：取值口径三条被抽走 → 「兼容性更好」退回各自理解（判不出来）
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**它同时被两代以上技术栈版本支持**", "看着更新的那个"))
+        cm.check_compat_preference_guard()
+        self.assertIn("它同时被两代以上技术栈版本支持", self.error_texts())
+
+    def test_scope_effect_equal_removed_reports(self):
+        # 反例：适用范围被抽走 → 效果不同的两个入口也硬换、做成功能缩水
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("只在**效果相同**时适用", "都按本条取"))
+        cm.check_compat_preference_guard()
+        self.assertIn("效果相同", self.error_texts())
+
+    def test_standard_exception_removed_reports(self):
+        # 反例：例外第三档被删 → 符合标准的既有形态被误读成必须换掉
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**符合标准的既有形态**与另一候选等价时", "另两种情形同上"))
+        cm.check_compat_preference_guard()
+        self.assertIn("符合标准的既有形态", self.error_texts())
+
+    def test_new_is_not_compatible_removed_reports(self):
+        # 反例：反向拦（"新不等于兼容"）被删 → 取了尚未被依赖面支持的新形态反而引编译问题
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**凡是新的就取**", "取结构更好的那个"))
+        cm.check_compat_preference_guard()
+        self.assertIn("凡是新的就取", self.error_texts())
+
+    def test_stack_side_dropped_reports(self):
+        # 反例：栈侧一跳引用被删 → 本栈取用方向丢失（写注解时读不到任何指引）
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   "= Spring 规范（技术栈层）\n\n== 参数校验\n"
+                   "* **方法参数校验统一用 `@Validated`（L2）**：统一用 `@Validated`。\n")
+        cm.check_compat_preference_guard()
+        self.assertIn("校验注解的候选之间取兼容性更好的一方", self.error_texts())
+
+    def test_stack_side_false_deprecation_reports(self):
+        # 反例：把旧命名空间说成"被弃用" → 本集合实证过的失效形态（查证：它并未被标记弃用）
+        self._write_valid()
+        self.write("specs/stack/spring.adoc",
+                   self.SPRING.replace("**`javax.validation` 在本栈已不构成正当候选**",
+                                       "**`javax.validation` 并未被标记弃用，仍属正当候选**"))
+        cm.check_compat_preference_guard()
+        self.assertIn("在本栈已不构成正当候选", self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例：加载门被删 → 在两个等价入口之间取舍时不会触发加载该条
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.COMMON.replace(
+            "要**在多个等价入口之间取一个**（同一能力的两个及以上候选并存——"
+            "两代命名空间的同名类型、框架自有入口与该能力接口、新旧两版 API 等——"
+            "要判定取哪一个时）", "要**在多个等价入口之间取一个**"))
+        cm.check_compat_preference_guard()
+        self.assertIn("两代命名空间的同名类型", self.error_texts())
+
+    def test_spring_dispatcher_gate_removed_reports(self):
+        # 反例：Spring 侧加载门被删 → `javax`/`jakarta` 并存时的取舍不会加载栈文件
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", self.COMMON.replace(
+            "、**校验注解的候选取舍**（`javax`/`jakarta` 两代命名空间并存、要定用哪一代时）", ""))
+        cm.check_compat_preference_guard()
+        self.assertIn("**校验注解的候选取舍**", self.error_texts())
+
+    def test_landing_file_missing_reports(self):
+        # 反例：通用层落点文件缺失 → 该条跨语言，须收在通用编码规范而非某一技术栈
+        self.write("specs/stack/spring.adoc", self.SPRING)
+        cm.check_compat_preference_guard()
+        self.assertIn("coding.adoc", self.error_texts())
+
+    def test_exception_list_hollowed_reports(self):
+        """反例：例外清单**整体**被抽（只留条文、取值口径与判定标准）→ 须报。
+
+        旧锚点只钉了例外第三档的**结论句**，「① 效果确有差异」「② 无现成且等价」两半
+        与档位标题可整组抽走——实测本形态 **0 条报红**：判据在、'例外'整段却没了。
+        """
+        self._write_valid()
+        hollow = ("= 通用编码规范\n\n== 警告与弃用\n"
+                  f"* **{self.BULLET}**：同一能力存在**两个及以上等价入口**时，"
+                  "**取兼容性更好的那一个**；只在**效果相同**时适用。"
+                  "**\"完整能力面\"是取用前提**：候选者**取不到你想要的那个能力**时不得选它。\n"
+                  "\n"
+                  "  **\"兼容性更好\"的取值（三条，从先到后，取最先成立的那一条）**："
+                  "① **迁移风险更小**；② **它同时被两代以上技术栈版本支持**"
+                  "（新旧版本并存期无需二选一、无需按版本配置）；③ **它的技术支持方是标准组织**。"
+                  "先例优先，不另立一套。**同一组条件下两个候选各自成立**。\n"
+                  "\n"
+                  "  **判定标准（任一命中即违规）**：① 同一能力在同一处代码里并存两种等价形态；"
+                  "② 以「旧写法也能跑」为由取兼容性更差的一方；③ **凡是新的就取**。\n"
+                  "\n"
+                  "  **边界**：只规定取哪一个。ISO/IEC 25010。"
+                  "**「同一能力取兼容性更好的一个」是本集合的判据化取舍**。\n")
+        self.write("specs/general/coding.adoc", hollow)
+        cm.check_compat_preference_guard()
+        texts = self.error_texts()
+        self.assertIn("**符合标准的既有形态**与另一候选等价时", texts)
+        self.assertIn("② 兼容性更好的一方**在当前依赖面内取不到**", texts)
+
+    def test_capability_premise_removed_reports(self):
+        """反例：**「完整能力面」是取用前提**整句被抽（只留四个字）→ 须报。
+
+        旧锚点只钉 `完整能力面` 四字：前提句连同「取不到即不得选它」可整句删掉而防线报绿。
+        """
+        self._write_valid()
+        premise = ("**\"完整能力面\"是取用前提**：候选者**取不到你想要的那个能力**时不得选它"
+                   "（少一个开关、少一层控制、少一个重载即为取不到），仍按效果差异取。")
+        self.assertIn(premise, self.CODING)
+        self.write("specs/general/coding.adoc", self.CODING.replace(premise, "**完整能力面**"))
+        cm.check_compat_preference_guard()
+        self.assertIn("候选者**取不到你想要的那个能力**时不得选它", self.error_texts())
+
+    def test_scope_of_third_exception_removed_reports(self):
+        """反例：例外第三档的**适用面**被抽 → 「已不兼容的旧形态」被误读成可径取 → 须报。
+
+        第二轮口径修正新增的判定句：本档**只保「在当前技术栈版本下仍被兼容」的既有形态**。
+        """
+        self._write_valid()
+        scope = "**这一档只保「在当前技术栈版本下仍被兼容」的既有形态**"
+        self.assertIn(scope, self.CODING)
+        self.write("specs/general/coding.adoc", self.CODING.replace(scope, "**这一档不设适用面**"))
+        cm.check_compat_preference_guard()
+        self.assertIn("这一档只保「在当前技术栈版本下仍被兼容」的既有形态", self.error_texts())
+
+    def test_dispatcher_gate_hollowed_reports(self):
+        """反例：调度器加载门的**整句识别特征**被抽 → 写 `@Valid`/`jakarta` 取舍不加载该条。
+
+        旧锚点钉的是 `要**在多个等价入口之间取一个**` 这一枚（改一处措辞即报红），
+        而**整句**（含"同一能力的两个及以上候选并存——两代命名空间的同名类型……"）被抽走
+        时同理只报锚点缺失、报不出"识别特征已空"；本用例钉住整句这一形态。
+        """
+        self._write_valid()
+        whole = ("要**在多个等价入口之间取一个**（同一能力的两个及以上候选并存——"
+                 "两代命名空间的同名类型、框架自有入口与该能力接口、新旧两版 API 等——"
+                 "要判定取哪一个时）")
+        self.assertIn(whole, self.COMMON)
+        self.write("AGENTS_COMMON.adoc",
+                   self.COMMON.replace(whole, "要**在多个等价入口之间取一个**"))
+        cm.check_compat_preference_guard()
+        # 首句仍在（那一枚锚点照样命中），被抽掉的是整句里的识别特征 → 须由整句锚点报出
+        self.assertIn("两代命名空间的同名类型", self.error_texts())
+
+
 class TestCheckConversionGuard(CheckSpecsTestCase):
     """钉住『对象转换防线』（通用层抽象 / 技术栈层框架专名 / **建议层口径**）。
 
