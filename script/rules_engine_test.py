@@ -1007,5 +1007,53 @@ class TestSeparationInvariants(unittest.TestCase):
         self.assertIn("GUARD_CHECK_LIMITS", data["tokens"])
 
 
+class TestSectionBulletsCutMarks(unittest.TestCase):
+    """`section_bullets` 的**截断标记**：该组只核 bullet 里某句之前/之后的正文。
+
+    立项理由（本仓库实测）：同一条 bullet 里『前半句的要点』与『后半句的措辞』共用同一个词
+    （如『必须用双引号』与紧随其后的『判定标准』里都出现『双引号』），按整条 bullet 核时
+    前者的缺项会被后者兜住——那一组形同虚设。
+    """
+
+    DOC = ("= t\n\n== 节\n\n"
+           "* **第一条**：必须用双引号。判定标准：这里也提到双引号。\n"
+           "* **第二条**：只有必须用双引号。\n")
+
+    def _rules(self, tokens):
+        return {"g": [{"kind": "section_bullets", "file": "a.adoc", "section": "节",
+                       "groups": [["G", tokens, "why"]],
+                       "message": "缺失 {missing}",
+                       "missing_section_message": "缺节"}]}
+
+    def _run(self, tokens, doc=None):
+        ctx = FakeCtx({"a.adoc": doc or self.DOC})
+        _rules(self._rules(tokens), ctx).run("g")
+        return ctx.errors
+
+    def test_cut_end_scopes_before_mark(self):
+        # 加 `|cut-end` 后只核标记**之前**的正文 → 前半句缺项被报出
+        doc = self.DOC.replace("必须用双引号。判定标准", "双引号是必须的。判定标准")
+        errs = self._run(["第一条", "必须用双引号", "判定标准" + re_.CUT_END], doc)
+        self.assertEqual(len(errs), 1)
+        self.assertIn("必须用双引号", errs[0][1])
+
+    def test_cut_end_passes_on_intact_bullet(self):
+        errs = self._run(["第一条", "必须用双引号", "判定标准" + re_.CUT_END])
+        self.assertEqual(errs, [])
+
+    def test_cut_start_scopes_after_mark(self):
+        # `|cut-start`：只核标记**之后**的正文（同一条 bullet 的另一段）
+        errs = self._run(["第一条", "缺失的判据句", "判定标准" + re_.CUT_START])
+        self.assertEqual(len(errs), 1)
+        self.assertIn("缺失的判据句", errs[0][1])
+
+    def test_cut_start_anchor_absent_reports(self):
+        # 起始串在 bullet 里找不到 → 报出「判据无从生效」而不是静默通过
+        errs = self._run(["第一条", "必须用双引号", "不存在的起始串" + re_.CUT_START])
+        self.assertEqual(len(errs), 1)
+        self.assertIn("不存在的起始串", errs[0][1])
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

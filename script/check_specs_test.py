@@ -1198,6 +1198,173 @@ class TestToolchainPresentGuard(CheckSpecsTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# check_yaml_string_quote_guard（配置文件的字符串取值须加双引号）
+# --------------------------------------------------------------------------- #
+class TestYamlStringQuoteGuard(CheckSpecsTestCase):
+    """钉住『明确是字符串的配置值须加双引号、防被隐式类型推断转义』（用户口径）。
+
+    要防的失效形态：一个语义是字符串的值（版本号 1.10、yes、纯数字编号）以裸值书写，
+    被隐式类型解析读成浮点/布尔/空值/日期——文本看着是字符串、解析出来不是。
+    判据本体在 specs/general/encoding.adoc「配置文件的字符串取值须加引号」，规则数据在
+    script/specs-rules/encoding.toml（按原地原样落进夹具）。
+
+    正例用**真实的那份文件**（不手抄）：手抄必然与现场漂移、产生假红。
+    """
+
+    _SECTION = "== 配置文件的字符串取值须加引号"
+
+    def _write_real(self):
+        # 落点是「文件编码与换行符」层（`specs/general/encoding.adoc`）：该条管配置文本里字符串
+        # 怎么书写，与"怎么跑流水线"无关；原误落在 CI/CD 层，用户指出后归位。
+        self.write_real_file("specs/general/encoding.adoc")
+        self.write_real_file("script/specs-rules/encoding.toml")
+        self._reset_rules()
+
+    def _reset_rules(self):
+        # 规则数据与"本阶段已跑过的防线名"都是**模块级缓存**：夹具每个用例都换根，
+        # 不清缓存时上一个用例读到的规则会替本用例作答（本仓库实测：缺规则文件的反例
+        # 因缓存命中而静默报绿）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _edit_ci(self, old, new):
+        p = os.path.join(self.root, "specs/general/encoding.adoc")
+        with open(p, encoding="utf-8") as fh:
+            text = fh.read()
+        assert old in text, old
+        self.write("specs/general/encoding.adoc", text.replace(old, new))
+
+    def test_real_section_passes(self):
+        # 正例：真实文件原样落进夹具 → 本道全绿
+        self._write_real()
+        cm.check_yaml_string_quote_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_section_reports(self):
+        # 反例①：整节被删 → 用户明确提出的要求失去落点
+        self._write_real()
+        p = os.path.join(self.root, "specs/general/encoding.adoc")
+        with open(p, encoding="utf-8") as fh:
+            text = fh.read()
+        self.write("specs/general/encoding.adoc", text[:text.index(self._SECTION)])
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("未找到", self.error_texts())
+
+    def test_dropped_l1_wording_reports(self):
+        # 反例②：把『必须用双引号』的强制用语抽掉 → 本条退化成『建议』
+        self._write_real()
+        self._edit_ci("必须用双引号", "建议用双引号")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("必须用双引号", self.error_texts())
+
+    def test_dropped_judgement_criterion_reports(self):
+        # 反例③：判定标准被抽（只剩一句口号、无法判定是否被遵守）
+        self._write_real()
+        self._edit_ci("判定标准（任一命中即违规）", "注意事项")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_dropped_value_forms_reports(self):
+        # 反例④：须加引号的取值形态逐类被删 → 读者判不出自己这一处算不算
+        self._write_real()
+        self._edit_ci("以数字开头的字符串", "某些取值")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("以数字开头的字符串", self.error_texts())
+
+    def test_rules_file_missing_reports(self):
+        # 反例5：规则数据文件缺失 -> 判据措辞的唯一来源丢失
+        # 夹具里备一个不含本防线的规则目录（否则落点回落到脚本自己那一份、读得到真规则）
+        self.write_real_file("specs/general/encoding.adoc")
+        self.write("script/specs-rules/other.toml",
+                   '[[guards.check_refs_exist]]\nfile = "x"\nkind = "file_groups"\n'
+                   'groups = [["g", ["t"], "w"]]\n')
+        self._reset_rules()
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("check_yaml_string_quote_guard", self.error_texts())
+
+    def test_dropped_escape_quote_rule_reports(self):
+        # 反例6：双引号优先/不混用的要点被抽
+        self._write_real()
+        self._edit_ci("统一取双引号、不混用两种引号", "引号按习惯选")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("统一取双引号、不混用两种引号", self.error_texts())
+
+    def test_dropped_do_not_change_value_reports(self):
+        # 反例7：加引号不改值的要点被抽（改**正文后半句**，不换 bullet 标题——
+        # 换标题会让 `ctx.bullet` 取不到该条、该组整个跳过，用例本身就没在核那件事）
+        self._write_real()
+        self._edit_ci("不得借加引号之机改动值的文本", "可以顺手调整值")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("不得借加引号之机改动值的文本", self.error_texts())
+
+    def test_dropped_escape_bridge_reports(self):
+        # 反例8：用户口径说的『避免被转义』与机制上的『隐式类型推断』之间的口径对齐被抽
+        self._write_real()
+        self._edit_ci("隐式类型推断与取值规范化", "某个机制")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("隐式类型推断与取值规范化", self.error_texts())
+
+    def test_same_bullet_neighbour_does_not_shield_l1(self):
+        # 反例9（**本轮实测的漏放**）：『必须用双引号』与紧随其后的『判定标准』同处一条
+        # bullet，而后者里同样出现『双引号』——按整条 bullet 核时，抽掉前者仍会命中原句。
+        # 本条钉住"该 bullet 必须分段核"：改法被撤（改回整条核）时本用例即报红。
+        self._write_real()
+        self._edit_ci("必须用双引号", "建议用双引号")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("必须用双引号", self.error_texts())
+
+    def test_l1_downgrade_in_mechanism_clause_reports(self):
+        # 反例10：机制句（取值＝被双引号包着、不依赖解析器推断）被抽成空话
+        # ——缺这句时『我这边解析出来正好对』会把裸值合理化掉，正是本条要拦的形态
+        self._write_real()
+        self._edit_ci("不依赖解析器如何推断", "随便怎么推断")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("不依赖解析器如何推断", self.error_texts())
+
+    def test_dropped_sign_char_class_reports(self):
+        # 反例11：取值形态里的『以特殊符号起头』整类被删（该类是 YAML 指示符的入口）
+        self._write_real()
+        self._edit_ci("以特殊符号起头", "某些符号")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("以特殊符号起头", self.error_texts())
+
+    def test_dropped_date_class_reports(self):
+        # 反例12：『会被推断成日期』整类被删（YAML 1.1 把它读成时间戳）
+        self._write_real()
+        self._edit_ci("会被推断成日期", "某些取值")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("会被推断成日期", self.error_texts())
+
+    def test_dropped_scope_narrowing_reports(self):
+        # 反例13：『不向本就无隐式推断的格式（JSON/TOML）扩用』这一收窄句被撤
+        # ——撤了本条会去管 JSON 的引号，与「JSON 的字符串必须自带引号」相抵
+        self._write_real()
+        self._edit_ci("本条不向它们扩用", "本条同样适用于它们")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("本条不向它们扩用", self.error_texts())
+
+    def test_rule_step_is_really_wired(self):
+        # 反例15（**防"只剩壳"**）：本防线函数里抽掉 `run_rule_guard(...)` 那一行后，
+        # 函数体只剩「找得到节就 phase_done」——规则一条都不跑而**全线报绿**。
+        # `check_wiring_guard` 的闭包只看"函数名在不在 `CHECKS`/被谁调用"，核不出一行
+        # 规则没人跑（本仓库已有的同类教训见 `check_asciidoctor_stub_guard`）。
+        # 故这里钉住"脚本里确实登记了本道防线的规则"这一件可机械核对的事实。
+        with open(os.path.join(os.path.dirname(os.path.abspath(cm.__file__)),
+                               "check_specs.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn('run_rule_guard("check_yaml_string_quote_guard")', src,
+                      "本防线的规则步骤没有被接线——防线只剩壳、规则一条都不跑")
+
+    def test_dropped_basis_version_note_reports(self):
+        # 反例14：依据行里『版本间解析规则还不一致』被删（删了只剩一个标准名，
+        # 读者看不到"同一份文本在不同解析器下类型不同"这一条立项理由）
+        self._write_real()
+        self._edit_ci("版本间解析规则还不一致", "各版本都一样")
+        cm.check_yaml_string_quote_guard()
+        self.assertIn("版本间解析规则还不一致", self.error_texts())
+
+
+# --------------------------------------------------------------------------- #
 # check_asciidoctor_stub_guard（语法段不得只剩壳）
 # --------------------------------------------------------------------------- #
 class TestAsciidoctorStubGuard(CheckSpecsTestCase):

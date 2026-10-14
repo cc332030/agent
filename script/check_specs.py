@@ -5908,6 +5908,39 @@ def check_adoption_guard():
 
 
 
+YAML_QUOTE_SECTION = "配置文件的字符串取值须加引号"
+
+
+def check_yaml_string_quote_guard():
+    """『配置文件字符串引号』防线：语义为字符串的标量须加双引号、防被隐式类型推断转义。
+
+用户口径：一个 YAML 的值由数字/英文/特殊符号组成、且明确是字符串时，必须加双引号，避免被
+转义（`"1.10"` 被读成浮点 1.1、`"yes"` 被读成布尔）。落点在「文件编码与换行符」通用层
+（`specs/general/encoding.adoc`）——本条管的是**配置文本里字符串怎么书写**，与"怎么跑流水线"
+无关（原误落在 CI/CD 层，用户指出后归位）。判据本体（规则 + 取值形态逐类 + 判定标准 +
+双引号优先 + 加引号不改值 + 依据）外置在 `script/specs-rules/encoding.toml`。
+"""
+    phase("配置文件字符串引号防线检查")
+    rel_enc = "specs/general/encoding.adoc"
+    path = os.path.join(REPO_ROOT, *rel_enc.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel_enc}——『{YAML_QUOTE_SECTION}』失去权威定义落点"
+            "（用户明确提出的硬性要求，不得删除、不得降级）", rel_enc)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(r"^== " + re.escape(YAML_QUOTE_SECTION) + r".*?(?=\n== |\Z)",
+                  text, re.M | re.S)
+    if m is None:
+        err(f"{rel_enc} 未找到「{YAML_QUOTE_SECTION}」一节——用户提出的"
+            "『明确是字符串的配置值须加双引号』失去落点（不得删除、不得降级为建议）", rel_enc)
+        phase_done()
+        return
+    run_rule_guard("check_yaml_string_quote_guard")
+    phase_done()
+
+
 def check_ci_cd_guard():
     """『CI/CD 与平台协作防线』：CICD 校验链完整性与 CNB 对象钉定要点。
 
@@ -11773,6 +11806,7 @@ CHECKS = (
     check_lifecycle_guard,
     check_adoption_guard,
     check_ci_cd_guard,
+    check_yaml_string_quote_guard,
     check_no_mechanism_claims_in_public,
     check_public_facing_docs_stay_self_contained,
     check_source_guard,

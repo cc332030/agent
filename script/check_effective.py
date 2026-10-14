@@ -191,6 +191,17 @@ MECHANISMS = [
      "phase_done(); return 0` 后脚本仍报 OK、本道照样全绿（探测代码不在那个函数里）。"
      "新道把『函数体真的探测 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`』"
      "与『CI 有一步真的执行 `check_specs.py`』变成可核对的；『某次 CI 里那几份 .adoc 是否真的都被编译了』属运行时事实"),
+    ("配置文件的字符串取值须加双引号（防被隐式类型推断转义：数字/英文/特殊符号组成的字符串被读成浮点/布尔/空值/日期一类）",
+     "specs/general/encoding.adoc", "script/check_specs.py",
+     "check_yaml_string_quote_guard",
+     "check_yaml_string_quote_guard 钉住 `specs/general/encoding.adoc`「配置文件的字符串取值须加引号」整节要点"
+     "（规则本体与 L1 ＋ 取值＝被双引号包着、不依赖解析器推断 ＋ 判定标准含『不得把 1.10 改写成 1.1 顶替加引号』"
+     "＋ 须加引号的取值形态逐类 ＋ 双引号优先于单引号并统一 ＋ 加引号不改值 ＋ 与「不信任外部输入」的分工），"
+     "导语里的适用范围、范围收窄（不向 JSON/TOML 扩用）与依据行另起一步核（不在 bullet 内）；"
+     "**分段核对**：首条 bullet 用截断标记分前后两段核，防『判定标准』把『必须用双引号』兜住；取不到 bullet 时报红（不再静默跳过——把标题连同要点改掉时整组一条都不报）；"
+     "规则数据在 `script/specs-rules/encoding.toml`；"
+     "**落点归位**：原落在 `specs/general/ci-cd.adoc`，该条管的是配置文本里字符串怎么书写、与『怎么跑流水线』无关（用户指出后迁到「文件编码与换行符」层）——"
+     "**效力边界**：只核该节与各锚点在不在，「某一处裸值到底算不算语义上的字符串」属语义判断，交人/子 agent 复核"),
     ("CI 触发路径须覆盖校验对象、上游依赖须实测可用、执行须有可判定超时", "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住「触发与作用范围」「依赖与外部资源可用性」「超时与资源」关键要点（实证：引用不存在的镜像在 Prepare 阶段失败、流水线长期 pending）；『具体取值是否合理』交人 review"),
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",

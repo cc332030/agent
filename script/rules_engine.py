@@ -544,12 +544,29 @@ def _expand_includes(ctx, rel, text):
     return re.sub(r"include::([A-Za-z0-9_.-]+)\[tag=([A-Za-z0-9_-]+)\]", _sub, text)
 
 
+# `section_bullets` 的**截断标记**：分组里的锚点以它们收尾时，末段不是锚点而是**截断串**
+# （`"**判定标准" + CUT_END`）——该组只核 bullet 里这一段之前（或之后）的正文。
+#
+# 为什么要有：`section_bullets` 按 bullet 核锚点，而**同一条 bullet 的相邻两句常共用
+# 同一个词**（实测：『必须用双引号』与紧接着的『判定标准』里都出现『双引号』），于是
+# 抽掉前一句的要点、后一句照样把它兜住——按整条 bullet 核时这一组形同虚设。
+# 用后缀而不是另立 `kind`，是因为"该组只核 bullet 的前半句"与"核整条 bullet"共用同一套
+# 加载期判据与报错文案，另立 kind 只会让规则数据里出现两套同形写法。
+CUT_START = "~cut-start"   # 该串**之后**起算（等价 `bullet_tokens` 的 `anchor`）
+CUT_END = "~cut-end"       # 该串**之前**截止（等价 `bullet_tokens` 的 `until`）
+
+
 def _step_section_bullets(rules, step):
     """取节内**每个分组自身**的 bullet 文本，再核该组的其余锚点（条目内核对）。
 
     分组形态：`[标题, [标题, 锚点...], 说明]`——首项是 bullet 前缀、其余是须落在
     **该 bullet 正文**里的锚点。只核整节时，相邻条目的字样会兜住被抽空的条目。
     `ctx.bullet` 取不到该 bullet 时**跳过**（轴标题缺失由别的检查负责，避免重复发声）。
+
+    `tokens` 里可再给两个**截断串**（`…, "<起始串>", "<结束串>"` 收尾）：与
+    `bullet_tokens` 的 `anchor`/`until` 同口径，只为"一条 bullet 里前半句与后半句同锚点"
+    的场合服务——同一 bullet 的后半句会把前半句缺项兜住时，把核对面收到前半句上
+    （实测形态：『必须用双引号』与紧随其后的『判定标准』里都出现『双引号』）。
     """
     ctx = rules.ctx
     rel = step["file"]
@@ -563,11 +580,32 @@ def _step_section_bullets(rules, step):
                 .replace("{section}", step["section"]), rel)
         return
     for name, tokens, why in step["groups"]:
-        prefix, anchors = tokens[0], tokens[1:]
+        prefix, marks = tokens[0], list(tokens[1:])
+        anchor = until = None
+        if len(marks) >= 1 and marks[-1].endswith(CUT_END):
+            until = marks.pop()[:-len(CUT_END)]
+        if len(marks) >= 1 and marks[-1].endswith(CUT_START):
+            anchor = marks.pop()[:-len(CUT_START)]
+        anchors = marks
         bullet = ctx.bullet(section, prefix)
         if bullet is None:
+            # 首项是该组的 **bullet 前缀**，取不到它说明这条 bullet 没了（或被改名）——
+            # 那是"核对面整个消失"，不能静默跳过：跳过等于该组判据在此处不生效，
+            # 而规则数据里写着它该管这件事（本仓库实测：把 bullet 标题连同要点一起改掉，
+            # 按 bullet 核的整组**一条都不报**）。
+            ctx.err(f"{rel} 的「{section}」节里找不到以 `{prefix}` 起头的条目——"
+                    f"『{name}』失去核对对象，该组判据无从生效", rel)
             continue
-        miss = [t for t in anchors if t not in bullet]
+        scope = bullet
+        if anchor:
+            if anchor not in scope:
+                ctx.err(f"{rel} 的『{name}』正文里找不到起始串 `{anchor}`——"
+                        "核对面收不到该句上，本组判据无从生效", rel)
+                continue
+            scope = scope.split(anchor, 1)[1]
+        if until and until in scope:
+            scope = scope.split(until, 1)[0]
+        miss = [t for t in anchors if t not in scope]
         if miss:
             msg = step.get("message", "{file} 的『{name}』正文缺失 {missing}——{desc}")
             ctx.err(msg.replace("{file}", rel).replace("{name}", name)
