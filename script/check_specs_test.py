@@ -4899,6 +4899,116 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
         self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
 
 
+class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
+    """钉住『Java 永不自动执行的实验代码后缀 `Playground`』（用户口径：`src/test/java`
+    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**、
+    **通过名字匹配**避免执行）。
+
+    失效形态四类：① 取名口径被删（回到 `Manual*`）；② **名字匹配天然落空**这一机制被删
+    （后缀可能被改成 `*Tests`/`*IT` 一类会进自动集合的形态）；③ 构建配置显式排除被删
+    （默认 includes 落空只挡默认规则，自定义扫描仍会收它）；④ 不得混入其他后缀被删
+    （`XxxPlaygroundTests` 被 surefire 命中）。故按**四条 bullet 各自的正文**核；读错物也要钉
+    通用层口径与调度器/README 登记。
+    """
+
+    RULES_FIXTURE_FILES = CheckSpecsTestCase.RULES_FIXTURE_FILES + (
+        "script/specs-rules/java.toml",
+    )
+
+    JAVA_TEST = "specs/stack/java-testing.adoc"
+    GEN_TEST = "specs/general/testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 规则引擎是**模块级缓存**（`RULES` 首次用到才构造），
+        # 而夹具每个用例都换 `REPO_ROOT`：不作废时，本类跑完后
+        # **后续用例**会读到本类夹具（已删）的规则目录，报“规则配置里没有防线 X”
+        # （本轮实测：全量跑时 `Playground` 类把后面的 `GradleGuard` 类全部带红）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_valid(self):
+        # 真文档逐字（不手抄）：锚点与真文档脱节时第一时间暴露
+        self.write_real_file(self.JAVA_TEST)
+        self.write_real_file(self.GEN_TEST)
+        self.write_real_file(self.COMMON)
+        self.write_real_file(self.README)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_java_test_playground_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_naming_dropped_reports(self):
+        # 反例①：取名口径被删（`Manual*` 回流）
+        self._mutate(self.JAVA_TEST, '* **`Playground` 是"永不自动执行"的唯一后缀（L1）**',
+                     '* **`ManualTests` 是这类代码的后缀**')
+        cm.check_java_test_playground_guard()
+        self.assertIn("`Playground`", self.error_texts())
+
+    def test_name_match_dropped_reports(self):
+        # 反例②：名字匹配天然落空这一机制被删
+        self._mutate(self.JAVA_TEST, "* **`Playground` 靠名字匹配天然落空（L1）**",
+                     "* **后缀取值不限**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("名字匹配", self.error_texts())
+
+    def test_config_exclude_dropped_reports(self):
+        # 反例③：构建配置显式排除被删
+        self._mutate(self.JAVA_TEST, "* **执行边界须在构建配置里显式排除（L1）**",
+                     "* **只靠后缀即可**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("构建配置", self.error_texts())
+
+    def test_mixed_suffix_dropped_reports(self):
+        # 反例④：不得混入其他后缀被删
+        self._mutate(self.JAVA_TEST, "* **`Playground` 不得混入其他后缀（L1）**",
+                     "* **后缀可自由组合**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("混入其他后缀", self.error_texts())
+
+    def test_generic_layer_dropped_reports(self):
+        # 反例⑤：通用层跨语言口径被删
+        self._mutate(self.GEN_TEST, "* **永不自动执行的实验代码（L1）**",
+                     "* **实验代码另议**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑥：调度器识别特征被删（写 `Playground` 类时不加载该文件）
+        self._mutate(self.COMMON, "`PerfTests`/`Playground`/`IT`", "`PerfTests`/`IT`")
+        cm.check_java_test_playground_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑦：README 目录说明未登记该后缀
+        self._mutate(self.README, "、`Playground`（**永不自动执行**的实验代码后缀）", "")
+        cm.check_java_test_playground_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例：Java 测试规范整体缺失
+        cm.check_java_test_playground_guard()
+        self.assertIn("缺少 specs/stack/java-testing.adoc", self.error_texts())
+
+    def tearDown(self) -> None:
+        # 同 setUp：把规则引擎缓存作废，避免本类的夹具目录残留给后续用例
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
     """钉住跨平台换行符规则（LF 基准 + Windows 批处理 CRLF）。
 
@@ -5602,7 +5712,11 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
 
 
 class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
-    """钉住『变更日志声明优先防线』（用户明确提出：除非主动声明否则不新增、不修改）。
+    """钉住『变更日志登记时机防线』（用户提出：只在主动声明时修改，不允许自动加）。
+
+    判据本体在**通用层** `specs/general/changelog.adoc`「登记时机」——本条跨项目成立，
+    用户口径：『加到公共规范里，项目规范里的此声明删掉』，故核对落点已由 `AGENTS.adoc`
+    改为通用层该节。
 
     两类失效形态（本项目实证，分别对应两次收紧）：
       * ①执行者把"我改动了东西"与"该记一条 changelog"画等号，每轮改动都自行追加条目；
@@ -5610,32 +5724,33 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         "改 changelog"，顺手新增了条目——旧条文只写正向（何时可以写），没写这条越界形态。
     """
 
+    COMMON = "specs/general/changelog.adoc"
+
     def _write_valid(self):
-        # 口径（用户指出）：这件事的**默认动作**是「不新增、不修改」——用户本次明确要求才写，
-        # 且**不再要求**"主动声明"这种额外声明（用户直接说"记一条/改 changelog"即算）。
-        self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
-                   "**本仓库的默认动作是「不新增、不修改」**，"
-                   "**只有用户本次明确要求**新增、修改、整理或压缩 changelog 时才写——**不再要求**"
-                   "\"主动声明\"这种额外声明。**其余一切情形按\"未要求\"处理**："
-                   "未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
-                   "均**不得**新增条目（含\"顺手补一条\"）。"
-                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
-                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
-                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        # 口径（用户指出）：这件事的**默认动作**是「不新增、不修改」——变更日志不是
+        # 自动追加区，**只在用户本次主动声明时才写、不得自动追加**。
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**——**默认动作是「不新增、不修改」**："
+                   "只有**用户本次主动声明**要求新增、修改、整理或压缩变更日志时才写、"
+                   "**不得自动追加**。\n\n"
+                   "* **未声明时一律不写（L1）**：未提到变更日志、"
+                   "**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
+                   "均按**未声明**处理——不得新增条目（含**顺手补一条**）；"
+                   "同理，**项目自身的规范文件变更不入变更日志**。\n"
+                   "* **声明是例外而非默认（L1）**：声明**仅对当次生效**、不得泛化。\n"
+                   "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
         # 登记表侧须是**单行**：该行同时给出抓手名与默认动作口径（判据只认这一行）
         self.write("script/check_effective.py",
                    "ROWS = [\n"
-                   "    (\"本仓库 changelog 的默认动作是不新增、不修改\",\n"
-                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "    (\"changelog 的默认动作是不新增、不修改\",\n"
+                   "     \"specs/general/changelog.adoc\", \"script/check_specs.py\",\n"
                    "     \"check_changelog_timing_guard 钉住默认动作条\"),\n"
                    "]\n"
                    "# 普通注释里单独提一次抓手名（不在登记表那一行上）\n"
                    "# 该条由 check_changelog_timing_guard 钉住\n")
-
-    def _patch_root(self):
-        # check_effective.py 按 REPO_ROOT 解析，直接写入临时根即可
-        pass
 
     def test_valid_changelog_timing_guard_passes(self):
         self._write_valid()
@@ -5643,71 +5758,94 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
     def test_missing_timing_clause_reports(self):
-        # 反例：登记时机条被删（执行者重新把"改了东西"与"该记一条"画等号）
+        # 反例：登记时机节被删（执行者重新把"改了东西"与"该记一条"画等号）
         self._write_valid()
-        self.write("AGENTS.adoc", "= 项目入口\n\n* 统一变更日志：根目录 `CHANGELOG.adoc`。\n")
+        self.write(self.COMMON, "= 变更日志编写规范（通用层）\n\n== 组织形态\n\n* 排序方向恒定。\n")
         cm.check_changelog_timing_guard()
         self.assertIn("登记时机", self.error_texts())
 
     def test_default_action_wording_removed_reports(self):
-        # 反例：只留"用户明确要求才写"，删掉**默认动作**「不新增、不修改」
+        # 反例：只留"只在用户本次主动声明时才写"，删掉**默认动作**「不新增、不修改」
         # （默认动作不被单独说出来时，读者仍要先判"这算不算已声明"——用户指出的失效）
         self._write_valid()
-        self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机：**只有用户本次明确要求**新增、修改、整理或压缩 changelog 时才写。"
-                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**：只有**用户本次主动声明**时才写、**不得自动追加**。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("本仓库的默认动作是「不新增、不修改」", self.error_texts())
-
-    def test_extra_declaration_requirement_removed_reports(self):
-        # 反例：把"不再要求主动声明"抽掉（"这应该也算声明"重新可用；用户直接说"
-        # 记一条"时执行者还要先自问算不算声明）
-        self._write_valid()
-        self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改）："
-                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写。"
-                   "**其余一切情形按\"未要求\"处理**：未提到该文件、**只要求更新文档或 README**、"
-                   "只说\"改动了什么\"、只要求\"调整项目规范\"，均**不得**新增条目（含\"顺手补一条\"）。"
-                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
-                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
-                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
-        cm.check_changelog_timing_guard()
-        self.assertIn("不再要求", self.error_texts())
+        self.assertIn("默认动作是「不新增、不修改」", self.error_texts())
 
     def test_undeclared_forms_removed_reports(self):
-        # 反例：默认动作与声明口径都在，但没点名"未要求"的越界形态
+        # 反例：默认动作与声明口径都在，但没点名"未声明"的越界形态
         # （用户只说改文档/改规范，执行者仍可把"改文档"读成"改 changelog"）
         self._write_valid()
-        self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
-                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写——**不再要求**"
-                   "\"主动声明\"这种额外声明。均**不得**新增条目（含\"顺手补一条\"）。"
-                   "**用户明确要求移除时**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
-                   "**不得为「版本线连续」自造一个新版本号条目顶上**。"
-                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**——**默认动作是「不新增、不修改」**："
+                   "只有**用户本次主动声明**时才写、**不得自动追加**。"
+                   "其余一切情形按未声明处理，均**不得**新增条目（含**顺手补一条**）。\n"
+                   "* **声明是例外而非默认（L1）**：声明**仅对当次生效**、不得泛化。\n"
+                   "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
         cm.check_changelog_timing_guard()
         self.assertIn("只要求更新文档或 README", self.error_texts())
+
+    def test_declaration_is_exception_wording_removed_reports(self):
+        # 反例：抽掉"声明是例外而非默认"（执行者会把"用户这次声明过"读成"这个项目以后都自动记"）
+        self._write_valid()
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**——**默认动作是「不新增、不修改」**："
+                   "只有**用户本次主动声明**时才写、**不得自动追加**。\n"
+                   "* **未声明时一律不写（L1）**：未提到变更日志、**只要求更新文档或 README**、"
+                   "只说\"改动了什么\"、只要求\"调整项目规范\"，均按**未声明**处理；"
+                   "**项目自身的规范文件变更不入变更日志**。\n"
+                   "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
+        cm.check_changelog_timing_guard()
+        self.assertIn("声明是例外而非默认", self.error_texts())
 
     def test_removal_disposition_removed_reports(self):
         # 反例：抽掉"用户要求移除时的处置"（执行者会为"版本线连续"自造一条新版本号顶上，
         # 等于换个说法把删掉的条目留在文件里；本仓库实测的真实场景）
         self._write_valid()
-        self.write("AGENTS.adoc",
-                   "= 项目入口\n\n* 登记时机（本仓库默认动作：不新增、不修改；用户明确要求才写）："
-                   "**本仓库的默认动作是「不新增、不修改」**，**只有用户本次明确要求**时才写——**不再要求**"
-                   "\"主动声明\"这种额外声明。**其余一切情形按\"未要求\"处理**："
-                   "未提到该文件、**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
-                   "均**不得**新增条目（含\"顺手补一条\"）。"
-                   "由 `script/check_specs.py` 的 `check_changelog_timing_guard` 钉住。\n")
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**——**默认动作是「不新增、不修改」**："
+                   "只有**用户本次主动声明**时才写、**不得自动追加**。\n"
+                   "* **未声明时一律不写（L1）**：未提到变更日志、**只要求更新文档或 README**、"
+                   "只说\"改动了什么\"、只要求\"调整项目规范\"，均按**未声明**处理"
+                   "（含**顺手补一条**）；**项目自身的规范文件变更不入变更日志**。\n"
+                   "* **声明是例外而非默认（L1）**：声明**仅对当次生效**、不得泛化。\n")
         cm.check_changelog_timing_guard()
         self.assertIn("保留其余内容与既有版本号不动", self.error_texts())
 
-    def test_missing_agents_file_reports(self):
-        # 反例：项目规范入口被删（条目无处承载）
+    def test_spec_file_change_exclusion_removed_reports(self):
+        # 反例：抽掉"项目自身的规范文件变更不入变更日志"（执行者会把"改了规范"当成"该记一条"）
         self._write_valid()
-        os.remove(os.path.join(self.root, "AGENTS.adoc"))
+        self.write(self.COMMON,
+                   "= 变更日志编写规范（通用层）\n\n"
+                   "== 登记时机（默认动作：不新增、不修改）\n\n"
+                   "**变更日志不是自动追加区**——**默认动作是「不新增、不修改」**："
+                   "只有**用户本次主动声明**时才写、**不得自动追加**。\n"
+                   "* **未声明时一律不写（L1）**：未提到变更日志、**只要求更新文档或 README**、"
+                   "只说\"改动了什么\"、只要求\"调整项目规范\"，均按**未声明**处理"
+                   "（含**顺手补一条**）。\n"
+                   "* **声明是例外而非默认（L1）**：声明**仅对当次生效**、不得泛化。\n"
+                   "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
+                   "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("AGENTS.adoc", self.error_texts())
+        self.assertIn("项目自身的规范文件变更不入变更日志", self.error_texts())
+
+    def test_missing_common_file_reports(self):
+        # 反例：通用层落点被删（条目无处承载）
+        self._write_valid()
+        os.remove(os.path.join(self.root, self.COMMON))
+        cm.check_changelog_timing_guard()
+        self.assertIn("changelog.adoc", self.error_texts())
 
     def test_registry_row_without_wording_reports(self):
         # 反例：抓手名还散落在别处（注释/别行），但**登记表那一行**抽掉了「默认动作」口径 →
@@ -5716,7 +5854,7 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
         self.write("script/check_effective.py",
                    "ROWS = [\n"
                    "    (\"登记时机\",\n"
-                   "     \"AGENTS.adoc\", \"script/check_specs.py\",\n"
+                   "     \"specs/general/changelog.adoc\", \"script/check_specs.py\",\n"
                    "     \"见登记时机一条\"),\n"
                    "]\n"
                    "# 该条由 check_changelog_timing_guard 钉住\n")

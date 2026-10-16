@@ -421,7 +421,11 @@ def _rules_spec():
     # 落点＝本脚本旁的规则**目录**；`REPO_ROOT` 被重定向（单测夹具）而那边**确实备了**
     # 规则目录时随它走，否则回落到本脚本自己那一份——否则"只重定向 REPO_ROOT、没备规则数据"
     # 的既有夹具会整批报"规则数据缺失"（那与本道判据无关的假红）。
-    if not os.path.isdir(rel):
+    # **判据取规则目录本身、不取它的父目录 `script/`**：夹具常为落一份 `script/` 下的
+    # 被核文件（如 `script/check_effective.py`）而建出 `script/`，此时 `script/` 存在、
+    # 规则目录却不在——按父目录判会选中那份空目录、整批夹具假红（本仓库实测：凡写
+    # `script/` 下文件的用例全部报"缺少规则文件"，而它们与本道判据无关）。
+    if not os.path.isdir(rules_engine.default_rules_spec(rel)):
         rel = os.path.dirname(os.path.abspath(__file__))
     return rules_engine.default_rules_spec(rel)
 
@@ -3943,8 +3947,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 146
-GUARD_TEST_BASELINE = 1913  # 本轮 1910 → 1913：`check_repeat_call_passthrough_guard` 补三条反例（依据行列表标记、子段列表续行、指代形态）
+GUARD_WIRING_BASELINE = 148  # 本轮合并 main（#260 长方法透传防线）并压缩提交后按同源实取校正：`check_repeat_call_passthrough_guard`（#146）、`check_java_test_playground_guard`（#148）两道新防线并存，唯一名实取 148
+GUARD_TEST_BASELINE = 1944  # 同源实取：合并 main 后 `script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -5437,6 +5441,28 @@ def check_java_test_naming_hint_guard():
                 "允许自定义类名与分类限定语命名（如 `CCacheAspectCacheKeyTests`），"
                 "强制面会把这类合规定名读成违规", "specs/stack/java-testing.adoc")
     run_rule_guard("check_java_test_naming_hint_guard")
+    phase_done()
+
+
+def check_java_test_playground_guard():
+    """『Java 永不自动执行的实验代码后缀 Playground』防线。
+
+    用户口径：`src/test/java` 下有一些代码是手动执行的，
+    **任何情况下都不能自动执行**；为这类任务取个名字（**不叫“手动”**）、
+    **通过名字匹配的方式避免执行**。取 `Playground`（试验场）：它不以
+    `Tests`/`Test`/`TestCase`/`IT` 结尾，surefire 与 failsafe 的默认 includes
+    都失中；再在构建配置里显式排除，守住“任何自动阶段都不收它”。
+
+    为什么单立一道（而不并进 `check_java_test_naming`）：那道核的是
+    **四类后缀与拆分裁决的判据仍在**；本条核的是**第五类后缀的存在与执行边界**
+    ——两道不得互相替代：`Playground` 条被整条删掉时，四类后缀判据
+    一字不少、只有本条报得出。
+    """
+    phase("Java `Playground` 防线检查")
+    if not os.path.isfile(JAVA_TEST_FILE):
+        err("缺少 specs/stack/java-testing.adoc——『丸章园后缀』的落点丢失"
+            "（名字匹配与执行边界无处承载）", "specs/stack/java-testing.adoc")
+    run_rule_guard("check_java_test_playground_guard")
     phase_done()
 
 
@@ -11072,20 +11098,20 @@ def check_delivery_guard():
 
 
 def check_changelog_timing_guard():
-    """『变更日志声明优先防线』：changelog **除非主动声明，否则不新增、不修改**（本仓库特有）。
+    """『变更日志登记时机防线』：changelog **只在用户主动声明时才写**（默认动作：不新增、不修改）。
 
-"""
+    判据本体在**通用层** `specs/general/changelog.adoc`「登记时机」——本条跨项目成立，
+    故与项目规范分开：项目规范（`AGENTS.adoc`）只留本仓库的落点（`CHANGELOG.adoc` 的位置、
+    适用范围、版本线），不再复述登记时机口径。
+    """
     phase("变更日志登记时机防线检查")
-    rel_agents = "AGENTS.adoc"
-    path_agents = os.path.join(REPO_ROOT, rel_agents)
-    if not os.path.isfile(path_agents):
-        err(f"缺少项目规范入口 {rel_agents}——changelog 登记时机条无处承载", rel_agents)
+    rel_common = os.path.join("specs", "general", "changelog.adoc")
+    if not os.path.isfile(os.path.join(REPO_ROOT, rel_common)):
+        err(f"缺少通用层落点 {rel_common}——changelog 登记时机条无处承载", rel_common)
     else:
-        atext = open(path_agents, encoding="utf-8").read()
         run_rule_guard("check_changelog_timing_guard")
     rel_eff = os.path.join("script", "check_effective.py")
     if os.path.isfile(os.path.join(REPO_ROOT, rel_eff)):
-        etext = open(os.path.join(REPO_ROOT, rel_eff), encoding="utf-8").read()
         run_rule_guard("check_changelog_timing_guard")
     else:
         err(f"缺少 {rel_eff}——『定义未执行』登记处缺失，本条成为无抓手条款", rel_eff)
@@ -11973,6 +11999,7 @@ CHECKS = (
     check_object_init_guard,
     check_repeat_call_passthrough_guard,
     check_fetch_self_update_guard,
+    check_java_test_playground_guard,
 )
 
 

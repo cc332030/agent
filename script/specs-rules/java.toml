@@ -506,3 +506,138 @@ groups = [
 ]
 kind = "file_groups"
 message = "Java 测试类命名（推荐面）防线被破坏：{file} 缺失 {missing}——{desc}"
+
+
+# 『Java 永不自动执行的实验代码后缀 Playground』防线（`specs/stack/java-testing.adoc`「测试类命名」）：
+# 用户口径（Issue）——`src/test/java` 下有手动执行的代码，**任何情况下都不能自动执行**；
+# 为这类任务取名（**不叫"手动"**）、**通过名字匹配**避免执行。
+# 失效形态有四类，逐类钉住：① **拒用"手动"的取名口径被删**（名字退回 `Manual*`——
+# "手动"只描述怎么跑，表达不了"任何自动集合都不许收它"）；② **名字匹配天然落空**这一机制
+# 被删（后缀被改成 `*Tests`/`*IT` 一类会进自动集合的形态，"永不执行"当场失效）；
+# ③ **构建配置显式排除**被删（默认 includes 落空只挡默认规则，自定义扫描仍会收它）；
+# ④ **不得混入其他后缀**被删（`XxxPlaygroundTests` 被 surefire 命中）。
+# 故按**四条 bullet 各自的正文**核（`bullet_tokens`）——整节核时相邻条目（`IT`、`PerfTests`）
+# 含同样的 `surefire`/`includes`/`IT` 字样，会把从某条抽走的要点兜住。
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "`Playground` 是"
+section = "测试类命名"
+message = "Java `Playground` 防线被破坏：{file} 的「`Playground` 是\"永不自动执行\"的唯一后缀」条缺失 {missing}——取名口径被删时，这类代码只能退回 `Manual*`（用户点名不要「手动」），\"任何自动集合都不许收它\"这一语义无处承载"
+min = 4
+tokens = [
+    "`Playground` 是\"永不自动执行\"的唯一后缀（L1）",
+    "任何构建/CI 阶段都不得自动执行",
+    "不叫 `Manual*`",
+    "试验场",
+]
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "`Playground` 靠名字匹配天然落空"
+section = "测试类命名"
+message = "Java `Playground` 防线被破坏：{file} 的「`Playground` 靠名字匹配天然落空」条缺失 {missing}——名字匹配这一机制被删时，后缀可能被改成 `*Tests`/`*IT` 一类会被自动集合命中的形态，\"永不自动执行\"失效"
+min = 4
+tokens = [
+    "`Playground` 靠名字匹配天然落空（L1）",
+    "不以 `Tests`/`Test`/`TestCase` 结尾、也不以 `IT` 结尾",
+    "`**/*TestCase.java`",
+    "都匹配不到它",
+]
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "执行边界须在构建配置里显式排除"
+section = "测试类命名"
+message = "Java `Playground` 防线被破坏：{file} 的「执行边界须在构建配置里显式排除」条缺失 {missing}——显式排除被删时，默认 includes 落空挡不住自定义扫描（按目录全收、`@Tag` 全选），`Playground` 会被自动阶段收进去"
+min = 3
+tokens = [
+    "执行边界须在构建配置里显式排除（L1）",
+    "须在构建配置中被显式排除",
+    "判定标准（任一命中即违规）",
+    "移除出 `src/test/java`",
+]
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "`Playground` 不得混入其他后缀"
+section = "测试类命名"
+message = "Java `Playground` 防线被破坏：{file} 的「`Playground` 不得混入其他后缀」条缺失 {missing}——混淆形态被删时，`XxxPlaygroundTests`（`Tests` 结尾、被 surefire 命中）会被读成合规"
+min = 3
+tokens = [
+    "`Playground` 不得混入其他后缀（L1）",
+    "不得**同时带上",
+    "XxxPlaygroundTests",
+]
+
+# 入场核（与上面四条 bullet 级核成对）：核**锚点清单自身的条数**——四条 bullet 里任一被整条删掉
+# 时，现场一字不少、上面四步里对应的一步直接报"缺 bullet"，但**若同时把该步也删掉**则会零证据，
+# 故核四条 bullet 的锚点总数（每步 3~4 项，合计 14）。
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "`Playground` 是"
+section = "测试类命名"
+min = 4
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "`Playground` 靠名字匹配天然落空"
+section = "测试类命名"
+min = 4
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "执行边界须在构建配置里显式排除"
+section = "测试类命名"
+min = 4
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "`Playground` 不得混入其他后缀"
+section = "测试类命名"
+min = 3
+
+# 执行边界条（`specs/general/testing.adoc`「执行与验证」）：通用层须写明"按名字识别并排除"的跨语言口径。
+[[guards.check_java_test_playground_guard]]
+file = "specs/general/testing.adoc"
+kind = "bullet_tokens"
+bullet = "永不自动执行的实验代码"
+section = "执行与验证"
+message = "Java `Playground` 防线被破坏：{file} 的「永不自动执行的实验代码」条缺失 {missing}——通用层口径被删时，非 Java 栈没有可参照的跨语言判据，Java 侧也失去上游落点"
+min = 3
+tokens = [
+    "永不自动执行的实验代码（L1）",
+    "须按名字识别并按名字排除",
+    "`<被测类名>Playground`",
+    "不用\"手动\"字样命名",
+]
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/general/testing.adoc"
+kind = "anchor_count"
+bullet = "永不自动执行的实验代码"
+section = "执行与验证"
+min = 4
+
+# 加载门：调度器的 Java 技术栈条须登记 `Playground` 这一识别特征——缺则"要新建或改动 Java 测试类"
+# 场景下该文件不会被加载，"永不自动执行"这条规则实际失效（写规则与登记是同一个动作）。
+[[guards.check_java_test_playground_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+message = "Java `Playground` 防线被破坏：{file} 的 Java 技术栈登记缺失 {missing}——缺该识别特征时，写 `Playground` 类时该文件不会被加载，规则实际失效"
+anchor = ["Java 项目"]
+tokens = ["**测试类命名与拆分**", "`PerfTests`/`Playground`/`IT`"]
+
+# README 目录说明须登记该后缀（读者按 README 学习时才知道有这一类）。
+[[guards.check_java_test_playground_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+message = "Java `Playground` 防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须登记 `Playground` 这一后缀，否则读者按 README 学习时无从知道有这类永不自动执行的代码"
+tokens = ["java-testing（", "Playground", "永不自动执行"]
