@@ -148,7 +148,9 @@ class CheckSpecsTestCase(unittest.TestCase):
     RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml",
                            "script/specs-rules/verify.toml",
                            # 本道（问与答对齐）的规则数据按原地原样落进夹具——手抄必然漂移
-                           "script/specs-rules/intent-answer.toml")
+                           "script/specs-rules/intent-answer.toml",
+                           # 本道（长方法的反复调用点）的判据措辞亦外置在该文件里
+                           "script/specs-rules/coding.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -17450,13 +17452,26 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertIn("防线接线数", self.error_texts())
 
     def test_changelog_wiring_ref_drift_reports(self):
-        # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法
+        # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法。
+        # 记的取值**高于**常量即记了一个抬基线时还不存在的值（条目按定义写在抬基线之后），
+        # 这是本道要拦的形态。
         self._write_valid()
         self._write_manifest(self._MANIFEST)
         self.write("CHANGELOG.adoc",
-                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **1**、其余不变。\n")
+                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **9**、其余不变。\n")
         cm.check_guard_manifest()
         self.assertIn("CHANGELOG.adoc", self.error_texts())
+
+    def test_changelog_wiring_ref_older_entry_passes(self):
+        # 正例：本轮**没写**变更日志条目（默认动作是「不新增、不修改」），最新条目记的是
+        # 某一轮当时的基线、低于现值——不得据此报红（本仓库实证：新增防线而不写条目时，
+        # 最新条目仍记着上一轮的取值，按"必须等值"核即误报）
+        self._write_valid()
+        self._write_manifest(self._MANIFEST)
+        self.write("CHANGELOG.adoc",
+                   "- 9.9 | 2026-09-27 | 更早一轮：防线接线基线 0 → **1**。\n")
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
 
     def test_changelog_wiring_ref_historic_entries_pass(self):
         # 正例：旧条目记的是**当时**的基线（按定义不得改写）——只核最新那条
@@ -19292,9 +19307,17 @@ class TestCheckObjectInitGuard(CheckSpecsTestCase):
 
     def test_basis_line_removed_reports(self):
         # 反例⑦：依据行/取舍声明被抽 -> 读者把本集合取舍当成 Effective Java 的规定
-        self._mutate(self.CODING, self.CODING_TEXT,
-                     "是本集合的判据化取舍**——通行材料",
-                     "属通行做法**——外部材料")
+        # （按**本条 bullet 内**那半句替换：`是本集合的判据化取舍**——通行材料` 在本节里
+        #   已不止一处（同节的「长方法的反复调用点」条也有同形半句），故先切出本条正文）
+        i = self.CODING_TEXT.index("* **对象初始化：链式初始化优先")
+        j = self.CODING_TEXT.index("\n== 数据契约", i)
+        body = self.CODING_TEXT[i:j]
+        old_txt = "是本集合的判据化取舍**——通行材料"
+        self.assertIn(old_txt, body)
+        self._write_all_valid()
+        self.write(self.CODING, self.CODING_TEXT[:i]
+                   + body.replace(old_txt, "属通行做法**——外部材料", 1)
+                   + self.CODING_TEXT[j:])
         self._run_guard()
         self.assertIn("本集合的判据化取舍", self.error_texts())
 
@@ -22623,6 +22646,200 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
                      "for target, why in [_self_update_candidates(out_dir, cwd).__next__()]:")
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
+
+
+class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
+    """钉住『长方法的反复调用点：在本处加透传』防线（**用户提出**）。
+
+    用户原话："太长的方法本类多次调用可以先加透传（**但是如果按此逻辑很多类都要加，要考虑
+    换个方法名？还是加个公共的透传？**）适用于任何语言"。该条要治的失效形态：同一处把**同一句
+    很长的调用**原样抄在每个调用点——**被调方法一改，改动面随调用点数量线性增长**，而每个
+    调用点各自的取值微调只落在其中一处、无从逐处核对。
+
+    **夹具＝真文档逐字**：四个落点各由现读取得（不是另抄一份说明文本），再按"删掉哪一截"
+    构造反例——换成手抄版时，锚点在同义改写后会整体与真文档脱节（锚点仍在、真文档已被改），
+    防线照样报红却与本用例无关。
+
+    核对对象一律是**条目/行自己的正文**（`bullet_tokens`/`line_tokens`）：「代码复用」节相邻
+    条目含「公共方法」「抽离」「重复」等字样，按整节核会把抽走的要点兜住。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+
+    def _src(self, rel: str) -> str:
+        with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
+            return fh.read()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        self.CODING_TEXT = self._src(self.CODING)
+        self.JAVA_TEXT = self._src(self.JAVA)
+        self.COMMON_TEXT = self._src(self.COMMON)
+        self.README_TEXT = self._src(self.README)
+        self.COMMON = os.path.relpath(cm.GENERIC_FILE, self.root)
+        self.write_rules_fixture()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in ((self.CODING, self.CODING_TEXT), (self.JAVA, self.JAVA_TEXT),
+                          (self.COMMON, self.COMMON_TEXT), (self.README, self.README_TEXT)):
+            self.write(rel, text)
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard(self) -> None:
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_repeat_call_passthrough_guard()
+
+    def _mutate(self, rel: str, text: str, old: str, new: str) -> None:
+        self.assertIn(old, text)
+        self._write_all_valid()
+        self.write(rel, text.replace(old, new, 1))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_all_valid()
+        cm.check_repeat_call_passthrough_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：条文（在本处加透传 + L1）被抽 -> "每个调用点各写一份长调用"重新成立
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "长方法的反复调用点：在本类（或本处已依赖的落点）加透传、不把调用点散到各处（L1，任何语言）",
+                     "关于方法调用")
+        self._run_guard()
+        self.assertIn("长方法的反复调用点", self.error_texts())
+
+    def test_tier_removed_reports(self):
+        # 反例②（**用户问的那一层**）：三条去向的分档被抽 -> 很多类都要加时又只能"每个类各写一份"
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "**多处都要加同一份透传时的三条去向（按序判，取最先成立的一条）**",
+                     "补充说明")
+        self._run_guard()
+        self.assertIn("三条去向", self.error_texts())
+
+    def test_public_landing_removed_reports(self):
+        # 反例③：去向③（公共落点）被抽 -> 用户问的"要不要加个公共的透传"无从判定
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "才在**公共落点**",
+                     "顺着写")
+        self._run_guard()
+        self.assertIn("公共落点", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例④：判定标准被抽 -> 本条不可判定，只剩一句口号
+        i = self.CODING_TEXT.index("* **长方法的反复调用点")
+        j = self.CODING_TEXT.index("\n* **缓存前先判断对象生命周期", i)
+        body = self.CODING_TEXT[i:j]
+        self.assertIn("**判定标准（任一命中即违规）**", body)
+        self.write(self.CODING, self.CODING_TEXT[:i]
+                   + body.replace("**判定标准（任一命中即违规）**", "补充说明", 1)
+                   + self.CODING_TEXT[j:])
+        self._run_guard()
+        self.assertIn("**判定标准（任一命中即违规）**", self.error_texts())
+
+    def test_exceptions_removed_reports(self):
+        # 反例⑤：例外与边界被抽 -> 短调用也被要求加透传、或去改外部 API 的签名
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "不擅自改它的签名",
+                     "照常处理")
+        self._run_guard()
+        self.assertIn("不擅自改它的签名", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑥：存量边界被抽 -> 等于要求立刻把全项目同类透传补齐
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "**不预先把同类透传给全项目补齐**",
+                     "顺手补齐")
+        self._run_guard()
+        self.assertIn("全项目补齐", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑦：依据行/取舍声明被抽 -> 读者把本集合取舍当成通行材料的规定
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "是本集合的判据化取舍**——通行材料只要求",
+                     "属通行做法**——外部材料")
+        self._run_guard()
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_java_public_landing_removed_reports(self):
+        # 反例⑧：Java 载体的公共落点被抽 -> Java 执行者会逐类各写一份透传
+        self._mutate(self.JAVA, self.JAVA_TEXT,
+                     "的公共落点是**项目自有工具类**",
+                     "照项目习惯处理")
+        self._run_guard()
+        self.assertIn("项目自有工具类", self.error_texts())
+
+    def test_java_pointer_removed_reports(self):
+        # 反例⑨：栈侧只留一句、回指被抽 -> 栈文件自成第二份判据（与本体各自漂移）
+        # （回指句在源文件里被断成两行，故按**整个条目**替换、核的是那枚只出现一次的短语）
+        i = self.JAVA_TEXT.index("* **长方法的反复调用点先看工具类里有没有现成入口（Java 落点）**")
+        j = self.JAVA_TEXT.index("\n* **JSON 处理全局统一使用 Jackson**", i)
+        body = self.JAVA_TEXT[i:j]
+        self.assertIn("此处**不复述**", body)
+        self._write_all_valid()
+        self.write(self.JAVA, self.JAVA_TEXT[:i]
+                   + body.replace("此处**不复述**", "此处给出全文", 1)
+                   + self.JAVA_TEXT[j:])
+        self._run_guard()
+        self.assertIn("不复述", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例⑩：调度器识别特征被抽 -> 在同一处重复写长调用不会触发加载该条
+        self._mutate(self.COMMON, self.COMMON_TEXT,
+                     "要**在一处多次调用同一个参数很多的（很长的）方法**",
+                     "要写代码")
+        self._run_guard()
+        self.assertIn("要**在一处多次调用", self.error_texts())
+
+    def test_basis_line_list_marker_removed_reports(self):
+        # 反例⑫：依据行的 `* ` 列表标记被抽 -> 整条依据并进**上一条 bullet** 的正文
+        # （渲染实测：依据段落落进「存量边界」那条的 `<li>` 里，并在正文里留下裸 `**`）
+        # 只核"那句语句在不在"的锚点兜不住这一形态——故锚点带上列表标记本身
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "\n* 依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148",
+                     "\n  依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148")
+        self._run_guard()
+        self.assertIn("* 依据（标准名/编号）", self.error_texts())
+
+    def test_exception_pointer_style_removed_reports(self):
+        # 反例⑬：例外④末句的两个指代名被**反引号包加粗**改写（``` `**x**` ```）——渲染后留下
+        # 裸反引号与裸 `**`（实测：正文露出字面量），且本文件其余位置指代判据名一律用「」形态
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "「代码质量」节的**职责单一、结构清晰**",
+                     "`**职责单一、结构清晰**`")
+        self._run_guard()
+        self.assertIn("「代码质量」节", self.error_texts())
+
+    def test_subparagraph_literal_block_reports(self):
+        # 反例⑭：子段退回"空行 + 两空格缩进"（不再是列表续行 `+`）——`asciidoc` 渲染实测：
+        # 该形态使子段落变成 **literal block**（`<pre><code>`），条目正文里的 `**` 与反引号
+        # 全部露出字面量、且子段被移出本条的 `<li>`
+        self._mutate(self.CODING, self.CODING_TEXT,
+                     "\n+\n**例外与边界（L2）**",
+                     "\n\n  **例外与边界（L2）**")
+        self._run_guard()
+        self.assertIn("列表续行", self.error_texts())
+
+    def test_readme_sync_removed_reports(self):
+        # 反例⑪：README 目录说明未同步 -> 读者按 README 学习时无从知道有这条规则
+        self._write_all_valid()
+        self.write(self.README, self.README_TEXT.replace(
+            "**长方法的反复调用点在本处加透传（跨类重复才上公共落点）**", "**代码复用**"))
+        self._run_guard()
+        self.assertIn("README.adoc", self.error_texts())
 
 
 if __name__ == "__main__":
