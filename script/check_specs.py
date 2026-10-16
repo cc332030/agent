@@ -287,7 +287,21 @@
      由 `check_guard_manifest` 里的这一核对钉住；"该不该补一条新条目、旧条目该不该动"
      属维护方取舍，交人/子 agent 复核。
 
- 88. 取规范脚本自更新防线：清单从入口的调度器登记解析，而**解析口径在脚本自己手里**——
+ 88. 长方法的反复调用点防线（**用户提出**，适用于任何语言）：判据本体唯一落点在通用层
+     `specs/general/coding.adoc`「代码复用」的**本条 bullet**——被调方法**本身就很长**
+     （多个参数、多层嵌套取值）时，**同一处多次调用它**一律在**本处**加一层透传
+     （方法体只是一句委托、参数原样交给被调方法），不得把这段很长的调用原样抄在每个
+     调用点；透传的**数量由本处调用点决定**（不由被调方法的长度决定）。**多条透传的
+     三条去向按序判、取最先成立的一条**：① 改被调方法自身的形态（参数对象 / 提级取值）
+     让调用点本来就短；② 该操作已有等价入口时改用那个入口；③ 上两条都不成立（同一份
+     透传在多个互不相干的类里各写一遍、而跨类透传改不动被调方法）才在**公共落点**加
+     一处透传（或只加一次的公共创建/取值方法）。本体还含判定标准五条、例外与边界四条、
+     存量边界与依据行；Java 落点 `specs/stack/java.adoc`「编码」只给载体并回指本体。
+     由 `check_repeat_call_passthrough_guard` 钉住（按**本条 bullet 自己的正文**核——
+     「代码复用」节相邻条目含「公共方法」「抽离」「重复」等字样，按整节核会把抽走的要点
+     兜住）；"某一处算不算很长""某两个类算不算互相不相干"属语义判断，交人/子 agent 复核。
+
+ 89. 取规范脚本自更新防线：清单从入口的调度器登记解析，而**解析口径在脚本自己手里**——
      远端改了脚本（新文件类型、新落点排布）时，跑着旧脚本的那一轮只会照旧口径取、新东西
      静默不进副本（"看着取全了、其实少了几份"）。故脚本须**先取回"最新脚本自身"**、与本轮
      真身逐字节比较，不同就**落到真身那一份的路径上、当轮即换上新版并重启**（`os.execv`、
@@ -3789,6 +3803,35 @@ REPEAT_UPDATE_POINTS = (
 )
 
 
+def check_repeat_call_passthrough_guard():
+    """『长方法的反复调用点：在本处加透传』防线（**用户提出**）：太长的方法本类多次调用先加透传。
+
+    用户原话："太长的方法本类多次调用可以先加透传（**但是如果很多类都要加，要考虑换个方法名？
+    还是加个公共的透传？**）适用于任何语言"。该条要治的失效形态：同一处把**同一句很长的调用**
+    （参数一多、嵌套取值一深）原样抄在每个调用点——**被调方法一改，改动面随调用点数量线性增长**，
+    而调用点各自的取值微调只体现在其中一处、无从逐处核对。
+
+    判据本体唯一落点在通用层 `specs/general/coding.adoc`「代码复用」的**本条 bullet**；Java 落点
+    在 `specs/stack/java.adoc` 给载体并回指本体。故本道核四处：通用层 bullet 自己的正文（去向分档 /
+    判定标准 / 例外与边界 / 存量边界 / 依据行）、Java 栈的载体行、调度器「任何代码活动」的识别特征、
+    README 目录说明。
+
+    只钉「判据是否仍在」——"某一处算不算『很长』""某两个类算不算互相不相干"属**语义判断**
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("长方法的反复调用点防线检查（在本处加透传、跨类重复才上公共落点）")
+    # 规则数据侧的步骤自己会报"文件缺失"（判据本体、栈落点、加载门、README 各一步），故先让
+    # 规则跑完——本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "coding.toml")):
+        err("缺少 script/specs-rules/coding.toml——『长方法的反复调用点』的锚点（判据措辞）"
+            "失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_repeat_call_passthrough_guard")
+    phase_done()
+
+
 def check_fetch_self_update_guard():
     """『取规范脚本自更新防线』：脚本每轮先取回"最新脚本自身"，**当轮即换上生效**。
 
@@ -3900,8 +3943,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 145
-GUARD_TEST_BASELINE = 1898  # 本轮 1893 → 1898：`pointer_no_verbatim` 原语扩到脚本/规则数据的回指（四条反例）+ 自更新兜底候选被只试一处（一条反例）
+GUARD_WIRING_BASELINE = 146
+GUARD_TEST_BASELINE = 1913  # 本轮 1910 → 1913：`check_repeat_call_passthrough_guard` 补三条反例（依据行列表标记、子段列表续行、指代形态）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -4468,10 +4511,17 @@ def check_guard_manifest():
     # 抬到的常量值，`_newest_changelog_wiring_ref`），右侧与常量一致即该条记的取值对。
     if manifest_test is not None:
         newest = _newest_changelog_wiring_ref()
-        if newest is not None and newest != GUARD_WIRING_BASELINE:
+        # **只在最新条目记的取值不低于常量时核**：`CHANGELOG.adoc` 的默认动作是「不新增、
+        # 不修改」（`AGENTS.adoc`「版本与变更记录」），故"本轮没写条目"是合法状态——
+        # 此时最新条目记的是**某一轮当时**的基线、低于现值属正常，不得据此报红
+        # （本仓库实证：新增一道防线而不写条目，最新条目仍记着上一轮的 `144 → **145**`，
+        # 按"必须等值"核即误报）。条目记的取值若**高于**常量，说明写进了一个当时还不存在的
+        # 数（条目按定义写在抬基线之后），这才是必须拦下的形态；等于常量时须逐字一致。
+        if newest is not None and newest > GUARD_WIRING_BASELINE:
             err(f"CHANGELOG.adoc 新版条目里记的防线接线基线是 {newest}、而 "
-                f"`GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——同一数值第三处写法；"
-                "旧条目记的是**当时**的基线（按定义不得改写），故只在版本号最大的那条里核，"
+                f"`GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——条目写的数**高于**"
+                "当前常量，即记了一个抬基线时还不存在的值（同一数值第三处写法）。"
+                "旧条目记的是**当时**的基线（按定义不得改写），故只在版本号最大的那条里核；"
                 "数要改就改常量、条目随之", "CHANGELOG.adoc")
     if manifest_test is not None:
         ref_wiring, ref_test, last_row = manifest_test
@@ -11921,6 +11971,7 @@ CHECKS = (
     check_role_skill_handoff_guard,
     check_skill_doc_guard,
     check_object_init_guard,
+    check_repeat_call_passthrough_guard,
     check_fetch_self_update_guard,
 )
 
