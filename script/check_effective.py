@@ -145,6 +145,10 @@ MECHANISMS = [
     ("Java 测试类命名是推荐（允许自定义、AI 生成用默认名字；四类后缀非禁令，构建边界仍强）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming_hint_guard", "check_java_test_naming_hint_guard 钉住命名口径的**级别与默认名字**（推荐、非必须 / AI 生成用默认名字 / 允许自定义类名且『自定义不是违规』）与后缀面（四类后缀是推荐、不是禁令；**构建配置一侧的取值仍为 L1**）；"
      "与 `check_java_test_naming` 分工——那道核四类后缀与拆分裁决的判据仍在、本条核级别，**反向拦「强制面复活」**"),
+    ("Java 里「永不自动执行」的实验代码用 `Playground` 后缀（按名字匹配落空 + 构建配置显式排除）", "specs/stack/java-testing.adoc + specs/general/testing.adoc", "script/check_specs.py",
+     "check_java_test_playground_guard", "check_java_test_playground_guard 钉住取名口径（后缀一律 `Playground`、不叫 `Manual*`）、名字匹配天然落空（不以 `Tests`/`Test`/`TestCase`/`IT` 结尾，surefire 与 failsafe 默认 includes 都失中）、构建配置显式排除、不得混入其他后缀四条，"
+     "以及通用层跨语言口径与调度器/README 登记；"
+     "『某次构建到底有没有跑到它』属运行时事实（构建日志），交人/子 agent 复核"),
     ("Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming", "check_java_test_naming 钉住规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不得滥拆」是单一语义，只剩一半即被读成『每个场景一个类』或『一个被测类一个类』"),
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py",
@@ -237,14 +241,15 @@ MECHANISMS = [
      "check_reuse_precedent_guard", "check_reuse_precedent_guard 钉住通用层两条 L1 条文与典型反例（UUID 手写、集合判空手写）、Java 栈 java-syntax.adoc 优先级顺序（项目自有/已引入库须排在 JDK 之前）、java.adoc 的识别特征与 README 同步；『某次编码是否真的先查了先例』"),
     ("跨语言执行脚本须放资源文件夹、扩展名取被调语言的扩展名，且按性能敏感度决定读取时机（不写字符串拼接/模板、热点路径不每次读）", "specs/general/coding.adoc", "script/check_specs.py",
      "check_external_script_guard", "check_external_script_guard 钉住通用层「跨语言执行脚本的落点（资源文件夹，不写字符串拼接/模板）」的四条 L1（落点／扩展名取被调语言，无通用扩展名时取该技术支持的文件形式如 MyBatis 的 `*.xml`／按资源读取后执行／加载时机：性能敏感路径首次读取一次并缓存、需求要求内容可变的不适用缓存）、可逐条核对的判定标准与典型反例、依据行，以及 Java 落点（`sql`/`lua` 放 `src/main/resources/`、Redis 用 `DefaultRedisScript` 按静态常量声明、MyBatis 的 `${}` 白名单、`EVALSHA` 复用）与 Java 侧加载时机、Spring 引用承接、调度器两处登记与 README 同步；『某次编码是否真的把脚本放进了资源文件夹、是否真的只读一次』"),
-    ("本仓库 changelog 的默认动作是不新增、不修改：用户本次明确要求才写（不再要求『主动声明』这种额外声明），"
-     "未要求时一律不写、不改；用户要求移除时删指定条目、保留其余与既有版本号不动、不得自造新版本号顶上",
-     "AGENTS.adoc「版本与变更记录」", "script/check_specs.py",
+    ("changelog 的默认动作是不新增、不修改：只在用户本次主动声明时才写、不得自动追加；"
+     "未声明时一律不写、不改；声明是例外而非默认（仅当次生效、不得泛化）；"
+     "用户要求移除时删指定条目、保留其余与既有版本号不动、不得自造新版本号顶上",
+     "specs/general/changelog.adoc「登记时机」", "script/check_specs.py",
      "check_changelog_timing_guard",
-     "check_changelog_timing_guard 钉住本仓库的默认动作条（默认动作是不新增、不修改／不再要求『主动声明』这种额外声明，用户直接说『记一条/改 changelog』即算）"
-     "、未要求的越界形态（未提到该文件／只要求更新文档或 README／只说『改动了什么』／只要求『调整项目规范』）"
-     "、顺手补一条、用户要求移除时的处置（删指定条目、既有版本号不动、不得自造新版本号顶上，含防『同版本号换个说法记一遍』）"
-     "以及与抓手登记；『某次是否真的自行新增或改写了条目、用户要求到底成不成立』"
+     "check_changelog_timing_guard 钉住通用层的默认动作条（变更日志不是自动追加区、默认动作是不新增、不修改／只在用户本次主动声明时才写、不得自动追加／声明是例外而非默认、仅当次生效、不得泛化）"
+     "、未声明的越界形态（未提到该文件／只要求更新文档或 README／只说『改动了什么』／只要求『调整项目规范』）"
+     "、顺手补一条、规范文件变更不入变更日志、用户要求移除时的处置（删指定条目、既有版本号不动、不得自造新版本号顶上，含防『同版本号换个说法记一遍』）"
+     "以及与抓手登记；『某次是否真的自行新增或改写了条目、用户声明到底成不成立』"
      "属运行时行为与语义判断（提交内容与评论记录），机械无法判定"),
     ("规范保持通用（规则与实例分离）：本仓库默认不写实例——用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号"
      "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）与 `CHANGELOG.adoc`",
