@@ -3644,13 +3644,13 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
         self.write("prompts/_common.txt", self.DELIVERY)
         self.write("prompts/review.adoc",
                    "= 检查修复\n\n[listing]\n----\n"
-                   "10. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "11. 交付即汇报（**有改动**须提交推送并建 PR，"
                    "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
                    "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
         self.write("prompts/refactor.adoc",
                    "= 重构\n\n[listing]\n----\n"
-                   "10. 交付即汇报（**有改动**须提交推送并建 PR，"
+                   "11. 交付即汇报（**有改动**须提交推送并建 PR，"
                    "**不得**只交付不汇报、**不得**只冒一句、**没有交付**；"
                    "**输出通道只有两条**、**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n----\n")
@@ -3692,7 +3692,7 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
                    "// end::no-self-dispatch[]\n")
         self.write("prompts/review.adoc",
                    "= 检查修复\n\n[listing]\n----\n"
-                   "10. 交付即汇报（**有改动**须提交推送并建 PR，**不得**只交付不汇报、"
+                   "11. 交付即汇报（**有改动**须提交推送并建 PR，**不得**只交付不汇报、"
                    "**不得**只冒一句、**没有交付**；**输出通道只有两条**、"
                    "**任何中间话一律不发**）\n"
                    "include::_common.txt[tag=delivery]\n"
@@ -14275,6 +14275,158 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
                        "include::_common.txt[tag=build-parallel]\n")
         cm.check_maven_parallel_guard()
         self.assertIn("prompts/refactor.adoc", self.error_texts())
+
+
+class TestCheckMavenSkipTestsGuard(CheckSpecsTestCase):
+    """钉住 Maven「跳过测试」的取值防线（**用户提出**）。
+
+    用户口径：**不跳过测试代码的编译，只跳过执行**——这一层取 `skipTests`
+    （"skip running tests, but still compile them"）；`skipITs` 只管集成测试；
+    `maven.test.skip` 才是"连编译一起跳"的全局那一层。本条的关键是**三个开关不得互相顶替**，
+    故反例逐条对应最易被改回的字句，并覆盖图书馆两处依据落点（官方原文 + 本站取舍）。
+    """
+
+    def _section(self):
+        parts = []
+        for name, tokens, _why in cm.MAVEN_SKIP_TESTS_ANCHORS:
+            parts.append("* " + name + "：" + "；".join(tokens) + "。\n")
+        parts.append("* 依据（标准名/编号）：Apache Maven Surefire 插件官方文档、"
+                     "Apache Maven Failsafe 插件官方文档、"
+                     "Apache Maven Compiler 插件官方文档、ISO/IEC/IEEE 29119-4。\n")
+        return "= Maven 规范\n\n== 全局跳过测试\n" + "".join(parts)
+
+    @property
+    def SECTION(self):
+        return self._section()
+
+    def _fixture(self):
+        self.write("specs/stack/maven.adoc", self.SECTION)
+        self.write("library/sources.adoc",
+                   "== Maven 跳过测试的三个属性\n"
+                   + "\n".join(cm.MAVEN_SKIP_TESTS_SOURCE_ANCHORS) + "\n")
+        self.write("library/adoption.adoc",
+                   "* " + cm.MAVEN_SKIP_TESTS_ADOPTION_ANCHOR + "」：官方只给机制。\n")
+
+    def test_positive_passes(self):
+        self._fixture()
+        cm.check_maven_skip_tests_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_spec_reports(self):
+        self._fixture()
+        os.remove(os.path.join(self.root, "specs", "stack", "maven.adoc"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("specs/stack/maven.adoc", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例①：整节被删 → 执行者在 `skipTests`、`skipITs` 与插件 `skip` 之间各挑一个
+        self._fixture()
+        self.write("specs/stack/maven.adoc", "= Maven 规范\n\n== 依赖\n* 别的\n")
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("全局跳过测试", self.error_texts())
+
+    def test_skip_tests_replaced_by_skip_compile_reports(self):
+        # 反例②：把"只跳执行"那一层写成 `maven.test.skip`（顺手连测试源码的编译一起丢）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("-DskipTests=true", "-Dmaven.test.skip=true"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("-DskipTests=true", self.error_texts())
+
+    def test_skip_tests_written_as_global_reports(self):
+        # 反例③：把 `skipTests` 写回"全局"那一档（自 Failsafe 3.6.0 起够不到集成测试）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("不得用一个开关去表达另一层的意图",
+                                        "一个开关就够用"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("不得用一个开关去表达另一层的意图", self.error_texts())
+
+    def test_skip_its_missing_reports(self):
+        # 反例④：`skipITs` 被抽走 → 集成测试那一层没有开关，只能拿全局开关顶
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("；`skipITs`；", "；"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("`skipITs`", self.error_texts())
+
+    def test_property_value_removed_reports(self):
+        # 反例⑤：取值本体（`-Dmaven.test.skip=true` 的命令形态）被抽走
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("-Dmaven.test.skip=true", "命令行加开关即可"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("-Dmaven.test.skip=true", self.error_texts())
+
+    def test_not_a_verification_excuse_removed_reports(self):
+        # 反例⑥："不构成验证可以不跑的依据"被抽走 → 拿跳过测试当"这轮不用验证"的许可
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("不构成**“验证可以不跑”**的依据", "可以据此免验证"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("不构成**“验证可以不跑”**的依据", self.error_texts())
+
+    def test_compile_state_not_reported_reports(self):
+        # 反例⑦：汇报口径里少了"测试源码这一轮编译过没有" → "跳了执行"被说成"编译过"
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("测试源码这一轮编译过没有", "其它"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("测试源码这一轮编译过没有", self.error_texts())
+
+    def test_custom_property_allowed_reports(self):
+        # 反例⑧："不得另造同义属性"被删 → 同一条开关两个名字，按哪个配置的人都以为生效
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("不得另造", "可以另建"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("不得另造", self.error_texts())
+
+    def test_basis_name_removed_reports(self):
+        # 反例⑨：依据被压成"本站规定"（读者无法核对官方到底怎么规定三个属性）
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("Apache Maven Compiler 插件官方文档", "相关最佳实践"))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("Apache Maven Compiler", self.error_texts())
+
+    def test_failsafe_basis_missing_reports(self):
+        # 反例⑩：Failsafe 的依据名被删 → "`-DskipTests` 够不到集成测试"无从核对
+        self._fixture()
+        self.write("specs/stack/maven.adoc",
+                   self.SECTION.replace("Apache Maven Failsafe 插件官方文档、", ""))
+        cm.check_maven_skip_tests_guard()
+        self.assertIn("Apache Maven Failsafe", self.error_texts())
+
+    def test_anchor_list_item_removed_reports(self):
+        # 反例⑪（**清单删项**）：锚点清单是纯数据、只被本条防线读取——删掉一项时
+        # 规范正文一字未动，而那圈"逐 token 核现场文本"一次都不报错。
+        self._fixture()
+        saved = cm.MAVEN_SKIP_TESTS_ANCHORS
+        reduced = copy.deepcopy(list(saved))
+        reduced[0][1] = [t for t in reduced[0][1] if t != "`skipITs`"]
+        reduced[1][1] = [t for t in reduced[1][1] if t != "只跳 Surefire、集成测试照跑"]
+        cm.MAVEN_SKIP_TESTS_ANCHORS = reduced
+        try:
+            self.write("specs/stack/maven.adoc", self._section())
+            cm.check_maven_skip_tests_guard()
+            self.assertIn("锚点条数从下限", self.error_texts())
+        finally:
+            cm.MAVEN_SKIP_TESTS_ANCHORS = saved
+
+    def test_library_source_anchor_removed_reports(self):
+        # 反例⑫：图书馆官方原文锚点被删（依据只剩名称，"官方到底怎么写的"无从核对）
+        self._fixture()
+        self.write("library/sources.adoc", "== Maven\n什么都记不清了\n")
+        cm.check_maven_skip_tests_guard()
+        self.assertIn(cm.MAVEN_SKIP_TESTS_SOURCE_ANCHORS[0], self.error_texts())
+
+    def test_library_adoption_anchor_removed_reports(self):
+        # 反例⑬：图书馆未登记"本站取舍" → 读者把本站口径当成 Maven 官方要求
+        self._fixture()
+        self.write("library/adoption.adoc", "* 别的\n")
+        cm.check_maven_skip_tests_guard()
+        self.assertIn(cm.MAVEN_SKIP_TESTS_ADOPTION_ANCHOR, self.error_texts())
 
 
 class TestCheckRegistryMirrorGuard(CheckSpecsTestCase):

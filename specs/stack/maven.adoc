@@ -15,6 +15,13 @@
 * **严禁私自调整依赖**（依赖声明与传递依赖解析规则见 Maven 官方文档的依赖机制一章）。
 * **除非有必要**（避免传递依赖版本漂移、传递路径可能失效），否则不重复声明依赖；传递依赖已满足时不显式声明。
 
+== 全局跳过测试
+
+* **"跳过执行"与"跳过编译"是两个开关，不得混为一谈（L1）**：本次只须**不跑测试、但仍要编译测试源码**（让测试代码随主代码一起进编译器——编译错误照旧暴露）时，取值＝`skipTests`（命令行形态 `-DskipTests=true`，作用面：Surefire 单元测试）；只须**不跑集成测试**时取值＝`skipITs`（`-DskipITs=true`，作用面：Failsafe）。**"全局跳过测试"＝"跳过执行 + 跳过编译"**，其取值＝`maven.test.skip`（`-Dmaven.test.skip=true`）——它是唯一同时由 Surefire `skip`、Failsafe `skip` 与 Compiler `testCompile` 的 `skip` 承接的属性（官方原文：`maven.test.skip` is honored by Surefire, Failsafe and the Compiler Plugin）。**不得用一个开关去表达另一层的意图**：写 `-Dmaven.test.skip=true` 就等于放弃测试源码的编译（`skipTests` 官方说明为"skip running tests, but still compile them"，正是本条要的那一层）；写 `-DskipTests=true` 则**不再**代表"全局"——自 Failsafe 3.6.0 起它只跳 Surefire、集成测试照跑（`-DskipITs` 才是 Failsafe 的那一个），且 Failsafe 侧的同名 `skipTests` 参数已标 `Deprecated. use skipITs instead`。**"全局"只到本模块构建范围**：外部服务、环境准备一类**不属于**测试流程的步骤不因这些属性被跳过。
+* **三个开关都带用途告警，均不构成"验证可以不跑"的依据（L1）**：官方对 `skipTests`、`skip`（两个插件）都写了 "Its use is NOT RECOMMENDED"，Failsafe 的 `skipTests` 更是已弃用——故它们是**"确实需要时"的开关**，不构成**“验证可以不跑”**的依据；验证仍按 `specs/general/verify.adoc`「编译/运行验证」执行，用它们的每一次都须在汇报里写明**哪些校验因此未执行**、以及**测试源码这一轮编译过没有**（"未执行"不得记作"通过"，"跳了执行"也不得说成"编译过"）。
+* **自定义属性不得与既有属性同义（L1）**：不得另造一个自家属性去控制"是否跑测试"或"是否编译测试"——同一条开关有两个名字时，按其中一个配置的人都以为自己的开关生效，而构建照旧按另一个取值跑。
+* 依据（标准名/编号）：Apache Maven Surefire 插件官方文档（Skipping Tests、`skipTests` 与 `skip` 参数）、Apache Maven Failsafe 插件官方文档（Skipping Tests、`skipITs` 参数与 `skipTests` 的弃用说明）、Apache Maven Compiler 插件官方文档（`testCompile` 的 `skip` 参数）、ISO/IEC/IEEE 29119-4（测试过程的可控与可追溯）。**"三层意图各有一个开关、`maven.test.skip` 只用于'连编译一起跳'"是本集合的判据化取舍**（官方只给各属性各自的机制与承接面，未裁定"某层意图该用哪一个"，也未给"不得自造同义属性"的口径）。
+
 == 构建并行度
 
 * **默认启用多线程构建（L2）**：未配置过并行度时，本规范自己发起的 Maven 构建（裸 `mvn`、命令行构建）**默认开 `-T`，取值＝当前构建设备的核心数**，即命令形态 `mvn -T <核心数>`——**本条到此为止：核心数怎么得到是执行动作，不写进规范**（这是本集合对**所有**规则一视同仁的写法：取值只定义到占位符那一层）。**这不是「取一个固定值」**：`-T`/`--threads` 按官方口径支持 `4`（整数）与 `2C`/`2.5C`（核心数倍率）两种写法，而 `C` 被官方写作 core **multiplied**、**未**给「`C` 等于可用核心数」的明文，故取值只到「核心数」这一层、不写成任何一个固定写法。**不写 `-T` 即默认单线程、拿不到多核**。**取值以命令行参数形态显式传（L1）**：`-T` **必须写在本次构建的命令行上**（`mvn -T <核心数> <目标>`、`./mvnw -T <核心数> <目标>`），**不采用环境变量一类载体**——`MAVEN_OPTS` **只用于 JVM 启动参数**（官方口径），把 `-T` 塞进去等于依赖实现细节、官方没给这条路径；`MAVEN_ARGS` 一类变量在 Maven 3.9.0 起才被读取、更早版本**静默忽略**——`MAVEN_OPTS` 里放 `-T` 正是本集合已实证的失效形态：参数看着加了、命令形态无从核对、换台机器/换个版本就悄悄退回单线程，而构建照旧成功（不报错、不提示）。项目已有构建入口（`mvnw`/`mvnw.cmd`）时用入口构建、参数照传。**本条只管多模块构建**：单模块时开 `-T` 拿不到模块级并行，按『改单模块不主动开』（见 `prompts/_common.txt` 的 `build-parallel` 片段）处理。

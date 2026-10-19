@@ -14,11 +14,11 @@
 1. `primary`：本任务唯一主侧重（方向，不符合即方向错误）——片段中的 `{主侧重}` 取本提示词的值『检查修复问题』；
 2. `priority-rules`：优先级规则（按业界共识分级执行，指明哪里是重点）；
 3. `isolation`：隔离要求（不混用其他提示词、不做跨任务顺手改动）；
+
 4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与本文档第 2-6 步：其余公共步骤与任务步骤；**`baseline-and-compat`**（动手前）接在「规范与基线」（第 1 步）之后，**`timeout`**（每次操作的超时与超时后处置）紧随其后，**`build-parallel`**（要跑构建/测试时）接在「回归自检」之后，**`compat`**（改动后）接在「最终验证」之前；
 5. `scope-boundary`：**变更范围只限当前项目**（未声明即拒绝越界改动，引用不等于授权）；
 6. `env-guard`：**只在命中环境标志时按专用口径执行**（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`），未命中就按其末尾的中性口径办。
 
-[listing]
 ----
 对本项目执行一次全量检查并修复问题。
 include::_common.txt[tag=primary]
@@ -43,7 +43,6 @@ include::_common.txt[tag=delivery]
 include::_common.txt[tag=no-self-dispatch]
 include::_common.txt[tag=no-self-dispatch-body]
 include::_common.txt[tag=delivery-report-body]
-include::_common.txt[tag=report-tail]
 ----
 
 完成后汇报：**先回报主侧重（"检查修复问题"）的达成情况**——本次检查了哪些模块、查出多少问题、各问题的处理状态（已修复/待确认/不处理及原因）；**"本次检查未发现问题、按主侧重结束"也是完整结论**（不得为"有产出"而动手重构）。随后汇报：各步骤执行情况、问题清单（编号）与处理状态、待确认清单的确认结果、验证结果、改动文件清单（未发现问题时应为空，且须说明）
