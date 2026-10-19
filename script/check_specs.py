@@ -315,6 +315,16 @@
      自己更新是脚本内部的事，取规范的人不必知道"脚本会换自己"）。由 `check_fetch_self_update_guard`
      钉住；"某次是否真的当轮换上了"属运行时事实，交人/子 agent 复核。
 
+ 90. SQL 不得写进宿主语言代码注解防线（**用户提出**）：判据本体落通用层
+     `specs/general/sql.adoc`「SQL 写法」——Java 下 mybatis **禁止** `org.apache.ibatis.annotations.Select`
+     这一类注解（注解参数就是字符串拼接、难维护），SQL 一律走 mapper 的 `*.xml`；语言**原生**
+     支持字符串模板（多行文本 + 插值占位符，如 Kotlin）时可用，但那是**例外**、须同时成立四条
+     （原生支持 / 取值走 `#{...}` 预编译占位符 / 文本带库名 / 映射文件优先）。另核 Java 落点
+     （`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」点名禁止面与 `*.xml`、一跳引用真源）
+     与加载门（调度器「写/改 SQL」识别特征含『代码注解』『字符串模板』）。由
+     `check_sql_annotation_binding_guard` 钉住；「某处算不算把取值拼进了 SQL 文本」「某语言是否
+     原生支持字符串模板」属语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -2162,6 +2172,77 @@ def check_alter_merge_guard():
     phase_done()
 
 
+def check_sql_annotation_binding_guard():
+    """『SQL 不得写进宿主语言代码注解』防线（**用户提出**）。
+
+    用户口径：java 下 mybatis **禁止**使用 `org.apache.ibatis.annotations.Select` 这一类注解
+    ——注解参数是字符串拼接、很难维护，改走 mapper 的 `*.xml`；**其他语言比如 kotlin 支持
+    字符串模板（多行字符串 + 占位符）时可以用**，即"不用字符串拼接"是前提、模板是例外。
+
+    判据本体唯一落点在通用层 `specs/general/sql.adoc`「SQL 写法」的两条 bullet（禁止面 +
+    字符串模板例外的四条取值）。故本道核**三处**：
+      * 真源两条 bullet 的要点（规则数据 `script/specs-rules/coding.toml`）；
+      * **Java 落点**：`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」须把 MyBatis
+        一侧钉到 `*.xml`、并点名被禁的注解——只写"改走 xml"而不点名禁止面，Java 执行者仍会
+        按注解写（MyBatis 官方把注解与 XML 当两种等价承载，不提就默认注解更省事）；
+      * **加载门**：调度器「写/改 SQL」的识别特征须含"代码注解"与"字符串模板"——缺则写注解
+        时永不触发加载，判据存在而执行者走不到它。
+
+    只钉「要点是否仍在」——「某处算不算把取值拼进了 SQL 文本」「某语言是否原生支持字符串
+    模板」属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("SQL 不得写进宿主语言代码注解防线检查")
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "coding.toml")):
+        err("缺少 script/specs-rules/coding.toml——『SQL 不得写进宿主语言代码注解』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_sql_annotation_binding_guard")
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少 {rel_java}——SQL 写法在 Java 侧没有落点，注解禁止面无从落地", rel_java)
+    else:
+        with open(JAVA_STACK_FILE, encoding="utf-8") as fh:
+            jtext = fh.read()
+        jsec = _section_text(jtext, "跨语言执行脚本")
+        if not jsec:
+            err(f"{rel_java} 缺少「跨语言执行脚本（SQL / Lua 等）」节——"
+                "Java 侧执行 SQL 时没有落点可循", rel_java)
+        else:
+            for token, desc in (
+                ("org.apache.ibatis.annotations.Select",
+                 "须点名被禁的那一族注解（`org.apache.ibatis.annotations.Select` 一类）"),
+                ("不得写进", "须写明禁止面（不得写进接口上的这类注解）"),
+                ("`*.xml`", "须给出落点（mapper 的 `*.xml`）"),
+                ("specs/general/sql.adoc", "须一跳引用真源（SQL 写法的判据本体）"),
+            ):
+                if token not in jsec:
+                    err(f"{rel_java}「跨语言执行脚本（SQL / Lua 等）」缺失要点：{desc}"
+                        f"（应含 `{token}`）——缺则 Java 执行者按 MyBatis 官方那两种等价承载"
+                        "写法继续用注解、把字符串拼接写回代码", rel_java)
+    rel_common = os.path.relpath(GENERIC_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(GENERIC_FILE):
+        err(f"缺少加载调度器 {rel_common}", rel_common)
+    else:
+        with open(GENERIC_FILE, encoding="utf-8") as fh:
+            ctext = fh.read()
+        line = next((ln for ln in ctext.splitlines()
+                     if "specs/general/sql.adoc" in ln), "")
+        if not line:
+            err(f"加载调度器未登记 `specs/general/sql.adoc`——该条永不触发加载", rel_common)
+        else:
+            for token, desc in (
+                ("代码注解", "识别特征须含『把 SQL 写进宿主语言的代码注解』"),
+                ("字符串模板", "识别特征须含『字符串模板』（用户口径：支持多行字符串与占位符的"
+                               "语言可用，故这是要判的场景）"),
+            ):
+                if token not in line:
+                    err(f"加载调度器里的 `specs/general/sql.adoc` 登记项缺少 `{token}`"
+                        f"识别特征——{desc}；缺则该场景下判据存在而执行者走不到它", rel_common)
+    phase_done()
+
+
 def check_java_serial_guard():
     """『Java 序列化 / 局部变量推断 / 链式调用换行』防线：判据本体不得被删或降级。
 
@@ -3947,8 +4028,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 148  # 本轮合并 main（#260 长方法透传防线）并压缩提交后按同源实取校正：`check_repeat_call_passthrough_guard`（#146）、`check_java_test_playground_guard`（#148）两道新防线并存，唯一名实取 148
-GUARD_TEST_BASELINE = 1944  # 同源实取：合并 main 后 `script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
+GUARD_WIRING_BASELINE = 149  # 同源实取：#150 `check_sql_annotation_binding_guard`（SQL 不得写进宿主语言代码注解）并入后，`CHECKS` 序列唯一名实取 149
+GUARD_TEST_BASELINE = 1970  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮新增 `TestCheckSqlAnnotationBindingGuard` 11 条）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12077,6 +12158,7 @@ CHECKS = (
     check_repeat_call_passthrough_guard,
     check_fetch_self_update_guard,
     check_java_test_playground_guard,
+    check_sql_annotation_binding_guard,
 )
 
 

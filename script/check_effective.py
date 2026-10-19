@@ -409,6 +409,12 @@ MECHANISMS = [
      "check_info_density_guard",
      "check_info_density_guard 钉住**判据本体**七组要点（与「精炼性」的分工『同一描述有几处』对照『单处里有多少句是废话』且明写『仍可能通篇是废话』／每一句都要有承载 L2 含四条判定标准『复述·空话·同义反复·可有可无的铺垫』／限定语不得降格为表意不明／与 P3 的边界『内容不减少优先』『只有这一句没有承载才是』『压成口号属违反 P3』／适用面『不适用于代码与测试断言』／存量随动迁移／依据行 GB/T 7713.2-2022、GB/T 7713.1-2025、ISO/IEC Directives Part 2、ISO/IEC/IEEE 29148），并钉住**两处入口互引**（`doc.adoc`「简洁」条正文里那半句、`review.adoc`「精炼性」的『与「信息密度」的分工』一行——只核节名不核这半句属防线空转）与**图书馆依据落点**（`library/sources.adoc` 的 GB/T 7713 系列主题段须含标准号、『已废止』换版关系与『同义性』取舍面）；"
      "**本条只钉要点文本仍在**——『某次产出里到底有没有废话』"),
+    ("SQL 不得写进宿主语言代码注解（禁止 `@Select` 一族，字符串模板须四条同时成立才可用）",
+     "specs/general/sql.adoc「SQL 写法」（两条 bullet：禁止面 + 字符串模板例外；Java 落点与加载门在栈文件与调度器）",
+     "script/check_specs.py",
+     "check_sql_annotation_binding_guard",
+     "check_sql_annotation_binding_guard 钉住**判据本体**六组要点（禁止面（L1，点名 `org.apache.ibatis.annotations.Select`、一律禁止）／禁止的理由与 `*.xml` 落点／判定标准／字符串模板例外须同时成立四条且『例外而非默认』／四条取值（原生支持、`#{` 预编译占位符、文本带库名、映射文件优先）／例外侧判定标准与反向越界／依据行含取舍归属）、**Java 落点**（`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」须点名禁止面与 `\`*.xml\``、并一跳引用真源）与**加载门**（调度器「写/改 SQL」识别特征含『代码注解』『字符串模板』）；"
+     "**本条只钉要点文本仍在**——「某处算不算把取值拼进了 SQL 文本」「某语言是否原生支持字符串模板」"),
     ("SQL 写法（同表同类操作合并、独立成文件、带库名）",
      "specs/general/sql.adoc「SQL 写法」（SQL 写法的唯一真源；SQL 是跨语言写法，不埋在技术栈文件里）",
      "script/check_specs.py",
