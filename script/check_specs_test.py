@@ -23132,5 +23132,138 @@ class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
         self.assertIn("README.adoc", self.error_texts())
 
 
+class TestCheckSqlAnnotationBindingGuard(CheckSpecsTestCase):
+    """钉住『SQL 不得写进宿主语言代码注解』防线（**用户提出**）。
+
+    用户要求："java 下 mybatis 禁止使用这一类注解 `org.apache.ibatis.annotations.Select`，
+    字符串拼接很难维护，使用 xml；其他语言比如 kotlin 支持字符串模板不用字符串拼接的情况下
+    （支持多行字符串和占位符）、且支持的情况下可以使用"。
+
+    **夹具形态**：夹具是仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/sql.adoc`
+    「SQL 写法」、Java 落点 `specs/stack/java.adoc`、加载门 `AGENTS_COMMON.adoc`、判据措辞
+    `script/specs-rules/coding.toml`）——`setUp` 时一次读入内存，每个用例在内存副本上做一处
+    定点改动后落进临时根再跑防线。手抄节选会与现场漂移（改了几十个字段仍全绿），故一律不手抄；
+    也**不写仓库里的真文件**（那是别的用例与本目录校验的输入，写坏它等于伪造"全绿"）。
+    """
+
+    FILES = ("specs/general/sql.adoc", "specs/stack/java.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc")
+    SQL, JAVA, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 本道另核 Java 落点常量，它在模块级就绑定到真实仓库路径——夹具重定向 `REPO_ROOT`
+        # 后不会跟着走，故一并重定向，否则被校验的一直是真实仓库那份。
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def tearDown(self) -> None:
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        # 判据措辞（规则数据）按**原样**落进夹具：规则目录一旦存在，防线就按它跑。
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        # `phase()` 会清掉"本阶段已跑过"的标记，`RULES` 须一并清空（否则沿用上一份规则）。
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_sql_annotation_binding_guard()
+        # **本类跑完必须把规则缓存还原**：`RULES` 是模块级缓存，留着本类加载的那份（它按
+        # 真实仓库的规则目录加载）会让后面的用例读到别的根下的规则——本仓库实测：不清缓存时
+        # 同一文件内 36 条与规则数据无关的用例整批假红（它们自己的规则文件装在夹具里、从未被读）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        """在真文件副本上做一处定点改动后跑防线（`old` 必须在场，否则夹具本身失效）。"""
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_sql_file_removed_reports(self):
+        # 反例①：真源文件被删 -> 判据无处承载
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, self.SQL))
+        self._run_guard()
+        self.assertIn("sql.adoc", self.error_texts())
+
+    def test_annotation_ban_bullet_removed_reports(self):
+        # 反例②：禁止面整条被删（Java 又可以用 `@Select` 写字符串拼接了）
+        self._write_all_valid()
+        text = self.base[self.SQL]
+        start = text.index("* **不得写进宿主语言的代码注解（L1）**")
+        end = text.index("\n* **字符串模板例外", start)
+        self.write(self.SQL, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("不得写进宿主语言的代码注解", self.error_texts())
+
+    def test_annotation_family_anchor_removed_reports(self):
+        # 反例③：只删被禁的那一族注解名（用户点名的取值），禁止面因此无处落地
+        self._run_guard_with(self.SQL, "`org.apache.ibatis.annotations.Select`/`@Update`",
+                             "`@Update`")
+        self.assertIn("org.apache.ibatis.annotations.Select", self.error_texts())
+
+    def test_template_exception_removed_reports(self):
+        # 反例④：字符串模板例外整条被抽 -> 只剩"一律禁止"，Kotlin 那类语言也被一刀切
+        self._write_all_valid()
+        text = self.base[self.SQL]
+        start = text.index("* **字符串模板例外（L2，须同时成立四条）**")
+        end = text.index("\n* **同表同类操作合并为一条", start)
+        self.write(self.SQL, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("字符串模板例外", self.error_texts())
+
+    def test_template_exception_four_conditions_removed_reports(self):
+        # 反例⑤：例外还在、但"须同时成立四条"这个门被压成"示例"——例外退化成许可
+        self._run_guard_with(self.SQL, "**例外须同时成立四条**：①",
+                             "**例外的写法**：①")
+        self.assertIn("例外须同时成立四条", self.error_texts())
+
+    def test_placeholder_value_removed_reports(self):
+        # 反例⑥：取值绑定那条被抽（`#{...}` 预编译占位符）——模板可随意把取值拼进文本
+        self._run_guard_with(self.SQL, "（MyBatis 的 `#{...}`）", "")
+        self.assertIn("#{", self.error_texts())
+
+    def test_library_waiver_removed_reports(self):
+        # 反例⑦：依据行的取舍归属被改成"标准规定"——外部材料只给语法能力、没规定必须用哪个
+        self._run_guard_with(self.SQL, "是本集合的判据化取舍（用户点名），非外部标准的规定",
+                             "是 MyBatis 官方文档的规定")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑧：Java 落点把禁止面改成"建议使用"——Java 执行者仍会按注解写
+        self._run_guard_with(self.JAVA,
+                             "**不得写进接口上的 `org.apache.ibatis.annotations.Select`",
+                             "**建议使用 `org.apache.ibatis.annotations.Select`")
+        self.assertIn("不得写进", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例⑨：加载门缺『字符串模板』识别特征 -> 该场景永不触发加载
+        self._run_guard_with(self.COMMON, "与字符串模板——识别特征", "——识别特征")
+        self.assertIn("字符串模板", self.error_texts())
+
+    def test_readme_entry_removed_reports(self):
+        # 反例⑩：README 目录说明未同步 -> 读者按 README 学习时不知道有这条要求
+        self._run_guard_with(self.README, "**不得写进宿主语言代码注解**",
+                             "独立成文件、带库名")
+        self.assertIn("README.adoc", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()

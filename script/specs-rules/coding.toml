@@ -2032,3 +2032,35 @@ message = "长方法的反复调用点防线被破坏：{file} 缺失要点 {mis
 tokens = [
     "**长方法的反复调用点在本处加透传（跨类重复才上公共落点）**",
 ]
+
+
+# 『SQL 不得写进宿主语言代码注解』防线（用户提出：java 下 mybatis 禁止使用
+# `org.apache.ibatis.annotations.Select` 这一类注解——字符串拼接很难维护，改走 xml；
+# 语言原生支持字符串模板（多行文本 + 占位符）时可用，但它是**例外**）。
+# 落点：`specs/general/sql.adoc`「SQL 写法」的两条（判据本体单建 sql.adoc 之后仍只有这一处）；
+# 只由这里钉，`check_alter_merge_guard` 不再各钉一份（同一事项只有一个真源）。
+[[guards.check_sql_annotation_binding_guard]]
+file = "specs/general/sql.adoc"
+section = "SQL 写法"
+kind = "section_groups"
+# 锚点清单只写一处（`_tokens.toml` 的 `SQL_ANNOTATION_BINDING_ANCHORS`），本步按名引用——
+# 清单再抄一份即第二真源（判据同 `rules_engine._groups_of` 的说明）。写错/漏登记会报错、
+# 不静默退化。`min` 取当前条数（21），由下面的 `anchor_count` 核。
+token_list = "SQL_ANNOTATION_BINDING_ANCHORS"
+message = "『SQL 不得写进宿主语言代码注解』防线被破坏：{file}「SQL 写法」缺失要点 {missing}——{desc}；该条对应用户点名要求（java 下 mybatis 禁止 `@Select` 一族注解、改用 xml；支持字符串模板的语言可用但须同时成立四条），不得删除、不得降级"
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤
+# 一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_sql_annotation_binding_guard]]
+file = "specs/general/sql.adoc"
+section = "SQL 写法"
+kind = "anchor_count"
+token_list = "SQL_ANNOTATION_BINDING_ANCHORS"
+min = 21
+
+# README 目录说明同步（读者按 README 学习时须知道有这条规则）。
+[[guards.check_sql_annotation_binding_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = ["**SQL 编写（`sql.adoc`；含 SQL 写法", "**不得写进宿主语言代码注解**"]
+message = "『SQL 不得写进宿主语言代码注解』防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须同步登记该条（通用层 `sql.adoc` 的条目清单里要能读到它），否则读者按 README 学习时无从知道有这条规则"
