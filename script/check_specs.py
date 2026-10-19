@@ -8313,6 +8313,22 @@ MAVEN_PARALLEL_ANCHOR_FLOOR = 30
 # 无人核（同 `POINTER_SCAN_FILES` 的教训——只列"当前已知的那几个"时，未列入者永远是盲区）。
 _MAVEN_MIGRATION_CROSSREF_ANCHORS = _RULES_TOKENS["MAVEN_MIGRATION_CROSSREF_ANCHORS"]
 MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR = 11
+# 『Maven 跳过测试』防线：三层意图各一个开关（`skipTests` / `skipITs` / `maven.test.skip`）。
+MAVEN_SKIP_TESTS_SECTION = _RULES_TOKENS["MAVEN_SKIP_TESTS_SECTION"]
+MAVEN_SKIP_TESTS_ANCHORS = _RULES_TOKENS["MAVEN_SKIP_TESTS_ANCHORS"]
+# 条数下限：清单是纯数据，删项时规范正文一字未动、逐 token 核对全绿。
+MAVEN_SKIP_TESTS_ANCHOR_FLOOR = 16
+MAVEN_SKIP_TESTS_BASIS = ("Apache Maven Surefire", "Apache Maven Failsafe",
+                          "Apache Maven Compiler", "ISO/IEC/IEEE 29119-4")
+# 图书馆两处落点：官方原文（sources.adoc）与本站取舍（adoption.adoc）
+MAVEN_SKIP_TESTS_SOURCE_ANCHORS = [
+    "`maven.test.skip` is honored by Surefire, Failsafe and the Compiler Plugin",
+    "the Failsafe plugin no longer binds its own `skipTests` parameter",
+    "skip running tests, but still compile them",
+    "User Property : skipITs",
+    "User Property : maven.test.skip",
+]
+MAVEN_SKIP_TESTS_ADOPTION_ANCHOR = "「跳过执行 / 跳过集成 / 连编译一起跳各取一个开关"
 # 「这份提示词要不要引 `build-parallel`」的判定词：正文里出现构建/测试类步骤即须引入，
 # 否则**不要求**（过度收紧会逼出一句与任务无关的构建说明——本轮实测）
 MAVEN_BUILD_WORDS = _RULES_TOKENS["MAVEN_BUILD_WORDS"]
@@ -8487,6 +8503,66 @@ def check_maven_parallel_guard():
         if runs_build and not included:
             err(f"{rel_p} 未引入 `{MAVEN_PARALLEL_PROMPT_TAG}` 公共片段——"
                 "该提示词的任务含构建/测试步骤，构建并行度不会被启用（公共片段不等于被引用）", rel_p)
+    phase_done()
+
+
+def check_maven_skip_tests_guard():
+    """Maven「跳过测试」防线：三层意图各自的取值（`skipTests`/`skipITs`/`maven.test.skip`）、
+    相互不得顶替、两处依据落点不得被删改。
+
+    本条只核**文本形态**：条款与其级别、三个开关的取值与承接面、依据名仍在，且依据两处落点
+    （图书馆的官方原文与本集合的取舍）一处不少——缺任一处即等于"规则写了却无从核对官方是否
+    这么要求"。**"某次构建到底跳没跳测试、编译过没有"属运行时事实**（见 GUARD_CHECK_LIMITS）。
+    """
+    phase("Maven 全局跳过测试防线检查")
+    rel = MAVEN_SPEC
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"{rel} 缺失（Maven 栈规范的唯一落点）", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = _section_text(text, MAVEN_SKIP_TESTS_SECTION)
+    if not section:
+        err(f"maven.adoc 缺少「{MAVEN_SKIP_TESTS_SECTION}」节——"
+            "『只跳执行 / 只跳集成 / 连编译一起跳各一个开关』失去落点，执行者会重新在 "
+            "`skipTests`、`skipITs` 与插件 `skip` 之间各挑一个", rel)
+        phase_done()
+        return
+    have = sum(len(tokens) for _name, tokens, _why in MAVEN_SKIP_TESTS_ANCHORS)
+    if have < MAVEN_SKIP_TESTS_ANCHOR_FLOOR:
+        err(f"`MAVEN_SKIP_TESTS_ANCHORS` 锚点条数从下限 {MAVEN_SKIP_TESTS_ANCHOR_FLOOR} 减到 {have}——"
+            "锚点清单是**纯数据**、只被本条防线读取：删掉一项时规范正文一字未动、"
+            "下面的逐项核对**一次都不报错**。确实要删就得说明删了哪条、为什么删"
+            "（并同步 `MAVEN_SKIP_TESTS_ANCHOR_FLOOR`）",
+            "script/specs-rules/_tokens.toml")
+    for name, tokens, why in MAVEN_SKIP_TESTS_ANCHORS:
+        for token in tokens:
+            if token not in section:
+                err(f"「{MAVEN_SKIP_TESTS_SECTION}」节缺少要点：{name}（应含 `{token}`）——{why}", rel)
+    for token in MAVEN_SKIP_TESTS_BASIS:
+        if token not in section:
+            err(f"「{MAVEN_SKIP_TESTS_SECTION}」节缺少依据名 `{token}`——"
+                "依据被删到只剩名称（或整段消失）时，读者无法核对『三层意图各取一个开关』"
+                "是官方要求还是本站取舍", rel)
+
+    src_path = os.path.join(REPO_ROOT, "library", "sources.adoc")
+    with open(src_path, encoding="utf-8") as fh:
+        src_text = fh.read()
+    for token in MAVEN_SKIP_TESTS_SOURCE_ANCHORS:
+        if token not in src_text:
+            err(f"library/sources.adoc 缺少 Maven 跳过测试的官方原文锚点 `{token}`——"
+                "依据被压成名称后，无法核对两个属性各自的承接面与 Failsafe 的绑定变化",
+                "library/sources.adoc")
+    ad_path = os.path.join(REPO_ROOT, "library", "adoption.adoc")
+    with open(ad_path, encoding="utf-8") as fh:
+        ad_text = fh.read()
+    if MAVEN_SKIP_TESTS_ADOPTION_ANCHOR not in ad_text:
+        err(f"library/adoption.adoc 缺少 `{MAVEN_SKIP_TESTS_ADOPTION_ANCHOR}`——"
+            "『三层意图各取一个开关』会被读成 Maven 官方要求"
+            "（依据不实，见 specs/general/source.adoc「外部引用」）",
+            "library/adoption.adoc")
     phase_done()
 
 
@@ -11992,6 +12068,7 @@ CHECKS = (
     check_gradle_guard,
     check_maven_migration_crossref_guard,
     check_operation_timeout_guard,
+    check_maven_skip_tests_guard,
     check_user_requirement_guard,
     check_correction_guard,
     check_role_skill_handoff_guard,
