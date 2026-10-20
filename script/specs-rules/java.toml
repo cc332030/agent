@@ -641,3 +641,65 @@ file = "README.adoc"
 kind = "file_tokens"
 message = "Java `Playground` 防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须登记 `Playground` 这一后缀，否则读者按 README 学习时无从知道有这类永不自动执行的代码"
 tokens = ["java-testing（", "Playground", "永不自动执行"]
+
+# 『没有多态时不得为 service 类加有相同方法的父接口』防线（**用户提出**，判据本体在通用层）
+# 用户口径：「在没有多态的情况下，禁止为 service 类添加有相同方法的父接口」。
+# 本文件里放三道：① 通用层本体（`specs/general/coding.adoc`「类设计」）；② 它自己的锚点条数；
+# ③ Java 落点（`specs/stack/java.adoc`「编码」）只给载体——认类、多态成不成立看注入与声明类型、
+# 去向是直接用该类、"框架由接口生成实现"的契约不在核对面。
+# 失效形态：① 条文被删或降级成"建议"（于是"面向接口编程""以后可能换实现"重新成立）；
+# ② **「没有多态」的判据**被抽（只剩一句口号时，任何"接口 + 唯一实现"都能自圆其说）；
+# ③ 理由被抽（读者不知道接口在这里没换来任何东西）；④ 例外清单被抽（连框架由接口生成实现的
+# 契约一起判红，`Mapper`/Feign/Spring Data 仓储无处安放）；⑤ 存量边界被抽（等于要求立刻批量删接口）。
+# 核对对象一律是**条目自己的正文**（`bullet_tokens`，不是整节）：「类设计」节相邻条目
+# （工具类继承、纯数据结构类、配置类）含大量「接口」「实现」字样，按整节核会被兜住。
+# 锚点一律取本条 bullet 内**只出现一次**的措辞——轴名（`**理由**`/`**判定标准（任一命中即违规）**`/
+# `**存量边界（L1）**`）在本节其余条目里同样出现，用它们核等于让相邻条目兜住本条。
+[[guards.check_service_interface_guard]]
+bullet = '没有多态时不得为 service 类加同方法父接口'
+file = 'specs/general/coding.adoc'
+kind = 'bullet_tokens'
+section = '类设计'
+message = 'service 父接口防线被破坏：{file} 的「没有多态时不得为 service 类加同方法父接口」条**本条自己的正文**缺失 {missing}——该条对应用户要求（没有多态时不得为 service 类添加有相同方法的父接口），缺了它「接口 + 唯一实现」的两件套又会被当成"面向接口编程"照写'
+min = 12
+tokens = [
+    '没有多态时不得为 service 类加同方法父接口（L1，任何语言）',
+    '不得**为它另建一个**声明了同样的方法**的父接口',
+    '**「没有多态」的判据**',
+    '**且没有任何注入点、参数、返回值或集合以该接口类型声明**',
+    '**不承担任何替换与解耦**',
+    '**没有多态时的去向是「直接用该类」**',
+    '**框架由接口生成实现**的契约',
+    '**该处已有先例**',
+    '**反向误用**',
+    '**只管 service 类的父接口**',
+    '**批量删接口、批量把注入类型改成实现类**',
+    '**「没有多态时不为 service 类加同方法父接口」是本集合自己的判据化取舍**',
+]
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错。
+[[guards.check_service_interface_guard]]
+file = 'specs/general/coding.adoc'
+kind = 'anchor_count'
+bullet = '没有多态时不得为 service 类加同方法父接口'
+section = '类设计'
+min = 12
+
+# Java 落点：判据本体在通用层，本处只给载体。
+[[guards.check_service_interface_guard]]
+file = 'specs/stack/java.adoc'
+kind = 'bullet_tokens'
+section = '编码'
+bullet = '没有多态时不为 service 加同方法的父接口（L1，Java 落点）'
+message = 'service 父接口防线被破坏：{file} 的「没有多态时不为 service 加同方法的父接口」条缺失 {missing}——缺 Java 载体时，执行者认不出「`XxxService` + `XxxServiceImpl` 一对一」这一形态，也分不清框架契约（`Mapper`/Feign）不在核对面'
+min = 8
+tokens = [
+    '没有多态时不为 service 加同方法的父接口（L1，Java 落点）',
+    '只有一个实现',
+    '`specs/general/coding.adoc`',
+    '此处**不复述**',
+    '**Java 侧只给载体**',
+    '**注入与声明类型**',
+    '**去向是直接用该类**',
+    '**框架由接口生成实现的契约不在核对面**',
+]
