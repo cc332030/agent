@@ -4041,7 +4041,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 150  # 同源实取：#117 `check_service_interface_guard`（没有多态时不得为 service 类加有相同方法的父接口）并入后，`CHECKS` 序列唯一名实取 150
-GUARD_TEST_BASELINE = 1984  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮新增 `TestCheckServiceInterfaceGuard` 14 条）
+GUARD_TEST_BASELINE = 1990  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（并入 main 的 14 条 + 本分支 `TestCheckPersistenceAccessGuard` 的 4 条反例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 

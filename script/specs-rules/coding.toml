@@ -827,6 +827,48 @@ groups = [
 kind = "file_groups"
 message = "持久化访问防线被破坏：{file} 缺失要点 {missing}——{desc}"
 
+# 『`IService` 的最终实现类须继承 `ServiceImpl` 一族』**按条目自己的正文核**（`bullet_tokens`，
+# 不是整节）：同一节里相邻条目共用大量字样（上一条含「统一入口」「Service 实现类」、下一条含
+# 「例外」「判定标准」「存量」，而该节末尾**整节共用**一条「判定标准」「存量边界」与「依据」），
+# 按整节 `file_groups` 核时这些相邻条目会把从本条抽走的要点**兜住**。本轮实测（`file_groups`
+# 期间，11 种形态逐一试过）：与上一条的分工句 / 判定标准①②③ / 边界①② / 本条 L1 降 L2 / 条文
+# 里的间接继承口径，**八种全部报绿**——只剩「可以不继承」一项有效力，其余几项虽报红、命中的是
+# 同一节别的条目的字样。
+# 锚点一律取**本条 bullet 内只出现一次**的词（「抽象类」「ServiceImpl」「最终实现类」在本条内
+# 各出现多次，不能当锚点）。
+[[guards.check_persistence_access_guard]]
+bullet = "`IService` 的最终实现类须继承 `ServiceImpl` 或其子类"
+file = "specs/stack/java.adoc"
+kind = "bullet_tokens"
+section = "持久化访问（MyBatis-Plus / JPA 等）"
+tokens = [
+    "（L1，用户点名）",
+    "其**最终实现类**须是 `ServiceImpl` 的本子类",
+    "**或其子类**",
+    "**抽象类可以不继承**",
+    "约束落在它的最终实现类上",
+    "① 非抽象的 `XxxServiceImpl` 实现 `XxxService` 却不继承 `ServiceImpl` 一族",
+    "为由自我豁免",
+    "把本条的约束错落到抽象类上",
+    "只管 `IService` 这一族入口",
+    "本条管「最终实现类由谁承载入口」",
+    "上一条管「在哪个类里调这个入口」",
+    "两条同向、互不替代",
+    "**存量**：随动迁移，见 `specs/core/execution.adoc`",
+    "依据（标准名/编号）",
+    "属**本集合自己的取舍**",
+]
+message = "持久化访问防线被破坏：{file} 的该条**本条自己的正文**缺失 {missing}——缺的若是 L1 标记，约束被降级成建议、「只 `implements` 不继承」重新成立；缺的若是豁免面，抽象类会被一并要求继承 `ServiceImpl`（与用户口径相反）；缺的若是边界或与上一条的分工，读者会二选一地读（以为继承了就能随便 `new`，或以为不继承也能调成员方法）。每条锚点须在**本条 bullet 内唯一**"
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时规范正文一字不少、
+# 上面那步一次都不报错（"核过且通过"与"没核"无从区分）。删锚点须与调 `min` 一并发生。
+[[guards.check_persistence_access_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "`IService` 的最终实现类须继承 `ServiceImpl` 或其子类"
+section = "持久化访问（MyBatis-Plus / JPA 等）"
+min = 15
+
 [[guards.check_pagination_guard]]
 file = "specs/stack/java.adoc"
 section = "持久化访问（MyBatis-Plus / JPA 等）"
@@ -1654,8 +1696,7 @@ tokens = [
     "工具类不继承工具类（L1，Java 落点）",
     "不得 `extends` 另一个工具类",
     "`specs/general/coding.adoc`",
-    "此处**不复述**",
-    "**Java 侧只给载体**",
+    "**本条只给 Java 侧的载体与判据**",
     "**不因它继承了谁而改变性质**",
     "**lombok 的 `@UtilityClass` 自带私有构造器、本身不可被继承**",
     "**不新起一个工具基类**",
@@ -1669,7 +1710,7 @@ file = "specs/stack/java-syntax.adoc"
 kind = "anchor_count"
 bullet = "工具类不继承工具类"
 section = "工具类定义"
-min = 9
+min = 8
 
 # 『对象初始化（手动创建对象时的写法）防线』（**用户提出**）：用户原文口径为「对象手动初始化时，
 # 优先使用链式初始化（java 下 builder > set chain），适用于所有语言，没有链式再用 set，
