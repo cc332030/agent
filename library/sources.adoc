@@ -402,6 +402,11 @@
 * **须注意的语义差异（同义性）**：上述材料给的是**两套写法都存在、lambda 形态受推荐**，**未**规定"禁止一切查询构造器的 `new`"、"必须只用 `IService` 成员方法"；本集合据此推出的是**自己更严的判据化取舍**——通用层只写抽象形态与判定标准、不写框架类名，框架专名与禁止清单的唯一落点为技术栈层。
 * 实证反例（**本项目真实记载**）：用户报告的失效形态——Service 实现类已经 `extends ServiceImpl`，业务代码里却仍 `new QueryWrapper<>()` / `new LambdaQueryWrapper<>()` 拼条件，**同一项目并存两套写法**。
 
+* **材料（`IService` 的最终实现类须继承 `ServiceImpl` 一族，支持 `specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」的同名条）**：**MyBatis-Plus 官方文档**把 `IService<T>` 与其默认实现 `ServiceImpl<M, T>` 作为**成对的既定形态**给出（默认实现承载通用 CRUD 与 lambda 成员方法；自定义 Service 接口继承 `IService`、实现类继承 `ServiceImpl`）；**本次未逐字取回**，按公开文档的能力面与包结构定位。
+* 依据要点（**要点转述**）：① `IService` 是**能力声明**、其默认方法由 `ServiceImpl` 提供——**不继承它，这组成员方法在本类上就没有来源**；② 官方给出的是**配对写法**，不是"可以只要一半"。
+* **须注意的语义差异（同义性，L1）**：官方材料只给**既定配对形态**，**未**规定"最终实现类**必须**继承 `ServiceImpl`"、（也**未**规定"抽象类可以不继承"）；"最终实现类强制继承、抽象类豁免"是**本集合自己的判据化取舍**（逐条论证见 `library/adoption.adoc`「同义性差异与覆盖点」）。**不得**把本条读成 MyBatis-Plus 的要求。
+* 实证（**本项目真实记载**）：用户口径为"**mybatis plus IService 的最终实现类（抽象类可不继承），必须要继承 ServiceImpl 或者其子类**"。
+
 == 分页查询的返回类型与元素转换（MyBatis-Plus 分页容器）
 
 * **材料与用途（支持 `specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」的「分页查询的返回类型与转换方式」（**L1**））**：**MyBatis-Plus 官方文档**的分页插件（`PaginationInnerInterceptor`）与分页容器 `IPage`；`IPage` 的 `convert` 方法（把容器内元素逐个映射为新类型的元素，返回同类型的新容器）。

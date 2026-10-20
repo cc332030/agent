@@ -11603,6 +11603,18 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "**静态构造方法**（`Wrappers.lambdaQuery()` 一类）——静态构造同样绕过统一入口；落点只能"
         "是在 Mapper 接口上用注解/映射文件声明，或在该接口上以默认方法封装一次。\n"
         "* **例外（L2，须写清理由）**：确需 Wrapper 子类时在 Mapper 接口封装一次，业务侧不 new。\n"
+        # 与现场同形：本条**单独成一个 bullet**（条目级核对的对象），末尾的「判定标准」「存量
+        # 边界」是整节共用条，不得用来兜住本条自己的判据。
+        "* **`IService` 的最终实现类须继承 `ServiceImpl` 或其子类（L1，用户点名）**：承载某实体"
+        "持久化入口的 `XxxService extends IService<Xxx>`，其**最终实现类**须是 `ServiceImpl` 的本"
+        "子类**或其子类**（经本项目的实现基类间接继承 `ServiceImpl` 同样算数）；**抽象类可以不继承**"
+        "（约束落在它的最终实现类上）。**判定标准（任一命中即违规）**：① 非抽象的 `XxxServiceImpl` "
+        "实现 `XxxService` 却不继承 `ServiceImpl` 一族；② 以「自己实现 `IService` 的一堆默认方法"
+        "更灵活」为由自我豁免；③ 把本条的约束错落到抽象类上、要求抽象类也必须继承 `ServiceImpl`。"
+        "**边界**：① 只管 `IService` 这一族入口；② 本条管「最终实现类由谁承载入口」，上一条管"
+        "「在哪个类里调这个入口」，两条同向、互不替代。**存量**：随动迁移，见 "
+        "`specs/core/execution.adoc`。依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148；"
+        "本条取其为强制面，属**本集合自己的取舍**。\n"
         "* **判定标准（任一命中即违规）**：①构造器 `new`；②出现 `Wrappers.lambdaQuery()` 一类"
         "**静态构造方法**而本 Service 的成员方法可表达；③列名以字符串写进查询构造"
         "（可用方法引用表达时）；④绕过本实体 Service 的成员方法另起一套访问写法。\n"
@@ -11646,6 +11658,58 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         self._write_valid()
         cm.check_persistence_access_guard()
         self.assertEqual(cm.errors, [])
+
+    def test_service_impl_requirement_deleted_reports(self):
+        # 反例：'最终实现类须继承 ServiceImpl'整条被删 → "只 implements 不继承"重新成立
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   "".join(ln for ln in self.JAVA.splitlines(keepends=True)
+                           if "最终实现类须继承" not in ln))
+        cm.check_persistence_access_guard()
+        self.assertIn("最终实现类", self.error_texts())
+
+    def test_service_impl_abstract_exemption_removed_reports(self):
+        # 反例：抽象类豁免被抽掉 → 抽象类也被要求继承 ServiceImpl（与用户口径相反）
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("**抽象类可以不继承**", "**抽象类同样适用**"))
+        cm.check_persistence_access_guard()
+        self.assertIn("抽象类可以不继承", self.error_texts())
+
+    # 下面四条是 review 实测形态：本条曾按**整节**（`file_groups`）核，相邻条目与节末共用的
+    # 「判定标准」「存量边界」「依据」把这些要点各自兜住——抽掉后 `check_specs.py` **全部报绿**，
+    # 防线只剩「可以不继承」一项有效力。改为条目级（`bullet_tokens`）后逐一须报错。
+    def _mutate_service_impl_bullet(self, old: str, new: str) -> None:
+        self._write_valid()
+        replaced = self.JAVA.replace(old, new, 1)
+        self.assertNotEqual(replaced, self.JAVA, f"夹具里找不到要改的片段：{old}")
+        self.write("specs/stack/java.adoc", replaced)
+
+    def test_service_impl_role_split_removed_reports(self):
+        # 反例：与上一条的分工句被抽 → 读者会二选一地读（继承了就能随便 new / 不继承也能调成员方法）
+        self._mutate_service_impl_bullet("本条管「最终实现类由谁承载入口」，上一条管"
+                                         "「在哪个类里调这个入口」，两条同向、互不替代。", "")
+        cm.check_persistence_access_guard()
+        self.assertIn("最终实现类由谁承载入口", self.error_texts())
+
+    def test_service_impl_first_criterion_removed_reports(self):
+        # 反例：判定标准①（非抽象实现类不继承）被抽 → 违规形态判不出来
+        self._mutate_service_impl_bullet("① 非抽象的 `XxxServiceImpl` 实现 `XxxService` 却不继承 "
+                                         "`ServiceImpl` 一族；", "① ")
+        cm.check_persistence_access_guard()
+        self.assertIn("非抽象的", self.error_texts())
+
+    def test_service_impl_scope_boundary_removed_reports(self):
+        # 反例：边界①（只管 IService 这一族）被抽 → 业务服务、工具类也被一并要求继承 ServiceImpl
+        self._mutate_service_impl_bullet("① 只管 `IService` 这一族入口；", "")
+        cm.check_persistence_access_guard()
+        self.assertIn("只管 `IService` 这一族入口", self.error_texts())
+
+    def test_service_impl_level_downgraded_reports(self):
+        # 反例：本条 L1 降成 L2 → 约束被降级成建议，"只 implements 不继承"重新成立
+        self._mutate_service_impl_bullet("或其子类（L1，用户点名）**", "或其子类（L2，用户点名）**")
+        cm.check_persistence_access_guard()
+        self.assertIn("（L1，用户点名）", self.error_texts())
 
     def test_clause_deleted_reports(self):
         # 反例：通用层条文被删 → "随手 new 构造器"重回默认做法
