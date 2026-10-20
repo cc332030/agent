@@ -325,6 +325,18 @@
      `check_sql_annotation_binding_guard` 钉住；「某处算不算把取值拼进了 SQL 文本」「某语言是否
      原生支持字符串模板」属语义判断，交人/子 agent 复核。
 
+ 91. service 父接口防线（**用户提出**）：用户口径"在没有多态的情况下，禁止为 service 类添加有相同
+     方法的父接口"。判据本体落通用层 `specs/general/coding.adoc`「类设计」——**没有多态**（只有一个
+     实现类，且**没有任何注入点、参数、返回值或集合以该接口类型声明**）时，**不得**为 service 类
+     另建声明了同样方法的父接口；理由（接口不承担替换与解耦、方法清单与类逐条重复、改一处要抄两遍）、
+     去向（**直接用该类**，能力面由该类的成员方法表达）、例外三档（存在第二个实现／框架由接口生成
+     实现的契约如 `Mapper`、Feign、Spring Data 仓储／该处已有先例）、判定标准（含拦"反向误用"：
+     别把例外清单里的契约一起删）、边界（只管 service 类的父接口）与存量边界。另核 Java 落点
+     （`specs/stack/java.adoc`「编码」：认类看 `XxxService`/`XxxServiceImpl` 成对、多态成不成立看
+     注入与声明类型、框架契约不在核对面）。两处都按**条目自己的正文**核（本节相邻条目含大量「接口」
+     「实现」字样，按整节核会被兜住）。由 `check_service_interface_guard` 钉住；「某处算不算多态」
+     「某个接口算不算框架契约」属语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -4028,8 +4040,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 149  # 同源实取：#150 `check_sql_annotation_binding_guard`（SQL 不得写进宿主语言代码注解）并入后，`CHECKS` 序列唯一名实取 149
-GUARD_TEST_BASELINE = 1970  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮新增 `TestCheckSqlAnnotationBindingGuard` 11 条）
+GUARD_WIRING_BASELINE = 150  # 同源实取：#117 `check_service_interface_guard`（没有多态时不得为 service 类加有相同方法的父接口）并入后，`CHECKS` 序列唯一名实取 150
+GUARD_TEST_BASELINE = 1984  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮新增 `TestCheckServiceInterfaceGuard` 14 条）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -11503,6 +11515,36 @@ def check_ternary_extraction_guard():
     phase_done()
 
 
+def check_service_interface_guard():
+    """『没有多态时不得为 service 类加有相同方法的父接口』防线（**用户提出**）。
+
+    要治的失效：「接口 + 唯一实现」这种两件套——为一个**只有它一个实现**、且**没有任何调用点
+    按父类型依赖**的 service 类另建接口，接口成员与实现类的公开方法**一一对应**。接口的全部
+    价值是让调用方只依赖契约、由多态决定跑哪一份实现；没有第二个实现时它**不承担任何替换与
+    解耦**，能给的只剩「多一个文件、多一份方法清单」——而这份清单还与类逐条重复，改方法即改
+    两处。**没有多态时的去向是直接用该类**。
+
+    本条**跨语言**（用户口径"在没有多态的情况下"），故判据本体落通用层
+    `specs/general/coding.adoc`「类设计」；Java 落点（`java.adoc`「编码」）只给载体——认类看
+    `XxxService`/`XxxServiceImpl` 成对与方法逐个 `@Override`、多态成不成立看注入与声明类型、
+    框架由接口生成实现的契约（`Mapper`/Feign/Spring Data 仓储）不在核对面。两处都按**条目
+    自己的正文**核（本节相邻条目含大量「接口」「实现」字样，按整节核会被兜住）。只核"判据本体
+    在不在"——"某处算不算多态""某个接口算不算框架契约"属语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("service 父接口（没有多态时不得加同方法父接口）防线检查")
+    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel}——『没有多态时不得为 service 类加有相同方法的父接口』的落点丢失"
+            "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
+    rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err(f"缺少文件 {rel_java}——该条的 Java 落点丢失"
+            "（`XxxService`/`XxxServiceImpl` 成对形态与框架契约的边界须有技术栈侧的载体）", rel_java)
+    run_rule_guard("check_service_interface_guard")
+    phase_done()
+
+
 def check_getter_bridge_guard():
     """『接口实现字段名与接口 getter 名不一致须手动桥接』防线（从存量项目规范引入）。
 
@@ -12125,6 +12167,7 @@ CHECKS = (
     check_java_serial_guard,
     check_ternary_extraction_guard,
     check_tool_class_inheritance_guard,
+    check_service_interface_guard,
     check_maven_parallel_guard,
     check_alter_merge_guard,
     check_toolchain_present_guard,

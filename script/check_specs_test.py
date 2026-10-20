@@ -20819,6 +20819,174 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         self.assertIn("java-syntax.adoc", self.error_texts())
 
 
+class TestCheckServiceInterfaceGuard(CheckSpecsTestCase):
+    """钉住『没有多态时不得为 service 类加有相同方法的父接口』（**用户提出**）。
+
+    用户原话：「在没有多态的情况下，禁止为 service 类添加有相同方法的父接口」。要治的失效：
+    「接口 + 唯一实现」的两件套——接口成员与实现类的公开方法逐条对应、却没有任何调用点按
+    父类型依赖它。最易被五件事冲掉：**「没有多态」的判据被抽**（只剩一句口号，"面向接口编程"
+    重新成立）、理由被抽（读者不知道接口在这里没换来任何东西）、**例外清单被抽**（连 `Mapper`、
+    Feign 这类框架由接口生成实现的契约一起判红）、判定标准的「反向误用」被抽（于是有人把例外
+    清单里的契约一起删）、存量边界被抽（等于要求立刻批量删接口）。
+
+    本条跨两文件（通用层本体 + Java 落点），故夹具一并重定向两处常量。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    JAVA = "specs/stack/java.adoc"
+    # 本防线的规则数据（判据本体与 Java 载体同放这一份）
+    RULES_JAVA = "script/specs-rules/java.toml"
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        self._orig_java = cm.JAVA_STACK_FILE
+        cm.CODING_FILE = os.path.join(self.root, *self.CODING.split("/"))
+        cm.JAVA_STACK_FILE = os.path.join(self.root, *self.JAVA.split("/"))
+        self.CODING_TEXT = self._repo_text(self.CODING)
+        self.JAVA_TEXT = self._repo_text(self.JAVA)
+
+    def _repo_text(self, rel: str) -> str:
+        """读**真实仓库**里那一份（不按当前工作目录——用例可能从任何 cwd 起跑）。"""
+        with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
+            return fh.read()
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        cm.JAVA_STACK_FILE = self._orig_java
+        super().tearDown()
+
+    def _rule_files(self) -> list:
+        """规则目录下的全部文件（引擎按**目录**扫描加载，缺一份即整批静默失效）。"""
+        folder = os.path.join(self._REPO_ROOT, os.path.dirname(self.RULES_JAVA))
+        return [f"{os.path.dirname(self.RULES_JAVA)}/{n}"
+                for n in sorted(os.listdir(folder)) if n.endswith(".toml")]
+
+    def _rule_text(self, rel: str) -> str:
+        return self._repo_text(rel)
+
+    def _prime_rules(self) -> None:
+        """作废规则引擎缓存（夹具换过 `REPO_ROOT`，`RULES` 还指着上一份规则数据）。"""
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_valid(self) -> None:
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.JAVA, self.JAVA_TEXT)
+        # 规则目录按真实文件**原样整份落进夹具**：`_rules_spec()` 随 `REPO_ROOT` 走，
+        # 不落进来时回落到本脚本自己那一份，改夹具里的规则数据等于没改（反例恒绿）。
+        for rel in self._rule_files():
+            self.write(rel, self._rule_text(rel))
+        self._prime_rules()
+
+    def _write_coding_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.CODING_TEXT)
+        self._write_valid()
+        self.write(self.CODING, self.CODING_TEXT.replace(removed, replacement))
+
+    def _write_java_mutated(self, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, self.JAVA_TEXT)
+        self._write_valid()
+        self.write(self.JAVA, self.JAVA_TEXT.replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_service_interface_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：整条被摘掉（含 L1 标注）->「接口 + 唯一实现」又被当"面向接口编程"照写
+        self._write_coding_mutated(
+            "没有多态时不得为 service 类加同方法父接口（L1，任何语言）",
+            "service 类一律配一个接口")
+        cm.check_service_interface_guard()
+        self.assertIn("没有多态时不得为 service 类加同方法父接口", self.error_texts())
+
+    def test_no_polymorphism_criterion_removed_reports(self):
+        # 反例②：「没有多态」的判据被抽 -> 只剩一句口号，任何"一对一"都能自圆其说
+        self._write_coding_mutated("**「没有多态」的判据**")
+        cm.check_service_interface_guard()
+        self.assertIn("没有多态", self.error_texts())
+
+    def test_injection_declaration_criterion_removed_reports(self):
+        # 反例③：判据落不了地（没人按父类型依赖这一半被抽）-> 只剩"只有一个实现"
+        self._write_coding_mutated("**且没有任何注入点、参数、返回值或集合以该接口类型声明**")
+        cm.check_service_interface_guard()
+        self.assertIn("注入点", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例④：理由被抽 -> 读者不知道接口在这里没换来任何东西
+        self._write_coding_mutated("**不承担任何替换与解耦**")
+        cm.check_service_interface_guard()
+        self.assertIn("替换与解耦", self.error_texts())
+
+    def test_destination_removed_reports(self):
+        # 反例⑤：去向被抽 -> 知道"不要接口"，但不知道怎么替代
+        self._write_coding_mutated("**没有多态时的去向是「直接用该类」**")
+        cm.check_service_interface_guard()
+        self.assertIn("直接用该类", self.error_texts())
+
+    def test_framework_contract_exception_removed_reports(self):
+        # 反例⑥：例外里"框架由接口生成实现的契约"被抽 -> `Mapper`/Feign/Spring Data 仓储
+        # 会被一并判红（那条最容易被当成"多余接口"）
+        self._write_coding_mutated("**框架由接口生成实现**的契约")
+        cm.check_service_interface_guard()
+        self.assertIn("框架由接口生成实现", self.error_texts())
+
+    def test_precedent_exception_removed_reports(self):
+        # 反例⑦：先例这一档被抽 -> 已按"接口 + 实现"成对发布的模块会被要求当场删接口
+        self._write_coding_mutated("**该处已有先例**")
+        cm.check_service_interface_guard()
+        self.assertIn("已有先例", self.error_texts())
+
+    def test_reverse_misuse_removed_reports(self):
+        # 反例⑧：判定标准里的「反向误用」被抽 -> 有人把例外清单里的契约一起删
+        self._write_coding_mutated("**反向误用**")
+        cm.check_service_interface_guard()
+        self.assertIn("反向误用", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑨：边界被抽 -> 工具类/数据对象的接口被一并判红
+        self._write_coding_mutated("**只管 service 类的父接口**")
+        cm.check_service_interface_guard()
+        self.assertIn("只管 service 类的父接口", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑩：存量边界被抽 -> 等于要求立刻批量删接口、批量改注入类型
+        self._write_coding_mutated("**批量删接口、批量把注入类型改成实现类**")
+        cm.check_service_interface_guard()
+        self.assertIn("批量删接口", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑪：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
+        self._write_coding_mutated(
+            "**「没有多态时不为 service 类加同方法父接口」是本集合自己的判据化取舍**")
+        cm.check_service_interface_guard()
+        self.assertIn("本集合自己的判据化取舍", self.error_texts())
+
+    def test_java_landing_removed_reports(self):
+        # 反例⑫：Java 载体被抽 -> 认不出「`XxxService` + `XxxServiceImpl` 一对一」这一形态
+        self._write_java_mutated("没有多态时不为 service 加同方法的父接口（L1，Java 落点）",
+                                 "service 一律配接口（Java 落点）")
+        cm.check_service_interface_guard()
+        self.assertIn("没有多态时不为 service 加同方法的父接口", self.error_texts())
+
+    def test_rules_data_anchor_removed_reports(self):
+        # 反例⑬：规则数据里这一条锚点被删（**规范正文一字未动**，`min` 与清单同步下调，
+        # 于是 `bullet_tokens` 的 `miss` 是空集）-> 只剩成对的 `anchor_count` 能报红
+        self._write_valid()
+        text = self._rule_text(self.RULES_JAVA).replace(
+            "    '**不承担任何替换与解耦**',\n", "", 1).replace(
+            "min = 12\ntokens = [", "min = 11\ntokens = [", 1)
+        self.assertNotIn("'**不承担任何替换与解耦**'", text)
+        self.write(self.RULES_JAVA, text)
+        self._prime_rules()
+        cm.check_service_interface_guard()
+        self.assertIn("锚点", self.error_texts())
+
+
 class TestCheckReferenceCoordGuard(CheckSpecsTestCase):
     """钉住『引用坐标』防线（本仓库实测 7 处同形失效：坏的是"去哪儿找"这一跳）。
 
