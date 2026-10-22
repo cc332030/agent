@@ -64,6 +64,7 @@
   锚点若被拆行或改写措辞，机械侧判不出"语义仍在"，那属语义复核的范围。
 """
 
+import functools
 import os
 import re
 import tomllib
@@ -692,23 +693,16 @@ def _step_dispatcher_no_verbatim(rules, step):
         s = re.sub(r"`[^`]*`", "", s)
         return re.sub(r"\s+", "", s)
 
-    def _lcs(a, b):
-        if not a or not b:
-            return 0, ""
-        prev = [0] * (len(b) + 1)
-        best = 0
-        end = 0
-        for i in range(1, len(a) + 1):
-            cur = [0] * (len(b) + 1)
-            ai = a[i - 1]
-            for j in range(1, len(b) + 1):
-                if ai == b[j - 1]:
-                    cur[j] = prev[j - 1] + 1
-                    if cur[j] > best:
-                        best = cur[j]
-                        end = i
-            prev = cur
-        return best, a[end - best:end]
+    # 被引文件的自动机按归一化正文缓存：同一份文件被多行引用时只建一次，各行的说明段
+    # 去走表——这道防线原来的耗时几乎全长在"每行为整份文件重建一次表"上（`b` 侧是整份
+    # 被引文件、最大十万字符级）。改自动机后取最大值的定义不变，故判据与输出都不变。
+    sam_cache = {}
+
+    def sam_of(normalized):
+        sam = sam_cache.get(normalized)
+        if sam is None:
+            sam = sam_cache[normalized] = _build_sam(normalized)
+        return sam
 
     # 缓存被引规范文件正文（同一文件被多行引用时只读一次）
     spec_cache = {}
@@ -737,7 +731,9 @@ def _step_dispatcher_no_verbatim(rules, step):
         if len(ndesc) < threshold:
             continue
         for ref in refs:
-            overlap, frag = _lcs(ndesc, _spec_norm(ref))
+            # 只判"是否 ≥ 阈值"：够到即停，不必走完整份被引文件（最大十万字符级）
+            overlap, frag = _lcs_against(sam_of(_spec_norm(ref)), ndesc,
+                                         early_stop=threshold)
             if overlap >= threshold:
                 ctx.err(step["message"].replace("{file}", rel)
                         .replace("{line}", str(lineno + lineno_offset))
@@ -790,6 +786,14 @@ def _step_pointer_no_verbatim(rules, step):
             spec_cache[path] = _norm(body) if body else ""
         return spec_cache[path]
 
+    # 被指文件的自动机按文件缓存：同一份文件会被多条回指行各比一次，建表只做一遍
+    sam_cache = {}
+
+    def _spec_sam(path):
+        if path not in sam_cache:
+            sam_cache[path] = _build_sam(_spec_norm(path))
+        return sam_cache[path]
+
     for rel in step["files"]:
         text = ctx.read(rel)
         if text is None:
@@ -817,7 +821,8 @@ def _step_pointer_no_verbatim(rules, step):
             for ref in refs:
                 if ctx.read(ref) is None:
                     continue
-                overlap, frag = _sam_lcs(nline, _spec_norm(ref))
+                # 只判"是否 ≥ 阈值"：够到即停，不必走完整份被引文件（最大十万字符级）
+                overlap, frag = _lcs_against(_spec_sam(ref), nline, early_stop=threshold)
                 if overlap >= threshold:
                     ctx.err(step["message"].replace("{file}", rel)
                             .replace("{line}", str(lineno))
@@ -834,25 +839,6 @@ def _norm_dup(s):
     在两处出现，拿它们算重合只会刷出假命中；**比的是实义文字**。
     """
     return re.sub(r"\s+", "", re.sub(r"`[^`]*`", "", s))
-
-
-def _longest_common(a, b):
-    """最长公共子串（返回 (长度, 片段)）。DP + 一维滚动数组，纯 stdlib。"""
-    if not a or not b:
-        return 0, ""
-    prev = [0] * (len(b) + 1)
-    best = end = 0
-    for i in range(1, len(a) + 1):
-        cur = [0] * (len(b) + 1)
-        ai = a[i - 1]
-        for j in range(1, len(b) + 1):
-            if ai == b[j - 1]:
-                cur[j] = prev[j - 1] + 1
-                if cur[j] > best:
-                    best = cur[j]
-                    end = i
-        prev = cur
-    return best, a[end - best:end]
 
 
 def _dup_units(rel, text):
@@ -880,21 +866,19 @@ def _dup_units(rel, text):
     return [(ln, "\n".join(ls), _norm_dup("\n".join(ls))) for ln, ls in units]
 
 
-def _sam_lcs(a, b):
-    """最长公共子串（后缀自动机版）：对 `b` 建 SAM、再拿 `a` 在上面走一遍。
+def _build_sam(text):
+    """后缀自动机：`nxt[i]` 是状态 i 的转移表、`link[i]` 是后缀链接、
+    `length[i]` 是该状态代表的最长子串长度（状态 0 为初始状态）。
 
-    为什么不用 DP：本条的核对对象是**全对**实体（数千条实体两两比对），DP 的
-    O(len(a)·len(b)) 在真实规模下是十亿级单元、分钟级耗时；SAM 是 O(len(a)+len(b))，
-    且仓储级规模下实测亚秒级。返回 (长度, 片段)——**完全匹配时片段可能不唯一**，
-    报错文案里的片段只作定位提示，判据是长度本身。
+    单独成函数是为了让**同一个实体只建一次表**：'逐字重复扫描'要拿它跟上百个实体各比
+    一次，建表正是其中最贵的一半；两份缓存都按"自动机建在更长的一侧"来存，走表那趟
+    才是长串。
     """
-    if not a or not b:
-        return 0, ""
     nxt = [{}]
     link = [-1]
     length = [0]
     last = 0
-    for ch in b:
+    for ch in text:
         cur = len(nxt)
         nxt.append({})
         length.append(length[last] + 1)
@@ -910,6 +894,7 @@ def _sam_lcs(a, b):
             if length[p] + 1 == length[q]:
                 link[cur] = q
             else:
+                # 克隆状态：把 q 的转移表整份复制过来（`dict()` 复制是 C 级操作）
                 clone = len(nxt)
                 nxt.append(dict(nxt[q]))
                 length.append(length[p] + 1)
@@ -920,6 +905,19 @@ def _sam_lcs(a, b):
                 link[q] = clone
                 link[cur] = clone
         last = cur
+    return nxt, link, length
+
+
+def _lcs_against(built, a, early_stop=None):
+    """拿 `a` 在**已建好的**自动机上走一遍，返回 (最长公共子串长度, 片段)。
+
+    能走多远就是当前起点的匹配长度，断链时沿后缀链接回退——O(len(a))。
+
+    `early_stop` 只用于**判定"是否 ≥ 阈值"**：最长值一旦够到它就打住，此时"够没够到"
+    与走完全程同值（`_sam_lcs` 要精确最大值，不传）。
+    片段在提前退出时退化为"走到的那一段"——报错文案里它只作定位提示，判据是长度本身。
+    """
+    nxt, link, length = built
     v = 0
     ln = 0
     best = 0
@@ -928,16 +926,57 @@ def _sam_lcs(a, b):
         while v and ch not in nxt[v]:
             v = link[v]
             ln = length[v]
-        if ch in nxt[v]:
-            v = nxt[v][ch]
+        to = nxt[v].get(ch)
+        if to is None:
+            v = 0
+            ln = 0
+        else:
+            v = to
             ln += 1
             if ln > best:
                 best = ln
                 end = i + 1
-        else:
-            v = 0
-            ln = 0
+                if early_stop is not None and best >= early_stop:
+                    break
     return best, a[end - best:end]
+
+
+@functools.lru_cache(maxsize=8192)
+def _sentences(raw, min_len):
+    """把实体按句号切开，返回**归一化后**不短于 `min_len` 的句子（去重、保序）。
+
+    用于"折叠 vs 展开"那一次补核：同一事实在一处换了行、在别处铺成多行时，整条公共子串
+    会被换行打断，只有按句才核得出来。归一化与实体侧同源（`_norm_dup`），否则比的是
+    两种不同形态的文本。
+    """
+    seen = set()
+    result = []
+    for part in raw.split("。"):
+        norm = _norm_dup(part)
+        if len(norm) < min_len or norm in seen:
+            continue
+        seen.add(norm)
+        result.append(norm)
+    return result
+
+
+def _sam_lcs(a, b):
+    """最长公共子串（返回 (长度, 片段)）：后缀自动机建在**较长的一侧**，另一侧上去走一遍。
+
+    为什么不用 DP：本条的核对对象是**全对**实体（近两千条实体、两万多对候选、单次调用
+    十余万次），DP 的 O(len(a)·len(b)) 是逐字符的 Python 级循环，单这一道防线就十几秒
+    （实测 10 s 占整条校验链的一半以上）。后缀自动机是 O(len(a)+len(b))，结果与 DP
+    **完全相同**——都是"最长公共子串"的确定定义，不是近似。
+
+    返回 (长度, 片段)——**完全匹配时片段可能不唯一**，报错文案里的片段只作定位提示，
+    判据是长度本身。
+    """
+    if not a or not b:
+        return 0, ""
+    # 自动机建在长的一侧：走表只有一趟、建表才是贵的，故让建表那侧承担更长的串
+    if len(a) < len(b):
+        a, b = b, a
+    return _lcs_against(_build_sam(b), a)
 
 
 def _step_duplicate_scan(rules, step):
@@ -1019,6 +1058,10 @@ def _step_duplicate_scan(rules, step):
 
     hit = 0
     seen = set()
+    # 自动机按实体缓存：同一实体要跟上百个实体各比一次，建表比走表贵得多，
+    # 每次重建成这一道防线的主要开销
+    built_units = {}
+    built_sent = {}
     for i, j in sorted(candidate):
         rel_a, ln_a, raw_a, na = units[i]
         rel_b, ln_b, raw_b, nb = units[j]
@@ -1029,20 +1072,35 @@ def _step_duplicate_scan(rules, step):
         if key in seen:
             continue
         seen.add(key)
-        size, frag = _sam_lcs(na, nb)
+        # 自动机建在**更长的一侧**：走表才是 `a` 那一趟，让建表承担更长的串
+        if len(na) >= len(nb):
+            if i not in built_units:
+                built_units[i] = _build_sam(na)
+            size, frag = _lcs_against(built_units[i], nb, early_stop=threshold)
+        else:
+            if j not in built_units:
+                built_units[j] = _build_sam(nb)
+            size, frag = _lcs_against(built_units[j], na, early_stop=threshold)
         if size < threshold:
             # 折叠 vs 展开：同一事实在一处换了行、在别处铺成多行时，整条公共子串会被换行
             # 打断——改按**句子**（'。' 切分）逐句核，补上这一形态。
             done = False
-            for sent_a in raw_a.split("。"):
-                sa = _norm_dup(sent_a)
-                if len(sa) < max(min_sentence, min_text):
-                    continue
-                for sent_b in raw_b.split("。"):
-                    sb = _norm_dup(sent_b)
-                    if len(sb) < min_sentence:
-                        continue
-                    ssize, sfrag = _sam_lcs(sa, sb)
+            for sa in _sentences(raw_a, max(min_sentence, min_text)):
+                for sb in _sentences(raw_b, min_sentence):
+                    # 两侧都按句缓存：同一句会跟对面的每一句各比一次
+                    key_a = (i, sa)
+                    if key_a not in built_sent:
+                        built_sent[key_a] = _build_sam(sa)
+                    key_b = (j, sb)
+                    if key_b not in built_sent:
+                        built_sent[key_b] = _build_sam(sb)
+                    # 建表那趟最贵，让更长的串去承担；走表拿另一句
+                    if len(sa) >= len(sb):
+                        ssize, sfrag = _lcs_against(built_sent[key_a], sb,
+                                                    early_stop=threshold)
+                    else:
+                        ssize, sfrag = _lcs_against(built_sent[key_b], sa,
+                                                    early_stop=threshold)
                     if ssize >= threshold:
                         size, frag = ssize, sfrag
                         done = True
