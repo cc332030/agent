@@ -1055,5 +1055,219 @@ class TestSectionBulletsCutMarks(unittest.TestCase):
 
 
 
+
+class TestLongestCommonSubstring(unittest.TestCase):
+    """最长公共子串原语：`_sam_lcs` / `_build_sam` + `_lcs_against` 三者**结果必须一致**。
+
+    这一组盯的是把 DP 换成后缀自动机那次改动留下的三个坑（都在真实语料上真的踩过）：
+    * **同一前缀在长串里命中多处**：只延第一处会少算（实证 `bb` 对上 `abaabbababab`，
+      首个 `b` 在 1、真正的 `bb` 在 4）；
+    * **长短两侧对称**：入参顺序不得影响结果（`_sam_lcs` 内部会按长度挑建表那一侧）；
+    * **建表 + 走表拆开后仍与整条原语同值**（缓存建好的自动机是这道防线的提速手段，
+      拆开后若走了另一套判定，缓存就会把结论带偏）。
+    """
+
+    @staticmethod
+    def _dp(a, b):
+        """参照实现：DP（慢、但定义直白），只用于比对，不进主流程。"""
+        if not a or not b:
+            return 0
+        prev = [0] * (len(b) + 1)
+        best = 0
+        for i in range(1, len(a) + 1):
+            cur = [0] * (len(b) + 1)
+            ai = a[i - 1]
+            for j in range(1, len(b) + 1):
+                if ai == b[j - 1]:
+                    cur[j] = prev[j - 1] + 1
+                    if cur[j] > best:
+                        best = cur[j]
+            prev = cur
+        return best
+
+    def test_same_prefix_matched_at_later_position(self):
+        # 前一个 `b` 只能延出 1 字、后一个 `b` 才是 `bb`：只延第一处会报 1
+        self.assertEqual(re_._sam_lcs("bb", "abaabbababab")[0], 2)
+        self.assertEqual(re_._sam_lcs("bb", "ababaaabbaabaaabbaba")[0], 2)
+
+    def test_argument_order_does_not_matter(self):
+        for a, b in [("bb", "abaabbababab"), ("aaba", "abaaaaaababaa"),
+                     ("的一是了不在", "了的是不在一人有")]:
+            self.assertEqual(re_._sam_lcs(a, b)[0], re_._sam_lcs(b, a)[0])
+
+    def test_build_and_walk_match_whole_primitive(self):
+        cases = [("bb", "abaabbababab"), ("abc", "zabcab"), ("", "abc"),
+                 ("的一是了不在人有", "不在人有我他这一是")]
+        for a, b in cases:
+            long_side, short_side = (a, b) if len(a) >= len(b) else (b, a)
+            self.assertEqual(re_._lcs_against(re_._build_sam(long_side), short_side)[0],
+                             re_._sam_lcs(a, b)[0])
+
+    def test_matches_dp_on_mixed_corpus(self):
+        # 带重复小字符集（最坏形态）与边界串，逐条与 DP 对照
+        corpus = ["bb", "abaabbababab", "ababaaabbaabaaabbaba", "aaba", "abaaaaaababaa",
+                  "的一是了不在人有我他这为之大来以个中上们", "aaaa", "abab", "x"]
+        for a in corpus:
+            for b in corpus:
+                self.assertEqual(re_._sam_lcs(a, b)[0], self._dp(a, b),
+                                 f"{a!r} vs {b!r}")
+
+    def test_empty_side_returns_empty(self):
+        self.assertEqual(re_._sam_lcs("", "abc"), (0, ""))
+        self.assertEqual(re_._sam_lcs("abc", ""), (0, ""))
+
+    def test_fragment_is_real_substring_of_both(self):
+        # 片段只作定位提示，但必须是两侧都真实存在的同长子串，否则报错文案会指错地方
+        for a, b in [("ababaaabbaabaaabbaba", "bbba"), ("的一是了不在", "了的是不在一人有")]:
+            size, frag = re_._sam_lcs(a, b)
+            self.assertEqual(len(frag), size)
+            self.assertIn(frag, a)
+            self.assertIn(frag, b)
+
+
+class TestDuplicateScanAutomatonReuse(unittest.TestCase):
+    """`duplicate_scan` / `pointer_no_verbatim` 复用自动机后，**判据不变**。
+
+    建表是这道防线最贵的一步（同一实体要跟上百个实体各比一次）。复用是按实体缓存的，
+    一旦缓存键串了实体，结论就会跟着串——故除性能外还须钉住"结论与逐对重建相同"。
+    """
+
+    def test_pointer_still_reports_verbatim_quote(self):
+        marker = "本处不复述，取值见 `ref.adoc`"
+        quoted = "加载面体积、时延与依赖要求须说得清，且写出不可用时的降级路径与兜底次序"
+        files = {"a.adoc": "* " + marker + "：" + quoted + "\n",
+                 "ref.adoc": quoted + "\n"}
+        step = {"kind": "pointer_no_verbatim", "files": ["a.adoc"],
+                "min_overlap": 20, "message": "{file}:{line} 与 {ref} 重合 {overlap} 字"}
+        ctx = FakeCtx(files)
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+
+    def test_duplicate_scan_reuses_cache_without_changing_verdict(self):
+        body = ("* **运行契约（L1）**：加载与遵守的代价是否说得清——加载面体积、时延与依赖要求"
+                "（含版本要求，且须给出不可用时的降级路径）。\n")
+        step = {"kind": "duplicate_scan", "sources": ["a.adoc", "b.adoc"],
+                "min_overlap": 24, "message": "{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字"}
+        ctx = FakeCtx({"a.adoc": body, "b.adoc": body})
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+    def test_dispatcher_cached_automaton_keeps_verdict(self):
+        # 调度器防线改用"按被引文件缓存自动机"后，**同一文件被多行引用仍逐行判**：
+        # 一行抄了本体（报）、一行只写触发特征（不报）——缓存不得把结论串到别的行上。
+        spec = ("= Java 规范\n\n该注解清单含 @NoArgsConstructor 与 @AllArgsConstructor 两项。\n")
+        dispatcher = ("* **Java 项目** → `specs/stack/java.adoc`（识别特征：清单含 "
+                      "@NoArgsConstructor 与 @AllArgsConstructor 两项）\n"
+                      "* **Java 测试** → `specs/stack/java.adoc`（识别特征：要写测试类）\n")
+        step = {"kind": "dispatcher_no_verbatim", "file": "AGENTS_COMMON.adoc",
+                "min_overlap": 14, "message": "{file}:{line} 与 {ref} 重合 {overlap} 字"}
+        ctx = FakeCtx({"AGENTS_COMMON.adoc": dispatcher, "specs/stack/java.adoc": spec})
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1, "只应报抄了本体的那一行")
+
+
+class TestDuplicateScanSentenceFallback(unittest.TestCase):
+    """`duplicate_scan` 的按句回退：整条被换行打断时，仍要按句核出重合。
+
+    回退不得被"整条不到阈值一半就跳过"提前放弃：整条那一趟只判"够没够阈值"，两条各三十
+    几字的重合块夹着二十几字不重合的过渡段时，整条结果会被截在阈值上，按句那遍照旧该跑。
+    """
+
+    def _run(self, files, **extra):
+        step = {"kind": "duplicate_scan", "file": None, "sources": sorted(files),
+                "min_overlap": extra.pop("min_overlap", 40),
+                "message": "{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字：{frag}"}
+        step.update(extra)
+        ctx = FakeCtx(files)
+        _rules({"g": [step]}, ctx).run("g")
+        return ctx.errors
+
+    def test_unrelated_short_overlap_still_silent(self):
+        # 整条只有十几个字重合（阈值 40）——真够不着，不得报
+        a = "* **甲**：这一段共有的部分只有十几个字，其余措辞各不相同、不会重合。\n"
+        b = "* **乙**：这一段共有的部分只有十几个字，后面接的是完全另写的一段话。\n"
+        self.assertEqual(self._run({"a.adoc": a, "b.adoc": b}), [])
+
+    def test_folded_form_still_reported(self):
+        # 「折叠 vs 展开」：整条被换行打断、但逐句重合过阈值，按句那遍必须接上
+        sentences = ("**① 影响面（L1）**：这条规则会改变引用方的哪些既有行为？"
+                     "**与引用方自身规范的冲突次序**是否写明（以引用方项目自身规范为准）。")
+        a = "* " + sentences + "\n"
+        b = "* **① 影响面（L1）**：这条规则会改变引用方的哪些既有行为？\n"
+        b += "** **与引用方自身规范的冲突次序**是否写明（以引用方项目自身规范为准）。\n"
+        self.assertEqual(len(self._run({"a.adoc": a, "b.adoc": b}, min_overlap=24)), 1)
+
+    def test_whole_entity_over_threshold_reported(self):
+        # 整条就过阈值：走整条那一遍即可
+        body = ("* **运行契约（L1）**：加载与遵守的代价是否说得清——加载面体积、时延与依赖要求"
+                "（含版本要求，且须给出不可用时的降级路径）。\n")
+        self.assertEqual(len(self._run({"a.adoc": body, "b.adoc": body}, min_overlap=40)), 1)
+
+
+class TestDuplicateScanEarlyExit(unittest.TestCase):
+    """提前退出**只用于"是否 ≥ 阈值"的判定**——不得把"够得着"判成"够不着"。"""
+
+    CORPUS = ["bb", "abaabbababab", "aaba", "abaaaaaababaa",
+              "的一是了不在人有我他这为之大来以个中上们", "aaaa", "abab",
+              "甲" * 30 + "乙" * 5 + "丙" * 30, "x"]
+
+    def test_early_stop_keeps_threshold_verdict(self):
+        for a in self.CORPUS:
+            for b in self.CORPUS:
+                full = re_._sam_lcs(a, b)[0]
+                for stop in (1, 3, 10, 40):
+                    got = re_._lcs_against(re_._build_sam(b), a, early_stop=stop)[0]
+                    self.assertEqual(got >= stop, full >= stop, f"{a!r} vs {b!r} stop={stop}")
+
+    def test_no_early_exit_path_is_exact(self):
+        # 不传 `early_stop` 时不提前退出——`_sam_lcs` 依赖这一点取精确最大值
+        for a in self.CORPUS:
+            for b in self.CORPUS:
+                self.assertEqual(re_._lcs_against(re_._build_sam(b), a)[0],
+                                 re_._sam_lcs(a, b)[0])
+
+    def test_automaton_on_longer_side_keeps_verdict(self):
+        # 提前退出打住的位置取决于"走表的那一侧"：拿短侧建表、长侧去走，走到阈值就打住；
+        # 拿长侧建表才走得出真正的 38 字。这一对必须报。
+        common = "天地玄黄宇宙洪荒日月盈昃辰宿列张寒来暑往秋收冬藏闰余成岁律吕调阳丙丁戊己庚辛"
+        for other in (common + "跳" * 23, "跳" * 23 + common):
+            a = "* 甲：" + common + "\n"
+            b = "* 乙：" + other + "\n"
+            step = {"kind": "duplicate_scan", "file": None, "sources": ["a.adoc", "b.adoc"],
+                    "min_overlap": 24, "message": "{a}:{line_a} {b}:{line_b} {overlap}"}
+            ctx = FakeCtx({"a.adoc": a, "b.adoc": b})
+            _rules({"g": [step]}, ctx).run("g")
+            self.assertEqual(len(ctx.errors), 1, f"{common!r} vs {other!r}")
+
+
+class TestDuplicateScanGramPrefilter(unittest.TestCase):
+    """粗筛只按"共享一个 n-gram"入围：多一层下界就得是必要条件，否则会漏报。
+
+    早期实现按"共享 n-gram 多重集交集 ≥ threshold-gram+1"再拦一刀，但公共子串的起点在
+    两侧的 n-gram 里未必同余，交集数会被算小，超阈值的重合于是被筛掉。
+    """
+
+    def _run(self, files, **extra):
+        step = {"kind": "duplicate_scan", "file": None, "sources": sorted(files),
+                "min_overlap": extra.pop("min_overlap", 24),
+                "message": "{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字：{frag}"}
+        step.update(extra)
+        ctx = FakeCtx(files)
+        _rules({"g": [step]}, ctx).run("g")
+        return ctx.errors
+
+    def test_overlap_above_threshold_still_reported(self):
+        shared = "加载与遵守的代价是否说得清加载面体积时延与依赖要求须给出降级路径"
+        a = "* **甲**：" + shared + "（此处措辞甲乙各自不同，后半段完全另写）。\n"
+        b = "* **乙**：" + shared + "（这一侧也另写了一段，与上一条不同）。\n"
+        self.assertEqual(len(self._run({"a.adoc": a, "b.adoc": b}, min_overlap=24)), 1)
+
+    def test_overlap_spanning_gram_buckets_still_reported(self):
+        # 公共子串落在 n-gram 桶的**边界上**（两侧起点不同余）：只按桶交集数算会漏报
+        shared = "加载与遵守的代价是否说得清加载面体积时延与依赖要求"
+        a = "* 甲：甲" + shared + "\n"
+        b = "* 乙：乙丙" + shared + "\n"
+        self.assertEqual(len(self._run({"a.adoc": a, "b.adoc": b}, min_overlap=24)), 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -17488,9 +17488,20 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
             # 第五次：远端不可达（本机服务已关、端口不可达）→ 本地那一份必须还在
             # （不得把副本删掉换成没有；来源仍相同故命中同一来源槽）
+            #
+            # **`shutdown()` 之后必须 `server_close()`**：`shutdown()` 只停 `serve_forever`
+            # 循环、监听 socket 仍开着，内核照样把 TCP 连接接进 backlog（`connect()` 返回成功），
+            # 客户端于是干等到 `fetch-specs.py` 的读超时——实测这一处等满 **30 s × 重试 1 次
+            # ＝ 60 s**，是本批 2002 条用例里最贵的一条（整批 72 s 里它占 60.9 s），且断言一直
+            # 是"过"的、只是过得极贵。关掉监听 socket 后连接立即被拒（`Connection refused`），
+            # 这条用例的语义也才对得上"端口不可达"。
             httpd.shutdown()
+            httpd.server_close()
             rc, so, se = self._run_fetch(base, home=home)
             self.assertNotEqual(0, rc)
+            # 判据：**立即**失败，而不是等满重试超时——退回"监听 socket 没关"时这里是
+            # `timed out`，只有走到 `Connection refused` 才说明端口真的不可达
+            self.assertIn("connectionrefused", re.sub(r"\s+", "", se + so).lower())
             with open(local, "rb") as fh:
                 self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
 
