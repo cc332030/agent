@@ -1700,6 +1700,141 @@ class TestTableRowPipeGuard(CheckSpecsTestCase):
         self.assertIn("library/b.adoc", texts)
 
 
+# --------------------------------------------------------------------------- #
+# check_list_structure_guard（平面列表范围内不得缩进）
+# --------------------------------------------------------------------------- #
+class TestListStructureGuard(CheckSpecsTestCase):
+    """钉住『列表结构不得被写坏』（**评审当场发现**的失效）。
+
+    `specs/stack/batch.adoc` 里「`exit /b %errorlevel%` 是必须写的」那条的代码块被插在
+    两个条目之间的空段里，其后那行说明**缩进两格**——AsciiDoc 把它读成**上一条的续行**，
+    而作者读到的是「代码块之后」。这类错字**文本一字不少**，按锚点核的防线全绿；唯一
+    发现路径是 `check_asciidoctor_syntax` 的编译告警，而本机装不出处理器时那一段只报
+    「缺工具」，于是长期缺席。故本道**与处理器版本无关**、不依赖外部程序即可核。
+    """
+
+    def _run(self, files):
+        for rel, text in files.items():
+            self.write(rel, text)
+        cm.check_list_structure_guard()
+
+    def test_indented_continuation_in_list_reports(self):
+        # 反例①：平面列表范围内出现缩进续行（本仓库实证之一：缩进两格的续行行）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + "  续行缩进两格" + NL + "* 条目二" + NL})
+        self.assertIn("specs/general/a.adoc", self.error_texts())
+        self.assertIn("缩进", self.error_texts())
+
+    def test_indented_line_right_after_block_listed_as_whitelist(self):
+        """边界（**刻意留的口子**）：**紧贴**定界块收尾的那一行缩进不报。
+
+        那种形态的真实成因是"把代码块插在两个条目之间的空段里"——此时**块该不该在那儿**
+        才是要判的事（属语义判断），本道只管缩进本身。这条用例把口子钉住：日后若有人把它
+        收窄/放宽，这里会立刻报出来，而不是让"漏判"悄悄扩到整个列表。
+
+        **紧跟**指中间不隔空行：隔一行空行就不是"紧贴"了（见下一条用例）。
+        """
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL
+                   + "* 条目一" + NL
+                   + NL + "[listing]" + NL + "----" + NL + "echo x" + NL + "----" + NL
+                   + "  说明行缩进两格" + NL
+                   + "* 条目二" + NL})
+        self.assertEqual(cm.errors, [])
+
+    def test_whitelist_does_not_spread_past_next_blank_line(self):
+        """白名单只管**紧贴块收尾的那一段**：隔一行空行再出现的缩进照报。
+
+        实测过的一版实现取"块收尾行号之后两行内一律豁免"，于是 `* 条目` 紧贴块收尾、
+        其后的缩进续行被一并放掉——"插完块再续写缩进"就能绕开整道防线。
+        """
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL
+                   + "* 条目一" + NL
+                   + NL + "[listing]" + NL + "----" + NL + "echo x" + NL + "----" + NL
+                   + NL + "* 条目二" + NL
+                   + NL + "  续行缩进两格" + NL
+                   + "* 条目三" + NL})
+        self.assertIn("specs/general/a.adoc", self.error_texts())
+
+    def test_indented_list_item_reports(self):
+        # 反例②：缩进的列表项（被读成嵌套/续行，条目边界与阅读所见不一致）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + "  ** 子项" + NL + "* 条目二" + NL})
+        self.assertIn("specs/general/a.adoc", self.error_texts())
+
+    def test_clean_flat_list_passes(self):
+        # 正例：平面列表 + 同级的 `**` 并列（层级靠措辞，不靠缩进）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL
+                   + "** **第一类**：说明" + NL + NL
+                   + "** **第二类**：说明" + NL
+                   + "* 条目二" + NL})
+        self.assertEqual(cm.errors, [])
+
+    def test_indented_outside_list_not_reported(self):
+        # 边界：没有可挂的列表时，缩进段不是"续行"（标题后、正文段之间的缩进不属本条）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "  缩进的正文段" + NL + NL + "[listing]" + NL
+                   + "----" + NL + "  echo x" + NL + "----" + NL})
+        self.assertEqual(cm.errors, [])
+
+    def test_code_block_internal_indentation_not_reported(self):
+        # 边界：定界块**内部**的缩进不判（代码块里的语言注释本来就用缩进）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL + "[listing]" + NL
+                   + "----" + NL + "  indented code" + NL + "----" + NL + "* 条目二" + NL})
+        self.assertEqual(cm.errors, [])
+
+    def test_list_ends_at_plain_paragraph(self):
+        # 边界：平面列表的范围到下一段**顶格非列表正文**为止——其后的缩进段不再算续行
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL + "普通正文段" + NL
+                   + NL + "  缩进段属普通正文" + NL})
+        self.assertEqual(cm.errors, [])
+
+    def test_all_landings_checked(self):
+        # 反例③：多个维护根逐份核（只核一个文件时，别的落点里的同形错字无人发现）
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + "  续行" + NL,
+                   "library/b.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + "  续行" + NL})
+        texts = self.error_texts()
+        self.assertIn("specs/general/a.adoc", texts)
+        self.assertIn("library/b.adoc", texts)
+
+    def test_indented_line_after_section_title_reports(self):
+        """反例④：**小节标题不结束列表范围**——判据的范围是"顶格列表项起、到小节标题或
+        顶格非列表正文止"，字面读下来`节标题`在**范围之内**。
+
+        实测过的旧实现把 `===`/`****` 一并当定界块翻转：一遇 `==== 例子` 就 `in_block=True`，
+        从该行起到下一个 `===` 之间**整段不再核缩进**——而"块之后不结束列表"正是本道要管
+        的那类错字的例外面，于是含 `===` 的列表尾部缩进全绿。
+        """
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL
+                   + "==== 例子" + NL + NL + "  缩进两格" + NL})
+        self.assertIn("specs/general/a.adoc", self.error_texts())
+
+    def test_indented_line_after_dash_underline_not_swallowed(self):
+        """反例⑤：`----` 收尾后紧跟的缩进行在**列表内**才算白名单；隔一个空行即复原。
+
+        与上一条同源：白名单的判据是"紧贴定界块收尾的那一段"，不是"块之后都放行"。
+        """
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL
+                   + "[listing]" + NL + "----" + NL + "echo x" + NL + "----" + NL
+                   + NL + "  说明行" + NL})
+        self.assertIn("specs/general/a.adoc", self.error_texts())
+
+    def test_plain_paragraph_ends_list(self):
+        """正例：顶格非列表正文一到，列表即结束——其后的缩进段不是任何条目的续行。"""
+        self._run({"specs/general/a.adoc":
+                   "= T" + NL + NL + "* 条目一" + NL + NL + "正文段" + NL
+                   + NL + "  这段缩进属正文，不属条目" + NL})
+        self.assertEqual(cm.errors, [])
+
+
 # check_refs_exist：目录型引用
 # --------------------------------------------------------------------------- #
 class TestCheckRefsExistDirRefs(CheckSpecsTestCase):
@@ -16142,13 +16277,22 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
     SCRIPT = (
         "= 脚本规范\n"
         "\n"
+        "== 文件命名\n"
+        "\n"
+        "* **脚本对应文档命名**：**不允许一个脚本对应一个文档**——即"
+        "**不以脚本文件的个数作为独立文档的个数**，也**不按脚本名给文档命名**"
+        "（`check-specs.adoc` 之类）。\n"
+        "\n"
         "== 脚本文档的承载位置与协作粒度（默认写进脚本自身）\n"
         "\n"
         "* **脚本默认单打独斗（L1）**：拆成多个脚本时**各脚本相互独立**；"
         "文档**默认直接写在脚本里、不另建独立文档**，有文档注释机制的语言一律用**文档注释**承载，"
-        "按**多行文档注释 → 多行普通/块注释 → 普通注释**的优先级取值。命中即违规。\n"
-        "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档，**判定标准**："
-        "该移交而未移交。\n"
+        "按**多行文档注释 → 多行普通/块注释 → 普通注释**的优先级取值。命中即违规——"
+        "**不许「一个脚本 ↔ 一个文档」的对应关系**：独立文档与脚本**一一对应**、"
+        "两边个数同步增减即命中。\n"
+        "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档、按**功能**命名，"
+        "**判定标准**：该移交而未移交。**按功能命名是实质要求、不是擦边许可**："
+        "一篇文档须由**一组功能相关的脚本共同指向**，实现上一个脚本一篇即属一一对应。\n"
         "* **大规模团队式协作是例外，不是默认（L2）**。\n"
         "* **外侧只登记\"这是干什么用的\"，不搬用途说明（L1）**：脚本的用法只在脚本自身的文档头里；"
         "**外侧登记面**只允许写一句话用途 + 指向该脚本的链接。\n"
@@ -16156,6 +16300,21 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         "== 脚本头部注释（文档头）\n"
         "\n"
         "* 文档头先行。\n"
+    )
+
+    # `doc-design.adoc` 的两处：命名条（脚本不在取源文件名之列）+「信息归属」的通用条。
+    # 通用条**逐字取自现场**（不手抄）：夹具里让它的标题落在行首——现场的同一条就在这里
+    # 换行（锚点若被拆进行中，`* **` 行锚缺失、本用例会假红）。
+    DOC_DESIGN = (
+        "= 设计文档\n\n== 设计文档\n"
+        "* **命名与格式**：独立设计文档**按功能/模块命名**；**仅当该文档确实只对应某个具体的"
+        "代码/脚本/类文件时**，才取该源文件名（去扩展名）加 `.adoc`（`Foo.java` → `Foo.adoc`；"
+        "**脚本不在其列**——按脚本名给文档命名即「一个脚本 ↔ 一个文档」的形态）。\n"
+        "\n"
+        "=== 信息归属（同一信息只写一处）\n"
+        "* **用法与细节写在被使用的那一份里，外层登记只写\"这是干什么用的\"（L1）**：\n"
+        "**外层登记面**只允许写一句话用途 + 链接；**边界**：只管位置、内容一条不少，"
+        "超出容量时另建文档（对象自身留一行链接）。\n"
     )
 
     def setUp(self) -> None:
@@ -16177,7 +16336,8 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
                    "按**多行文档注释 → 多行普通/块注释 → 普通注释**取值。\n")
         self.write("specs/stack/python.adoc",
                    "= Python\n\n== 文件头\n"
-                   "* **单打独斗的 `.py` 脚本同样用模块 docstring**、默认**不另建**独立文档。\n")
+                   "* **单打独斗的 `.py` 脚本同样用模块 docstring**、默认**不另建**独立文档；"
+                   "移交时按功能命名、**一篇可由几个脚本共同指向**。\n")
         self.write("specs/stack/bash.adoc",
                    "= 栈\n\n== 文件头\n"
                    "* **无文档注释机制，文档头用多行块注释**（连续 `#` 行）承载。\n")
@@ -16189,17 +16349,16 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
                    "* **用基于注释的帮助（comment-based help）承载文档头**。\n")
         # 调度器**只给触发特征**（要为脚本另建独立文档时即命中），不抄条目本体的取值。
         self.write("AGENTS_COMMON.adoc",
-                   "脚本 → `specs/general/script.adoc`（识别特征：要为脚本另建独立文档）。\n")
+                   "脚本 → `specs/general/script.adoc`（识别特征：要给脚本配文档（一个脚本配一个文档））。\n")
         self.write("README.adoc",
                    "目录：脚本（含**文档默认写进脚本自身**与**跨环境脚本**）。\n")
-        # `doc-design.adoc`「信息归属」的通用条：用法写在被使用的那一份里、外层登记只写这是干什么用的
-        # 通用条本体**逐字取自现场**（不手抄）：夹具里让它的标题落在行首——
-        # 现场的同一条就在这里换行（锚点若被拆进行中，`* **` 行锚缺失、本用例会假红）。
-        self.write("specs/general/doc-design.adoc",
-                   "= 设计文档\n\n=== 信息归属（同一信息只写一处）\n"
-                   "* **用法与细节写在被使用的那一份里，外层登记只写\"这是干什么用的\"（L1）**：\n"
-                   "**外层登记面**只允许写一句话用途 + 链接；**边界**：只管位置、内容一条不少，"
-                   "超出容量时另建文档（对象自身留一行链接）。\n")
+        # 设计文档的命名条：脚本不在「文档取源文件名」之列（否则同源命名被读成合法）
+        self.write("specs/general/doc-design.adoc", self.DOC_DESIGN)
+        # 通用工具/库类项目的粒度条：脚本同样不逐脚本建篇
+        self.write("specs/general/doc-tool.adoc",
+                   "= 通用工具\n\n== 粒度\n"
+                   "* **文档目录只放总结性、规划性内容（不另建逐文件/逐类文档）**："
+                   "**脚本同样不为每个脚本各建一篇文档**。\n")
 
     def test_valid_script_selfdoc_guard_passes(self):
         self._write_valid()
@@ -16236,8 +16395,8 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
     def test_exception_clause_removed_reports(self):
         # 反例：唯一例外（超容量移交）被删 → "能拆成两处写"被当成另建文档的理由
         self._write_valid(self.SCRIPT.replace(
-            "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档，**判定标准**："
-            "该移交而未移交。\n", "* 想拆就拆。\n"))
+            "* **唯一例外（L1）**：只有**超出头部块注释的容量**时才另建独立文档、按**功能**命名，"
+            "**判定标准**：该移交而未移交。", "* 想拆就拆。\n"))
         cm.check_script_selfdoc_guard()
         self.assertIn("超出头部块注释的容量", self.error_texts())
 
@@ -16297,6 +16456,41 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         cm.check_script_selfdoc_guard()
         self.assertIn("README.adoc", self.error_texts())
 
+    def test_naming_clause_removed_reports(self):
+        # 反例：**命名条**（另一个二级节里的那条）被抽 → 实现层判据无人守。
+        # 实测形态：只留「不允许一个脚本对应一个文档」、抽掉两条实现层判据，
+        # 主防线的规则步骤按**节**取锚点、够不到本节，于是全绿。
+        self._write_valid(self.SCRIPT.replace(
+            "* **脚本对应文档命名**：**不允许一个脚本对应一个文档**——即"
+            "**不以脚本文件的个数作为独立文档的个数**，也**不按脚本名给文档命名**"
+            "（`check-specs.adoc` 之类）。\n", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("不按脚本名给文档命名", self.error_texts())
+
+    def test_naming_rule_clause_removed_reports(self):
+        # 反例：同一条只抽「也不按脚本名给文档命名」→ `check_specs.py` → `check_specs.adoc`
+        # 这类同源命名重新被读成合法（主防线的锚点一字不少）
+        self._write_valid(self.SCRIPT.replace(
+            "，也**不按脚本名给文档命名**", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("不按脚本名给文档命名", self.error_texts())
+
+    def test_one_script_one_doc_clause_removed_reports(self):
+        # 反例：「不许一个脚本一个文档」被抽 → 每个脚本各配一篇 .adoc 重回默许形态
+        self._write_valid(self.SCRIPT.replace(
+            "**不许「一个脚本 ↔ 一个文档」的对应关系**：独立文档与脚本**一一对应**、"
+            "两边个数同步增减即命中。", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("不许「一个脚本 ↔ 一个文档」的对应关系", self.error_texts())
+
+    def test_function_naming_substance_clause_removed_reports(self):
+        # 反例：「按功能命名是实质要求、不是擦边许可」被抽 → 移交出口变成给每个脚本各建一篇的后门
+        self._write_valid(self.SCRIPT.replace(
+            "**按功能命名是实质要求、不是擦边许可**："
+            "一篇文档须由**一组功能相关的脚本共同指向**，实现上一个脚本一篇即属一一对应。", ""))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("擦边许可", self.error_texts())
+
     def test_outer_registry_only_clause_removed_reports(self):
         # 反例：'外侧只登记用途、不搬用法'被抽 → 脚本头部有了用法、README 里再抄一份正文，
         # 同一份契约两个来源（改脚本头部必漏外侧），本条要防的失效照旧
@@ -16307,6 +16501,36 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
                        "**外侧登记面**只允许写一句话用途 + 指向该脚本的链接。\n", ""))
         cm.check_script_selfdoc_guard()
         self.assertIn("外侧只登记", self.error_texts())
+
+    def test_design_doc_naming_clause_removed_reports(self):
+        # 反例：命名条不排除脚本 → `check_specs.py` → `check_specs.adoc` 这类同源命名被读成合法，
+        # 「不允许一个脚本对应一个文档」当场失效
+        self._write_valid()
+        self.write("specs/general/doc-design.adoc",
+                   self.DOC_DESIGN.replace(
+                       "（`Foo.java` → `Foo.adoc`；"
+                       "**脚本不在其列**——按脚本名给文档命名即「一个脚本 ↔ 一个文档」的形态）",
+                       "（`Foo.java` → `Foo.adoc`、`check_specs.py` → `check_specs.adoc`）"))
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/general/doc-design.adoc", self.error_texts())
+
+    def test_doc_tool_granularity_clause_removed_reports(self):
+        # 反例：通用工具/库类项目的粒度条不写脚本 → 该项目类型的文档目录按脚本各建一篇
+        self._write_valid()
+        self.write("specs/general/doc-tool.adoc",
+                   "= 通用工具\n\n== 粒度\n"
+                   "* **文档目录只放总结性、规划性内容（不另建逐文件/逐类文档）**。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/general/doc-tool.adoc", self.error_texts())
+
+    def test_python_handover_naming_clause_removed_reports(self):
+        # 反例：Python 侧只写"不另建"、不写移交也按功能命名 → 移交出口按脚本名各建一篇
+        self._write_valid()
+        self.write("specs/stack/python.adoc",
+                   "= Python\n\n== 文件头\n"
+                   "* **单打独斗的 `.py` 脚本同样用模块 docstring**、默认**不另建**独立文档。\n")
+        cm.check_script_selfdoc_guard()
+        self.assertIn("specs/stack/python.adoc", self.error_texts())
 
     def test_doc_design_general_clause_removed_reports(self):
         # 反例：通用条（用法写在被使用的那一份里、外层只登记）被抽空只留标题
@@ -19466,9 +19690,11 @@ class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
     def test_bullet_present_but_hollow_reports(self):
         """反例⑪：条目还在、要点被抽空成一句空话 -> 须报。
 
-        该条 bullet 由「定义段 + 缩进子段（理由/判定标准/例外/存量/依据）」组成，
+        该条 bullet 由「定义段 + 紧随其后的 `**` 子段（理由/判定标准/例外/存量/依据）」组成，
         故"掏空"须把子段一并清掉——只换首行时那些子段原样留着，防线照样全绿，
         这个用例就不再能证明"掏空会报"（核的是同一条 bullet 的完整正文）。
+        **子段写成顶格同级的 `**`**（不用缩进：缩进行会被 AsciiDoc 读成上一项的续行，
+        结构见 `script/specs-rules/list.toml`）。
         """
         self._write_all_valid()
         keep = ("* **链式赋值顺序随字段顺序（L1，任何语言）**：链式调用里的**赋值环节**"
@@ -19476,13 +19702,16 @@ class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
         lines = self.CODING_TEXT.splitlines(keepends=True)
         idx = next(i for i, ln in enumerate(lines)
                    if ln.startswith("* **链式赋值顺序随字段顺序（L1，任何语言）**"))
-        # 连同其后紧跟的缩进子段（空行 + 两空格起头的续段）一并删除
+        # 连同其后紧跟的子段（空行 + `**` 起头的续段）一并删除，**到下一个顶格列表项为止**
+        # ——本节的续段与下一条目之间没有空行，只按"空行/`**`"跳会停得太早，把下一项的前半
+        # 留下来当本条正文（实测：掏空后 19 个锚点一个不缺、防线报绿）。
         end = idx + 1
-        while end < len(lines) and (not lines[end].strip()
-                                    or lines[end].startswith("  ")):
+        while end < len(lines) and not lines[end].startswith("* "):
             end += 1
         self.write(self.CODING, "".join(lines[:idx] + [keep] + lines[end:]))
         self._run_guard()
+        # 断言取**被掏空的子段**的锚点（依据行里的取舍定性）：只断言"整条缺失"时，
+        # 掏空与"整条被删"分不开，防线退化也只报同一条错、看不出掏空这一形态仍被判住。
         self.assertIn("本集合的判据化取值", self.error_texts())
 
     def test_java_landing_removed_reports(self):
@@ -19743,15 +19972,15 @@ class TestCheckObjectInitGuard(CheckSpecsTestCase):
         连同例外 2 的尾句（框架创建的构造"书写仍按各自规则"）一并核：抽掉即报。
         """
         # 例外 3/4/5：各自一整条被抽
-        for frag in ("  ** **语言或框架根本没有链式形态**",
-                     "  ** **目标对象是第三方类型、不可改**",
-                     "  ** **语言惯用的具名构造即该语言的链式形态**"):
+        for frag in ("** **语言或框架根本没有链式形态**",
+                     "** **目标对象是第三方类型、不可改**",
+                     "** **语言惯用的具名构造即该语言的链式形态**"):
             lines = [ln for ln in self.CODING_TEXT.splitlines() if ln.startswith(frag)]
             self.assertTrue(lines, frag)
             self._write_all_valid()
             self.write(self.CODING, self.CODING_TEXT.replace(lines[0] + "\n", "", 1))
             self._run_guard()
-            self.assertIn(frag.replace("  ** **", "**"), self.error_texts())
+            self.assertIn(frag.replace("** **", "**"), self.error_texts())
         # 例外 2 的尾句（框架创建的构造"书写仍按各自规则"）被换掉
         clip = "这类构造的书写仍按各自规则"
         self.assertIn(clip, self.CODING_TEXT)

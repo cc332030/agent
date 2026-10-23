@@ -1,0 +1,7 @@
+# 平面列表范围内出现缩进的列表项或缩进的续行即报红（判据、范围与白名单的唯一落点是
+# `specs-project-maintainer/guards.adoc` 本道防线行：范围到**顶格非列表正文**为止，节标题与
+# `[listing]` 一类块属性行在范围之内，定界块内部与「紧贴块收尾的那一段」不判）。
+
+[[guards.check_list_structure_guard]]
+kind = "list_structure"
+message = "{file}:{line} 平面列表范围内缩进了——AsciiDoc 把这一行读成上一项的续行／嵌套，条目边界与逐行阅读所见不一致；续行写顶格正文、嵌套条目写同级的 `**` 并列"
