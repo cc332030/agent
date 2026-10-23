@@ -1269,5 +1269,22 @@ class TestDuplicateScanGramPrefilter(unittest.TestCase):
         self.assertEqual(len(self._run({"a.adoc": a, "b.adoc": b}, min_overlap=24)), 1)
 
 
+class TestSentencesCache(unittest.TestCase):
+    """按句回退的切分：归一化与实体侧同源、短句与重复句不参与。
+
+    这条回退是"整条被换行打断"的唯一补核路径（`duplicate_scan` 的折叠 vs 展开形态），
+    切开的口径一旦与 `_norm_dup` 不同源，比的就是两种不同形态的文本、永远核不出来。
+    """
+
+    def test_short_and_duplicate_sentences_dropped(self):
+        raw = "短的。这一句足够长出过阈值了。这一句足够长出过阈值了。"
+        self.assertEqual(re_._sentences(raw, 8), ["这一句足够长出过阈值了"])
+
+    def test_normalized_like_entity_side(self):
+        # 行内代码被剥掉、空白被压掉——与 `_norm_dup` 同源
+        text = "判据见 `a.adoc` 与 b.adoc 的正文"
+        self.assertEqual(re_._sentences(text, 4), [re_._norm_dup(text)])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

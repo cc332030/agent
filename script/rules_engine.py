@@ -881,8 +881,8 @@ def _build_sam(text):
     for ch in text:
         cur = len(nxt)
         nxt.append({})
+        link.append(-1)
         length.append(length[last] + 1)
-        link.append(0)
         p = last
         while p != -1 and ch not in nxt[p]:
             nxt[p][ch] = cur
@@ -1182,6 +1182,70 @@ def _step_table_row_pipe(rules, step):
                         rel, lineno)
 
 
+# 平面列表结构（`list_structure`）的三个形态判据：AsciiDoc 的**节标题**（`== ...` 含更长层级）、
+# **列表项**（`* ` / `. ` / `- `，与 `_bullet_text` 取条目时的口径同源）、**定界块边界**
+# （`----`/`....`/`====`/`****` 一类，**只认至少 4 个同字符**——`===` 是三级节标题，不是块边界）。
+_BLOCK_DELIM = re.compile(r"^(?:-{4,}|\.{4,}|={4,}|\*{4,}|_{4,}|\+{4,}|`{3,})$")
+_HEADING = re.compile(r"^=+[ \t]")
+_LIST_ITEM = re.compile(r"^\*{1,2}\s|^[.\-]\s")
+# 块属性行（`[listing]`、`[cols="1,2"]`、`[NOTE]`）：紧跟其后的定界块仍属当前列表项
+_BLOCK_ATTR = re.compile(r"^\[[^\]]+\]$")
+
+
+def _step_list_structure(rules, step):
+    """核**列表结构没被写坏**：平面列表范围内缩进了即报红。
+
+    判据、范围与白名单的落点是 `script/specs-rules/list.toml`，本函数只实现它。
+    规则参数：`files`（可选），不给时取维护范围内的全部 `.adoc`。
+    """
+    ctx = rules.ctx
+    files = sorted(set(step.get("files") or (ctx.adoc_files() if hasattr(ctx, "adoc_files") else [])))
+    if not files:
+        ctx.err(_msg(step, "missing_files_message").replace("{file}", "维护范围内的 .adoc"), "")
+        return
+    for rel in files:
+        text = ctx.read(rel)
+        if text is None:
+            ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
+            continue
+        in_block = False       # 定界块内部：块内的缩进本来就用
+        in_list = False        # 上一行之后，平面列表是否还在继续
+        after_block = False    # 白名单：紧贴定界块收尾的**那一段**（遇空行即复原，防它悄悄扩散）
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                # 空行不算列表断开（列表中间可隔着空段）；白名单只管**紧贴块收尾的那一段**，
+                # 隔了空行即失效（否则"插完块再续写缩进"能绕开整道防线）。
+                after_block = False
+                continue
+            if _BLOCK_DELIM.match(line.strip()):
+                if in_block:
+                    in_block = False
+                    after_block = in_list
+                elif not (line[0] in " \t"):
+                    in_block = True
+                    after_block = False
+                continue
+            if in_block:
+                continue
+            if _HEADING.match(line):
+                # 节标题**不结束**列表范围：列表到"顶格非列表正文"为止，小节标题不是正文
+                # （判据原文如此）。此处只把白名单复原——块刚收尾就换节时，那一段白名单失效。
+                after_block = False
+                continue
+            if not (line[0] in " \t"):
+                # 顶格行三种：**列表项**与**块属性行**（`[listing]` 一类，仍属条目内的块）
+                # 让列表继续；**顶格非列表正文**则是列表范围的终点。
+                if _LIST_ITEM.match(line):
+                    in_list = True
+                elif not _BLOCK_ATTR.match(line):
+                    in_list = False
+                after_block = False
+                continue
+            if in_list and not after_block:
+                ctx.err(step["message"].replace("{file}", rel)
+                        .replace("{line}", str(lineno)), rel, lineno)
+
+
 KINDS = {
     "exists": _step_exists,
     "section_groups": _step_section_groups,
@@ -1202,6 +1266,7 @@ KINDS = {
     "duplicate_scan": _step_duplicate_scan,
     "pointer_no_verbatim": _step_pointer_no_verbatim,
     "table_row_pipe": _step_table_row_pipe,
+    "list_structure": _step_list_structure,
 }
 
 

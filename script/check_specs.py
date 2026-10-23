@@ -2016,6 +2016,17 @@ _PROMPTS_INDEX_ENTRIES = (
 # ② 形态的必需指向语：登记处须显式说明"正文在片段里、此处只作索引"（否则读者以为这就是全文）
 _PROMPTS_INDEX_POINTERS = ("不复述正文", "正文只写在", "一处维护、两处生效")
 
+def check_list_structure_guard():
+    """『列表结构不得被写坏』：平面列表范围内出现缩进即报红（缩进列表项／缩进续行）。
+
+    背景、效力边界、覆盖范围与报错文案都在 `script/specs-rules/list.toml`——本函数只做接线，
+    这里复述一遍就是同一份口径的第二个来源。
+    """
+    phase("列表结构（平面列表内不得缩进）防线检查")
+    run_rule_guard("check_list_structure_guard")
+    phase_done()
+
+
 def check_table_row_pipe_guard():
     """『表格行不得以 `|` 收尾』：行尾多出的一个 `|` 是 AsciiDoc 的**残缺行**形态。
 
@@ -4040,8 +4051,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 150  # 同源实取：#117 `check_service_interface_guard`（没有多态时不得为 service 类加有相同方法的父接口）并入后，`CHECKS` 序列唯一名实取 150
-GUARD_TEST_BASELINE = 1990  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（并入 main 的 14 条 + 本分支 `TestCheckPersistenceAccessGuard` 的 4 条反例后实取）
+GUARD_WIRING_BASELINE = 153  # 同源实取：本轮新增 `check_script_selfdoc_name_guard`（脚本文档命名防线）后，`CHECKS` 序列唯一名实取 153
+GUARD_TEST_BASELINE = 2028  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮补脚本文档命名防线的 2 条反例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6814,8 +6825,15 @@ def _bullet_text(section: str, prefix: str):
     """取 section 里以 `* **<prefix>` 开头的那个 bullet 的完整文本（到下一个 bullet 或节末）。
 
     用于"条目内核对"——按整节关键词核对时，相邻条款的字样会兜住被抽空的条目。
+
+    **取到"该条自己的正文"到底为止**：条目之后的**顶格续段**（`**理由**`、`**判定标准**`、
+    `**依据（标准名/编号）**` 一类，写在同一列表项的续段落里）属本条；下一行一旦是
+    **顶格列表项**（`* ` / `. ` / `- `）或**标题**，本条即结束——不把下一项吞进来。
+    否则"掏空某一条"会被下一项兜住：实测把「链式赋值顺序随字段顺序」掏空后，下一项
+    「注解/装饰器排序」及其后的续段全被算进本条，19 个锚点一个不缺、防线报绿。
     """
-    m = re.search(r"^\* \*\*" + re.escape(prefix) + r"[^\n]*(?:\n(?!\s*\*\s)[^\n]*)*",
+    m = re.search(r"^\* \*\*" + re.escape(prefix)
+                  + r"[^\n]*(?:\n(?!(?:\s*\*\s|[.=]+\s))[^\n]*)*",
                   section, re.M)
     return m.group(0) if m else None
 
@@ -7546,9 +7564,14 @@ def check_guard_order_guard():
             detail.append(f"只在清单表里：{only_manifest}")
         if not detail:
             # 两处**集合相同、次序不同**是最难发现的一种：逐行对账要给出第一处分叉，
-            # 否则报错信息只说"不一致"、修的人得自己逐行比 89 行（实测形态：对调两道防线）。
-            i = next(j for j, (a, b) in enumerate(zip(seq, names)) if a != b)
-            detail.append(f"第 {i + 1} 处起次序不同：`CHECKS` 是 {seq[i]}、清单表是 {names[i]}")
+            # 否则报错信息只说"不一致"、修的人得自己逐行比（实测形态：对调两道防线）。
+            # 集合相同时两列等长，`next` 必取得到；仍有 `None` 分支只为不抛 `StopIteration`
+            # ——不带默认值的 `next` 会让整个校验链**带栈退出**，那是崩溃、不是报红。
+            i = next((j for j, (a, b) in enumerate(zip(seq, names)) if a != b), None)
+            if i is None:
+                detail.append("次序对账失败：两列在当前核对口径下未比出分叉")
+            else:
+                detail.append(f"第 {i + 1} 处起次序不同：`CHECKS` 是 {seq[i]}、清单表是 {names[i]}")
         err("防线次序不一致：`script/check_specs.py` 的 `CHECKS` 序列与 "
             "specs-project-maintainer/guards.adoc 的清单表不是同一串（" + "；".join(detail)
             + "）——次序是刻意安排的，两处必须逐一同序；改一侧就必须同步另一侧"
@@ -9236,6 +9259,18 @@ def check_script_header_guard():
 SCRIPT_SELFDOC_SECTION = "脚本文档的承载位置与协作粒度（默认写进脚本自身）"
 
 
+def check_script_selfdoc_name_guard():
+    """『脚本文档命名』：`文件命名` 节的命名条不得把脚本名当文档名的合法来源。
+
+    它是「不允许一个脚本对应一个文档」在**命名**这一面的落点，坐落在另一个二级节——
+    按节取锚点时核不到它（本轮实测：把「不按脚本名给文档命名」整句抽掉，主防线的规则
+    步骤全绿）。判据本体与报错文案在 `script/specs-rules/script.toml`。
+    """
+    phase("脚本文档命名（不允许一对一的命名来源）防线检查")
+    run_rule_guard("check_script_selfdoc_name_guard")
+    phase_done()
+
+
 def check_script_selfdoc_guard():
     """『脚本自述文档防线』：脚本默认单打独斗、文档随脚本落盘（不逐脚本另建独立文档）。
 
@@ -9257,6 +9292,11 @@ def check_script_selfdoc_guard():
     section = m.group(0)
     run_rule_guard("check_script_selfdoc_guard")
 
+    # 通用侧：**文件命名**节的命名条（`* **脚本对应文档命名**`）——它在另一节里，
+    # 不进上面那道规则步骤的核对面；不单独钉住时「不按脚本名给文档命名」这类实现层判据
+    # 被抽掉也全绿（本轮实测）
+    run_rule_guard("check_script_selfdoc_name_guard")
+
     # 通用编码侧：注释定位条须带脚本例外并指回本节
     coding = os.path.join(SPECS_DIR, "general", "coding.adoc")
     rel_coding = os.path.relpath(coding, REPO_ROOT).replace("\\", "/")
@@ -9271,10 +9311,31 @@ def check_script_selfdoc_guard():
                 "该条原文说'普通注释仅限方法体内、详细设计一律进文档注释'，缺脚本例外时"
                 "会被读成'脚本也要按类/方法那套走、文档头得另建文档'", rel_coding)
 
+    # 通用侧：设计文档的**命名条**不得把脚本名当文档名的合法来源——
+    # "按脚本名给文档命名"就是一个脚本一篇的实现形态（判据本体见 `specs/general/script.adoc`）
+    for rel, keys, desc in (
+        ("specs/general/doc-design.adoc", ("脚本不在其列", "按脚本名给文档命名"),
+         "设计文档的命名条须写明**脚本不在「文档取源文件名」之列**——"
+         "缺则 `check_specs.py` → `check_specs.adoc` 这类同源命名被读成合法，"
+         "「不允许一个脚本对应一个文档」当场失效"),
+        ("specs/general/doc-tool.adoc", ("脚本同样不为每个脚本各建一篇文档",),
+         "通用工具/库类项目的粒度条须写明**脚本同样不逐脚本建篇**——"
+         "缺则该项目类型的文档目录会按脚本各建一篇"),
+    ):
+        fp = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(fp):
+            err(f"缺少 {rel}——脚本自述文档条在该处无处承接", rel)
+            continue
+        body = open(fp, encoding="utf-8").read()
+        missing = [k for k in keys if k not in body]
+        if missing:
+            err(f"脚本自述文档防线被破坏：{rel} 缺失要点 {missing}——{desc}", rel)
+
     # 技术栈侧：Python 用 docstring 且单文件脚本不另建文档；三个无机制栈用多行块注释承载
     for name, keys, desc in (
-        ("python.adoc", ("单打独斗", "不另建"),
-         "Python 侧须写明**单文件脚本同样用模块 docstring**、默认**不另建**独立文档"
+        ("python.adoc", ("单打独斗", "不另建", "一篇可由几个脚本共同指向"),
+         "Python 侧须写明**单文件脚本同样用模块 docstring**、默认**不另建**独立文档，"
+         "并写明**移交也按功能命名、一篇可由几个脚本共同指向**"
          "（否则'有文档注释机制'只被读成'注释形态要求'，脚本仍会被各建一篇文档）"),
         ("bash.adoc", ("多行块注释", "无文档注释机制"),
          "bash 须写明**无文档注释机制、文档头用多行块注释（连续 `#` 行）承载**——"
@@ -9303,7 +9364,7 @@ def check_script_selfdoc_guard():
         err(f"缺少 {rel_common}——脚本自述文档条的调度器登记无从核对", rel_common)
     else:
         common = open(common_path, encoding="utf-8").read()
-        # 只核**触发特征**（要为脚本另建独立文档时即命中）：`脚本单打独斗`/`多行块注释`
+        # 只核**触发特征**（要给脚本配文档、含一个脚本配一个文档时即命中）：`脚本单打独斗`/`多行块注释`
         # 是 `script.adoc` 的条目本体取值，抄进调度器即第二真源。
         # **取调度器那一行**：入口里点 `script.adoc` 的地方不止一处（取回口径一节也回指它的
         # 「脚本头部注释（文档头）」，"第一处命中"会取到那一行、把本判据判成缺失——本轮实测）。
@@ -9313,8 +9374,8 @@ def check_script_selfdoc_guard():
         if not script_disp:
             err(f"脚本自述文档防线被破坏：{rel_common} 未登记 `specs/general/script.adoc`——"
                 "缺则该文件永远不会被加载、本条实际失效", rel_common)
-        elif "另建独立文档" not in script_disp:
-            err(f"脚本自述文档防线被破坏：{rel_common} 的脚本加载项缺少『要为脚本另建独立文档』"
+        elif "要给脚本配文档" not in script_disp:
+            err(f"脚本自述文档防线被破坏：{rel_common} 的脚本加载项缺少『要给脚本配文档』"
                 "这一触发特征——缺则该条永远不会被触发加载、规则实际失效", rel_common)
     rel_readme = os.path.relpath(README_FILE, REPO_ROOT).replace("\\", "/")
     if os.path.isfile(README_FILE):
@@ -12175,6 +12236,8 @@ CHECKS = (
     check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
     check_table_row_pipe_guard,
+    check_list_structure_guard,
+    check_script_selfdoc_name_guard,
     check_declarative_rule_guard,
     check_param_carrier_guard,
     check_getter_bridge_guard,
