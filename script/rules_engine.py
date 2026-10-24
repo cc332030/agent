@@ -434,6 +434,13 @@ def _step_bullet_tokens(rules, step):
     miss = [t for t in step["tokens"] if t not in scope]
     if miss:
         ctx.err(step["message"].replace("{missing}", str(miss)), rel)
+    # 本步的锚点清单**自己**被删项时现场一字不少、上一句一次也不报错（"防线零证据"的形态，
+    # 与 `anchor_count` 同一条道理）：`min` 取当前条数，删锚点须与调 `min` 一并发生。
+    floor = step.get("min")
+    if isinstance(floor, int) and len(step["tokens"]) < floor:
+        ctx.err(_msg(step, "anchor_count_message")
+                .replace("{file}", rel).replace("{have}", str(len(step["tokens"])))
+                .replace("{min}", str(floor)).replace("{bullet}", step["bullet"]), rel)
 
 
 def _paired_bullet_token_count(rules, step) -> int:

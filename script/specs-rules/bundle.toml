@@ -1,0 +1,155 @@
+# 『分发产物的体积与按需加载』防线规则数据。
+#
+# 判据本体在 `specs/general/coding.adoc`——**公共内容**（对任何做过分发产物的项目成立）。
+# 前端载体在 `specs/stack/web.adoc`（技术栈层），它**只给载体、不另立判据**。
+#
+# 本条防的失效：构建工具报「某产物超过体积上限」时，**把上限调高**（或关掉告警）就收工——
+# 产物一个字节没少、首屏加载量照旧，而日志从此"干净"；下一次再超了再调一次。
+# 用户口径：**去根治，不要掩耳盗铃，有必要可扩到所有语言**。
+
+# ① 跨语言那一条（体积上限只是「质量哨兵」的一种）：落在通用层「警告与弃用」这一节的
+# 那一条 bullet 里。**不按条目核、按整节核**：该 bullet 的正文里另嵌了两段（去路/边界），
+# 而引擎的 `bullet` 取法只认单行 `* **` 条目；措辞被抽走时按整节核同样报红（本组的锚点
+# 全是该条独有的长句，相邻条目的字样兜不住——见 `specs-project-maintainer/guards.adoc`
+# 「锚点一律取只出现一次的措辞」）。
+[[guards.check_bundle_size_guard]]
+file = "specs/general/coding.adoc"
+section = "警告与弃用"
+kind = "section_groups"
+token_list = "BUNDLE_SIZE_ANCHORS"
+message = "『分发产物的体积与按需加载』防线被破坏：{file}「警告与弃用」缺失要点 {missing}——{desc}；该条对应用户点名要求（打包告警须去根治、不得调高上限掩耳盗铃），不得删除、不得降级"
+
+# 与上面那步成对：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤
+# 一次都不报错（"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_bundle_size_guard]]
+file = "specs/general/coding.adoc"
+section = "警告与弃用"
+kind = "anchor_count"
+token_list = "BUNDLE_SIZE_ANCHORS"
+min = 7
+
+# ② 判据本体：通用层「分发产物的体积与按需加载」整节（含前端载体小节与依据行）。
+[[guards.check_bundle_size_guard]]
+file = "specs/general/coding.adoc"
+section = "分发产物的体积与按需加载"
+kind = "section_groups"
+token_list = "BUNDLE_SECTION_ANCHORS"
+message = "『分发产物的体积与按需加载』防线被破坏：{file}「分发产物的体积与按需加载」缺失要点 {missing}——{desc}；该条对应用户点名要求（打包告警须去根治、不得调高上限掩耳盗铃），不得删除、不得降级"
+
+# 与上面那步成对：核该清单自己的条数（删锚点须与调 `min` 一并发生）。
+[[guards.check_bundle_size_guard]]
+file = "specs/general/coding.adoc"
+section = "分发产物的体积与按需加载"
+kind = "anchor_count"
+token_list = "BUNDLE_SECTION_ANCHORS"
+min = 28
+
+# 同一条 bullet 按**条目级**再核一遍：「警告与弃用」整节的密钥锚点里有「质量哨兵」「取值定错」
+# 一类同节多条共用的措辞，别的条目能兜住本条被抽走的部分；本条只取这一条 bullet 内**只出现
+# 一次**的措辞，另含整节清单兜不住的那句「不得**整类关闭**」——它是本条的防反用面。
+[[guards.check_bundle_size_guard]]
+file = "specs/general/coding.adoc"
+section = "警告与弃用"
+kind = "bullet_tokens"
+bullet = "不得调高阈值或关掉规则来消灭告警（L1，任何语言）"
+anchor = "**去路（L1）**"
+min = 6
+tokens = [
+    "**只有一种情形可以调**",
+    "取值定错",
+    "改取值须有可核对的依据",
+    "**判据是\"成因变没变\"**",
+    "**边界（防反用）**",
+    "**不得**整类关闭",
+]
+message = "『分发产物的体积与按需加载』防线被破坏：{file} 的那条 bullet 缺失要点 {missing}——去路（唯一可调的情形＝取值定错，且须给出可核对的依据）与边界（不得整类关闭规则）是该条的出口与防反用面，抽掉后它会被读成「要么永远不调、要么整类关掉」"
+
+# ③ 前端载体：技术栈层只给载体、不另立判据（第二真源由本组反向钉住）。
+[[guards.check_bundle_size_guard]]
+file = "specs/stack/web.adoc"
+section = "与通用层的关系（防第二真源）"
+kind = "section_groups"
+groups = [
+    [
+        "回指唯一真源（不另立判据）",
+        [
+            "`specs/general/coding.adoc`「分发产物的体积与按需加载」为唯一真源",
+            "本文件不复述、也不另立判据",
+        ],
+        "缺则技术栈层变成第二处真源：判据在两处各自漂移，先报红的那道未必是权威",
+    ],
+]
+[[guards.check_bundle_size_guard]]
+file = "specs/stack/web.adoc"
+section = "分包与按需加载（载体）"
+kind = "section_groups"
+groups = [
+    [
+        "路由层按需加载（载体＝路由定义处）",
+        [
+            "**路由层按需加载（L1）**",
+            "静态**引入的页面组件即违规",
+        ],
+        "缺则前端这一半只剩通用层口号：路由该怎么组织没了载体",
+    ],
+    [
+        "重区块按需加载（载体＝使用点）",
+        [
+            "**重区块按需加载（L1）**",
+            "在其**使用点**按需加载",
+        ],
+        "缺则重依赖仍可留在入口/共享布局里，而通用层只讲『入口只装首次要用的』、点不到前端这一层",
+    ],
+    [
+        "按名引入与副作用声明（载体＝代码与包清单）",
+        [
+            "**重依赖按名引入（L1）**",
+            "**副作用声明（L1）**",
+            "本包确实无副作用时",
+        ],
+        "缺则静态消除的载体消失：整包引入 + 全局副作用把剔除能力关掉，而体积告警看起来『莫名其妙』",
+    ],
+]
+[[guards.check_bundle_size_guard]]
+file = "specs/stack/web.adoc"
+section = "产物体积告警"
+kind = "section_groups"
+groups = [
+    [
+        "告警的载体：不改默认上限",
+        [
+            "**告警的载体（L2）**",
+            "本项目**不改动**它",
+            "命中即按通用层那条的违规处理",
+        ],
+        "缺则打包器那一侧又留了一个『改配置』的出口",
+    ],
+    [
+        "不把告警当噪音",
+        [
+            "**不把告警当噪音（L1）**",
+        ],
+        "缺则体积告警被当成『知道就行』的日志噪音",
+    ],
+]
+
+# ④ 加载门：调度器须登记该栈文件与独立识别特征——缺则打包告警时永不触发加载。
+[[guards.check_bundle_size_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "**Web 前端打包产物**",
+    "`specs/stack/web.adoc`",
+    "**打包告警**",
+]
+message = "『分发产物的体积与按需加载』防线被破坏：{file} 缺失要点 {missing}——技术栈层须登记前端打包产物文件与它的独立识别特征（打包告警/构建配置），缺则执行者看到体积告警时永不加载该栈文件，判据存在却走不到"
+
+# ⑤ README 目录说明同步（读者按 README 学习时须知道有这条规则）。
+[[guards.check_bundle_size_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "**分发产物的体积与按需加载",
+    "web（**Web 前端打包产物的载体与取值形态**",
+]
+message = "『分发产物的体积与按需加载』防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须同步登记该条（通用层 `coding.adoc` 与栈层 `web.adoc` 两处），否则读者按 README 学习时无从知道有这条规则"

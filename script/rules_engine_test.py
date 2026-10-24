@@ -467,6 +467,44 @@ class TestAnchorCount(unittest.TestCase):
         self.assertEqual(len(ctx.errors), 1)
 
 
+class TestBulletTokensAnchorFloor(unittest.TestCase):
+    """`bullet_tokens` 自带的 `min`：核**这一步自己的锚点清单**有没有被删项。
+
+    要治的失效与 `anchor_count` 同源，但漏在另一处：锚点清单**写在 `bullet_tokens` 步里**
+    时没有成对的 `anchor_count` 步可核，规则数据里删掉一项锚点后现场一字不少、`miss` 是
+    空集——"核过且通过"与"根本没核这一项"看起来一样。
+    """
+
+    DOC = "= t\n\n== 节\n\n* **目标条目**：要点 A 与 要点 B\n"
+
+    def _step(self, tokens, floor):
+        return {"kind": "bullet_tokens", "file": "a.adoc", "section": "节",
+                "bullet": "目标条目", "tokens": tokens, "min": floor,
+                "message": "缺 {missing}", "missing_bullet_message": "缺条目",
+                "missing_section_message": "缺节"}
+
+    def test_at_floor_passes(self):
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        _rules({"g": [self._step(["要点 A", "要点 B"], 2)]}, ctx).run("g")
+        self.assertEqual(ctx.errors, [])
+
+    def test_below_floor_reports(self):
+        # 锚点被删一项：现场一字未动，`miss` 为空，只有条数这一步报得出
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        _rules({"g": [self._step(["要点 A"], 2)]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+        self.assertIn("只剩 1 项锚点", ctx.texts())
+        self.assertIn("基线 2", ctx.texts())
+
+    def test_without_floor_not_checked(self):
+        # 不写 `min` 即不核条数（其余防线不受影响）
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        step = self._step(["要点 A"], 0)
+        step.pop("min")
+        _rules({"g": [step]}, ctx).run("g")
+        self.assertEqual(ctx.errors, [])
+
+
 class TestPromptFilesGroups(unittest.TestCase):
     def test_each_prompt_file_checked(self):
         ctx = FakeCtx({"prompts/a.txt": "要点 A", "prompts/b.txt": "没有"},

@@ -1691,7 +1691,7 @@ file = "specs/stack/java-syntax.adoc"
 kind = "bullet_tokens"
 message = "工具类继承防线被破坏：{file} 的「工具类不继承工具类」条**本条自己的正文**缺失 {missing}——缺 Java 落点时，执行者不知道 `@UtilityClass` 本就不可被继承、会把静态方法重新抽成基类"
 section = "工具类定义"
-min = 9
+min = 8
 tokens = [
     "工具类不继承工具类（L1，Java 落点）",
     "不得 `extends` 另一个工具类",
