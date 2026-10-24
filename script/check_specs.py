@@ -1792,6 +1792,7 @@ POINTER_SCAN_FILES = (
     "specs/stack/powershell.adoc",
     "specs/stack/python.adoc",
     "specs/stack/spring.adoc",
+    "specs/stack/web.adoc",
 )
 
 
@@ -2263,6 +2264,40 @@ def check_sql_annotation_binding_guard():
                 if token not in line:
                     err(f"加载调度器里的 `specs/general/sql.adoc` 登记项缺少 `{token}`"
                         f"识别特征——{desc}；缺则该场景下判据存在而执行者走不到它", rel_common)
+    phase_done()
+
+
+def check_bundle_size_guard():
+    """『分发产物的体积与按需加载』防线（**用户提出**）。
+
+    用户口径：前端打包反复报「Some chunks are larger than 500 kB after minification」，
+    规范里要**去根治**、**不要掩耳盗铃**（＝调高上限把告警挪开），**有必要可扩到所有语言**。
+
+    判据本体唯一落点在通用层 `specs/general/coding.adoc`：跨语言那一条在「警告与弃用」
+    （体积上限只是**质量哨兵**的一种），本主题在「分发产物的体积与按需加载」整节（含前端
+    载体小节与依据行）。故本道核**四处**：
+      * 真源：两节的要点（规则数据 `script/specs-rules/bundle.toml`）；
+      * **技术栈层 `specs/stack/web.adoc`**：只给前端载体（路由定义处、使用点、包清单、
+        构型键），且须回指唯一真源——缺则前端那一半只剩口号，或栈层变成第二处真源；
+      * **加载门**：调度器须登记该栈文件与它的独立识别特征（打包告警/构建配置）——缺则执行者
+        看到体积告警时永不加载该文件，判据存在而走不到它；
+      * README 目录说明同步。
+
+    只钉「要点是否仍在」——「这一处算不算首屏要用的」「某个依赖是否真被消除」属语义判断与
+    运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("分发产物的体积与按需加载防线检查")
+    rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if not os.path.isfile(os.path.join(rules_dir, "bundle.toml")):
+        err("缺少 script/specs-rules/bundle.toml——『分发产物的体积与按需加载』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_bundle_size_guard")
+    rel_web = "specs/stack/web.adoc"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel_web.split("/"))):
+        err(f"缺少 {rel_web}——前端打包产物没有落点，体积告警在栈层无从落地（判据本体仍在"
+            "通用层，但执行者拿到告警时读不到载体）", rel_web)
     phase_done()
 
 
@@ -4051,8 +4086,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 153  # 同源实取：本轮新增 `check_script_selfdoc_name_guard`（脚本文档命名防线）后，`CHECKS` 序列唯一名实取 153
-GUARD_TEST_BASELINE = 2028  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮补脚本文档命名防线的 2 条反例后实取）
+GUARD_WIRING_BASELINE = 154  # 同源实取：本轮新增 `check_bundle_size_guard`（分发产物的体积与按需加载防线，正式序号 #154）后，`CHECKS` 序列唯一名实取 154
+GUARD_TEST_BASELINE = 2044  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮补体积与按需加载防线的 13 条反例、`bullet_tokens` 锚点条数自核的 3 条后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12265,6 +12300,7 @@ CHECKS = (
     check_fetch_self_update_guard,
     check_java_test_playground_guard,
     check_sql_annotation_binding_guard,
+    check_bundle_size_guard,
 )
 
 

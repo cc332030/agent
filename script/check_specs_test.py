@@ -150,7 +150,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（问与答对齐）的规则数据按原地原样落进夹具——手抄必然漂移
                            "script/specs-rules/intent-answer.toml",
                            # 本道（长方法的反复调用点）的判据措辞亦外置在该文件里
-                           "script/specs-rules/coding.toml")
+                           "script/specs-rules/coding.toml",
+                           # 本道（分发产物的体积与按需加载）的判据措辞外置在该文件里
+                           "script/specs-rules/bundle.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -23735,6 +23737,148 @@ class TestCheckSqlAnnotationBindingGuard(CheckSpecsTestCase):
         self._run_guard_with(self.README, "**不得写进宿主语言代码注解**",
                              "独立成文件、带库名")
         self.assertIn("README.adoc", self.error_texts())
+
+
+class TestCheckBundleSizeGuard(CheckSpecsTestCase):
+    """钉住『分发产物的体积与按需加载』防线（**用户提出**）。
+
+    用户要求："前端打包经常出现这样的问题（打包后单个块大于 500 kB），规范里定义去根治此
+    问题，**不要掩耳盗铃**，如果有必要，可以扩展到所有语言"。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`
+    的两处、前端载体 `specs/stack/web.adoc`、加载门 `AGENTS_COMMON.adoc`、README、判据措辞
+    `script/specs-rules/bundle.toml` 与 `_tokens.toml`）——每个用例在内存副本上做一处定点
+    改动后落进临时根再跑防线。手抄节选会与现场漂移，故一律不手抄；也**不写仓库里的真文件**。
+    """
+
+    FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc")
+    CODING, WEB, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_bundle_size_guard()
+        # 规则缓存须还原（理由同 `TestCheckSqlAnnotationBindingGuard._run_guard`）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def _drop_section_body(self, marker: str) -> None:
+        """把某节标题以下的正文整段抽走（只留标题）——最彻底的那一类反例。"""
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index(marker)
+        end = text.index("\n== ", start + 1)
+        self.write(self.CODING, text[:start] + marker + "\n\n" + text[end + 1:])
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_web_stack_file_removed_reports(self):
+        # 反例①：前端载体文件被删 -> 拿到体积告警时栈层无线索
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, self.WEB))
+        self._run_guard()
+        self.assertIn("web.adoc", self.error_texts())
+
+    def test_bullet_deleted_reports(self):
+        # 反例②：跨语言那一条整条被删（"体积上限也是质量哨兵"这层意思整个消失）
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("* **不得调高阈值或关掉规则来消灭告警（L1，任何语言）**")
+        end = text.index("\n* **不得使用被弃用的类/API", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("不得调高阈值或关掉规则来消灭告警", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例③：L1 被降级成 L2（"可以调"重新变成正当选项）
+        self._run_guard_with(self.CODING,
+                             "不得调高阈值或关掉规则来消灭告警（L1，任何语言）",
+                             "尽量不调高阈值或关掉规则来消灭告警（L2，任何语言）")
+        self.assertIn("不得调高阈值或关掉规则来消灭告警", self.error_texts())
+
+    def test_waiver_clause_removed_reports(self):
+        # 反例④：唯一可调的情形被抽 -> 只剩"永远不得调"，取值确实定错时执行者只能偷偷改
+        self._run_guard_with(self.CODING, "**只有一种情形可以调**", "**一般不要调**")
+        self.assertIn("只有一种情形可以调", self.error_texts())
+
+    def test_section_bullet_removed_reports(self):
+        # 反例⑤：判据本体里"不得调高上限"那条整条被删
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("* **体积哨兵响了就消成因，不得调高上限（L1）**")
+        end = text.index("\n* **按需加载（L1）**", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("体积哨兵响了就消成因", self.error_texts())
+
+    def test_need_load_removed_reports(self):
+        # 反例⑥：按需加载条被删（只剩"别调阈值"、没有"该怎么改"）
+        self._run_guard_with(self.CODING, "**按需加载（L1）**", "**按需加载（建议）**")
+        self.assertIn("按需加载", self.error_texts())
+
+    def test_form_over_number_removed_reports(self):
+        # 反例⑦：判据从"取形态"退回"看体积数字"
+        self._run_guard_with(self.CODING, "**判据取形态、不取体积**", "**判据取体积**")
+        self.assertIn("判据取形态、不取体积", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：取舍归属被抹掉——外部材料只给方向、没规定该改代码还是改阈值
+        self._run_guard_with(self.CODING,
+                             "以及「判据取可达性形态而非体积数字」是本集合的判据化取舍**——",
+                             "以及「判据取可达性形态而非体积数字」——")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_web_backref_removed_reports(self):
+        # 反例⑨：栈层不再回指真源 -> 判据在两处各自漂移
+        self._run_guard_with(self.WEB, "本文件不复述、也不另立判据",
+                             "本文件同样规定这些判据")
+        self.assertIn("唯一真源", self.error_texts())
+
+    def test_web_side_effect_removed_reports(self):
+        # 反例⑩：副作用声明那一条被抽 -> 静态消除的载体消失
+        self._run_guard_with(self.WEB, "**副作用声明（L1）**", "**副作用（可选）**")
+        self.assertIn("副作用声明", self.error_texts())
+
+    def test_border_clause_removed_reports(self):
+        # 反例⑪：边界句里的「不得整类关闭」被抽 -> 「例外」被读成「把规则整类关掉」。
+        # 该句只在本条 bullet 内出现，整节核与条目核两处都须接得住。
+        self._run_guard_with(self.CODING, "**不得**整类关闭", "**不得**在别处整类关闭")
+        self.assertIn("整类关掉", self.error_texts())
+
+    def test_rule_anchor_removed_reports(self):
+        # 反例⑫：判据措辞（规则数据）里某项锚点被删 -> 现场一字不少、防线少核一项
+        self._write_all_valid()
+        rel = "script/specs-rules/bundle.toml"
+        with open(os.path.join(self.root, rel), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.write(rel, rules.replace('    "**不得**整类关闭",\n', "", 1))
+        self._run_guard()
+        self.assertIn("只剩", self.error_texts())
 
 
 if __name__ == "__main__":
