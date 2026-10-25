@@ -155,7 +155,11 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（分发产物的体积与按需加载）的判据措辞外置在该文件里
                            "script/specs-rules/bundle.toml",
                            # 本道（界面与样式）的判据措辞外置在该文件里
-                           "script/specs-rules/ui.toml")
+                           "script/specs-rules/ui.toml",
+                           # 本道（界面的规模与性能）的判据措辞外置在该文件里
+                           "script/specs-rules/ui-perf.toml",
+                           # 本道（已有 PR 时不得私开 PR）的判据措辞外置在该文件里
+                           "script/specs-rules/cnb.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -24406,6 +24410,9 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # 父类只把 `REPO_ROOT` 改到它自己引用的那份 `cm`；本类用按路径加载的那一份，
+        # 故须再钉一次（不钉时正例读真仓库、反例改的是夹具，一律报绿）。
+        cm.REPO_ROOT = self.root
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
@@ -24418,6 +24425,7 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
         self.write_rules_fixture()
 
     def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
         cm.errors.clear()
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.RULES = None
@@ -24562,6 +24570,10 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         self.write_rules_fixture()
 
     def _run_guard(self) -> None:
+        # 父类只把 `REPO_ROOT` 改到它自己引用的那份 `cm`；本文件用的是按路径另加载的一份，
+        # 故须再钉一次（不钉时跑过一次别的用例后 `REPO_ROOT` 可能停在真实仓库，
+        # 反例改的却是夹具，一律报绿——本仓库实测）。
+        cm.REPO_ROOT = self.root
         cm.errors.clear()
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.RULES = None
@@ -24695,6 +24707,177 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         self.assertIn("锚点", self.error_texts())
 
 
+class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
+    """钉住『界面的规模与性能』防线（**用户提出**）。
+
+    用户口径：『能用和好用是不一样的』——界面设计要考虑性能，**开发期数据不多时看不出来、
+    只有数据量大了才知道哪一处卡**；问『前端页面是否要默认加性能测试？还是根据实际情况、
+    场景加？』。故本道按两件事分开钉：**形态**在通用层（取数边界、同一次展示不逐项各取一次、
+    重区块按需加载、判据取形态不取当前数据量），**要不要做性能结论**回指测试规范的触发特征。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`、
+    前端载体 `specs/stack/web.adoc`、测试触发特征 `specs/general/testing.adoc`、加载门
+    `AGENTS_COMMON.adoc`、README、规则数据 `script/specs-rules/ui-perf.toml` 与
+    `_tokens.toml`）——每个用例在内存副本上做一处定点改动后落进临时根再跑防线。
+    手抄节选会与现场漂移，故一律不手抄；也**不写仓库里的真文件**。
+    """
+
+    FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc", "specs/general/testing.adoc",
+             "AGENTS_COMMON.adoc", "README.adoc")
+    CODING, WEB, TESTING, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 父类的 `setUp` 改的是 `sys.modules` 里那份 `check_specs`，而本文件的 `cm` 是
+        # **按路径另加载的一份**——两者不是同一个模块对象，父类那一行对本类无效
+        # （本仓库实测：正例读真仓库、反例改的却是夹具，一律报绿）。故本类的夹具根在此
+        # 再钉一次，`_run_guard` 里也钉（`REPO_ROOT` 是本类全部读文件的唯一入口）。
+        cm.REPO_ROOT = self.root
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_ui_performance_guard()
+        # 规则缓存须还原（理由同 `TestCheckSqlAnnotationBindingGuard._run_guard`）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：判据本体整节被摘掉（别处零散字样兜不住）
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("=== 界面的规模与性能（任何语言、任何端）")
+        end = text.index("\n=== 同一件事只有一个来源", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("界面的规模与性能", self.error_texts())
+
+    def test_data_scale_judgement_removed_reports(self):
+        # 反例②：「判据取形态、不取当前数据量」被抽 -> 「现在数据没那么多」重新成为正当理由
+        self._run_guard_with(self.CODING, "**判据取形态，不取当前数据量**",
+                             "**数据多时再考虑**")
+        self.assertIn("取形态，不取当前数据量", self.error_texts())
+
+    def test_virtual_scroll_removed_reports(self):
+        # 反例③：渲染侧的按需形态被抽 -> 只剩"按需加载"一句口号
+        self._run_guard_with(self.CODING, "虚拟滚动、分页、折叠之一",
+                             "任意展示方式")
+        self.assertIn("虚拟滚动", self.error_texts())
+
+    def test_n_plus_one_removed_reports(self):
+        # 反例④：同一次展示不逐项各取一次被抽 -> N+1 取数无处可判
+        self._run_guard_with(self.CODING, "**同一次展示里不逐项各取一次（L1）**",
+                             "**同一次展示的取数不限（L3）**")
+        self.assertIn("不逐项各取一次", self.error_texts())
+
+    def test_full_aggregate_scope_removed_reports(self):
+        # 反例：全量类操作的生效范围被抽 -> 上了虚拟列表后，总数/全选/导出/全局搜索没有落点
+        self._run_guard_with(self.CODING, "全量聚合类操作",
+                             "聚合操作")
+        self.assertIn("全量聚合类操作", self.error_texts())
+
+    def test_aggregate_owner_removed_reports(self):
+        # 反例：聚合的归属被抽 -> 「数据不在前端」被读成「数据不存在」
+        self._run_guard_with(self.CODING, "**数据不在前端不等于不存在**",
+                             "数据就在前端")
+        self.assertIn("数据不在前端不等于不存在", self.error_texts())
+
+    def test_web_aggregate_carrier_removed_reports(self):
+        # 反例：栈层没有全量类操作的载体 -> 只能前端扫全表，或悄悄只对已加载范围生效
+        self._run_guard_with(self.WEB, "前端逐页拉取凑全量",
+                             "前端按需拉取")
+        self.assertIn("前端逐页拉取凑全量", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑤：依据行的取舍归属被抹掉 -> 读者会以为"三处形态"是标准原文
+        self._run_guard_with(self.CODING, "是本集合的判据化取舍**——通行前端与桌面框架文档",
+                             "是本集合的说明**——通行前端与桌面框架文档")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_testing_trigger_removed_reports(self):
+        # 反例⑥：界面那一档从性能测试触发特征里消失 -> 永远不加（数据长起来才发现卡）
+        self._run_guard_with(self.TESTING, "界面的首屏与常用交互",
+                             "服务端的接口耗时")
+        self.assertIn("界面的首屏与常用交互", self.error_texts())
+
+    def test_default_add_or_not_removed_reports(self):
+        # 反例⑦：「界面不默认加、也不默认不加」被抽 -> 退回"一律加"或"一律不加"
+        self._run_guard_with(self.TESTING, "界面不默认加、也不默认不加",
+                             "界面一律加性能测试")
+        self.assertIn("界面不默认加、也不默认不加", self.error_texts())
+
+    def test_web_backref_removed_reports(self):
+        # 反例⑧：栈层不再回指真源 -> 判据在两处各自漂移
+        # 替换的是「判据措辞不复述、也不另立一套」那一句——与同文件「界面（载体）」同一说法，
+        # 不得两处各写一套（本条首版写成「不另立判据」，与该文件已有的写法各一套）。
+        self._run_guard_with(self.WEB, "判据本体的措辞不复述、也不另立一套",
+                             "本文件同样规定这些判据")
+        self.assertIn("也不另立一套", self.error_texts())
+
+    def test_web_carrier_boundary_removed_reports(self):
+        # 反例⑨：栈层的取数边界载体被抽 -> 判据在栈层没有落地位置
+        self._run_guard_with(self.WEB, "虚拟滚动或分页", "任意展示方式")
+        self.assertIn("虚拟滚动或分页", self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例⑩：加载门被抽 -> 写界面时永不加载该节
+        self._run_guard_with(self.COMMON, "会随数据长起来的界面", "界面样式约定")
+        self.assertIn("会随数据长起来的界面", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑪：README 目录说明未同步
+        self._run_guard_with(self.README, "**界面的规模与性能（任何语言、任何端",
+                             "**界面性能（网页）")
+        self.assertIn("README", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑫（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
+        self._write_all_valid()
+        tokens_rel = "script/specs-rules/_tokens.toml"
+        with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
+            tokens = fh.read()
+        start = tokens.index("UI_PERFORMANCE_ANCHORS = [")
+        # 按组名定位**尾部那组**（依据行）的起点：它自己在清单里占三行，
+        # 起点是组首那个 `[`、终点是它的 `],` 收尾（不数固定行数，清单长起来也不会偏）。
+        tail = tokens.index('"依据行"', start)
+        cut = tokens.rindex("    [", start, tail)
+        cut_end = tokens.index("    ],\n", tokens.index("]", tail)) + len("    ],\n")
+        # 削掉尾部那组后剩下的仍是合法 TOML，少了恰恰是 `anchor_count` 该报出的形态。
+        self.write(tokens_rel, tokens[:cut] + tokens[cut_end:])
+        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换。用完还原。
+        original = cm._RULES_TOKENS["UI_PERFORMANCE_ANCHORS"]
+        trimmed = [g for g in original if g[0] != "依据行"]
+        self.assertLess(len(trimmed), len(original))
+        cm._RULES_TOKENS["UI_PERFORMANCE_ANCHORS"] = trimmed
+        self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_PERFORMANCE_ANCHORS", original)
+        self._run_guard()
+        self.assertIn("UI_PERFORMANCE_ANCHORS", self.error_texts())
+        self.assertIn("锚点", self.error_texts())
+
+
 class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
     """钉住『同一件事只有一个来源』防线（**用户追问扩面**）。
 
@@ -24730,6 +24913,9 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
         self.write_rules_fixture()
 
     def _run_guard(self) -> None:
+        # 父类只把 `REPO_ROOT` 改到它自己引用的那份 `cm`；本文件用的是按路径另加载的一份，
+        # 故须再钉一次（不钉时 `REPO_ROOT` 可能停在真实仓库，反例改的却是夹具，一律报绿）。
+        cm.REPO_ROOT = self.root
         cm.errors.clear()
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.RULES = None
@@ -24884,6 +25070,128 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
         self._run_guard()
         self.assertIn("SAME_SOURCE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
+
+
+class TestCheckPrScopeGuard(CheckSpecsTestCase):
+    """钉住『已有 PR 时不得私开 PR』防线（**用户点名**：「本 pr 处理，未经允许，不允许私开 pr」）。
+
+    判据本体落在平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的**同节条**（分支策略
+    的同一条，不另立一节），提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被
+    未知项目复制执行）。
+
+    **夹具形态**：仓库里那两份**真文件的逐字副本** + 规则数据 `script/specs-rules/cnb.toml`
+    按原样落进夹具；每个用例在内存副本上做一处定点改动后落进临时根再跑防线。手抄节选会与
+    现场漂移，故不手抄；也**不写仓库里的真文件**。
+    """
+
+    FILES = ("specs/platform/cnb.adoc", "prompts/_common.txt")
+    CNB, COMMON = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+        # 公共片段的落点由模块常量给出（不随 `REPO_ROOT` 推导），须一并重定向到夹具根，
+        # 否则夹具里改的是 `prompts/_common.txt`、防线读的仍是仓库里那份（改不动、测不出）。
+        self._orig_common = getattr(cm, "COMMON_PROMPT_FILE", None)
+        setattr(cm, "COMMON_PROMPT_FILE", os.path.join(self.root, self.COMMON))
+
+    def tearDown(self) -> None:
+        setattr(cm, "COMMON_PROMPT_FILE", self._orig_common)
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        # 父类只把 `REPO_ROOT` 改到它自己引用的那份 `cm`；本文件用的是按路径另加载的一份，
+        # 故须再钉一次（不钉时 `REPO_ROOT` 可能停在真实仓库，反例改的却是夹具，一律报绿）。
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_pr_scope_guard()
+        # 规则缓存须还原（理由同 `TestCheckUiPerformanceGuard._run_guard`）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_removed_reports(self):
+        # 反例①：整条禁令被摘掉
+        self._run_guard_with(
+            self.CNB, "* **已有合并请求时，不得另开合并请求（L1", "* **旧的一条（L1")
+        self.assertIn("不得另开合并请求", self.error_texts())
+
+    def test_user_words_removed_reports(self):
+        # 反例②：用户原话被抹——禁令还在、界却被读成「只是建议」
+        self._run_guard_with(self.CNB, "未经允许，不允许私开 PR", "不要私开")
+        self.assertIn("未经允许", self.error_texts())
+
+    def test_permission_source_removed_reports(self):
+        # 反例③：许可来源被抽（开新 PR 属派发者的动作、须用户显式允许）
+        self._run_guard_with(self.CNB, "**开新的合并请求属派发者的动作、不是执行者的动作**", "")
+        self.assertIn("派发者", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例④：判定标准被抽成口号
+        self._run_guard_with(self.CNB, "**新建了另一个合并请求**", "**新建了另一个**")
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_closed_pr_carryover_removed_reports(self):
+        # 反例⑤：『原 PR 已关闭时另开属承继』被抽——规则会被读成「有 PR 就别干活了」
+        # 摘掉「原 PR 已关闭时另开属承继」整句——保留判定标准与用户原话，故锚点不会互相兜住
+        self._write_all_valid()
+        text = self.base[self.CNB].replace(
+            "；**原 PR 已关闭**时原分支无法再修订，此时**另开一个承载该改动的合并请求属承继、不属私开**，须在结论里写明\"原 PR 已关闭\"这一事实", "")
+        self.assertNotIn("承继", text)
+        self.write(self.CNB, text)
+        self._run_guard()
+        self.assertIn("承继", self.error_texts())
+
+    def test_branch_rule_dropped_reports(self):
+        # 反例⑥：同节既有规则被顶掉（本节整段替换过、规则凭空消失而全绿，本仓库实测过）
+        self._run_guard_with(self.CNB, "也**只能修改同一个分支**", "也应尽量统一")
+        self.assertIn("只能修改同一个分支", self.error_texts())
+
+    def test_prompt_block_removed_reports(self):
+        # 反例⑦：提示词侧的交付边界被抽（复制到未知项目执行的那一份就没有这条）
+        self._run_guard_with(
+            self.COMMON, "**已有 PR 时不得私开 PR（L1，用户点名「未经允许，不允许私开 PR」）**",
+            "**旧的一条（L1，用户点名「旧」）**")
+        self.assertIn("不得私开 PR", self.error_texts())
+
+    def test_prompt_permission_source_removed_reports(self):
+        # 反例⑧：提示词侧的许可来源被抽
+        self._run_guard_with(self.COMMON, "开新 PR 属**派发者**的动作", "开新 PR 要慎重")
+        self.assertIn("派发者", self.error_texts())
+
+    def test_prompt_carryover_removed_reports(self):
+        # 反例⑨：提示词侧的承继边界被抽
+        self._run_guard_with(self.COMMON, "另开一个承载该改动的 PR 属**承继、不属私开**",
+                             "另开一个 PR 也行")
+        self.assertIn("承继", self.error_texts())
+
+    def test_platform_file_missing_reports(self):
+        # 反例⑩：判据本体所在文件缺失（不得静默放行）
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, self.CNB))
+        self._run_guard()
+        self.assertIn("specs/platform/cnb.adoc", self.error_texts())
 
 
 if __name__ == "__main__":

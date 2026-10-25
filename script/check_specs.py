@@ -378,7 +378,19 @@
      `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
      `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
      方法」属语义判断与运行时事实，交人/子 agent 复核。
- 97. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
+ 97. 界面的规模与性能防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`
+     「界面的规模与性能」——**能用 ≠ 好用**：界面在开发期数据不多时看不出问题，**只有数据量
+     大了才知道哪一处卡**（与后端接口同理）；覆盖 web 端、Java、Python 等端画的界面。三条形态：
+     列表与表格**按需取数**（不把整份集合一次取回、一次画出来）、**同一次展示不逐项各取一次**
+     （N+1 取数、渲染路径反复重算）、**重区块按需加载**；**判据取形态、不取当前数据量**。
+     「要不要为界面做性能结论」不另立判据——回指 `specs/general/testing.adoc`「性能测试」的
+     触发特征（界面**不默认加、也不默认不加**，按特征判）。另核前端载体
+     （`specs/stack/web.adoc`「界面的规模与性能（载体）」，只给载体、回指唯一真源）、
+     加载门两处（调度器「任何代码活动」与前端栈条）与 README 同步、锚点条数下限。规则数据在
+     `script/specs-rules/ui-perf.toml` + `_tokens.toml` 的 `UI_PERFORMANCE_ANCHORS`。由
+     `check_ui_performance_guard` 钉住；「这一处算不算一次取回整份集合」「要不要为它做性能
+     结论」属语义判断与运行时事实，交人/子 agent 复核。
+ 98. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
      否则禁止修改 changelog』，判据本体（通用层「登记时机」）、公共片段专用口径、
      `check_changelog_timing_guard` 三处**都在**，条目照样被自行追加——平台按评论唤起时执行者
      读到的是**提示词的读入清单**，清单里没有这条。故钉三处：每个提示词实际注入 `env-guard`
@@ -387,6 +399,17 @@
      规范集合自身的对外变更）并保住例外怎么判（判据只认行为是否变化——纯勘误、措辞与排版整理、
      重命名与搬迁仍不写）。由 `check_changelog_timing_prompt_guard` 钉住；「某次改动算不算对外
      可观察行为的变化」「这次到底有没有得到用户声明」属语义判断与运行时事实，交人/子 agent 复核。
+ 99. 已有 PR 时不得私开 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，不允许私开 pr
+     （有 pr 的情况下）」——**已有承载本次事项的合并请求时，改动一律做在该 PR 的源分支上**，
+     开新 PR 属**派发者**的动作、须用户显式允许；同一处改动也不得同时落在两个 PR 上。
+     失效形态（本仓库实证）：执行者在当前 PR 之外发现别的问题就自己另开 PR + 分支，同一批工作
+     被拆成两处、本 PR 上的事项停在半路。判据本体落在平台层 `specs/platform/cnb.adoc`
+     「分支与合并请求统一」的**同节条**（分支策略的同一条，另立一节即并存两套说法），
+     提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被复制到未知项目执行）。
+     边界两句一起写：本条**只限定承载位置**、不构成「不动手」的许可；**原 PR 已关闭**时另开
+     属**承继、不属私开**。规则数据在 `script/specs-rules/cnb.toml`。由 `check_pr_scope_guard`
+     钉住；「哪个 PR 才算承载本次事项」「用户有没有真的允许」属语义判断与运行时事实，
+     交人/子 agent 复核。
 
 """
 
@@ -2389,6 +2412,71 @@ def check_ui_style_guard():
     phase_done()
 
 
+def check_pr_scope_guard():
+    """『已有 PR 时不得私开 PR』防线（**用户点名**：「本 pr 处理，未经允许，不允许私开 pr」）。
+
+    失效形态（本仓库实证）：执行者在本 PR 之外发现别的问题时**自己另开一个 PR + 分支**，
+    把同一批工作拆成两处——用户说的「本 pr 处理」被读成「另开一处处理」，于是本 PR 上的
+    事项停在半路、两处各自漂移。
+
+    钉两处：
+      * 判据本体：平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的同节条（分支策略
+        的同一条，不另立一节——另立一节就会与本条并存两份说法）；
+      * **提示词侧**：`prompts/_common.txt` 的 `delivery` 片段——提示词会被未知项目复制执行，
+        只写平台层则复制出去的那份没有这条边界。
+
+    只钉「要点是否仍在」——「哪个 PR 才算承载本次事项」「用户有没有真的允许」属语义判断与
+    运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("已有 PR 时不得私开 PR 防线检查")
+    rel = "specs/platform/cnb.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少文件 {rel}——『已有 PR 时不得私开 PR』的判据无处承载（平台层规范缺失）", rel)
+    else:
+        run_rule_guard("check_pr_scope_guard")
+    rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(COMMON_PROMPT_FILE):
+        err(f"缺少提示词公共片段 {rel_common}——『已有 PR 时不得私开 PR』无处承载", rel_common)
+    else:
+        run_rule_guard("check_pr_scope_guard")
+    phase_done()
+
+
+def check_ui_performance_guard():
+    """『界面的规模与性能』防线（**用户提出**）。
+
+    用户口径：『能用和好用是不一样的』——界面设计要考虑性能，而**开发期看不出来**：刚开始
+    数据不多时并不卡，与后端接口一样，**只有数据量大了，才知道哪一处卡**；覆盖 web 端、
+    Java、Python 等端画的界面。问的是『前端页面是否要默认加性能测试？还是根据实际情况、
+    场景加？』——故本道把两件事分开钉：**形态**在通用层（判据取形态、不取当前数据量），
+    **要不要做性能结论**回指测试规范的触发特征（界面不默认加、也不默认不加）。
+
+    钉五处：
+      * 真源：通用层 `specs/general/coding.adoc`「界面的规模与性能」的三组要点 + 依据行
+        （规则数据 `script/specs-rules/ui-perf.toml` + `_tokens.toml`）；
+      * **测试触发特征**：`specs/general/testing.adoc`「性能测试」的「何时需要」须含界面
+        那一档——缺则界面性能要么一律加（噪声用例）、要么永远不加（数据长起来才发现卡）；
+      * **技术栈层 `specs/stack/web.adoc`「界面的规模与性能（载体）」**：只给前端载体并
+        回指唯一真源——缺则前端那一半只剩口号，或栈层变成第二处真源；
+      * **加载门两处**：调度器「任何代码活动」与前端栈条须登记界面规模的识别特征——缺则
+        写界面的人永不加载该节，判据存在而走不到它；
+      * README 目录说明同步。
+
+    只钉「要点是否仍在」——「这一处算不算一次取回整份集合」「要不要为它做性能结论」属语义
+    判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("界面的规模与性能防线检查")
+    rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if not os.path.isfile(os.path.join(rules_dir, "ui-perf.toml")):
+        err("缺少 script/specs-rules/ui-perf.toml——『界面的规模与性能』的锚点（判据措辞）"
+            "失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_ui_performance_guard")
+    phase_done()
+
+
 def check_same_thing_one_source_guard():
     """『同一件事只有一个来源』防线（**用户追问扩面**）。
 
@@ -4201,8 +4289,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 159  # 同源实取：本轮并入 `check_reusable_scenario_guard` 与 `check_changelog_timing_prompt_guard` 后，`CHECKS` 序列唯一名实取 159
-GUARD_TEST_BASELINE = 2136  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「优化公共规范」防线撤销 README 目录说明那条反例后实取）
+GUARD_WIRING_BASELINE = 162  # 同源实取：新增 `check_ui_performance_guard` 与 `check_pr_scope_guard` 后，`CHECKS` 序列唯一名实取 162
+GUARD_TEST_BASELINE = 2163  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「界面的规模与性能」16 条反例 +「已有 PR 时不得私开 PR」11 条反例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12544,6 +12632,8 @@ CHECKS = (
     check_bundle_size_guard,
     check_ui_style_guard,
     check_same_thing_one_source_guard,
+    check_ui_performance_guard,
+    check_pr_scope_guard,
     check_changelog_timing_prompt_guard,
 )
 
