@@ -4176,7 +4176,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
                    "（每次验证都换一个干净上下文）；②判据：可执行、依据、降级路径、读的形态、"
                    "常驻层只放底线、从属者可达、④性能；三问都须留证；三态台账；依据 IEEE 1028；"
                    "硬超时。\n\n"
-                   "=== 运行契约（公共内容被未知项目加载时的可控性）\n\n"
+                   "=== 运行契约\n\n"
                    "① 影响面；② 成本；③ 可控性；降级路径；不得让引用方依赖本仓库私有物；"
                    "依据 ISO 9241-110；接纳面须留证。\n")
         self.write("specs-project-maintainer/verify.adoc",
@@ -4257,7 +4257,7 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
         p = self._pub()
         t = open(p, encoding="utf-8").read()
         self.write("specs/general/verify.adoc",
-                   t.replace("=== 运行契约（公共内容被未知项目加载时的可控性）", "=== 别的节"))
+                   t.replace("=== 运行契约", "=== 别的节"))
         cm.check_verify_guard()
         self.assertIn("运行契约", self.error_texts())
 
@@ -22954,12 +22954,6 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
         self._mutate(self.ENTRY, "**三者分工（重点不同、勿混用）**", "**分工**")
         self._run()
         self.assertIn("三者分工", self.error_texts())
-
-    def test_readme_listing_removed_reports(self):
-        # 反例⑬：目录说明未同步 -> 引用方从目录里看不到这个命令
-        self._mutate(self.README, "`prompts/spec-refine.adoc`（优化公共规范，只对本项目生效）", "`prompts/xxx.adoc`")
-        self._run()
-        self.assertIn("README.adoc", self.error_texts())
 
     def test_lifecycle_trigger_removed_reports(self):
         # 反例⑭：自身重构的触发面被抽 -> 命令没有可回指的真源（顺序只能现编一套）

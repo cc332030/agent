@@ -112,8 +112,9 @@
 
 **核对边界（一次声明，取代逐条重复同一句口径）**：本文件每道防线只核**文本与文件形态**；
 `GUARD_CHECK_LIMITS` 给出机械核对覆盖不到的两类（`运行时事实`／`语义判断`），**凡越出这两类
-的结论一律不得由机械判定，一律交人/子 agent 复核**——逐条防线里不再各写一句"某次是否真的……
-交人复核"（同一句话写 90 遍既是信息密度判据③「同义反复」的形态，也把"边界是什么"绑在人的记性上）。
+的结论一律不得由机械判定，一律交人/子 agent 复核**——**边界只在两处声明**：本节（脚本侧）与
+`specs-project-maintainer/priority.adoc`「机械核对边界（覆盖不到的两类，一次声明）」（规范侧）；
+逐道防线（`CHECKS` 的接线与规则数据）不再各写一句"交人/子 agent 复核"。
 
  75. 精炼性（同一描述只写一处）防线：通用层
      `specs/general/review.adoc`「精炼性」须仍在且齐备**判据本体**——重复面是必查项（L1）
@@ -4201,7 +4202,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 159  # 同源实取：本轮并入 `check_reusable_scenario_guard` 与 `check_changelog_timing_prompt_guard` 后，`CHECKS` 序列唯一名实取 159
-GUARD_TEST_BASELINE = 1984  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（两条防线的用例并入后实取）
+GUARD_TEST_BASELINE = 2136  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「优化公共规范」防线撤销 README 目录说明那条反例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 

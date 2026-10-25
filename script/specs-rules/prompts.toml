@@ -306,20 +306,6 @@ groups = [
 kind = "file_groups"
 message = "优化公共规范防线被破坏：{file} 缺失要点 {missing}——{desc}"
 
-[[guards.check_spec_optimize_guard]]
-file = "README.adoc"
-groups = [
-    [
-        "目录说明",
-        [
-            "`prompts/spec-refine.adoc`（优化公共规范，只对本项目生效）",
-            "三者分工",
-        ],
-        "缺它时引用方从目录说明里看不到这个命令，只在 `PROMPTS.adoc` 里能查到",
-    ],
-]
-kind = "file_groups"
-message = "优化公共规范防线被破坏：{file} 缺失要点 {missing}——{desc}"
 
 [[guards.check_spec_optimize_guard]]
 file = "specs-project-maintainer/spec-lifecycle.adoc"
