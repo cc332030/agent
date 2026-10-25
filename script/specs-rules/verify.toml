@@ -386,3 +386,69 @@ tokens = [
 ]
 kind = "file_tokens"
 message = "公开面 README 未登记「要复用的验证场景归入测试源码」{missing}——公开面只看得见「跑验证」、看不见「验过的东西要留落点」，这条判据对读者不存在"
+
+
+# 『用例只允许在本机跑』防线（`check_local_only_guard`）。用户口径：
+# **测试用例的执行范围严格控制在本地电脑范围内**，不允许依赖任何其他电脑、服务器
+# （「手动写的除外」——即人工另行声明的远端验证那一处，落成本条的唯一例外）。
+# 判据本体在 `specs/general/testing.adoc`「环境与兼容」，锚点清单在
+# `_tokens.toml` 的 `LOCAL_ONLY_TOKENS`；四处同口径（Java 落点、调度器识别特征、
+# 提示词公共片段、公开面 README）各自只给载体、不重列判据。
+[[guards.check_local_only_guard]]
+file = "specs/general/testing.adoc"
+section = "环境与兼容"
+kind = "section_groups"
+token_list = "LOCAL_ONLY_TOKENS"
+
+# 与上条成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿，
+# "核过且通过"与"没核"无从区分——删锚点须与调基线一并发生。
+[[guards.check_local_only_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 4
+token_list = "LOCAL_ONLY_TOKENS"
+
+# Java 落点只给载体（判据本体在通用层）：替代品优先进程内、确实要独立进程时起在本机回环；
+# `IT` 同受约束（它讲的是执行时机、不是"可去连远端"的许可）。
+[[guards.check_local_only_guard]]
+file = "specs/stack/java-testing.adoc"
+tokens = [
+    "用例只在本机跑（Java 侧的载体，不构成 Java 专属规则）",
+    "specs/general/testing.adoc",
+    "`IT` 同样受此约束",
+]
+kind = "file_tokens"
+message = "Java 测试规范缺失「用例只在本机跑」的载体 {missing}——缺则写测试时想不到这条，远端地址照旧写进测试配置，且 `IT` 会被读成『可以去连远端环境』的许可"
+
+# 调度器须能被触发（否则设计用例、决定连不连远端时，这一条永远不会被加载）。
+[[guards.check_local_only_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "判定用例能不能连本机之外的机器",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「用例只允许在本机跑」的识别特征 {missing}——缺则写测试、配测试环境时这一条永远不被加载"
+
+# 提示词侧同口径（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有该边界）。
+# 核对对象**收在 `final-verify` 片段内**：按整份文件核时同一批措辞出现在别的片段里就能兜住。
+[[guards.check_local_only_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "测试用例只允许在本机跑（L1）",
+    "把所有其他机器都拔掉，这套用例还跑不跑得通",
+    "不得以\"本地起不来、用远端环境跑\"自我豁免",
+    "主动声明",
+]
+kind = "text_block_groups"
+message = "提示词公共片段缺失「用例只允许在本机跑」的要点 {missing}——缺条文则执行侧照旧连远端环境跑；缺判据问句则『有没有越出本机』无从判断；缺禁止面则『本地起不来』成了通行豁免；缺例外则用户声明的那一处也无处安放"
+
+# 公开面同步（读者不从公开面知道有这条，就仍把『有环境才跑得通』当成用例成立的前提）。
+[[guards.check_local_only_guard]]
+file = "README.adoc"
+tokens = [
+    "测试用例只允许在本机跑",
+    "specs/general/testing.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「测试用例只允许在本机跑」{missing}——公开面只看得见『怎么跑测试』、看不见『用例不许依赖别的机器』，这条判据对读者不存在"

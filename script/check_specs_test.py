@@ -159,7 +159,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（界面的规模与性能）的判据措辞外置在该文件里
                            "script/specs-rules/ui-perf.toml",
                            # 本道（已有 PR 时不得私开 PR）的判据措辞外置在该文件里
-                           "script/specs-rules/cnb.toml")
+                           "script/specs-rules/cnb.toml",
+                           # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
+                           "script/specs-rules/local-service.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -5719,6 +5721,300 @@ class TestCheckReusableScenarioGuard(CheckSpecsTestCase):
                      "**验证场景的归属**")
         cm.check_reusable_scenario_guard()
         self.assertIn("本条的名称已入字典", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
+class TestCheckLocalOnlyGuard(CheckSpecsTestCase):
+    """钉住『用例只允许在本机跑』（用户口径：**测试用例只允许本机跑（严格控制在本地电脑范围内），
+    不允许依赖任何其他电脑、服务器**，手动写的除外）。
+
+    失效形态：用例的前置是"某台机器上起好了那套环境"——本地起不来就改去连远端（内网 IP、域名、
+    共享环境、远程库），这组用例换台机器就跑不通，也不再是"谁都能跑一遍"的回归载体。故按四组
+    锚点核 `specs/general/testing.adoc`「环境与兼容」，并钉四处同口径（Java 落点的载体、加载门
+    识别特征、提示词公共片段、公开面 README）。规则数据在 `script/specs-rules/verify.toml`
+    （锚点清单在 `_tokens.toml` 的 `LOCAL_ONLY_TOKENS`）。
+    """
+
+    TESTING = "specs/general/testing.adoc"
+    JAVA_TESTING = "specs/stack/java-testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.TESTING, self.JAVA_TESTING, self.COMMON, self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_local_only_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"有那套环境才跑得通"）
+        self._mutate(self.TESTING, "用例只允许在本机跑（L1）", "测试环境另议")
+        cm.check_local_only_guard()
+        self.assertIn("条文与判据问句", self.error_texts())
+
+    def test_question_dropped_reports(self):
+        # 反例②：判据问句被抽——"有没有越出本机"没有判断入口，本条退回一句口号
+        self._mutate(self.TESTING, "把所有其他电脑和服务器都拔掉", "看情况")
+        cm.check_local_only_guard()
+        self.assertIn("所有其他电脑和服务器都拔掉", self.error_texts())
+
+    def test_remote_premise_forbidden_dropped_reports(self):
+        # 反例③：禁止面被抽（远端环境照旧写进用例前置）
+        self._mutate(self.TESTING, '不得**把"某台机器上有那套环境"当作用例成立的前提', "")
+        cm.check_local_only_guard()
+        self.assertIn("落点与替代品", self.error_texts())
+
+    def test_exemption_scope_dropped_reports(self):
+        # 反例④：「仅当次生效」被抽——一次声明被读成永久许可
+        self._mutate(self.TESTING, "仅当次生效", "")
+        cm.check_local_only_guard()
+        self.assertIn("唯一例外", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例⑤：判定标准被抽（本条只剩"尽量在本机跑"）。
+        # **不能只按字样改**：本文件相邻的「永不自动执行的实验代码」那条也有同一串字样，
+        # 故连它特有的结尾三字一起替换——只换前半段时核对面会被邻条兜住而报绿。
+        self._mutate(self.TESTING, "判定标准（任一命中即违规）**：① 用例要求先连上本机之外的地址",
+                     "注意事项：① 用例要求先连上本机之外的地址")
+        cm.check_local_only_guard()
+        self.assertIn("判定标准与边界", self.error_texts())
+
+    def test_java_backref_dropped_reports(self):
+        # 反例⑥：Java 落点的载体被抽——写测试时想不到这条，`IT` 还会被读成"可以去连远端"
+        self._mutate(self.JAVA_TESTING,
+                     "用例只在本机跑（Java 侧的载体，不构成 Java 专属规则）", "测试环境另议")
+        cm.check_local_only_guard()
+        self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑦：调度器识别特征被抽（写测试、配测试环境时这一条永远不被加载）
+        self._mutate(self.COMMON, "判定用例能不能连本机之外的机器", "测试相关")
+        cm.check_local_only_guard()
+        self.assertIn("判定用例能不能连本机之外的机器", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑧：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "测试用例只允许在本机跑（L1）", "测试注意环境")
+        cm.check_local_only_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑨：公开面 README 未登记（读者仍把"有环境才跑得通"当成用例成立的前提）
+        self._mutate(self.README, "测试用例只允许在本机跑", "测试说明")
+        cm.check_local_only_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑩：规范文件整体缺失
+        cm.check_local_only_guard()
+        self.assertIn("缺少 specs/general/testing.adoc", self.error_texts())
+
+    def test_adjacent_items_do_not_mask(self):
+        # 反例⑪：本条被整段抽掉，但相邻的「外部服务替代」那条仍写着"外部服务""运行测试"这类
+        # 同形字样——核对面若落在整节上就会被兜住、报绿。本条按**本 bullet 自己的措辞**核。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.TESTING), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index("* **用例只允许在本机跑（L1）**")
+        end = text.index("* **外部服务替代**", start)
+        self._write_valid()
+        self.write(self.TESTING, text[:start] + text[end:])
+        cm.check_local_only_guard()
+        self.assertIn("条文与判据问句", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑫：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里。
+        # 改动落在**规则数据**（基线值），清单本体与规范正文都不动。
+        self._write_valid()
+        path = os.path.join(self.root, "script/specs-rules/verify.toml")
+        with open(path, encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn('min = 4\ntoken_list = "LOCAL_ONLY_TOKENS"', rules)
+        self.write("script/specs-rules/verify.toml",
+                   rules.replace('min = 4\ntoken_list = "LOCAL_ONLY_TOKENS"',
+                                 'min = 99\ntoken_list = "LOCAL_ONLY_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_local_only_guard()
+        self.assertIn("LOCAL_ONLY_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
+class TestCheckLocalServiceAssertGuard(CheckSpecsTestCase):
+    """钉住『请求服务须有本机断言』（用户口径：**如果涉及到请求服务，需要加断言，限制在本机，
+    不在口头上限制**）。
+
+    它与 `TestCheckLocalOnlyGuard` 是两件事：那一条管"规范里写着本机"，这一条管
+    "地址算不算本机由断言判定、不由配置里的字符串说了算"。故核判据本体
+    （`specs/general/testing.adoc`「环境与兼容」）与三处载体（Java 落点、调度器识别特征、
+    公开面 README）。规则数据在 `script/specs-rules/local-service.toml`
+    （锚点清单在 `_tokens.toml` 的 `LOCAL_SERVICE_ASSERT_TOKENS`）。
+    """
+
+    TESTING = "specs/general/testing.adoc"
+    JAVA_TESTING = "specs/stack/java-testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+    CI = ".github/workflows/check-specs.yml"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.TESTING, self.JAVA_TESTING, self.COMMON, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+        # 断言件须真被跑：CI 那一步也按**原样**落进来（手抄与现场漂移）
+        self.write_real_file(self.CI)
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_local_service_assert_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文被抽（"配置里写了本机"照旧被当成已经限住）
+        self._mutate(self.TESTING, "请求服务须有本机断言（L1）", "请求服务另议")
+        cm.check_local_service_assert_guard()
+        self.assertIn("请求服务须有本机断言（L1）", self.error_texts())
+
+    def test_assertion_shape_dropped_reports(self):
+        # 反例②：断言形态被抽——执行者只知道"要有断言"、不知道断言写成什么
+        self._mutate(self.TESTING, "先解析成地址再判", "写个断言")
+        cm.check_local_service_assert_guard()
+        self.assertIn("先解析成地址再判", self.error_texts())
+
+    def test_literal_ban_dropped_reports(self):
+        # 反例③：禁止面被抽——配置文件里写 `localhost` 又被当成断言
+        self._mutate(self.TESTING, "配置里写了 `localhost` 不是断言", "建议写在配置里")
+        cm.check_local_service_assert_guard()
+        self.assertIn("配置里写了 `localhost` 不是断言", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例④：判定标准被抽（本条只剩"要有断言"）
+        # 措辞按**本 bullet 自己的**那一串替换：同节另一条（用例只允许在本机跑）也含这半句，
+        # 只换前半段时核对面会被邻条兜住而报绿。
+        self._mutate(self.TESTING, "判定标准（任一命中即违规）**：① 用例发出真实请求",
+                     "注意事项：① 用例发出真实请求")
+        cm.check_local_service_assert_guard()
+        self.assertIn("判定标准（任一命中即违规）", self.error_texts())
+
+    def test_exemption_dropped_reports(self):
+        # 反例⑤：例外落点被抽——用户声明的那一处无处安放，本条变成一刀切
+        self._mutate(self.TESTING, "同一处例外", "另一档例外")
+        cm.check_local_service_assert_guard()
+        self.assertIn("同一处例外", self.error_texts())
+
+    def test_java_carrier_dropped_reports(self):
+        # 反例⑥：Java 落点被抽——写测试时不知道该把断言写在哪、地址从哪来
+        self._mutate(self.JAVA_TESTING,
+                     "断言把落点限在本机（Java 侧的载体，不构成 Java 专属规则）", "测试环境另议")
+        cm.check_local_service_assert_guard()
+        self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑦：调度器识别特征被抽（写请求类用例时这条永远不被加载）
+        self._mutate(self.COMMON, "断言限制在本机", "测试相关")
+        cm.check_local_service_assert_guard()
+        self.assertIn("断言限制在本机", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑧：公开面未同步（读者只看得见"在本机跑"、看不见"越界要被断言拦住"）
+        self._mutate(self.README, "对本机之外发起请求要有断言拦住", "测试说明")
+        cm.check_local_service_assert_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_ci_step_dropped_reports(self):
+        # 反例⑨：断言件在那儿、CI 里却没有任何一步跑它——"声明了校验手段却从未执行"
+        # 与"核过且通过"在输出上分辨不出来，故这一步本身也要钉住。
+        rel = ".github/workflows/check-specs.yml"
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        # 取 `run:` 那一条命令本身（不是上一行的 `name:`——名字里也有同一个脚本路径，
+        # 改名字而命令照旧时会假红，真该改的那一行反倒没动）
+        line = [ln for ln in text.split("\n")
+                if ln.strip() == "run: python3 script/guard/local_service_assert.py --repo ."]
+        self.assertTrue(line, "工作流里没有断言件那一步——本反例的前提不成立")
+        # 夹具须先铺满规范文件：本类其余反例走 `_mutate`，它会先 `_write_valid()`；
+        # 只改 CI 时规范文件缺席，报出的会是"缺少文件"而掩掉本条要核的那一件。
+        self._write_valid()
+        self.write(rel, text.replace(line[0], "        run: echo skipped", 1))
+        cm.check_local_service_assert_guard()
+        self.assertIn("没有任何一步执行断言件", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑩：规范文件整体缺失
+        cm.check_local_service_assert_guard()
+        self.assertIn("缺少 specs/general/testing.adoc", self.error_texts())
+
+    def test_adjacent_item_does_not_mask(self):
+        # 反例⑩：本条被整段抽掉，但上一条（用例只允许在本机跑）仍写着"本机""用例"这类同形
+        # 字样——核对面若落在整节上就会被兜住、报绿。故按**这一节**核（节内两处都在时才绿）。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.TESTING), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index("* **请求服务须有本机断言（L1）**")
+        end = text.index("* **外部服务替代**", start)
+        self._write_valid()
+        self.write(self.TESTING, text[:start] + text[end:])
+        cm.check_local_service_assert_guard()
+        self.assertIn("请求服务须有本机断言（L1）", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑪：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里。
+        self._write_valid()
+        path = os.path.join(self.root, "script/specs-rules/local-service.toml")
+        with open(path, encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn('min = 15\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"', rules)
+        self.write("script/specs-rules/local-service.toml",
+                   rules.replace('min = 15\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"',
+                                 'min = 99\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_local_service_assert_guard()
+        self.assertIn("LOCAL_SERVICE_ASSERT_TOKENS", self.error_texts())
 
     def tearDown(self) -> None:
         cm.RULES = None

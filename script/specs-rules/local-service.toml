@@ -1,0 +1,120 @@
+# 『用例涉及请求服务时须有机械断言把落点限在本机』规则数据。
+#
+# 本条补的是『用例只允许在本机跑』（`check_local_only_guard`）**够不到的那一半**：
+#   那一条钉的是「规范里写着本机」这一事实，管不到**某个地址到底算不算本机**——
+#   而这件事在代码里是**可机械判定**的（`InetAddress#isLoopbackAddress`），
+#   留在口头约定上时，写测试的人只要把 `127.0.0.1` 敲成内网 IP 或域名就整条越界，
+#   且没有任何一次检查会发声（用户口径：**不在口头上限制**）。
+#
+# 判据本体：请求类用例凡发出真实请求，就须有**会失败的断言**把落点限在本机——
+#   断言一侧成立、被判的一侧不成立，这条才算落地；"配置里写了 localhost"不是断言。
+#
+# 判据本体只有一处（通用层 `specs/general/testing.adoc`「环境与兼容」的该条），
+# 其余三处各自只给载体：Java 侧给类与取值来源、调度器给识别特征、公开面给一行；
+# 代码侧本仓库自己的佐证走 `guard/local_service_assert_test.py`（用例在本机跑绿的那一步）。
+
+[[guards.check_local_service_assert_guard]]
+kind = "exists"
+files = [
+    "specs/general/testing.adoc",
+    "specs/stack/java-testing.adoc",
+    "AGENTS_COMMON.adoc",
+    "README.adoc",
+]
+message = "缺少文件 {file}——『请求服务须有本机断言』的判据本体/Java 载体/加载门/公开面无一处承载它"
+
+[[guards.check_local_service_assert_guard]]
+file = "specs/general/testing.adoc"
+section = "环境与兼容"
+kind = "section_groups"
+token_list = "LOCAL_SERVICE_ASSERT_TOKENS"
+message = "「环境与兼容」节缺失『请求服务须有本机断言』的要点 {missing}——{desc}"
+
+# 与上条成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿，
+# "核过且通过"与"没核"无从区分——删锚点须与调基线一并发生。
+[[guards.check_local_service_assert_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 15
+token_list = "LOCAL_SERVICE_ASSERT_TOKENS"
+
+# Java 侧只给载体（判据本体在通用层）：断言落在哪个类、取值从运行时解析而非写死，
+# 且"连得上那个服务"不构成豁免。
+[[guards.check_local_service_assert_guard]]
+file = "specs/stack/java-testing.adoc"
+tokens = [
+    "断言把落点限在本机（Java 侧的载体，不构成 Java 专属规则）",
+    "specs/general/testing.adoc",
+    "`isLoopbackAddress()`",
+    "连得上目标服务不构成豁免",
+]
+kind = "file_tokens"
+message = "Java 测试规范缺失『请求服务须有本机断言』的载体 {missing}——缺则写测试时不知道断言落在哪、地址改成内网 IP 也不会有人拦，且『远端连得上』会被读成可以连"
+
+# 调度器须能被触发（否则写请求类用例时，这一条永远不会被加载）。
+[[guards.check_local_service_assert_guard]]
+file = "AGENTS_COMMON.adoc"
+anchor = ["跑测试、补测试"]
+tokens = [
+    "断言限制在本机",
+]
+kind = "line_tokens"
+message = "加载调度器缺少『请求服务须有本机断言』的识别特征 {missing}——缺则写请求类用例时这一条永远不被加载"
+
+# 公开面同步（读者不从公开面知道这条，就仍把"配置里写了 localhost"当成已经限住）。
+[[guards.check_local_service_assert_guard]]
+file = "README.adoc"
+tokens = [
+    "对本机之外发起请求要有断言拦住",
+    "specs/general/testing.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记『请求服务须有本机断言』{missing}——公开面只看得见『在本机跑』、看不见『越界的请求要被断言拦住』，这条判据对读者不存在"
+
+# 机械件 `script/guard/local_service_assert.py` 的扫描面（与本道防线的判据本体同一处声明）：
+# 判据写在规范里、抓手在这里——两处各写一份扫描面就会各自漂移。
+# **两种扫描形态并存、各按自己的落点收文件**：
+#   ① `scan_prefixes` + `scan_suffixes` —— 测试源码树（引用方项目的常见落点）
+#   ② `guard_prefixes` + `guard_suffixes` —— 本仓库自己的用例树（`script/` 下的 `*_test.py`）。
+#      本仓库只在这一半上有用例落点，故本仓库那一步要按 `guard_*` 收；拿 ① 去收时
+#      一份都收不到（实取 0），那份"核过且通过"是假的。
+[tokens.local_service_assert]
+scan_prefixes = ["src/"]
+scan_suffixes = ["_test.py", "Test.java", "Tests.java", "IT.java", "Spec.java", "spec.ts", "_test.go"]
+guard_prefixes = ["script/"]
+guard_suffixes = ["_test.py"]
+# 判据取**两点的合取**：有请求客户端，且有发起动作。只认前者时，核"别人的用例有没有断言"
+# 的校验脚本自己也会被认成请求类用例。
+request_call_cues = [
+    ".execute(",
+    ".exchange(",
+    ".getForObject(",
+    ".getForEntity(",
+    ".postForObject(",
+    "requests.get(",
+    "requests.post(",
+    ".request(",
+    ".urlopen(",
+    "await fetch(",
+    "getConnection(",
+    ".connect(",
+    "curl ",
+    "wget ",
+]
+request_markers = [
+    "HttpClient",
+    "RestTemplate",
+    "WebClient",
+    "FeignClient",
+    " requests.get(",
+    " requests.post(",
+    "urlopen(",
+    "urllib.request",
+    "http.get(",
+    "fetch(",
+    "jdbc:",
+    "DriverManager",
+    "DataSource",
+]
+# 被测行为本身就是"访问外部资源"的用例（被测行为不在此列，规范侧边界已写明）。
+scan_exempt_globs = []
