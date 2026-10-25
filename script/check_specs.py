@@ -354,6 +354,31 @@
      识别特征）、提示词公共片段与公开面 README 同步。由 `check_no_desktop_takeover_guard` 钉住；
      「这一处能不能离屏取到」「某次是不是真抢了焦点」属运行时事实与语义判断，交人/子 agent 复核。
 
+ 94. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
+     （**任何语言、任何端**：网页与前端应用、桌面窗口、移动端页面、服务端渲染模板、终端 UI）——
+     新写界面**优先取现成 UI 框架与开源样式方案**（项目已引入 → 该生态通用），同形基础件不得
+     从零重写；**同一形态只许一个样式来源**；框架默认外观与主题只在一处改；无障碍与语义属性取
+     框架所给；**从零写的唯一正当情形**＝与既有界面对齐（逆向/复刻、按设计稿实现，且**只覆盖
+     需要对齐的范围**）或**本机、目标版本、目标形态上实际试过取不到**；从零写也须收在一处。
+     另核前端载体（`specs/stack/web.adoc`「界面（载体）」只给取用入口与唯一落点、回指唯一真源）、
+     加载门两处（调度器「任何代码活动」与前端栈条的界面识别特征，缺则写页面时永不加载该节）、
+     锚点条数下限与 README 同步。规则数据在 `script/specs-rules/ui.toml` + `_tokens.toml` 的
+     `UI_STYLE_ANCHORS`。由 `check_ui_style_guard` 钉住；「这一处算不算同一形态」「现成方案到底
+     取不取得到」「某个页面是不是在复刻范围内」属语义判断与运行时事实，交人/子 agent 复核。
+
+ 95. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
+     「界面与样式」下的三级小节——界面之外还有**功能与工具类**：业务上同义的产出（函数、工具
+     方法、组件、数据契约、配置、校验规则）**只许有唯一一处来源**；**第一处就该放在能被取用的
+     位置**；实现已存在时不得另写一套；定下来源时**一次收敛**；**重复须有能自动发现它的手段**
+     （有判据的一档用测试/类型检查/静态检查，没有判据的一档用可 diff 的快照或清单）。两档后果
+     说明处置次序（先治没有判据的界面那一档）；例外只到无法共享的运行边界为止（**契约仍只有
+     一处来源**）；语言只定载体、不定判据。另核上一节指回这一档、栈层只给载体
+     （`specs/stack/web.adoc`「前后端各一份时的契约载体」、`specs/stack/java-syntax.adoc`
+     「工具类使用约定」）、加载门与 README 同步、锚点条数下限。规则数据在
+     `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
+     `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
+     方法」属语义判断与运行时事实，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -2318,6 +2343,70 @@ def check_bundle_size_guard():
     phase_done()
 
 
+def check_ui_style_guard():
+    """『界面与样式』防线（**用户提出**）。
+
+    用户口径：AI 写界面习惯**从零开始**——没有 UI 框架时，同一套东西在各个位置被各写一套，
+    从业务角度是同一件事、展示出来却不一样；**优先取现有的 UI 框架与开源样式方案**，
+    **可以从零开始写、但不能每个地方都从头写**，界面对 UI 做**统一管理、避免各自为政**；
+    这条**不限于网页**（Java、Python 等同样能写页面，必要时扩到所有语言）；
+    而**逆向/复刻一个网页时为与原来一致**，从零写是**正当情形**（兼容性一面）。
+
+    判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」（任何语言、任何端）。
+    故本道核**四处**：
+      * 真源：该节的要点（规则数据 `script/specs-rules/ui.toml` + `_tokens.toml`）；
+      * **技术栈层 `specs/stack/web.adoc`「界面（载体）」**：只给前端载体（取用入口、唯一落点、
+        框架外观与复刻差异的落点），且须回指唯一真源——缺则前端那一半只剩口号，或栈层变成
+        第二处真源；
+      * **加载门**：调度器须在「任何代码活动」与前端栈两处登记界面的识别特征——缺则执行者
+        写页面/样式时永不加载该节，判据存在而走不到它；
+      * README 目录说明同步。
+
+    只钉「要点是否仍在」——「这一处算不算同一形态」「现成方案到底取不取得到」属语义判断与
+    运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("界面与样式防线检查")
+    rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if not os.path.isfile(os.path.join(rules_dir, "ui.toml")):
+        err("缺少 script/specs-rules/ui.toml——『界面与样式』的锚点（判据措辞）失去唯一"
+            "来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_ui_style_guard")
+    rel_web = "specs/stack/web.adoc"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel_web.split("/"))):
+        err(f"缺少 {rel_web}——前端界面没有落点，界面判据在栈层无从落地（判据本体仍在"
+            "通用层，但执行者写页面时读不到取用入口与唯一落点）", rel_web)
+    phase_done()
+
+
+def check_same_thing_one_source_guard():
+    """『同一件事只有一个来源』防线（**用户追问扩面**）。
+
+    用户追问：「再扩展一下，功能也算吧？工具类也算吧？还能扩展到哪些地方？为什么先提 ui，
+    因为样式只有人眼看到才知道有问题，功能和工具类是因为不一样的时候，结果就不一样，
+    甚至报错，可以查出来，只是底层还是各自为政」。
+
+    故本条是『界面与样式』的同一条判据铺到界面之外：界面那一档**没有可执行判据**（只有人
+    看得出来），先治；功能、工具类、配置、契约那一档**不一致会自己冒出来**（结果不同、甚至
+    报错）——但**能查出来不等于会收敛**，没人替它做决定时底层仍各自为政。
+
+    判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」的「同一件事只有一个
+    来源（不限界面，任何语言）」。本道核**四处**：
+      * 真源：该小节要点（规则数据 `script/specs-rules/ui.toml` + `_tokens.toml`）；
+      * 上一节须指向这一档（处置次序：先界面、再其余），否则两条各自成篇；
+      * 栈层只给载体、不另立判据（`specs/stack/web.adoc`「前后端各一份时的契约载体」、
+        `specs/stack/java-syntax.adoc`「工具类使用约定」）；
+      * 加载门与 README 目录说明同步。
+
+    只钉「判据是否仍在」——「这两处算不算同一件事」「某一处该不该抽公共方法」属语义判断与
+    运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("同一件事只有一个来源防线检查（功能与工具类也算）")
+    run_rule_guard("check_same_thing_one_source_guard")
+    phase_done()
+
+
 def check_java_serial_guard():
     """『Java 序列化 / 局部变量推断 / 链式调用换行』防线：判据本体不得被删或降级。
 
@@ -4103,8 +4192,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 156  # 同源实取：本轮新增 `check_no_desktop_takeover_guard`（看显示效果时不接管桌面防线，正式序号 #30）后，`CHECKS` 序列唯一名实取 156
-GUARD_TEST_BASELINE = 2077  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮补「看显示效果时不接管桌面」防线的 15 条用例后实取）
+GUARD_WIRING_BASELINE = 158  # 同源实取：本轮新增 `check_same_thing_one_source_guard`（同一件事只有一个来源防线）后，`CHECKS` 序列唯一名实取 158
+GUARD_TEST_BASELINE = 2112  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮「语言只定载体、不给语言开例外」与「与数据字典同源」三条用例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12363,6 +12452,8 @@ CHECKS = (
     check_java_test_playground_guard,
     check_sql_annotation_binding_guard,
     check_bundle_size_guard,
+    check_ui_style_guard,
+    check_same_thing_one_source_guard,
 )
 
 
