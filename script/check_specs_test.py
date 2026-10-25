@@ -5536,6 +5536,192 @@ class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
         super().tearDown()
 
 
+class TestCheckReusableScenarioGuard(CheckSpecsTestCase):
+    """钉住『要复用的验证场景归入测试源码』（用户口径：验证时**如果不是「本次只验一次」**，
+    测试场景就该归成测试用例落进测试源码，不能当临时脚本/文件，而不是每次验证都重新设计重写）。
+
+    失效形态：同一个验证场景每轮都照着印象重写一个 `verify.sh`，写在 `tmp/`、跑完即弃——
+    下次改动再从头设计一遍，既不进回归，也越写越与代码脱节。故按六组锚点核
+    `specs/general/verify.adoc`「编译/运行验证」，并钉四处同口径（通用测试规范与 Java 测试规范
+    的回指、加载门识别特征、提示词公共片段、公开面 README）。规则数据在
+    `script/specs-rules/verify.toml`（锚点清单在 `_tokens.toml`）。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    TESTING = "specs/general/testing.adoc"
+    JAVA_TESTING = "specs/stack/java-testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+    START = "* **要复用的验证场景归入测试源码，不得落成一次性脚本（L1）**"
+    NEXT = "* **以真实结果为准（L1）**"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.VERIFY, self.TESTING, self.JAVA_TESTING, self.COMMON,
+                    self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_reusable_scenario_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"验证随手写个脚本就行"）
+        self._mutate(self.VERIFY, self.START, "* **验证脚本另议**")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("条文与判据问句", self.error_texts())
+
+    def test_question_dropped_reports(self):
+        # 反例②：判据问句被抽——"要不要留"没有判断入口，本条退回一句口号
+        self._mutate(self.VERIFY, "这个场景以后还要不要再验一次", "看情况")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("这个场景以后还要不要再验一次", self.error_texts())
+
+    def test_landing_dropped_reports(self):
+        # 反例③：往哪写被抽（执行者仍把验证脚本放 tmp/、跑完即散）
+        self._mutate(self.VERIFY, "一律写进**该项目的测试源码**", "写在顺手的地方")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("要复用就写成用例", self.error_texts())
+
+    def test_one_off_exemption_dropped_reports(self):
+        # 反例④：一次性例外被抽（本条被读成"任何探索都得写用例"，反过来压住按需验证）
+        self._mutate(self.VERIFY, '只有"一次性"才可留在临时产物里', "一律写成用例")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("只有一次性才可留在临时产物里", self.error_texts())
+
+    def test_tie_break_dropped_reports(self):
+        # 反例⑤：「判不准时按会重复」被抽——灰色地带永远倒向随手脚本
+        self._mutate(self.VERIFY, '判不准时按"会重复"处理', "可以自行取舍")
+        cm.check_reusable_scenario_guard()
+        self.assertIn('判不准时按"会重复"处理', self.error_texts())
+
+    def test_playground_route_dropped_reports(self):
+        # 反例⑥：「真的不该进自动阶段」的去向被抽——"既不想进自动阶段、又不想留 tmp 脚本"
+        # 无处安放，执行者会退回临时脚本
+        self._mutate(self.VERIFY, "写进测试源码就进自动执行集合", "写进测试源码更好")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("写进测试源码就进自动执行集合", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例⑦：判定标准被抽（本条只剩"尽量写成用例"）
+        self._mutate(self.VERIFY, "未纳入校验手段**的验证脚本", "其他脚本")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("判定标准与边界", self.error_texts())
+
+    def test_testing_backref_dropped_reports(self):
+        # 反例⑧：通用测试规范的回指被抽——测试侧只认"有测试"，验证脚本留在 tmp/ 仍算合规
+        self._mutate(self.TESTING, "验证场景的归属按「要复用就写成用例」判", "测试相关")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
+    def test_java_backref_dropped_reports(self):
+        # 反例⑨：Java 落点的同口径被抽——写测试类时想不到这条
+        self._mutate(self.JAVA_TESTING, "验证场景要复用就写成测试方法（Java 侧的载体，不构成 Java 专属规则）", "测试写法另议")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑩：调度器识别特征被抽（写完临时验证脚本时想不到加载该条）
+        self._mutate(self.COMMON, "这次的验证脚本要不要留", "验证相关")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("这次的验证脚本要不要留", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑪：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "要复用的验证场景归入测试源码、不落成一次性脚本（L1）",
+                     "验证注意留证据")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑫：公开面 README 未登记（读者只看得见"跑验证"）。
+        # **两处都改**：README 的目录说明那行也含同一串字样——只改条目那一处时，
+        # 按整份文件核的那一步会被目录说明兜住而报绿（实测）。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.README), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        self.write(self.README, text.replace(
+            "要复用的验证场景归入测试源码、不落成一次性脚本", "验证说明"))
+        cm.check_reusable_scenario_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑬：规范文件整体缺失
+        cm.check_reusable_scenario_guard()
+        self.assertIn("缺少 specs/general/verify.adoc", self.error_texts())
+
+    def test_adjacent_items_do_not_mask(self):
+        # 反例⑭：本条被整段抽掉，但相邻两条里仍有"验证""用例""tmp/""实际试过"这类同形字样
+        # （尤其「最轻路径」那条也写着"能跑单个用例的不跑全量"）——核对面若落在整节上就会
+        # 被兜住、报绿。本条按**本 bullet 自己的措辞**核，故仍须报红。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.VERIFY), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index(self.START)
+        end = text.index(self.NEXT, start)
+        self._write_valid()
+        self.write(self.VERIFY, text[:start] + text[end:])
+        cm.check_reusable_scenario_guard()
+        self.assertIn("条文与判据问句", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑮：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里
+        self._write_valid()
+        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.write("script/specs-rules/verify.toml",
+                   rules.replace('min = 19\ntoken_list = "REUSABLE_SCENARIO_TOKENS"',
+                                 'min = 99\ntoken_list = "REUSABLE_SCENARIO_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_reusable_scenario_guard()
+        self.assertIn("REUSABLE_SCENARIO_TOKENS", self.error_texts())
+
+    def test_boundary_dropped_reports(self):
+        # 反例⑰：**边界**那一行被抽（判定标准仍在、正文其余一字不少）——判据自己写着
+        # 「不扩张任何一处该不该验」，缺了它本条被读成"任何探索都得写用例"，反过来压住
+        # 按需验证。故边界须**自成一行**、单独可核；埋在判定标准那一行末尾时它与判定标准
+        # 同生共死，抽掉判定标准才报红、单抽边界报绿。
+        self._mutate(self.VERIFY,
+                     "** **边界（L1）**：本条**不要求**为一次性探索也写用例"
+                     "、也**不扩张**任何一处该不该验（该不该验仍按「按需验证、不滥验证」判）；"
+                     "它只要求**验过的东西有持久落点**。", "")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("判定标准与边界", self.error_texts())
+
+    def test_dictionary_entry_dropped_reports(self):
+        # 反例⑯：本条**引入的新名称**没入本文件的字典（《数据字典》「新增与调整内容时都须
+        # 判定」）。本条正文一字不少、各处回指都在——只核整份文件时字典里那串同形字样把
+        # 「没登记」兜住，全线报绿（上一条「最轻路径」就是这么漏的）。
+        self._mutate(self.VERIFY, "**验证场景的归属（要复用就写成用例）**",
+                     "**验证场景的归属**")
+        cm.check_reusable_scenario_guard()
+        self.assertIn("本条的名称已入字典", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
     """钉住跨平台换行符规则（LF 基准 + Windows 批处理 CRLF）。
 
@@ -6265,7 +6451,8 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
                    "* **未声明时一律不写（L1）**：未提到变更日志、"
                    "**只要求更新文档或 README**、只说\"改动了什么\"、只要求\"调整项目规范\"，"
                    "均按**未声明**处理——不得新增条目（含**顺手补一条**）；"
-                   "同理，**项目自身的规范文件变更不入变更日志**。\n"
+                   "同理，**项目自身的规范文件变更默认不入变更日志**"
+                   "——**例外**：本次声明的正是**维护这套规范集合**的对外变更。\n"
                    "* **声明是例外而非默认（L1）**：声明**仅对当次生效**、不得泛化。\n"
                    "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
                    "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
@@ -6365,7 +6552,7 @@ class TestCheckChangelogTimingGuard(CheckSpecsTestCase):
                    "* **移除时的处置（L1）**：删掉指定的条目、**保留其余内容与既有版本号不动**，"
                    "**不得为「版本线连续」自造一个新版本号条目顶上**。\n")
         cm.check_changelog_timing_guard()
-        self.assertIn("项目自身的规范文件变更不入变更日志", self.error_texts())
+        self.assertIn("项目自身的规范文件变更默认不入变更日志", self.error_texts())
 
     def test_missing_common_file_reports(self):
         # 反例：通用层落点被删（条目无处承载）
@@ -6828,7 +7015,12 @@ class TestCheckEnvMarkerGuard(CheckSpecsTestCase):
         "// tag::env-guard[]\n"
         "**按环境标志选执行口径**：执行 `printenv CNB_EVENT`，非空且触发内容含 `@<Agent名>` 时按专用口径；\n"
         "未命中 → 按其末尾**中性口径**执行。\n"
+        "专用口径含：不得自行修改 `CHANGELOG.*`（默认动作是不新增、不修改）。\n"
         "// end::env-guard[]\n")
+
+    # 提示词的读入说明须提到「变更日志」——只注入片段不够，执行者按清单读
+    PROMPT = ("6. `env-guard`：按环境标志选执行口径；**变更日志默认不动**。\n"
+              "include::_common.txt[tag=env-guard]\n")
 
     def setUp(self) -> None:
         super().setUp()
@@ -6846,8 +7038,8 @@ class TestCheckEnvMarkerGuard(CheckSpecsTestCase):
         self.write("prompts/_common.txt", self.GUARD)
         self.write("PROMPTS.adoc",
                    "环境标志与专用口径（`env-guard`）：标志为 `printenv CNB_EVENT` 非空。\n")
-        self.write("prompts/review.adoc", "include::_common.txt[tag=env-guard]\n")
-        self.write("prompts/refactor.adoc", "include::_common.txt[tag=env-guard]\n")
+        self.write("prompts/review.adoc", self.PROMPT)
+        self.write("prompts/refactor.adoc", self.PROMPT)
 
     def test_valid_env_guard_passes(self):
         self._write_valid()
@@ -6885,12 +7077,82 @@ class TestCheckEnvMarkerGuard(CheckSpecsTestCase):
         cm.check_env_marker_guard()
         self.assertIn("env-guard", self.error_texts())
 
+    def test_fragment_without_changelog_rule_reports(self):
+        # 反例：专用口径里没有"变更日志默认不动"——按评论唤起时执行者仍会自行追加条目
+        self._write_valid()
+        self.write("prompts/_common.txt", self.GUARD.replace(
+            "专用口径含：不得自行修改 `CHANGELOG.*`（默认动作是不新增、不修改）。\n", ""))
+        cm.check_env_marker_guard()
+        self.assertIn("CHANGELOG", self.error_texts())
+
+    def test_prompt_notes_without_changelog_reports(self):
+        # 反例：片段注入了，但读入说明没提 → 执行者按清单读、读不到它
+        self._write_valid()
+        self.write("prompts/refactor.adoc", "include::_common.txt[tag=env-guard]\n")
+        cm.check_env_marker_guard()
+        self.assertIn("变更日志", self.error_texts())
+
     def test_registry_without_marker_reports(self):
         # 反例：登记处未写明标志 → 后来者无从知道它何时生效
         self._write_valid()
         self.write("PROMPTS.adoc", "提示词登记（无环境标志登记）。\n")
         cm.check_env_marker_guard()
         self.assertIn("env-guard", self.error_texts())
+
+
+class TestCheckChangelogTimingPromptGuard(CheckSpecsTestCase):
+    """钉住『变更日志默认不动在读入端可见』（用户提出：除非主动声明，否则禁止修改 changelog）。
+
+    实测失效：判据本体（通用层「登记时机」）、公共片段 `env-guard`、防线三处都在，**条目照样被
+    自行追加**——平台按评论唤起时真正读到的是**提示词**，读入清单里没有这条，执行者按清单读。
+    故本道钉住：本仓库落点给出**唯一个例外**且保住"判据只认行为是否变化"。
+    """
+
+    AGENTS = "AGENTS.adoc"
+
+    def _write_valid(self):
+        self.write(self.AGENTS,
+                   "* **登记时机**：变更日志只在用户主动声明时才写——判据本体在 "
+                   "`specs/general/changelog.adoc`「登记时机」。\n"
+                   "**本仓库的例外只有一处**：维护这套规范集合自身的对外变更。\n"
+                   "**判据只认行为是否变化**——纯勘误、措辞与排版整理仍按未声明处理。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_changelog_timing_prompt_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_entry_dropped_reports(self):
+        # 反例：本仓库落点整条被抽（回指判据本体没了）
+        self._write_valid()
+        self.write(self.AGENTS, "= 项目规范\n\n没有变更日志的落点。\n")
+        cm.check_changelog_timing_prompt_guard()
+        self.assertIn("登记时机", self.error_texts())
+
+    def test_exception_dropped_reports(self):
+        # 反例：例外被抽——本集合自身的对外变更无处登记，执行者只能二选一
+        self._write_valid()
+        self.write(self.AGENTS,
+                   "* **登记时机**：变更日志只在用户主动声明时才写——判据本体在 "
+                   "`specs/general/changelog.adoc`「登记时机」。\n"
+                   "**判据只认行为是否变化**——纯勘误仍按未声明处理。\n")
+        cm.check_changelog_timing_prompt_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_exception_criterion_dropped_reports(self):
+        # 反例：只写"例外"不写判据——任何一次改动都能被读成例外
+        self._write_valid()
+        self.write(self.AGENTS,
+                   "* **登记时机**：变更日志只在用户主动声明时才写——判据本体在 "
+                   "`specs/general/changelog.adoc`「登记时机」。\n"
+                   "**本仓库的例外只有一处**：维护这套规范集合自身的对外变更。\n")
+        cm.check_changelog_timing_prompt_guard()
+        self.assertIn("判据只认行为是否变化", self.error_texts())
+
+    def test_missing_project_spec_reports(self):
+        # 反例：项目规范入口被删（落点无处承载）
+        cm.check_changelog_timing_prompt_guard()
+        self.assertIn(self.AGENTS, self.error_texts())
 
 
 class TestCheckNpcMergeGuard(CheckSpecsTestCase):
@@ -7894,8 +8156,11 @@ class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
         # （历史留痕 `CHANGELOG.adoc` 除外——它的职责就是逐字保留历史产物）。
         import subprocess
         repo = os.path.dirname(HERE)
-        tracked = subprocess.run(["git", "ls-files", "*.adoc"], cwd=repo,
-                                 capture_output=True, text=True).stdout.split()
+        # **去重**：路径既暂存又未暂存（解冲突后 `git add` 前）时 `ls-files` 会给出两行，
+        # 而核对面是"文件清单"、不按暂存状态计（本仓库实测：冲突中跑单测即假报红）。
+        tracked = sorted(set(subprocess.run(
+            ["git", "ls-files", "*.adoc"], cwd=repo,
+            capture_output=True, text=True).stdout.split()))
         expected = sorted(f for f in tracked if f != "CHANGELOG.adoc")
         self.assertEqual(list(cm.POINTER_SCAN_FILES), expected,
                          "自称回指的核对面须覆盖全部 .adoc——只列已知文件会让未列入者"

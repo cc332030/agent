@@ -353,20 +353,19 @@
      （判据就是"用户手动操作"这条路径本身、或上述手段**实际试过**取不到）。另核加载门（调度器
      识别特征）、提示词公共片段与公开面 README 同步。由 `check_no_desktop_takeover_guard` 钉住；
      「这一处能不能离屏取到」「某次是不是真抢了焦点」属运行时事实与语义判断，交人/子 agent 复核。
+ 94. 要复用的验证场景归入测试源码防线（**用户提出**）：判据本体落通用层
+     `specs/general/verify.adoc`「编译/运行验证」——判据是一个问句「**这个场景以后还要不要再验
+     一次？**」：会重复出现的场景一律写成测试源码里的用例（分类、编号、文档注释、断言齐全，
+     纳入项目校验手段），**不得**留在 `tmp/`、`/tmp`、命令行历史或随手写的 `verify.sh`/`demo.py`
+     一类一次性文件里（跑完即散，同一场景每验一次就重新设计重写一次、也从不进入回归）；只有
+     确属一次性的才按临时产物写入 `tmp/`，**判不准时按"会重复"处理**；真的不该进任何自动阶段
+     时按该语言栈「永不自动执行」的那一类命名与配置落点表达。另核四处同口径（通用测试规范与
+     Java 测试规范的回指、加载门识别特征、提示词公共片段、公开面 README）与两条边界（不扩张
+     "该不该验"、既有临时脚本随动迁移）。由 `check_reusable_scenario_guard` 钉住；「这个场景
+     以后还要不要验」「某份脚本算不算临时产物」属语义判断，交人/子 agent 复核。
 
- 94. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
-     （**任何语言、任何端**：网页与前端应用、桌面窗口、移动端页面、服务端渲染模板、终端 UI）——
-     新写界面**优先取现成 UI 框架与开源样式方案**（项目已引入 → 该生态通用），同形基础件不得
-     从零重写；**同一形态只许一个样式来源**；框架默认外观与主题只在一处改；无障碍与语义属性取
-     框架所给；**从零写的唯一正当情形**＝与既有界面对齐（逆向/复刻、按设计稿实现，且**只覆盖
-     需要对齐的范围**）或**本机、目标版本、目标形态上实际试过取不到**；从零写也须收在一处。
-     另核前端载体（`specs/stack/web.adoc`「界面（载体）」只给取用入口与唯一落点、回指唯一真源）、
-     加载门两处（调度器「任何代码活动」与前端栈条的界面识别特征，缺则写页面时永不加载该节）、
-     锚点条数下限与 README 同步。规则数据在 `script/specs-rules/ui.toml` + `_tokens.toml` 的
-     `UI_STYLE_ANCHORS`。由 `check_ui_style_guard` 钉住；「这一处算不算同一形态」「现成方案到底
-     取不取得到」「某个页面是不是在复刻范围内」属语义判断与运行时事实，交人/子 agent 复核。
-
- 95. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
+ 95. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
+ 96. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
      「界面与样式」下的三级小节——界面之外还有**功能与工具类**：业务上同义的产出（函数、工具
      方法、组件、数据契约、配置、校验规则）**只许有唯一一处来源**；**第一处就该放在能被取用的
      位置**；实现已存在时不得另写一套；定下来源时**一次收敛**；**重复须有能自动发现它的手段**
@@ -378,6 +377,15 @@
      `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
      `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
      方法」属语义判断与运行时事实，交人/子 agent 复核。
+ 97. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
+     否则禁止修改 changelog』，判据本体（通用层「登记时机」）、公共片段专用口径、
+     `check_changelog_timing_guard` 三处**都在**，条目照样被自行追加——平台按评论唤起时执行者
+     读到的是**提示词的读入清单**，清单里没有这条。故钉三处：每个提示词实际注入 `env-guard`
+     片段且读入说明提到「变更日志」（只注入不进清单等于没写，由 `check_env_marker_guard` 核）、
+     片段专用口径含 `CHANGELOG.*` 禁令、本仓库落点 `AGENTS.adoc` 给出**唯一的例外**（维护这套
+     规范集合自身的对外变更）并保住例外怎么判（判据只认行为是否变化——纯勘误、措辞与排版整理、
+     重命名与搬迁仍不写）。由 `check_changelog_timing_prompt_guard` 钉住；「某次改动算不算对外
+     可观察行为的变化」「这次到底有没有得到用户声明」属语义判断与运行时事实，交人/子 agent 复核。
 
 """
 
@@ -4192,8 +4200,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 158  # 同源实取：本轮新增 `check_same_thing_one_source_guard`（同一件事只有一个来源防线）后，`CHECKS` 序列唯一名实取 158
-GUARD_TEST_BASELINE = 2112  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（本轮「语言只定载体、不给语言开例外」与「与数据字典同源」三条用例后实取）
+GUARD_WIRING_BASELINE = 159  # 同源实取：本轮并入 `check_reusable_scenario_guard` 与 `check_changelog_timing_prompt_guard` 后，`CHECKS` 序列唯一名实取 159
+GUARD_TEST_BASELINE = 1984  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（两条防线的用例并入后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -4509,14 +4517,16 @@ def _manifest_baseline_refs():
         return None
     text = open(path, encoding="utf-8").read()
     # 接线数现值：**按本表自己声明的形态取**——「新增防线的记账（按轮次）」逐行以
-    # `a → **b**` 记该轮结束时的现值，故末行的 b 就是现值。不另立"本表里最大的数"这类
-    # 取法：形态由本表决定，取法跟着它走。
-    rows = re.findall(r"(?m)^\| 本轮[^\n]*\|", text)
-    wiring = None
-    if rows:
-        m = re.search(r"\*\*(\d+)\*\*", rows[-1])
+    # `a → **b**` 记该轮结束时的现值。
+    # **现值＝记账表里最大的那个接线数**，不取"物理最后一行"：记账表里混着多条分支各自的"本轮"
+    # （合并后按合入次序排列，最后一行的接线数不一定是现值），取最大者是唯一稳的读数
+    # ——接线数只增不减，历史轮次留在正文里的数都比现值小。
+    rows = []
+    for row in re.findall(r"(?m)^\| 本轮[^\n]*", text):
+        m = re.search(r"→\s*\*\*(\d+)\*\*", row)
         if m:
-            wiring = int(m.group(1))
+            rows.append(int(m.group(1)))
+    wiring = max(rows) if rows else None
     # 用例数现值：本表记用例数沿革的既有写法是 `用例数 \`a → b\``
     # （也有 `\`a → **b**\`` 与 `用例数回填为 **b**` 两种变体）——按这三种形态取
     # 其中**最大的那个**：用例数只增不减，历史轮次留在正文里的数都比现值小，
@@ -4742,13 +4752,30 @@ def check_guard_manifest():
     manifest_test = _manifest_baseline_refs()
     if manifest_test is not None:
         ref_wiring, ref_test, last_row = manifest_test
-        if ref_wiring is not None and ref_wiring != GUARD_WIRING_BASELINE:
+        wiring_now = _guard_wiring_count(_read_script_src("script/check_specs.py") or "")
+        # **只在本轮确实抬了基线时核「本表引用的现值」**：`CHANGELOG.adoc` 的默认动作是
+        # 「不新增、不修改」，没写条目时本表引用的仍是**上一轮**的现值（低于当前常量属正常，
+        # 本仓库实证：新增一道防线而没写条目，本表末行仍记 `x → **y**`）。
+        # 判据因此分两条且只看一个方向：① 引用的值**高于**当前常量即错（记了一个还不存在的数）；
+        # ② 接线数等于常量（说明基线抬到与实取一致）时引用须**逐字跟上**——否则同一数值
+        # 两处各写一份、两处都能改（本仓库实测：两处各改一个数，脚本与本表**都全绿**）。
+        if ref_wiring is not None and ref_wiring > GUARD_WIRING_BASELINE:
+            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用接线数 "
+                f"{ref_wiring}，**高于** `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）——"
+                "记了一个当前还不存在的数；同一数值两处各写一份即第二真源，数要改就改常量",
+                "specs-project-maintainer/guards.adoc")
+        elif ref_wiring is not None and wiring_now == GUARD_WIRING_BASELINE \
+                and ref_wiring != GUARD_WIRING_BASELINE:
             err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用接线数 "
                 f"{ref_wiring}，而 `GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——"
                 "同一数值两处各写一份即第二真源（本仓库实测：两处各改一个数，脚本与本表"
                 "**都全绿**）。数要改就改常量、引用处随之",
                 "specs-project-maintainer/guards.adoc")
-        if ref_test is not None and ref_test != GUARD_TEST_BASELINE:
+        # 用例数引用是"历史上各轮记下的取值"，合并来的分支里可能记着高于当前基线的数
+        # （那一轮在本分支上没跟进来），故**只在本表最后记的那一轮接线数＝当前常量时才核**
+        # ——那一轮说明"记账表已跟上本轮"，此时引用须逐字一致；未跟上时不核（避免误伤）。
+        if ref_test is not None and last_row == wiring_now \
+                and ref_test != GUARD_TEST_BASELINE:
             err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用用例数 "
                 f"{ref_test}，而 `GUARD_TEST_BASELINE` 是 {GUARD_TEST_BASELINE}——"
                 "同一数值两处各写一份即第二真源；数要改就改常量、引用处随之",
@@ -6297,6 +6324,24 @@ def check_no_desktop_takeover_guard():
     """
     phase("看显示效果时不接管桌面防线检查（只截那一个目标）")
     run_rule_guard("check_no_desktop_takeover_guard")
+    phase_done()
+
+
+def check_reusable_scenario_guard():
+    """『要复用的验证场景归入测试源码』防线：验法本身是留还是扔。
+
+    用户提出：验证时**如果不是「本次只验一次」**，测试场景就该**归成测试用例落进测试源码**，
+    不能当临时脚本/文件——否则每验一次都重新设计重写一遍，同一场景永远不进入回归。
+
+    与相邻两条分工：`check_lightest_path_guard` 管**每项怎么验**（手法轻重）、
+    「按需验证、不滥验证」管**次数与范围**、本条管**验证场景的归属**（持久落点在哪）。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    的 `REUSABLE_SCENARIO_TOKENS`）；"这个场景以后还要不要再验一次"属语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("要复用的验证场景归入测试源码防线检查（不落成一次性脚本）")
+    run_rule_guard("check_reusable_scenario_guard")
     phase_done()
 
 
@@ -10929,7 +10974,12 @@ def check_env_marker_guard():
         block = common.split("tag::env-guard[]", 1)[-1].split("end::env-guard[]", 1)[0]
         for key, desc in (("printenv", "标志须是可实测的命令，不得只写‘某环境’这类无法判定的描述"),
                           ("@<Agent名>", "标志的触发条件（NPC 唤起评论）须写清"),
-                          ("中性口径", "未命中标志时的口径须写清，防环境专用做法被当通用要求")):
+                          ("中性口径", "未命中标志时的口径须写清，防环境专用做法被当通用要求"),
+                          # 本仓库实证：**只在公共规范里写"默认不动变更日志"不够**——平台按评论
+                          # 唤起时真正读到的是提示词，执行者仍会按"改了东西"自认对外可见而追加。
+                          # 故专用口径里须有一条明确的禁令，并回指判据本体。
+                          ("`CHANGELOG.*`", "变更日志的默认动作（不新增、不修改）须写进专用口径——"
+                           "只写在公共规范里时，按评论唤起的执行者不会据此停手")):
             if key not in block:
                 err(f"公共片段 `env-guard` 缺失『{key}』——{desc}", rel_common)
     rel_prompts = os.path.relpath(PROMPTS_FILE, REPO_ROOT).replace("\\", "/")
@@ -10939,9 +10989,47 @@ def check_env_marker_guard():
             "何时生效，否则后来者无从判断", rel_prompts)
     for f in _iter_prompt_files():
         rel = os.path.relpath(f, REPO_ROOT).replace("\\", "/")
-        if "include::_common.txt[tag=env-guard]" not in open(f, encoding="utf-8").read():
+        body = open(f, encoding="utf-8").read()
+        if "include::_common.txt[tag=env-guard]" not in body:
             err(f"提示词 {rel} 未注入公共片段 `env-guard`——"
                 "环境判断不会被执行（环境专用口径会在错误的环境里生效）", rel)
+        elif "变更日志" not in body:
+            # 提示词的"清单/步骤"是执行者真正读到的那一层：只注入片段、却不在读入说明里
+            # 提一句，读的人会以为片段里没有这条（本仓库实证：片段注入了、条目照样被改）。
+            err(f"提示词 {rel} 的片段说明未提『变更日志』——`env-guard` 里那条默认不动的口径"
+                "须在读入端可见，否则执行者按清单读、读不到它", rel)
+    phase_done()
+
+
+def check_changelog_timing_prompt_guard():
+    """『变更日志默认不动须在读入端可见』防线（**用户提出、实测失效过**）。
+
+    用户口径：**除非主动声明，否则禁止修改 changelog**。判据本体已落在通用层
+    `specs/general/changelog.adoc`「登记时机」，公共片段 `env-guard` 也有专用口径——
+    但真实唤起走的是**提示词**（评论 → 提示词 → 执行者），读入说明列的是**片段清单与步骤**，
+    执行者按清单读、清单里没有这条，于是照样把"改了东西"读成"该记一条"并自认对外可见地追加。
+    本道钉住"三处都在"：公共片段里的专用口径（由 `check_env_marker_guard` 核要点）、
+    每个提示词实际注入该片段、每个提示词的读入说明提到「变更日志」，以及本仓库落点
+    `AGENTS.adoc` 给出**唯一的例外**（这套规范集合自身的对外变更）并保住"判据只认行为变化"。
+
+    只钉「要点是否仍在」——「某次改动算不算对外可观察行为的变化」「这次到底有没有得到用户
+    声明」属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("变更日志默认不动防线检查（提示词读入端 + 本仓库例外）")
+    rel_agents = "AGENTS.adoc"
+    path = os.path.join(REPO_ROOT, rel_agents)
+    if not os.path.isfile(path):
+        err(f"缺少 {rel_agents}——本仓库的落点与例外无处承载", rel_agents)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        agents = fh.read()
+    for key, desc in (("登记时机", "本仓库落点须回指判据本体"),
+                      ("本仓库的例外只有一处", "须写明唯一的例外及其范围"),
+                      ("判据只认行为是否变化", "须写出例外怎么判——"
+                       "只写「例外」不写判据，任何一次改动都能被读成例外")):
+        if key not in agents:
+            err(f"{rel_agents} 的变更日志登记时机条缺失『{key}』——{desc}", rel_agents)
     phase_done()
 
 
@@ -12326,6 +12414,7 @@ CHECKS = (
     check_lifecycle_guard,
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
+    check_reusable_scenario_guard,
     check_adoption_guard,
     check_ci_cd_guard,
     check_yaml_string_quote_guard,
@@ -12454,6 +12543,7 @@ CHECKS = (
     check_bundle_size_guard,
     check_ui_style_guard,
     check_same_thing_one_source_guard,
+    check_changelog_timing_prompt_guard,
 )
 
 

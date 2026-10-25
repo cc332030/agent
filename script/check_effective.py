@@ -210,6 +210,10 @@ MECHANISMS = [
      "check_ci_cd_guard", "check_ci_cd_guard 钉住「触发与作用范围」「依赖与外部资源可用性」「超时与资源」关键要点（实证：引用不存在的镜像在 Prepare 阶段失败、流水线长期 pending）；『具体取值是否合理』交人 review"),
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住 CNB 侧『派发与复核须钉定 commit sha』『压缩提交/强推会替换对象』『git fetch -f』『派发前确认执行者实际可用』『流水线不无界挂起』与 collab 侧『派发对象须钉定 commit sha』『派发前确认执行者可执行』"),
+    ("要复用的验证场景归入测试源码、不落成一次性脚本（验法本身是留还是扔）",
+     "specs/general/verify.adoc", "script/check_specs.py",
+     "check_reusable_scenario_guard",
+     "check_reusable_scenario_guard 钉住「编译/运行验证」里「这个场景以后还要不要再验一次」的判据问句、会重复就写进测试源码、只有一次性才可留在 tmp/、判不准按会重复、不该进自动阶段时走永不自动执行那一类（不是留 tmp/）与随动迁移、判定标准三条与两条边界，并核四处同口径（通用测试规范与 Java 测试规范的回指、调度器识别特征、提示词公共片段、README）；「这个场景以后还要不要验」「某份脚本算不算临时产物」属语义判断"),
     ("验某项功能时的手法取「能出判据的最轻路径」", "specs/general/verify.adoc", "script/check_specs.py",
      "check_lightest_path_guard", "check_lightest_path_guard 钉住「编译/运行验证」里最轻路径的取值、实例、判定标准三条与完整流程的两类例外（被判据的就是那道重流程本身、轻手段实际试过取不到），并核加载门、提示词公共片段与 README 同步；「这一处算不算更轻」「轻手段在本机可不可行」属运行时事实与语义判断"),
     ("需要看显示效果时，取那个目标自身的画面、不接管用户的桌面（不截整屏、不抢焦点）",
@@ -259,6 +263,17 @@ MECHANISMS = [
      "、顺手补一条、规范文件变更不入变更日志、用户要求移除时的处置（删指定条目、既有版本号不动、不得自造新版本号顶上，含防『同版本号换个说法记一遍』）"
      "以及与抓手登记；『某次是否真的自行新增或改写了条目、用户声明到底成不成立』"
      "属运行时行为与语义判断（提交内容与评论记录），机械无法判定"),
+    ("变更日志默认不动须在**读入端**可见：公共片段 `env-guard` 的专用口径写明禁令、"
+     "每个提示词注入该片段且读入说明提到「变更日志」、本仓库落点给出**唯一的例外**并不让例外失判",
+     "prompts/_common.txt + prompts/ + AGENTS.adoc", "script/check_specs.py",
+     "check_changelog_timing_prompt_guard",
+     "check_changelog_timing_prompt_guard 钉住 `AGENTS.adoc` 的『登记时机』回指、"
+     "『本仓库的例外只有一处』与『判据只认行为是否变化』（缺例外则本集合自身的对外变更无处登记，"
+     "缺判据则任何一次改动都能自称例外）；片段与提示词那两半由 `check_env_marker_guard` 核"
+     "（专用口径含 `CHANGELOG.*`、每个提示词读入说明提到「变更日志」）。"
+     "**本仓库实证**：判据本体、公共片段、专用防线三处都在，条目仍被自行追加——"
+     "平台按评论唤起时执行者读到的是提示词的读入清单，清单里没有这条；"
+     "『某次改动算不算对外可观察行为的变化』『这次到底有没有得到用户声明』属语义判断与运行时事实"),
     ("规范保持通用（规则与实例分离）：本仓库默认不写实例——用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号"
      "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）与 `CHANGELOG.adoc`",
      "AGENTS.adoc「规范组织与自身重构（本仓库落点）」", "script/check_specs.py",

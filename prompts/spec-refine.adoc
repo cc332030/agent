@@ -17,7 +17,7 @@ include::_common.txt[tag=assembly-check]
 3. `isolation`：隔离要求（不混用其他提示词、不做跨任务顺手改动）；
 4. `intro-rules` / `baseline` / `final-verify` / `delivery` 与本命令的各步：公共步骤与任务步骤同前；**`baseline-and-compat`** 紧接「规范与基线」（第 1 步）、**`timeout`** 紧随其后、**`compat`** 紧接「最终验证」之前读入；
 5. `scope-boundary`：**变更范围只限当前项目**（未声明即拒绝越界改动，引用不等于授权）；
-6. `env-guard`：**按环境标志选执行口径**——命中标志（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`）时按专用口径，否则按其末尾的中性口径。
+6. `env-guard`：**按环境标志选执行口径**——命中标志（`printenv CNB_EVENT` 非空 且 触发内容含 `@<Agent名>`）时按专用口径，否则按其末尾的中性口径；**变更日志默认不动**（未声明即不新增、不修改，例外见项目规范）。
 
 ----
 把公共规范按现行判据全文优化一遍（删冗余、压表述、清无效与不可达内容）。
