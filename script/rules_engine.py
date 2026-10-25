@@ -443,13 +443,15 @@ def _step_bullet_tokens(rules, step):
                 .replace("{min}", str(floor)).replace("{bullet}", step["bullet"]), rel)
 
 
-def _paired_bullet_token_count(rules, step) -> int:
-    """取本步所指清单的锚点条数。
+def _paired_bullet_token_count(rules, step):
+    """取本步所指清单的锚点条数；**清单本身取不到时返回 `None`**（调用方须报红）。
 
     两种取法：① `token_list` 给出规则数据里的锚点清单名（`tokens` 段里的常量，形如
     `[[组名, [锚点...], 理由], ...]`）——**按组内的锚点项数逐项累加**，这样删掉一项锚点
-    也会被本步接住（只取组数拦不住组内被削）；② `file` + `bullet` 指向同防线同位置的
-    那条 `bullet_tokens` 步骤，取其 `tokens` 条数。
+    也会被本步接住（只取组数拦不住组内被削）；清单名拼错或被整段删掉时 `ctx.tokens()`
+    给不出数据，此时条数是"取不到"、不是 0——返回 0 会被 `min` 判成"清单只剩 0 项"、
+    把读者指向错误的原因（真因是清单名对不上）。② `file` + `bullet` 指向同防线同位置的
+    那条 `bullet_tokens` 步骤，取其 `tokens` 条数（取不到成对那一步同样是"取不到"）。
     """
     guard = step.get("_guard")
     if guard is None:
@@ -458,7 +460,7 @@ def _paired_bullet_token_count(rules, step) -> int:
     if named:
         data = rules.ctx.tokens(named)
         if not isinstance(data, (list, tuple)):
-            return 0
+            return None
         total = 0
         for group in data:
             if isinstance(group, (list, tuple)) and len(group) >= 2 \
@@ -470,7 +472,7 @@ def _paired_bullet_token_count(rules, step) -> int:
                 and other.get("file") == step.get("file")
                 and other.get("bullet") == step.get("bullet")):
             return len(other.get("tokens", []))
-    return 0
+    return None
 
 
 def _step_anchor_count(rules, step):
@@ -488,6 +490,14 @@ def _step_anchor_count(rules, step):
     """
     ctx = rules.ctx
     have = _paired_bullet_token_count(rules, step)
+    if have is None:
+        # 清单名拼错 / 成对的那一步被删：条数取不到时若当成 0，报错会写成"清单只剩 0 项"，
+        # 读者按那句话去正文里找，而真因在规则数据这一侧——故单列一句、指向该清单。
+        target = step.get("token_list") or f"{step.get('file')} 的 `{step.get('bullet')}` 条目"
+        ctx.err(f"取不到锚点清单 `{target}`——`anchor_count` 核的是清单自己的条数，"
+                "取不到成对的那一步/那一个清单名时该清单**没有任何机械抓手**"
+                "（改错名字或删掉成对步骤都属这个形态）", step["file"])
+        return
     floor = step["min"]
     if have < floor:
         ctx.err(_msg(step, "anchor_count_message")

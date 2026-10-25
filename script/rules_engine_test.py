@@ -460,11 +460,22 @@ class TestAnchorCount(unittest.TestCase):
         self.assertEqual(ctx.errors, [])
 
     def test_unpaired_reports(self):
-        # 找不到成对的那一步 -> 条数 0（配置写错时不得静默放过）
+        # 找不到成对的那一步 -> 条数取不到（配置写错时不得静默放过）
         ctx = FakeCtx({"a.adoc": self.DOC})
         _rules({"g": [{"kind": "anchor_count", "file": "a.adoc", "section": "节",
                        "bullet": "目标条目", "min": 1}]}, ctx).run("g")
         self.assertEqual(len(ctx.errors), 1)
+
+    def test_token_list_name_typo_reports(self):
+        # 清单名拼错（或整段被删）：条数是"取不到"、不是 0——报错须指向清单名，
+        # 不得写成"只剩 0 项锚点"把读者引去正文里找一个并不存在的删项。
+        ctx = FakeCtx({"a.adoc": self.DOC})
+        ctx._tokens = {"真清单": [["组", ["要点 A"], "理由"]]}
+        _rules({"g": [{"kind": "anchor_count", "file": "a.adoc",
+                       "token_list": "清单名拼错", "min": 1}]}, ctx).run("g")
+        self.assertEqual(len(ctx.errors), 1)
+        self.assertIn("取不到锚点清单", ctx.texts())
+        self.assertIn("清单名拼错", ctx.texts())
 
 
 class TestBulletTokensAnchorFloor(unittest.TestCase):
