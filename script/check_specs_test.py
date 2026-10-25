@@ -153,7 +153,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（长方法的反复调用点）的判据措辞亦外置在该文件里
                            "script/specs-rules/coding.toml",
                            # 本道（分发产物的体积与按需加载）的判据措辞外置在该文件里
-                           "script/specs-rules/bundle.toml")
+                           "script/specs-rules/bundle.toml",
+                           # 本道（界面与样式）的判据措辞外置在该文件里
+                           "script/specs-rules/ui.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -24267,6 +24269,362 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
         self.write(rel, rules.replace('    "**不得**整类关闭",\n', "", 1))
         self._run_guard()
         self.assertIn("只剩", self.error_texts())
+
+
+class TestCheckUiStyleGuard(CheckSpecsTestCase):
+    """钉住『界面与样式』防线（**用户提出**）。
+
+    用户要求："调整规范，是不是可以扩展到所有涉及 ui 的地方……AI 写网页代码时，优先使用现有的
+    ui 框架、开源样式方案等，AI 习惯从 0 开始写，没用 UI 框架就是会各个地方都重写一套……可以从
+    0 开始写，但是不能每个地方都从头写，是不是要对 ui 这些做统一管理，避免各自为政……如果逆向
+    一个网页的时候，为了保证和原来一样，是不是不可避免从 0 开始写？兼容性吧"。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`、
+    前端载体 `specs/stack/web.adoc`、加载门 `AGENTS_COMMON.adoc`、README、判据措辞
+    `script/specs-rules/ui.toml` 与 `_tokens.toml`）——每个用例在内存副本上做一处定点改动后
+    落进临时根再跑防线。手抄节选会与现场漂移，故一律不手抄；也**不写仓库里的真文件**。
+    """
+
+    FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc")
+    CODING, WEB, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_ui_style_guard()
+        # 规则缓存须还原（理由同 `TestCheckSqlAnnotationBindingGuard._run_guard`）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：判据本体整节被摘掉（别处零散字样兜不住）
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("== 界面与样式（任何语言、任何端）")
+        end = text.index("\n== 表达式与调用写法", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("界面与样式", self.error_texts())
+
+    def test_framework_first_downgraded_reports(self):
+        # 反例②：框架优先被降级（"自己写"重新成为正当选项）
+        self._run_guard_with(self.CODING,
+                             "**优先取现成 UI 框架与开源样式方案，不从零写一套（L1）**",
+                             "**优先取现成 UI 框架与开源样式方案，不从零写一套（建议）**")
+        self.assertIn("优先取现成 UI 框架", self.error_texts())
+
+    def test_single_source_removed_reports(self):
+        # 反例③：同一形态只许一个样式来源那条被抽 -> 各处仍各写一套
+        self._run_guard_with(self.CODING, "**同一形态只许一个样式来源（L1）**",
+                             "**同一形态的样式尽量保持一致（L2）**")
+        self.assertIn("同一形态只许一个样式来源", self.error_texts())
+
+    def test_zero_justification_removed_reports(self):
+        # 反例④：从零写的唯一正当情形被抽 -> 判据变成一刀切、逆向复刻被误判
+        self._run_guard_with(self.CODING,
+                             "**从零写的唯一正当情形：与既有界面对齐（L1）**",
+                             "**从零写（L1）**")
+        self.assertIn("从零写的唯一正当情形", self.error_texts())
+
+    def test_reverse_scope_widened_reports(self):
+        # 反例⑤：正当情形被读成整个项目的许可
+        self._run_guard_with(self.CODING,
+                             "该情形**只覆盖需要对齐的那个范围**",
+                             "该情形**覆盖整个项目**")
+        self.assertIn("只覆盖需要对齐的那个范围", self.error_texts())
+
+    def test_collect_in_one_place_removed_reports(self):
+        # 反例⑥：「从零写也须收在一处」被抽 -> 用户原话的『不能每个地方都从头写』落空
+        self._run_guard_with(self.CODING, "**从零写也须收在一处、只此一份（L1）**",
+                             "**从零写按需组织（L2）**")
+        self.assertIn("从零写也须收在一处", self.error_texts())
+
+    def test_multi_language_scope_removed_reports(self):
+        # 反例⑦：适用面被抄窄成"只在网页里成立"
+        self._run_guard_with(self.CODING,
+                             "桌面窗口、移动端页面、服务端渲染的模板、终端 UI",
+                             "以及若干种页面")
+        self.assertIn("桌面窗口、移动端页面", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑧：依据行的取舍归属被抹掉 -> 读者会把它当成组件库官方规定
+        self._run_guard_with(self.CODING,
+                             "是本集合的判据化取舍**——各组件库",
+                             "是本集合的说明**——各组件库")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_web_backref_removed_reports(self):
+        # 反例⑨：栈层不再回指真源 -> 判据在两处各自漂移
+        self._run_guard_with(self.WEB, "本文件只给前端的载体与取用入口",
+                             "本文件同样规定这些判据")
+        self.assertIn("取用入口", self.error_texts())
+
+    def test_web_anchor_removed_reports(self):
+        # 反例⑩：栈层的取用入口被抽 -> 执行者仍会就地手写
+        self._run_guard_with(self.WEB, "**框架与样式方案的取用入口（L2）**",
+                             "**框架与样式方案（可选）**")
+        self.assertIn("取用入口", self.error_texts())
+
+    def test_web_relation_backref_removed_reports(self):
+        # 反例⑪：「与通用层的关系」的回指只覆盖体积那一条、界面这一半失效
+        self._run_guard_with(self.WEB, "**以 `specs/general/coding.adoc`「界面与样式」为唯一真源**",
+                             "**界面的要求见上文**")
+        self.assertIn("界面与样式", self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例⑫：加载门被抽 -> 写页面时永不加载该节
+        self._run_guard_with(self.COMMON, "含**界面**：要写/改给人看的界面与样式",
+                             "含**样式约定**：要写/改样式时")
+        self.assertIn("界面", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑬：README 目录说明未同步
+        self._run_guard_with(self.README, "**界面与样式（任何语言、任何端",
+                             "**样式约定（网页）")
+        self.assertIn("README", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑭（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
+        self._write_all_valid()
+        tokens_rel = "script/specs-rules/_tokens.toml"
+        with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
+            tokens = fh.read()
+        start = tokens.index("UI_STYLE_ANCHORS = [")
+        tail_mark = tokens.index("\"不批量替换既有组件、不为统一外观重写既有页面\"", start)
+        cut = tokens.rindex('    [\n        "存量随动迁移",', start, tail_mark)
+        cut_end = tokens.index("官方规定\",\n    ],\n", tail_mark) + len("官方规定\",\n    ],\n")
+        # 削掉尾部两组（存量 + 依据行）后补一个换行：剩下的仍是合法 TOML，少了恰恰是
+        # `anchor_count` 该报出的那一形态（清单被删项、正文一字不少）。
+        self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
+        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，不读夹具里的文件，
+        # 故须就地替换（否则这条用例核的是一个永远不再变化的常量、必假绿）。用完还原。
+        original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
+        trimmed = [g for g in original
+                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
+        self.assertLess(len(trimmed), len(original))
+        cm._RULES_TOKENS["UI_STYLE_ANCHORS"] = trimmed
+        self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_STYLE_ANCHORS", original)
+        self._run_guard()
+        # 只核文件名不够：须落成"清单条数"这一步自己的文案（正文缺项那一步在这里不该报）。
+        self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
+        self.assertIn("锚点", self.error_texts())
+
+
+class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
+    """钉住『同一件事只有一个来源』防线（**用户追问扩面**）。
+
+    用户口径："再扩展一下，功能也算吧？工具类也算吧？还能扩展到哪些地方？为什么先提 ui，
+    因为样式只有人眼看到才知道有问题，功能和工具类是因为不一样的时候，结果就不一样，甚至
+    报错，可以查出来，只是底层还是各自为政"。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`、
+    栈层载体 `specs/stack/web.adoc` 与 `specs/stack/java-syntax.adoc`、加载门
+    `AGENTS_COMMON.adoc`、README、判据措辞 `script/specs-rules/ui.toml` 与 `_tokens.toml`）——
+    每个用例在内存副本上做一处定点改动后落进临时根再跑防线。手抄节选会与现场漂移，故一律不手抄。
+    """
+
+    FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc",
+             "specs/stack/java-syntax.adoc", "AGENTS_COMMON.adoc", "README.adoc")
+    CODING, WEB, JAVA_SYNTAX, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+        # 规则引擎是**模块级缓存**，夹具每个用例都换 `REPO_ROOT`：不作废时会读到上一个
+        # 用例（已删）的规则目录，报"规则配置里没有防线 X"。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_same_thing_one_source_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文件 + 真规则数据全绿（锚点与现场脱节会第一时间暴露）
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_subsection_removed_reports(self):
+        # 反例①：整节被摘掉（别处的零散字样兜不住——按**小节**取才是核对对象）
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("=== 同一件事只有一个来源（不限界面，任何语言）")
+        end = text.index("\n== 表达式与调用写法", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("同一件事只有一个来源", self.error_texts())
+
+    def test_two_tiers_removed_reports(self):
+        # 反例②：两档后果被抽 -> 读不出"为什么先提界面"，也读不出功能与工具类同样在内
+        self._run_guard_with(self.CODING, "**能查出来不等于会收敛**",
+                             "**能查出来就行**")
+        self.assertIn("能查出来不等于会收敛", self.error_texts())
+
+    def test_one_source_downgraded_reports(self):
+        # 反例③：唯一来源被降级成建议
+        self._run_guard_with(self.CODING, "**同一件事只许一个来源（L1）**",
+                             "**同一件事尽量只有一个来源（L2）**")
+        self.assertIn("同一件事只许一个来源", self.error_texts())
+
+    def test_first_place_removed_reports(self):
+        # 反例④："第一处就该是能被取用的那一处"被抽 -> 先就近写死、等第二处出现再挪
+        self._run_guard_with(self.CODING, "**第一处就该是能被取用的那一处（L1）**",
+                             "**事后再收编（L2）**")
+        self.assertIn("第一处就该是能被取用的那一处", self.error_texts())
+
+    def test_converge_once_removed_reports(self):
+        # 反例⑤：一次收敛被抽 -> 加了公共写法就算完工、副本留着
+        self._run_guard_with(self.CODING,
+                             "**定下唯一来源时一次收敛，不逐处漂移（L1）**",
+                             "**定下唯一来源即可（L2）**")
+        self.assertIn("一次收敛", self.error_texts())
+
+    def test_self_proof_removed_reports(self):
+        # 反例⑥：自证一条被抽 -> 全靠"记得改两处"（用户点名的"各自为政"没了抓手）
+        self._run_guard_with(self.CODING,
+                             "**判据与自证：重复要有办法自己冒出来（L1）**",
+                             "**重复的发现方式自定（L3）**")
+        self.assertIn("重复要有办法自己冒出来", self.error_texts())
+
+    def test_exception_widened_reports(self):
+        # 反例⑦：例外被抹掉 -> 前后端各实现一份被一律判违规
+        self._run_guard_with(self.CODING,
+                             "**两侧分属无法共享的运行边界**",
+                             "**两侧只要都实现了就行**")
+        self.assertIn("两侧分属无法共享的运行边界", self.error_texts())
+
+    def test_semantic_identification_removed_reports(self):
+        # 反例⑧：识别判据被抽 -> "算不算同一件事"交回直觉
+        self._run_guard_with(self.CODING, "**同义取业务语义，不取代码相似度**",
+                             "**看代码像不像**")
+        self.assertIn("同义取业务语义", self.error_texts())
+
+    def test_basis_attribution_removed_reports(self):
+        # 反例⑨：依据行的取舍归属被抹 -> 读者会以为"按判据分档"是外部规定
+        self._run_guard_with(self.CODING,
+                             "**未**规定按\"有没有可执行的判据\"分档处置",
+                             "规定按判据分档处置")
+        self.assertIn("分档处置", self.error_texts())
+
+    def test_ui_section_backref_removed_reports(self):
+        # 反例⑩：上一节不再指回这一档 -> 两条各自成篇，读不出处置次序
+        self._run_guard_with(self.CODING, "**为什么界面排在最前**",
+                             "**界面优先**")
+        self.assertIn("为什么界面排在最前", self.error_texts())
+
+    def test_web_contract_carrier_removed_reports(self):
+        # 反例⑪：栈层契约载体被抽 -> 例外①只剩一句许可、没有落点
+        self._run_guard_with(self.WEB, "**由它生成或对照核验**",
+                             "**两侧各自维护并保持同步**")
+        self.assertIn("由它生成或对照核验", self.error_texts())
+
+    def test_java_carrier_removed_reports(self):
+        # 反例⑫：Java 侧工具方法落点被抽 -> 通用层的"工具类也算"没有载体
+        self._run_guard_with(self.JAVA_SYNTAX,
+                             "**同一能力只留一个工具方法与一个工具类（Java 侧的载体，不构成 Java 专属规则）**",
+                             "**工具方法尽量复用**")
+        self.assertIn("同一能力只留一个工具方法", self.error_texts())
+
+    def test_language_carrier_rule_removed_reports(self):
+        # 反例⑮：语言无关那条被抽 -> 本条被读成「Java 专属」，其他语言照样各写一套
+        self._run_guard_with(self.CODING,
+                             "**语言只定载体、不定判据，也不给某门语言开例外（L1）**",
+                             "**语言各有各的做法（L3）**")
+        self.assertIn("语言只定载体", self.error_texts())
+
+    def test_language_exception_escape_removed_reports(self):
+        # 反例⑯：逃生口那条被抹 -> "这门语言没有工具类"又能当理由放过第二份来源
+        self._run_guard_with(self.CODING, "这门语言没有工具类",
+                             "语言差异另行考虑")
+        self.assertIn("这门语言没有工具类", self.error_texts())
+
+    def test_data_dictionary_homology_removed_reports(self):
+        # 反例⑰：与数据字典同源那一支被抽 -> 名称的定义在各处各写一遍，两条断成两处
+        self._run_guard_with(self.CODING, "`specs/general/terminology.adoc`「数据字典」判",
+                             "另见术语文件")
+        self.assertIn("数据字典」判", self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例⑬：加载门被抽 -> 写功能/工具类时永不加载该节
+        self._run_guard_with(self.COMMON, "**同一件事有没有长出第二份来源**",
+                             "**代码风格**")
+        self.assertIn("同一件事有没有长出第二份来源", self.error_texts())
+
+    def test_readme_not_synced_reports(self):
+        # 反例⑭：README 目录说明未同步
+        self._run_guard_with(self.README,
+                             "**同一件事只有一个来源（界面之外还有功能与工具类",
+                             "**重复代码（界面之外")
+        self.assertIn("README", self.error_texts())
+
+    def test_anchor_count_self_shrunk_reports(self):
+        # 反例⑮（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
+        self._write_all_valid()
+        tokens_rel = "script/specs-rules/_tokens.toml"
+        with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
+            tokens = fh.read()
+        start = tokens.index("SAME_SOURCE_ANCHORS = [")
+        cut = tokens.rindex('    [\n        "存量随动迁移",', start)
+        end = tokens.index('"缺则依据只剩名称', start)
+        cut_end = tokens.index("\n    ],\n", end) + len("\n    ],\n")
+        # 削掉尾部两组（存量 + 依据行）：剩下的仍是合法 TOML，正是"清单被删项、正文一字不少"
+        self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
+        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换、用完还原。
+        original = cm._RULES_TOKENS["SAME_SOURCE_ANCHORS"]
+        trimmed = [g for g in original
+                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
+        self.assertLess(len(trimmed), len(original))
+        cm._RULES_TOKENS["SAME_SOURCE_ANCHORS"] = trimmed
+        self.addCleanup(cm._RULES_TOKENS.__setitem__, "SAME_SOURCE_ANCHORS", original)
+        self._run_guard()
+        self.assertIn("SAME_SOURCE_ANCHORS", self.error_texts())
+        self.assertIn("锚点", self.error_texts())
 
 
 if __name__ == "__main__":

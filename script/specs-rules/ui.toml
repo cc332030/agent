@@ -1,0 +1,201 @@
+# 『界面与样式』防线规则数据。
+#
+# 判据本体在 `specs/general/coding.adoc`「界面与样式」——**公共内容**（对任何产出界面的项目成立，
+# 不限语言与端）。前端载体在 `specs/stack/web.adoc`（技术栈层），它**只给载体、不另立判据**。
+#
+# 本条防的失效：AI 写界面习惯**从零开始**——没有 UI 框架时，各个位置的同一套东西（按钮、卡片、
+# 表单控件）被各写一套，从业务角度看是同一件事，展示出来却是好几种样式。
+# 用户口径：**可以从零开始写，但不能每个地方都从头写；对 UI 做统一管理、避免各自为政**；
+# **优先取现有的 UI 框架与开源样式方案**；**逆向一个网页时为与原来一致，从零写是正当情形**。
+
+# ① 判据本体：通用层整节（框架优先、同一形态一个来源、全局外观一处、无障碍取框架所给、
+# 从零写的唯一正当情形、从零也须收在一处、存量边界、依据行）。
+[[guards.check_ui_style_guard]]
+file = "specs/general/coding.adoc"
+section = "界面与样式"
+kind = "section_groups"
+token_list = "UI_STYLE_ANCHORS"
+message = "『界面与样式』防线被破坏：{file}「界面与样式」缺失要点 {missing}——{desc}；该条对应用户点名要求（优先用现成 UI 框架与开源样式方案、同一形态只许一个样式来源、不得每处从头写），不得删除、不得降级"
+
+# 与上面那步成对：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤
+# 一次都不报错（"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ui_style_guard]]
+file = "specs/general/coding.adoc"
+section = "界面与样式"
+kind = "anchor_count"
+token_list = "UI_STYLE_ANCHORS"
+min = 33
+
+# ② 前端载体：技术栈层只给载体、不另立判据（第二真源由本组反向钉住）。
+[[guards.check_ui_style_guard]]
+file = "specs/stack/web.adoc"
+section = "界面（载体）"
+kind = "section_groups"
+groups = [
+    [
+        "判据本体回指通用层（不另立判据）",
+        [
+            "`specs/general/coding.adoc`「界面与样式」",
+            "本文件只给前端的载体与取用入口",
+        ],
+        "缺则技术栈层变成第二处真源：判据在两处各自漂移，先报红的那道未必是权威（回指向是整节与本文件开头两处的同一句）",
+    ],
+    [
+        "取用入口（框架与样式方案）",
+        [
+            "**框架与样式方案的取用入口（L2）**",
+            "项目包清单里已引入的组件库与样式方案",
+            "公共组件目录与全局样式落点",
+        ],
+        "缺则前端这一半只剩通用层口号：先看哪儿取现成方案没有落点，执行者仍会就地手写",
+    ],
+    [
+        "同一形态的唯一落点（载体）",
+        [
+            "**同一形态的唯一落点（载体）**",
+            "第二个文件里出现一份复制或就地重写",
+        ],
+        "缺则「同一形态只许一个样式来源」落不到具体位置，页面里各写一套照样过",
+    ],
+    [
+        "框架默认外观与复刻的落点",
+        [
+            "**改造框架默认外观的落点（载体）**",
+            "**逆向/复刻与设计稿的载体**",
+        ],
+        "缺则覆盖框架外观散在使用点、复刻时的差异清单没有落点（同一属性多处覆盖）",
+    ],
+]
+[[guards.check_ui_style_guard]]
+file = "specs/stack/web.adoc"
+section = "与通用层的关系（防第二真源）"
+kind = "section_groups"
+groups = [
+    [
+        "界面的真源同在本文件的回指里",
+        [
+            "**以 `specs/general/coding.adoc`「界面与样式」为唯一真源**",
+            "两处本文件都不复述判据、也不另立判据",
+        ],
+        "缺则栈层的回指只覆盖体积那一条：界面判据在栈层成为第二处真源，或栈层干脆不提界面、执行者读不到该去哪",
+    ],
+]
+
+# ③ 加载门：调度器须登记界面识别特征——缺则写界面时永不触发加载（判据存在而走不到）。
+[[guards.check_ui_style_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "**界面**",
+    "含**界面**",
+    "**前端界面载体**",
+]
+message = "『界面与样式』防线被破坏：{file} 缺失要点 {missing}——调度器须在「任何代码活动」与前端栈两处登记界面的识别特征，缺则执行者写页面/样式时永不加载该节，判据存在却走不到"
+
+# ④ README 目录说明同步（读者按 README 学习时须知道有这条规则）。
+[[guards.check_ui_style_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "**界面与样式（任何语言、任何端",
+    "**界面的取用入口与唯一落点**",
+]
+message = "『界面与样式』防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须同步登记该条（通用层 `coding.adoc` 与栈层 `web.adoc` 两处），否则读者按 README 学习时无从知道有这条规则"
+
+# ============================================================================
+# 『同一件事只有一个来源』（`check_same_thing_one_source_guard`）
+#
+# 与上面『界面与样式』是**同一条判据的两档**：用户追问"功能也算吧？工具类也算吧？还能扩到
+# 哪些地方？"——答案是把"同一套东西只许一处来源"铺到界面之外：功能（业务上同一件事各写
+# 一套分支）、工具类（同一能力在两个 Utils 里各一份）、数据契约、配置、校验规则。
+# 用户还给了**为什么先提界面**：样式只有人眼看到才知道有问题；功能与工具类一不一致，结果就
+# 不同、甚至报错，能查出来——**只是底层还是各自为政**。故本条把"能查出来"与"会收敛"分开，
+# 并要求重复须有能自动发现它的手段。
+#
+# 判据本体在 `specs/general/coding.adoc`「界面与样式」的「同一件事只有一个来源（不限界面，
+# 任何语言）」；栈层只给载体（Web 的前后端契约、Java 的工具方法落点），不另立判据。
+
+# ① 判据本体：通用层该小节（两档后果、识别判据、五条 L1、例外、存量边界、依据行）。
+[[guards.check_same_thing_one_source_guard]]
+file = "specs/general/coding.adoc"
+subsection = "同一件事只有一个来源（不限界面，任何语言）"
+kind = "subsection_groups"
+token_list = "SAME_SOURCE_ANCHORS"
+message = "『同一件事只有一个来源』防线被破坏：{file} 该节缺失要点 {missing}——{desc}；该条对应用户点名要求（功能与工具类同样算、同一套东西不得各处各写一套、删掉重复后底层仍各自为政），不得删除、不得降级"
+
+# 与上面那步成对：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错。
+[[guards.check_same_thing_one_source_guard]]
+file = "specs/general/coding.adoc"
+subsection = "同一件事只有一个来源（不限界面，任何语言）"
+kind = "anchor_count"
+token_list = "SAME_SOURCE_ANCHORS"
+min = 37
+
+# ② 界面那一档的入口（本条的处置次序是"先界面、再其余"）：上一节须指向这一档。
+[[guards.check_same_thing_one_source_guard]]
+file = "specs/general/coding.adoc"
+section = "界面与样式（任何语言、任何端）"
+kind = "section_groups"
+groups = [
+    [
+        "为什么界面排在最前（指回下一档）",
+        [
+            "**为什么界面排在最前**",
+            "**唯一没有可执行判据**的一类",
+            "下节「同一件事只有一个来源」",
+        ],
+        "缺则两条各自成篇：读者读不出为什么先治界面、也读不出界面只是同一条判据里没有判据的那一档",
+    ],
+]
+
+# ③ 栈层只给载体、不另立判据（Web 的前后端各一份时契约落在哪、Java 的工具方法落在哪）。
+[[guards.check_same_thing_one_source_guard]]
+file = "specs/stack/web.adoc"
+subsection = "前后端各一份时的契约载体"
+kind = "subsection_groups"
+groups = [
+    [
+        "契约的唯一来源与判定标准",
+        [
+            "**契约的唯一来源（载体）**",
+            "**由它生成或对照核验**",
+            "那条例外判",
+        ],
+        "缺则前后端各写一份字段/校验规则无处收敛：例外①只剩一句许可、没有载体，两侧各写一份照样过",
+    ],
+]
+[[guards.check_same_thing_one_source_guard]]
+file = "specs/stack/java-syntax.adoc"
+section = "工具类使用约定"
+kind = "section_groups"
+groups = [
+    [
+        "同一能力只留一个工具方法与一个工具类（Java 落点）",
+        [
+            "**同一能力只留一个工具方法与一个工具类（Java 侧的载体，不构成 Java 专属规则）**",
+            "`specs/general/coding.adoc`「同一件事只有一个来源」",
+            "**落点**",
+        ],
+        "缺则通用层的「工具类也算」在 Java 侧没有落点：判据在通用层、取用位置无人指，同一能力继续在两个 Utils 里各一份；且这处只写「Java 落点」会被读成 Java 专属规则（通用层那条对任何语言都成立）",
+    ],
+]
+
+# ④ 加载门：调度器须登记「同一件事长出第二份来源」的识别特征——缺则判据存在而走不到。
+[[guards.check_same_thing_one_source_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "**同一件事有没有长出第二份来源**",
+    "两份来源怎么让它自己暴露",
+]
+message = "『同一件事只有一个来源』防线被破坏：{file} 缺失要点 {missing}——调度器须在「任何代码活动」里登记该识别特征，缺则执行者写功能/工具类时永不加载该节，判据存在却走不到"
+
+# ⑤ README 目录说明同步（读者按 README 学习时须知道有这条规则）。
+[[guards.check_same_thing_one_source_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "**同一件事只有一个来源（界面之外还有功能与工具类",
+    "**前后端各一份时的契约载体**",
+]
+message = "『同一件事只有一个来源』防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须同步登记该条（通用层与栈层两处），否则读者按 README 学习时无从知道有这条规则"
