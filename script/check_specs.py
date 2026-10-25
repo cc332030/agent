@@ -96,6 +96,7 @@
  73. 防线的核对对象是**判据本体**、不是轴名防线
  74. 冲突与压缩提交防线
 
+
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
 **本仓库自身侧**的 git 暂存区状态行——后者是最高关注项 P1 在本仓库侧那一半的抓手，
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
@@ -365,8 +366,19 @@
      "该不该验"、既有临时脚本随动迁移）。由 `check_reusable_scenario_guard` 钉住；「这个场景
      以后还要不要验」「某份脚本算不算临时产物」属语义判断，交人/子 agent 复核。
 
- 95. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
- 96. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
+ 95. 用例只允许在本机跑防线（**用户提出**）：判据本体落通用层
+     `specs/general/testing.adoc`「环境与兼容」——用例的执行范围**严格控制在执行者本机**、
+     **不依赖本机之外的任何电脑与服务器**（内网 IP、域名、共享环境、远程库），外部依赖一律
+     换成本机可起的替代品（嵌入式/内存实现、本机回环地址上的进程），**不得**把"某台机器上
+     有那套环境"当作用例成立的前提。判据问句「**把所有其他电脑和服务器都拔掉，这套用例还跑
+     不跑得通？**」；**唯一例外**是用户**主动声明**的那一处（仅当次生效、不得泛化）；判定
+     标准三条与两条边界（只管用例落点、不放开"运行环境与项目声明一致"；存量随动迁移）。另核
+     四处同口径（Java 落点的载体、加载门识别特征、提示词公共片段、公开面 README）。由
+     `check_local_only_guard` 钉住；「某条用例到底连没连远端」「某个地址算不算本机」属运行时
+     事实与语义判断，交人/子 agent 复核。
+
+ 96. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
+ 97. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
      「界面与样式」下的三级小节——界面之外还有**功能与工具类**：业务上同义的产出（函数、工具
      方法、组件、数据契约、配置、校验规则）**只许有唯一一处来源**；**第一处就该放在能被取用的
      位置**；实现已存在时不得另写一套；定下来源时**一次收敛**；**重复须有能自动发现它的手段**
@@ -378,7 +390,7 @@
      `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
      `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
      方法」属语义判断与运行时事实，交人/子 agent 复核。
- 97. 界面的规模与性能防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`
+ 98. 界面的规模与性能防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`
      「界面的规模与性能」——**能用 ≠ 好用**：界面在开发期数据不多时看不出问题，**只有数据量
      大了才知道哪一处卡**（与后端接口同理）；覆盖 web 端、Java、Python 等端画的界面。三条形态：
      列表与表格**按需取数**（不把整份集合一次取回、一次画出来）、**同一次展示不逐项各取一次**
@@ -390,7 +402,7 @@
      `script/specs-rules/ui-perf.toml` + `_tokens.toml` 的 `UI_PERFORMANCE_ANCHORS`。由
      `check_ui_performance_guard` 钉住；「这一处算不算一次取回整份集合」「要不要为它做性能
      结论」属语义判断与运行时事实，交人/子 agent 复核。
- 98. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
+ 99. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
      否则禁止修改 changelog』，判据本体（通用层「登记时机」）、公共片段专用口径、
      `check_changelog_timing_guard` 三处**都在**，条目照样被自行追加——平台按评论唤起时执行者
      读到的是**提示词的读入清单**，清单里没有这条。故钉三处：每个提示词实际注入 `env-guard`
@@ -399,7 +411,7 @@
      规范集合自身的对外变更）并保住例外怎么判（判据只认行为是否变化——纯勘误、措辞与排版整理、
      重命名与搬迁仍不写）。由 `check_changelog_timing_prompt_guard` 钉住；「某次改动算不算对外
      可观察行为的变化」「这次到底有没有得到用户声明」属语义判断与运行时事实，交人/子 agent 复核。
- 99. 已有 PR 时不得私开 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，不允许私开 pr
+ 100. 已有 PR 时不得私开 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，不允许私开 pr
      （有 pr 的情况下）」——**已有承载本次事项的合并请求时，改动一律做在该 PR 的源分支上**，
      开新 PR 属**派发者**的动作、须用户显式允许；同一处改动也不得同时落在两个 PR 上。
      失效形态（本仓库实证）：执行者在当前 PR 之外发现别的问题就自己另开 PR + 分支，同一批工作
@@ -410,6 +422,21 @@
      属**承继、不属私开**。规则数据在 `script/specs-rules/cnb.toml`。由 `check_pr_scope_guard`
      钉住；「哪个 PR 才算承载本次事项」「用户有没有真的允许」属语义判断与运行时事实，
      交人/子 agent 复核。
+
+ 101. 请求服务须有本机断言防线（**用户提出：不在口头上限制**）：`specs/general/testing.adoc`
+     「环境与兼容」须有那一条——用例**凡发出真实请求**就须有一条**会失败的断言**把落点限在本机；
+     判据问句「把目标地址换成内网 IP 或域名，会不会失败」；断言形态（**先解析成地址再判**回环、
+     不比字面量、**命中即失败**、**不得静默跳过**）；判定标准三条（无断言／只比字面量／
+     以"连得上"自我豁免）与边界（只管用例侧落点、**被测代码自身访问外部资源不在此列**）；
+     例外与上条同一处。另钉三处载体：Java 侧（断言落在共用位置、取值来自运行时
+     `isLoopbackAddress()`、连得上目标服务不构成豁免）、调度器识别特征、公开面 `README.adoc`。
+     规则数据 `script/specs-rules/local-service.toml`（锚点清单 `_tokens.toml` 的
+     `LOCAL_SERVICE_ASSERT_TOKENS`）；**可执行的一半**是 `script/guard/local_service_assert.py`
+     （断言件 + 现场自检，扫描面同在该规则数据的 `[tokens.local_service_assert]`），
+     其用例 `local_service_assert_test.py` 在本机跑绿即"这条判据在本机成立"的取值。
+     **失效形态**：配置里写了 `localhost` 就被当成已经限住——而名字不是判据、解析结果才是；
+     地址换成内网 IP 或域名时没有任何检查会发声。由 `check_local_service_assert_guard` 钉住；
+     「这套用例里那条断言跑起来到底拦不拦得住」属运行时事实，以断言件自身的用例为准。
 
 """
 
@@ -4289,8 +4316,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 162  # 同源实取：新增 `check_ui_performance_guard` 与 `check_pr_scope_guard` 后，`CHECKS` 序列唯一名实取 162
-GUARD_TEST_BASELINE = 2163  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「界面的规模与性能」16 条反例 +「已有 PR 时不得私开 PR」11 条反例后实取）
+GUARD_WIRING_BASELINE = 163  # 同源实取：新增 `check_local_service_assert_guard` 后，`CHECKS` 序列唯一名实取 163
+GUARD_TEST_BASELINE = 2188  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「请求服务须有本机断言」12 条反例 + 断言件自身 17 条用例后实取）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6290,6 +6317,65 @@ def check_delegation_guard():
                     "『强制同 Agent、不得点名外部 Agent/NPC、不可用时降级为执行者本人串行"
                     "或如实标悬置』，任何写法都不得让外部来源重新成为合法路径"
                     "（禁止式表述与反例引用除外）", rel)
+    phase_done()
+
+
+def check_local_only_guard():
+    """『用例只允许在本机跑』防线：验的地方不许越出本机。
+
+    用户提出：**测试用例只允许本机跑（严格控制在本地电脑范围内），不允许依赖任何其他电脑、
+    服务器**，手动写的除外。失效形态：用例的前置是"某台机器上起好了那套环境"——本地起不来
+    就改去连远端（内网 IP、域名、共享环境、远程库），于是**这组用例换台机器就跑不通**，
+    也不再是"谁都能跑一遍"的回归载体。
+
+    与相邻几条分工：「外部服务替代」管**用什么替**（优先嵌入式/测试专用实现）、本条管
+    **替不替得动**（能不能只靠本机）；`specs/general/ci-cd.adoc`「运行环境须与项目声明一致」
+    管版本与工具，本条**不放宽**它。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    的 `LOCAL_ONLY_TOKENS`）；"某条用例到底连没连远端""某个地址算不算本机"属运行时事实与
+    语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("用例只允许在本机跑防线检查（不依赖本机之外的机器）")
+    run_rule_guard("check_local_only_guard")
+    phase_done()
+
+
+def check_local_service_assert_guard():
+    """『请求服务须有本机断言』防线：判据与载体是否仍在（**不在口头上限制**）。
+
+    用户口径：**如果涉及到请求服务，需要加断言，限制在本机，不在口头上限制**。相邻的
+    `check_local_only_guard` 钉的是"规范里写着本机"，管不到"某个地址到底算不算本机"——
+    而这件事在代码里可判定（回环地址集合由 RFC 6890 界定），留在口头约定上时，把
+    `127.0.0.1` 敲成内网 IP 或域名就整条越界、且没有任何检查会发声。
+
+    **规则数据**：锚点与落点在 `script/specs-rules/local-service.toml`（清单在 `_tokens.toml`
+    的 `LOCAL_SERVICE_ASSERT_TOKENS`）。**可执行的一半**是 `script/guard/local_service_assert.py`
+     （断言件 + 现场自检），它的用例在本机跑绿即"这条判据在本机成立"的取值——文本侧只证
+    "判据仍在"，证不了"那条断言真拦得住"。
+
+    **抓手须真被跑**（与 `check_operation_timeout_guard` 同一口径）：断言件在那儿、而本仓库
+    CI 里没有任何一步执行它的现场自检时——"声明的校验手段从未执行、输出看起来却是绿的"，
+    判据与载体一字不少也全绿。故本道另核 CI 里真有那一步。
+    """
+    phase("请求服务须有本机断言防线检查（不在口头上限制）")
+    rel_ci = ".github/workflows/check-specs.yml"
+    ci_path = os.path.join(REPO_ROOT, *rel_ci.split("/"))
+    if not os.path.isfile(ci_path):
+        err(f"缺少 {rel_ci}——本仓库的确定性校验没有执行入口，"
+            "`script/guard/local_service_assert.py` 也就没有任何地方跑它", rel_ci)
+    else:
+        with open(ci_path, encoding="utf-8") as fh:
+            ci_text = fh.read()
+        # 判据取**每步实际执行的命令**（见 `_workflow_runs`）：只看整段文本时，
+        # 步骤名里那个脚本路径会把"命令被换掉"兜住、这条防线形同虚设。
+        runs = [" ".join(step) for step in _workflow_runs(ci_text)]
+        if not any("script/guard/local_service_assert.py" in r.split() for r in runs):
+            err(f"{rel_ci} 里没有任何一步执行断言件的现场自检"
+                "（`script/guard/local_service_assert.py`）——抓手在那儿却没人跑它，"
+                "与『声明了校验手段却从未执行』同形；须把它接进校验链、"
+                "并让它的失败使构建失败", rel_ci)
+    run_rule_guard("check_local_service_assert_guard")
     phase_done()
 
 
@@ -12504,6 +12590,8 @@ CHECKS = (
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
     check_reusable_scenario_guard,
+    check_local_only_guard,
+    check_local_service_assert_guard,
     check_adoption_guard,
     check_ci_cd_guard,
     check_yaml_string_quote_guard,

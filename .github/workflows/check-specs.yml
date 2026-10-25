@@ -73,6 +73,11 @@ jobs:
       # 守卫自己也核本文件：缺时限时本步骤失败（不是"跳过"）。
       - name: Check every pipeline step has a decidable timeout
         run: python3 script/guard/check_pipeline_timeout.py --repo .
+      # 用例的请求落点须被断言限制在本机（`specs/general/testing.adoc`「环境与兼容」）：
+      # 断言件 `script/guard/local_service_assert.py` 的现场自检在这里真跑一次——
+      # 断言件在那儿却没人跑它，与"声明了校验手段却从未执行"同形。
+      - name: Check test requests stay on this machine
+        run: python3 script/guard/local_service_assert.py --repo .
 
   # 2) “定义未执行”核验（工具自身回归）
   #    该工具主体为人工按需运行，CI 只跑一次输出核验清单，保证其自身不回归
