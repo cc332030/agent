@@ -89,7 +89,7 @@ https://agent.c332030.com/script/fetch-specs.py
 * **文件编码与换行符、配置文件的取值书写形态**（新增/编辑文件、跨 Linux 与 Windows 协作、写 `.bat`/`.cmd`/`.ps1`、配置 `.gitattributes`/`.editorconfig`；**要写/改 YAML 一类存在隐式类型推断的配置文件的值**——出现 `version: 1.10`、`name: yes`、纯数字编号一类**裸标量**，或要判定「这个值要不要加引号」时）→ `specs/general/encoding.adoc`
 * **涉及安全边界的代码**（外部输入、认证授权、敏感信息、文件路径、命令执行、加密随机数、对外接口与错误响应之一即加载）→ `specs/general/security.adoc`
 * **引入/调整/升级依赖，或取依赖/构件/运行时/系统包**（依赖清单变化、取包失败、要新配包源或镜像站）→ `specs/general/dependency.adoc`
-* **跑测试、补测试、做性能测试或性能优化**（识别特征：要跑或补测试、要判定某处是否需要性能测试、出现性能敏感特征、要给出成绩或结论）→ `specs/general/testing.adoc`
+* **跑测试、补测试、做性能测试或性能优化**（识别特征：要跑或补测试、要判定某处是否需要性能测试、出现性能敏感特征、要给出成绩或结论，以及**要设计或调整测试用例、判定用例本身的执行代价**）→ `specs/general/testing.adoc`
 * **动手前**（要改任何东西、要替换或废弃既有流程、需判定"改完有没有破坏既有行为"；**含"这次该不该做基线测试"**——按改动性质判）→ `specs/general/planning.adoc`
 * **执行任何非平凡任务**（需读完再动手的多步骤任务）→ `specs/general/self-check.adoc`
 * **改动范围判定**（识别特征：要增删改文件、在平台上动手、任务引用了工作空间以外的文件或项目）→ `specs/general/scope.adoc`
