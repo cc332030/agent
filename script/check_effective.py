@@ -210,6 +210,14 @@ MECHANISMS = [
      "check_ci_cd_guard", "check_ci_cd_guard 钉住「触发与作用范围」「依赖与外部资源可用性」「超时与资源」关键要点（实证：引用不存在的镜像在 Prepare 阶段失败、流水线长期 pending）；『具体取值是否合理』交人 review"),
     ("平台上的派发与复核须钉定 commit sha（分支名不是稳定标识）、确认执行者可用", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住 CNB 侧『派发与复核须钉定 commit sha』『压缩提交/强推会替换对象』『git fetch -f』『派发前确认执行者实际可用』『流水线不无界挂起』与 collab 侧『派发对象须钉定 commit sha』『派发前确认执行者可执行』"),
+    ("验某项功能时的手法取「能出判据的最轻路径」", "specs/general/verify.adoc", "script/check_specs.py",
+     "check_lightest_path_guard", "check_lightest_path_guard 钉住「编译/运行验证」里最轻路径的取值、实例、判定标准三条与完整流程的两类例外（被判据的就是那道重流程本身、轻手段实际试过取不到），并核加载门、提示词公共片段与 README 同步；「这一处算不算更轻」「轻手段在本机可不可行」属运行时事实与语义判断"),
+    ("需要看显示效果时，取那个目标自身的画面、不接管用户的桌面（不截整屏、不抢焦点）",
+     "specs/general/verify.adoc", "script/check_specs.py",
+     "check_no_desktop_takeover_guard",
+     "check_no_desktop_takeover_guard 钉住「编译/运行验证」里看显示效果时的取证手法（取值四级：能不开界面就不开／界面别落在用户眼前／按窗口-进程取那一个目标的画面且『不在最上层、被盖住也取得到』／可 diff 的视觉快照，"
+     "判定标准四条、该走完整流程的两类例外、边界与『调试工具优先、操作电脑是最后一条路』），并核加载门、提示词公共片段与 README 同步；"
+     "『这一处能不能离屏取到』『某次是不是真抢了焦点』属运行时事实与语义判断"),
     ("验证须覆盖项目全部既定校验手段、验证对象须钉定 commit sha、按需验证不滥验证", "specs/general/verify.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验）"),
     ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py",

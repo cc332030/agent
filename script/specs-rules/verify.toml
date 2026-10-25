@@ -184,3 +184,113 @@ file = "specs/general/review.adoc"
 kind = "anchor_count"
 token_list = "CLEAN_SUBAGENT_REVIEW_ANCHORS"
 min = 33
+
+# 验证手法取最轻路径（用户提出）：判据本体在 `specs/general/verify.adoc`「编译/运行验证」——
+# **手法**这一面不得被删或降级（次数与范围由「按需验证、不滥验证」管，本条管每项怎么验）。
+# 锚点清单**只写一处**（`_tokens.toml` 的 `LIGHTEST_PATH_TOKENS`），本处按名引用。
+[[guards.check_lightest_path_guard]]
+file = "specs/general/verify.adoc"
+section = "编译/运行验证"
+token_list = "LIGHTEST_PATH_TOKENS"
+kind = "section_groups"
+
+# 与「最轻路径」成对：只核正文时，把锚点清单自身削掉几项（规范正文一字不少）防线仍全绿，
+# "核过且通过"与"没核"无从区分——同 `anchor_count` 的既有口径，删锚点须与调基线一并发生。
+[[guards.check_lightest_path_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 24
+token_list = "LIGHTEST_PATH_TOKENS"
+
+# 调度器须能被触发（否则该条永远不会被加载）
+[[guards.check_lightest_path_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "这项功能怎么验最省",
+    "拿不准该启动应用还是得打包成可执行产物",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「最轻路径」的识别特征 {missing}——缺则该条永远不会被触发加载，验一个功能时照旧直接整包打包"
+
+# 提示词侧同口径（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有该边界）。
+# 核对对象**收在 `final-verify` 片段内**：该片段在整份公共片段里只占一段，按整份文件核时
+# 同一批措辞出现在别的片段里就能把抽走的要点兜住（"核过且通过"与"没核"无从区分）。
+# 缺的那几项**逐条给出去向**：原写法用 `{desc}` 却没给 `desc`，报错正文里会原样留一个
+# `{desc}`（加载期的占位符白名单只保证名字合法，保不了"填得进去"）。
+[[guards.check_lightest_path_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "验证手法取\"能出判据的最轻路径\"（L1",
+    "能启动就够的不打包",
+    # 取本条的**整句**：裸"实际试过"在相邻的「看显示效果时不接管桌面」那一句里也有
+    # （同在一个片段内），按裸词核时把那句连同本条一起抽掉、本条这一项仍报绿。
+    "更轻手段在本机/本版本**实际试过**取不到该判据",
+    "对外可观察行为的最小集合",
+    "覆盖范围不变",
+]
+kind = "text_block_groups"
+message = "提示词公共片段缺失最轻路径的要点 {missing}——缺『最轻路径』本身则执行侧仍按『要验就整包打包』行事；缺实例则条文退回一句口号；缺『实际试过』则『取不到』变成凭印象的挡箭牌；缺兜底则探索性验证被读成『可任意停在某步』；缺『覆盖范围不变』则本条被读成『先轻跑一遍、不通过再加码』的许可（那是「一次到位」的违反）（提示词会被复制到未知项目执行，这层边界须随片段走）"
+
+# 公开面同步（读者不从目录说明知道有这条，就仍按"要验就得打包"行事）
+[[guards.check_lightest_path_guard]]
+file = "README.adoc"
+tokens = [
+    "验证手法取\"能出判据的最轻路径\"",
+    "specs/general/verify.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「验证手法取最轻路径」{missing}——公开面只看得见「跑全量」、看不见「最轻路径」，这条判据对读者不存在"
+
+# 需要看显示效果时不接管桌面（用户提出）：判据本体在 `specs/general/verify.adoc`
+# 「编译/运行验证」——用户实际在用这台机器，切前台/动鼠标键盘抢焦点，整屏图还把桌面
+# 一并拍下来。锚点清单只写一处（`_tokens.toml` 的 `NO_DESKTOP_TAKEOVER_TOKENS`）。
+[[guards.check_no_desktop_takeover_guard]]
+file = "specs/general/verify.adoc"
+section = "编译/运行验证"
+token_list = "NO_DESKTOP_TAKEOVER_TOKENS"
+kind = "section_groups"
+
+# 与「最轻路径」成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿。
+[[guards.check_no_desktop_takeover_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 22
+token_list = "NO_DESKTOP_TAKEOVER_TOKENS"
+
+
+# 提示词侧同口径（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有该边界）。
+# 核对对象**收在 `final-verify` 片段内**：按整份文件核时，同一批措辞出现在别的片段里
+# 就能把抽走的要点兜住。也核公开面 README（读者不从目录说明知道有这条，就仍按
+# "看效果就截整屏"行事）——两处都是**单条锚点**：条文以长句写成、要点逐条在 token 侧核，
+# 这里只答"这一层有没有被整段抽掉"。
+[[guards.check_no_desktop_takeover_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "取那个目标自己的画面、不接管用户的桌面（L1）",
+    "不在最上层、被盖住",
+    "实际试过",
+    "DevTools 协议",
+]
+kind = "text_block_groups"
+message = "提示词公共片段缺失「看显示效果不接管桌面」的要点 {missing}——缺条文则执行侧仍按「切前台 + 整屏截图」取证；缺『不在最上层、被盖住』则执行者以为只能切到前台；缺『实际试过』则例外变成凭印象的挡箭牌；缺 DevTools 则调试工具排不到前面"
+
+[[guards.check_no_desktop_takeover_guard]]
+file = "README.adoc"
+tokens = [
+    "需要看显示效果时不接管用户的桌面",
+    "specs/general/verify.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「看显示效果不接管桌面」{missing}——公开面只看得见「看效果就截图」，这条判据对读者不存在"
+
+# 调度器须能被触发（否则「要看显示效果」时这一条永远不会被加载）。
+[[guards.check_no_desktop_takeover_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "要看显示效果时",
+    "截整屏",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「看显示效果时不接管桌面」的识别特征 {missing}——缺则看效果照旧切前台 + 整屏截图"

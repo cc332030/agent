@@ -139,6 +139,7 @@ class CheckSpecsTestCase(unittest.TestCase):
             f.write(content)
 
     def error_texts(self) -> str:
+        # 名字虽叫 `texts`，返回的是**拼好的字符串**（既有用例都按 `in` / `assertNotIn` 用）。
         return "\n".join(cm.errors)
 
     # 规则数据是判据措辞的**唯一来源**：凡"本道判据外置在 `script/specs-rules/`"的防线，
@@ -4155,7 +4156,9 @@ class TestCheckVerifyGuard(CheckSpecsTestCase):
                    "不重跑全量编译与测试）；"
                    "\"内容没变\"不是\"少核对\"的借口；"
                    "判据问句\"会不会被未知项目加载\"；先判改动性质；不得互串；取**更严的一侧**；"
-                   "每次验证都换一个干净上下文。\n\n"
+                   "每次验证都换一个干净上下文；"
+                   "验证手法取\"能出判据的最轻路径\"（L1）、能承载该判据的更轻手段优先；"
+                   "判据在哪一步，就走到哪一步为止；须先实际试过。\n\n"
                    "=== 验证的效力等级\n\n"
                    "确定项（判据本体验证）走机械校验；概念项只能启发式复核；未发现问题；悬置；"
                    "不得当作阻断交付的条件。\n\n"
@@ -5074,13 +5077,28 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         self.write_real_file(self.README)
         self.write_rules_fixture()
 
-    def _mutate(self, rel, removed, replacement=""):
+    def setUp(self) -> None:
+        super().setUp()
+        self._fixture_root = self.root
+
+    def _mutate(self, rel, removed, replacement="", within=None):
+        # `within`：**只在那一行里**替换（不传＝全文首次命中）。「最轻路径」与相邻的
+        # 「看显示效果时不接管桌面」共用同一批字样（"实际试过"），全文替换会命中新条那份、
+        # 把本条的风险漏检——故按行取。
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
         with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
             text = fh.read()
         self.assertIn(removed, text)
         self._write_valid()
-        self.write(rel, text.replace(removed, replacement, 1))
+        if within is None:
+            mutated = text.replace(removed, replacement, 1)
+        else:
+            lines = text.split("\n")
+            hit = [i for i, line in enumerate(lines)
+                   if within in line and removed in line][0]
+            lines[hit] = lines[hit].replace(removed, replacement, 1)
+            mutated = "\n".join(lines)
+        self.write(rel, mutated)
 
     def test_valid_passes(self):
         self._write_valid()
@@ -5141,6 +5159,376 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
 
     def tearDown(self) -> None:
         # 同 setUp：把规则引擎缓存作废，避免本类的夹具目录残留给后续用例
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
+class TestCheckLightestPathGuard(CheckSpecsTestCase):
+    """钉住『验证手法取最轻路径』（用户口径：功能验证在保证必要流程完整性的前提下走最小
+    流程——tauri 类项目可直接启动验某个功能，就不必打包成 exe，除非要验的正是打包流程
+    或产物本身；可扩展到所有验证情况）。
+
+    失效形态：条文齐了但**手法**这一面没人管——验一个功能先整包打成可执行产物，重流程
+    全跑一遍、而这步并不产出该项判据。故按六组锚点核 `specs/general/verify.adoc`
+    「编译/运行验证」（取值、实例、判定标准、两类例外、与相邻两条的分工、依据行），
+    并钉加载门（调度器识别特征）、提示词公共片段与公开面 README 同步。
+    规则数据在 `script/specs-rules/verify.toml`（锚点清单在 `_tokens.toml`）。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 本类全部读**本用例的夹具根**：跑过别的用例后模块全局可能停在别处（本仓库实测：
+        # 单跑反例时 `REPO_ROOT` 已是 `/workspace`，防线随即读到真文本、造出来的删除一律
+        # 报绿），故此处按显式目录另建一个，与 `self.root` 同寿命（`tearDown` 一并删掉）。
+        self._fixture_root = tempfile.mkdtemp()
+        self.root = self._fixture_root
+        cm.REPO_ROOT = self.root
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _guard(self, check):
+        """跑防线前把 `REPO_ROOT` 钉回本用例的夹具根（父类 setUp 定的那一个）。
+
+        不钉的后果：跑过一次用例后模块全局可能停在真实仓库（本仓库实测：单跑反例时
+        `REPO_ROOT` 已是 `/workspace`，防线随即读到真文本、造出来的删除一律报绿）。
+        """
+        cm.REPO_ROOT = self._fixture_root
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        check()
+        self.assertEqual(cm.REPO_ROOT, self._fixture_root)
+
+    def _write_valid(self):
+        # 真文档逐字（不手抄）：锚点与真文档脱节时第一时间暴露
+        for rel in (self.VERIFY, self.COMMON, self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement="", within=None):
+        # `within`：**只在那一行里**替换（不传＝全文首次命中）。「最轻路径」与相邻的
+        # 「看显示效果时不接管桌面」共用同一批字样（"实际试过"），全文替换会命中新条那份、
+        # 把本条的风险漏检——故按行取。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        if within is None:
+            mutated = text.replace(removed, replacement, 1)
+        else:
+            lines = text.split("\n")
+            hit = [i for i, line in enumerate(lines)
+                   if within in line and removed in line][0]
+            lines[hit] = lines[hit].replace(removed, replacement, 1)
+            mutated = "\n".join(lines)
+        self.write(rel, mutated)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        self._guard(cm.check_lightest_path_guard)
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"要验就走完整流程"）
+        self._mutate(self.VERIFY, "* **验证手法取\"能出判据的最轻路径\"（L1）**", "* **验证方式另议**")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("最轻路径的取值", self.error_texts())
+
+    def test_example_dropped_reports(self):
+        # 反例②：实例被抽（条文退回一句口号，照旧整包打包）
+        self._mutate(self.VERIFY, "能启动就够的不打包", "尽量轻")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("能启动就够的不打包", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例③：判定标准被抽（被读成"建议尽量轻"，最典型的两类失效无处拦）
+        self._mutate(self.VERIFY, "用比基线更重的手段验同一件事", "")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("用比基线更重的手段验同一件事", self.error_texts())
+
+    def test_exemption_dropped_reports(self):
+        # 反例④：两类例外被抽（验打包流程本身反倒被本条缩掉）
+        self._mutate(self.VERIFY, "该走完整流程的两类例外", "执行者自行取舍")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("该走完整流程的两类例外", self.error_texts())
+
+    def test_tested_in_practice_dropped_reports(self):
+        # 反例⑤：'实际试过'被抽（"取不到"变成凭印象的挡箭牌）
+        self._mutate(self.VERIFY, "该走完整流程的两类例外", "两类例外另议")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("该走完整流程的两类例外", self.error_texts())
+
+    def test_division_dropped_reports(self):
+        # 反例⑥：与相邻两条的分工被抽（本条被读成「按需验证」的重复条文）
+        self._mutate(self.VERIFY, "本条管**每项怎么验**", "本条为补充说明")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("每项怎么验", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑦：调度器识别特征被抽（验功能时想不到加载该条）
+        self._mutate(self.COMMON, "这项功能怎么验最省", "验证相关")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("这项功能怎么验最省", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑧：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "能启动就够的不打包", "视情况而定")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑨：公开面 README 未登记（读者只看得见"跑全量"）
+        self._mutate(self.README, "验证手法取\"能出判据的最轻路径\"", "验证")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑩：规范文件整体缺失
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("缺少 specs/general/verify.adoc", self.error_texts())
+
+    def test_exempt_path_stays_exempt(self):
+        # 正例（防"例外被写反"）：验打包流程本身时重流程**不得**被判违规——条文里那两类例外
+        # 必须仍在，否则本条会把"要验的就是可执行产物"这条正常路径一起拦掉（准入面）
+        self._write_valid()
+        with open(os.path.join(self.root, self.VERIFY), encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("该走完整流程的两类例外", body)
+        self.assertIn("判据在哪一步，就走到哪一步为止", body)
+        cm.check_lightest_path_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_adjacent_items_do_not_mask(self):
+        # 反例⑫：本条被整段抽掉，但相邻「按需验证」「验证须覆盖全部既定校验手段」里
+        # 仍有"验证""手段""全量"这类同形字样——核对面若落在整节上就会被兜住、报绿。
+        # 本条按**本 bullet 自己的措辞**核，故仍须报红。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.VERIFY), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index('* **验证手法取"能出判据的最轻路径"（L1）**')
+        end = text.index("\n* **以真实结果为准（L1）**", start)
+        self._write_valid()
+        self.write(self.VERIFY, text[:start] + text[end + 1:])
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("最轻路径的取值", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑪：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里
+        self._write_valid()
+        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.write("script/specs-rules/verify.toml",
+                   rules.replace("min = 24", "min = 99", 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("LIGHTEST_PATH_TOKENS", self.error_texts())
+
+    def test_ui_instance_dropped_reports(self):
+        # 反例⑬：实例**被抽走一条**（"能查接口/日志的不手点 UI"）——这一条只在规范正文里
+        # 出现一次，锚点清单里漏了它时，正文删掉它防线仍全绿（"条文少了一句"与"核过且通过"
+        # 无从区分）。同组其余三条都还在，故只有这一枚锚点能拦住它。
+        self._mutate(self.VERIFY, "、能查接口/日志的不手点 UI", "")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("能查接口/日志的不手点 UI", self.error_texts())
+
+    def test_exemption_half_dropped_reports(self):
+        # 反例⑭：例外②的**前提**被抽走（「取不到该判据」→「可能行不通」）——同组其余
+        # 锚点（"两类例外"、"判据在哪一步就走到哪一步为止"、"实际试过"）都还在，
+        # 只核「实际试过」时这一半可被抽掉而防线全绿；而「取不到」正是例外的成立条件，
+        # 抽走它等于把例外②变成一句"总可以试一下"。
+        self._mutate(self.VERIFY, "**② 更轻手段取不到该判据**", "**② 更轻手段可能行不通**")
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("取不到该判据", self.error_texts())
+
+    def test_prompt_clip_scope_is_the_fragment(self):
+        # 反例⑮：提示词侧的核对对象须**收在 `final-verify` 片段内**——按整份文件核时，
+        # 同一批措辞出现在别的片段里就把抽走的要点兜住了（本仓库实测：`build-parallel`
+        # 里删掉的那句仍能在别处命中，防线全绿）。这里把那句**搬到另一个片段**，
+        # 片段内已经没有了，须报红。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.PROMPT), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("// tag::build-parallel[]", text)
+        moved = text.replace("能启动就够的不打包", "", 1)
+        moved = moved.replace("// tag::build-parallel[]",
+                              "// tag::build-parallel[]\n能启动就够的不打包", 1)
+        self._write_valid()
+        self.write(self.PROMPT, moved)
+        self._guard(cm.check_lightest_path_guard)
+        self.assertIn("能启动就够的不打包", self.error_texts())
+
+    def test_prompt_message_placeholders_filled(self):
+        # 反例⑯：提示词侧的报错文案不得留未填的占位符——`{desc}` 在 `file_tokens` 那一步
+        # 没有对应的填充值（加载期只校验占位符**名字**合法，保不了"填得进去"），
+        # 报错正文会把 `{desc}` 原样给读者看。这里比对"报出来的那句话里没有花括号"。
+        # 提示词片段里"实际试过"也是新条共用的字样（新条的片段与「最轻路径」同在
+        # `final-verify` 内），故按本条的整句取——替换落到新条那句上时本条的风险就漏检了。
+        self._mutate(self.PROMPT, "更轻手段在本机/本版本**实际试过**取不到该判据",
+                     "更轻手段可能取不到该判据")
+        cm.check_lightest_path_guard()
+        prompt_errors = [e for e in cm.errors if "prompts/_common.txt" in e]
+        self.assertTrue(prompt_errors, self.error_texts())
+        for e in prompt_errors:
+            self.assertNotIn("{", e)
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        shutil.rmtree(getattr(self, "_fixture_root", ""), ignore_errors=True)
+        super().tearDown()
+
+
+class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
+    """钉住『看显示效果时不接管桌面』（用户口径：需要看实际显示效果时尽量少截图、不要整屏，
+    **只截那一个进程/窗口**——哪怕它不在最上层也能取到；调试工具（Chrome DevTools）能代替的
+    优先代替，因为**操作电脑会影响用户使用**）。
+
+    失效形态：条文齐了但**取证手法**这一面没人管——看一次界面就把应用切到前台、动鼠标点一遍、
+    再截一张整屏图：抢走用户的输入焦点、打断他手上的事，还把用户的桌面一并拍下来。故按六组
+    锚点核 `specs/general/verify.adoc`「编译/运行验证」（判据对象、取值四级、判定标准、两类例外、
+    边界与工具优先、依据行），并钉加载门（调度器识别特征）、提示词公共片段与公开面 README 同步。
+    规则数据在 `script/specs-rules/verify.toml`（锚点清单在 `_tokens.toml`）。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+    START = "* **需要看显示效果时，取那一个目标自身的画面、不接管用户的桌面（L1）**"
+    NEXT = "* **以真实结果为准（L1）**"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.VERIFY, self.COMMON, self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_no_desktop_takeover_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"要看效果就切前台、截整屏"）
+        self._mutate(self.VERIFY, self.START, "* **看效果另议**")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_instance_dropped_reports(self):
+        # 反例②：取值被抽（条文退回一句口号）
+        self._mutate(self.VERIFY, "能不开界面就不开", "尽量少看")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("能不开界面就不开", self.error_texts())
+
+    def test_offscreen_window_instance_dropped_reports(self):
+        # 反例③：**"不在最上层也能取到画面"** 这一条被抽（用户原话点名的那一条）——
+        # 抽掉它，执行者就以为"要看效果只能把它切到前台"，本条的核心取值当场失效
+        self._mutate(self.VERIFY, "不在最上层、被别的窗口盖住", "尽量让它可见")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("不在最上层", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例④：判定标准被抽（被读成"尽量少截图"，整屏图无处拦）
+        self._mutate(self.VERIFY, "而判据只需要其中一个目标窗口/页面", "")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("判定标准四条", self.error_texts())
+
+    def test_exemption_dropped_reports(self):
+        # 反例⑤：例外被抽（真机交互、必须手点的路径被本条一并拦掉）
+        self._mutate(self.VERIFY, "『用户手动操作』这条路径本身", "其他情况")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("『用户手动操作』这条路径本身", self.error_texts())
+
+    def test_tested_in_practice_dropped_reports(self):
+        # 反例⑥：'实际试过'被抽（"取不到"变成凭印象的挡箭牌）
+        self._mutate(self.VERIFY, "在**这台机器、这个版本、这个形态上实际试过取不到**",
+                     "**可能**取不到")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("实际试过", self.error_texts())
+
+    def test_boundary_dropped_reports(self):
+        # 反例⑦：边界被抽（本条被读成"先手工看、不行再自动"的许可）
+        self._mutate(self.VERIFY, "不是『先手工看一眼、不通过再上自动』的许可", "")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("不是『先手工看一眼", self.error_texts())
+
+    def test_devtools_priority_dropped_reports(self):
+        # 反例⑧：调试工具优先 / "操作电脑是最后一条路"被抽
+        self._mutate(self.VERIFY, "『操作电脑』是**最后**一条路", "必要时也可以操作电脑")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("『操作电脑』是", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑨：调度器识别特征被抽（要看显示效果时想不到加载该条）
+        self._mutate(self.COMMON, "要看显示效果时", "验证相关")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("要看显示效果时", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑩：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "取那个目标自己的画面、不接管用户的桌面（L1）", "截图即可")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑪：公开面 README 未登记（读者只看得见"看效果就截图"）
+        self._mutate(self.README, "需要看显示效果时不接管用户的桌面", "截图说明")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑫：规范文件整体缺失
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("缺少 specs/general/verify.adoc", self.error_texts())
+
+    def test_adjacent_items_do_not_mask(self):
+        # 反例⑬：本条被整段抽掉，但相邻的「验证手法取最轻路径」里仍有"能查接口/日志的不手点
+        # UI""实际试过""两类例外"这类同形字样——核对面若落在整节上就会被兜住、报绿。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.VERIFY), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index(self.START)
+        end = text.index(self.NEXT, start)
+        self._write_valid()
+        self.write(self.VERIFY, text[:start] + text[end:])
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑭：**锚点清单自身**被削（规范正文一字不少、正文核全绿）
+        self._write_valid()
+        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.write("script/specs-rules/verify.toml",
+                   rules.replace('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"',
+                                 'min = 99\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("NO_DESKTOP_TAKEOVER_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         super().tearDown()
