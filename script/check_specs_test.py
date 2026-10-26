@@ -7183,7 +7183,8 @@ class TestCheckChecklistGuard(CheckSpecsTestCase):
                    "**预估它的最长执行时间**并设可判定的时限；**没有进度输出的操作尤其适用**。\n"
                    "* **超时后先排查、再换手段继续（L1）**：① **排查原因**；"
                    "② **换一种手段继续**，并继续做不依赖该操作的其余部分，"
-                   "**不得把整条任务停在中间**；**不得把超时未完成的操作写成已完成**。\n"
+                   "**不得把整条任务停在中间**；② **不得把超时未完成的操作写成已完成**——"
+                   "\"已完成/已通过\"与\"超时未完成\"是两个结论，不得混写；\n"
                    "* **与复核者超时的分工（L1）**："
                    "**执行类操作没有这条约束**，超时后须换手段做完，**不得直接放弃该步骤**。\n")
         self.write("AGENTS.adoc", "= 项目入口\n\n由 `check_demo_guard` 钉住，见 `clean_tmp.py`。\n")
@@ -8502,7 +8503,9 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         "精炼性判**\"同一描述有几处\"**；本条判**\"单处里有多少句是废话\"**——"
         "**只有一处、完全不重复的一段文字，仍可能通篇是废话**。\n"
         "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
-        "② **空话**；③ **同义反复**；④ **可有可无的铺垫**。\n"
+        "② **空话**；③ **同义反复**；④ **可有可无的铺垫**；"
+        "⑤ **反向兜底**——把本条并不禁止的另一种做法专门拦掉，越细越像是在给它立一个**首因**；"
+        "**边界与反例不在此列**。\n"
         "* **陈述句不得降格为表意不明（L2）**：删掉**不承载信息的限定语**；"
         "确属有边界的判断**须写出边界**。\n"
         "* **边界（防反用，L1）**：**内容不减少（最高关注项 P3）优先于本条**；"
@@ -8565,10 +8568,26 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         # 反例：判定标准被抽成一句"要注意" -> 本条自身不可判定
         self._write(section=self.SECTION.replace(
             "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
-            "② **空话**；③ **同义反复**；④ **可有可无的铺垫**。\n",
+            "② **空话**；③ **同义反复**；④ **可有可无的铺垫**；"
+            "⑤ **反向兜底**——把本条并不禁止的另一种做法专门拦掉，越细越像是在给它立一个**首因**；"
+            "**边界与反例不在此列**。\n",
             "* **每一句都要有承载（L2）**：注意别写废话。\n"))
         cm.check_info_density_guard()
         self.assertIn("判定标准", self.error_texts())
+
+    def test_backward_guard_removed_reports(self):
+        # 反例（用户口径）：抽掉「反向兜底」→ 本条并不禁止、也不必提及的另一种做法
+        # 又会被专门写一句拦掉，写下的那个动作名成了可被照着做的第二份来源
+        self._write(section=self.SECTION.replace(
+            "；⑤ **反向兜底**——把本条并不禁止的另一种做法专门拦掉，越细越像是在给它立一个**首因**", ""))
+        cm.check_info_density_guard()
+        self.assertIn("反向兜底", self.error_texts())
+
+    def test_backward_guard_boundary_removed_reports(self):
+        # 反例：抽掉「边界与反例不在此列」→ ⑥ 被反用，正当的防反用（边界与反例）一并被删
+        self._write(section=self.SECTION.replace("；**边界与反例不在此列**", ""))
+        cm.check_info_density_guard()
+        self.assertIn("边界与反例不在此列", self.error_texts())
 
     def test_p3_boundary_removed_reports(self):
         # 反例：与 P3 的边界被删 -> 本条会被反用成"这一段很长就删短"
@@ -17236,9 +17255,8 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         "\n"
         "== 文件命名\n"
         "\n"
-        "* **脚本对应文档命名**：**不允许一个脚本对应一个文档**——即"
-        "**不以脚本文件的个数作为独立文档的个数**，也**不按脚本名给文档命名**"
-        "（`check-specs.adoc` 之类）。\n"
+        "* **脚本不参与「文档取源文件名」的命名规则**：**不按脚本名给文档命名**；"
+        "**不新增脚本配套文档**。\n"
         "\n"
         "== 脚本文档的承载位置与协作粒度（默认写进脚本自身）\n"
         "\n"
@@ -17267,6 +17285,7 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         "* **命名与格式**：独立设计文档**按功能/模块命名**；**仅当该文档确实只对应某个具体的"
         "代码/脚本/类文件时**，才取该源文件名（去扩展名）加 `.adoc`（`Foo.java` → `Foo.adoc`；"
         "**脚本不在其列**——按脚本名给文档命名即「一个脚本 ↔ 一个文档」的形态）。\n"
+        "* **代码与文档互相引用**：双向可定位；**脚本不在其列**。\n"
         "\n"
         "=== 信息归属（同一信息只写一处）\n"
         "* **用法与细节写在被使用的那一份里，外层登记只写\"这是干什么用的\"（L1）**：\n"
@@ -17418,17 +17437,16 @@ class TestCheckScriptSelfdocGuard(CheckSpecsTestCase):
         # 实测形态：只留「不允许一个脚本对应一个文档」、抽掉两条实现层判据，
         # 主防线的规则步骤按**节**取锚点、够不到本节，于是全绿。
         self._write_valid(self.SCRIPT.replace(
-            "* **脚本对应文档命名**：**不允许一个脚本对应一个文档**——即"
-            "**不以脚本文件的个数作为独立文档的个数**，也**不按脚本名给文档命名**"
-            "（`check-specs.adoc` 之类）。\n", ""))
+            "* **脚本不参与「文档取源文件名」的命名规则**：**不按脚本名给文档命名**；"
+            "**不新增脚本配套文档**。\n", ""))
         cm.check_script_selfdoc_guard()
         self.assertIn("不按脚本名给文档命名", self.error_texts())
 
     def test_naming_rule_clause_removed_reports(self):
-        # 反例：同一条只抽「也不按脚本名给文档命名」→ `check_specs.py` → `check_specs.adoc`
+        # 反例：同一条只抽「不按脚本名给文档命名」→ `check_specs.py` → `check_specs.adoc`
         # 这类同源命名重新被读成合法（主防线的锚点一字不少）
         self._write_valid(self.SCRIPT.replace(
-            "，也**不按脚本名给文档命名**", ""))
+            "**不按脚本名给文档命名**；", ""))
         cm.check_script_selfdoc_guard()
         self.assertIn("不按脚本名给文档命名", self.error_texts())
 
@@ -23133,7 +23151,7 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
 
 
     def test_command_file_missing_reports(self):
-        # 反例①：命令文件整个不在 -> 用户点名的七类判据没有任何一处组织成"全文一次过"
+        # 反例①：命令文件整个不在 -> 用户点名的八类判据没有任何一处组织成"全文一次过"
         self._write_valid()
         os.remove(os.path.join(self.root, "prompts", "spec-refine.adoc"))
         self._run()
@@ -23216,8 +23234,8 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
         self.assertIn("tmp", self.error_texts())
 
     def test_self_classification_boundary_removed_reports(self):
-        # 反例⑱（三视角复核查出）：把七类扫描面读成七条新判据 -> 第二真源
-        self._mutate(self.CMD, "本命令自定的只是**扫描面的分类**", "本命令另立七条判据")
+        # 反例⑱（三视角复核查出）：把八类扫描面读成八条新判据 -> 第二真源
+        self._mutate(self.CMD, "本命令自定的只是**扫描面的分类**", "本命令另立八条判据")
         self._run()
         self.assertIn("扫描面的分类", self.error_texts())
 

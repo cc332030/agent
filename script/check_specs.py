@@ -9732,8 +9732,8 @@ def check_script_selfdoc_guard():
     # "按脚本名给文档命名"就是一个脚本一篇的实现形态（判据本体见 `specs/general/script.adoc`）
     for rel, keys, desc in (
         ("specs/general/doc-design.adoc", ("脚本不在其列", "按脚本名给文档命名"),
-         "设计文档的命名条须写明**脚本不在「文档取源文件名」之列**——"
-         "缺则 `check_specs.py` → `check_specs.adoc` 这类同源命名被读成合法，"
+         "设计文档的命名条须写明**脚本不在「文档取源文件名」之列**（双向引用条以「脚本不在其列」"
+         "把脚本排除在外）——缺则 `check_specs.py` : `check_specs.adoc` 这类同源命名被读成合法，"
          "「不允许一个脚本对应一个文档」当场失效"),
         ("specs/general/doc-tool.adoc", ("脚本同样不为每个脚本各建一篇文档",),
          "通用工具/库类项目的粒度条须写明**脚本同样不逐脚本建篇**——"
