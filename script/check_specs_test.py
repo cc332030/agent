@@ -24976,6 +24976,39 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
                              "**样式约定（网页）")
         self.assertIn("README", self.error_texts())
 
+    def test_important_last_step_removed_reports(self):
+        # 反例⑮：`!important` 是最后一步那条被抽 -> 它重新成为常规手段（用户原话的靶心）
+        self._run_guard_with(self.CODING,
+                             "**`!important` 是最后一步，不是常规手段（L1）**",
+                             "**样式写法（L2）**")
+        self.assertIn("`!important`", self.error_texts())
+
+    def test_important_over_important_removed_reports(self):
+        # 反例⑯：『以 `!important` 覆盖 `!important` 即违规』被抽 -> 层层加码无人可判
+        self._run_guard_with(self.CODING,
+                             "**以 `!important` 覆盖 `!important` 即违规**",
+                             "**必要时可以再压一层**")
+        self.assertIn("覆盖", self.error_texts())
+
+    def test_important_frequency_measured_per_write_site_reports(self):
+        # 反例⑰：『判定只在写它的那处算、不看调用点有多少』被抽 -> 复用的那一处被误判成频繁
+        self._run_guard_with(self.CODING,
+                             "**判定只在写它的那处算、不看调用点有多少**",
+                             "**按调用点多少判定**")
+        self.assertIn("判定只在写它的那处算", self.error_texts())
+
+    def test_web_important_carrier_removed_reports(self):
+        # 反例⑱：栈层没有 `!important` 的落点 -> 通用层只有次序、执行者仍散在页面里加
+        self._run_guard_with(self.WEB, "**`!important` 的落点（载体）**",
+                             "**样式写法（可选）**")
+        self.assertIn("落点", self.error_texts())
+
+    def test_dispatcher_style_priority_gate_removed_reports(self):
+        # 反例⑲：加载门少了「要写/改样式优先级」这一识别特征 -> 只会写 CSS 时永不加载该节
+        self._run_guard_with(self.COMMON, "含**样式优先级**",
+                             "含**样式整理**")
+        self.assertIn("样式优先级", self.error_texts())
+
     def test_anchor_list_shrunk_reports(self):
         # 反例⑭（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
         self._write_all_valid()
