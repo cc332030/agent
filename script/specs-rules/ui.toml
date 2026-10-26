@@ -24,7 +24,7 @@ file = "specs/general/coding.adoc"
 section = "界面与样式"
 kind = "anchor_count"
 token_list = "UI_STYLE_ANCHORS"
-min = 33
+min = 37
 
 # ② 前端载体：技术栈层只给载体、不另立判据（第二真源由本组反向钉住）。
 [[guards.check_ui_style_guard]]
@@ -65,6 +65,14 @@ groups = [
         ],
         "缺则覆盖框架外观散在使用点、复刻时的差异清单没有落点（同一属性多处覆盖）",
     ],
+    [
+        "`!important` 的落点（载体）",
+        [
+            "**`!important` 的落点（载体）**",
+            "页面级的就地样式里",
+        ],
+        "缺则通用层那条只有次序没有落点：`!important` 散到页面级就地样式里、或在同一段里层层加码，而栈层读不到它该写在哪一处",
+    ],
 ]
 [[guards.check_ui_style_guard]]
 file = "specs/stack/web.adoc"
@@ -88,9 +96,10 @@ kind = "file_tokens"
 tokens = [
     "**界面**",
     "含**界面**",
+    "含**样式优先级**",
     "**前端界面载体**",
 ]
-message = "『界面与样式』防线被破坏：{file} 缺失要点 {missing}——调度器须在「任何代码活动」与前端栈两处登记界面的识别特征，缺则执行者写页面/样式时永不加载该节，判据存在却走不到"
+message = "『界面与样式』防线被破坏：{file} 缺失要点 {missing}——调度器须在「任何代码活动」与前端栈两处登记界面的识别特征（含样式优先级的触发：要写/改选择器或考虑要不要加 `!important` 时），缺则执行者写页面/样式时永不加载该节，判据存在却走不到"
 
 # ④ README 目录说明同步（读者按 README 学习时须知道有这条规则）。
 [[guards.check_ui_style_guard]]

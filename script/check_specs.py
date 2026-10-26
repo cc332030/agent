@@ -378,6 +378,14 @@
      事实与语义判断，交人/子 agent 复核。
 
  96. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
+     ——框架与开源样式方案优先、同一形态只许一个样式来源、框架默认外观只在一处改、
+     **`!important` 是最后一步**（取用次序：提高选择器优先级 → 收进来源那一处 → 覆盖层收在
+     一处并写明理由；判定标准三条，其中『判定只在写它的那处算、不看调用点有多少』把「频繁」
+     落成可核对的取值——以它覆盖它即违规）、从零写的唯一正当情形、从零也须收在一处、存量随动
+     迁移；前端载体在技术栈层 `specs/stack/web.adoc`「界面（载体）」（只给落点、回指唯一真源）。
+     规则数据在 `script/specs-rules/ui.toml` + `_tokens.toml` 的 `UI_STYLE_ANCHORS`。由
+     `check_ui_style_guard` 钉住；「这一处算不算同一形态」「这一处算不算频繁加 `!important`」属
+     语义判断与运行时事实，交人/子 agent 复核。
  97. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
      「界面与样式」下的三级小节——界面之外还有**功能与工具类**：业务上同义的产出（函数、工具
      方法、组件、数据契约、配置、校验规则）**只许有唯一一处来源**；**第一处就该放在能被取用的
@@ -2411,6 +2419,11 @@ def check_ui_style_guard():
     这条**不限于网页**（Java、Python 等同样能写页面，必要时扩到所有语言）；
     而**逆向/复刻一个网页时为与原来一致**，从零写是**正当情形**（兼容性一面）。
 
+    用户后续补了一条同节判据：**css 尽量避免使用 `!important`**——它的失效不是「用了一次」，
+    而是**散开**（逐处再加更强的 `!important` 去覆盖，改一处必漏一处）。故本条与本道同节同源、
+    不另开防线：判据本体在该节的「`!important` 是最后一步」一条（取用次序 + 三条判定标准，
+    其中「判定只在写它的那处算、不看调用点有多少」正是「频繁」的可核对取值）。
+
     判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」（任何语言、任何端）。
     故本道核**四处**：
       * 真源：该节的要点（规则数据 `script/specs-rules/ui.toml` + `_tokens.toml`）；
@@ -4316,8 +4329,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 163  # 同源实取：新增 `check_local_service_assert_guard` 后，`CHECKS` 序列唯一名实取 163
-GUARD_TEST_BASELINE = 2188  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「请求服务须有本机断言」12 条反例 + 断言件自身 17 条用例后实取）
+GUARD_WIRING_BASELINE = 163  # 同源实取：`CHECKS` 序列唯一名（新增 `check_local_service_assert_guard` 后为 163；本条不新开防线，数不抬）
+GUARD_TEST_BASELINE = 2194  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「`!important` 是最后一步」5 条反例后实取；合并 `main` 后按现场实测取 2194）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
