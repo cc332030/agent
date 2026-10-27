@@ -161,7 +161,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（已有 PR 时不得私开 PR）的判据措辞外置在该文件里
                            "script/specs-rules/cnb.toml",
                            # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
-                           "script/specs-rules/local-service.toml")
+                           "script/specs-rules/local-service.toml",
+                           # 本道（猜到的行为先报、待人工确认）的判据措辞外置在该文件里
+                           "script/specs-rules/execution.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -22855,10 +22857,12 @@ class TestCheckStagedDeliveryGuard(CheckSpecsTestCase):
         self.assertIn("从最后一个已交付的阶段继续", self.error_texts())
 
     def test_merge_boundary_removed_reports(self):
-        # 反例：删掉"只到提交 + 推送 + 建 PR（不含合并）" -> 与 delivery 的『合并一律不做』相抵
+        # 反例：删掉"只到提交 + 推送 + 建 PR（不含合并）" -> 与 delivery 的『合并一律不做』相抵。
+        # 锚点取"边界："这一处出现、不取独立的 `提交 + 推送 + 建 PR`：本条要求两端的交付链都是
+        # 那三步，同一串字在别处还会出现，按裸串取会让本反例失去对象（改到那处即转向）。
         self._mutate_git("**边界：只到\"提交 + 推送 + 建 PR\"（L1）**")
         self._run()
-        self.assertIn("提交 + 推送 + 建 PR", self.error_texts())
+        self.assertIn("边界：只到", self.error_texts())
 
     def test_source_line_removed_reports(self):
         # 反例：删掉依据行 -> 依据与"哪一部分是本集合自己加的严"都无从追溯
@@ -22893,8 +22897,15 @@ class TestCheckStagedDeliveryGuard(CheckSpecsTestCase):
     def test_common_prompt_pointer_removed_reports(self):
         # 反例：片段里的判据本体回指被删 -> 该边界在提示词侧成为第二真源（或悬空）
         self._write_valid()
-        self.write(self.COMMON, self._text_of(self.COMMON).replace(
-            "判据本体见 `specs/general/git.adoc`「分阶段交付（大任务）」", "判据见规范"))
+        # 只在**片段正文**里替换：本节新增的两条 bullet 也回指这个节名，按全文替换会
+        # 连它们一起改掉、反例失去对象（抗「让反例适应改动」：夹具按段取值，不按全文）。
+        text = self._text_of(self.COMMON)
+        head = "   - **阶段成果的交付（L1，任务中途也有交付）**"
+        start = text.index(head)
+        stop = text.index("\n", start)
+        self.write(self.COMMON, text[:start] + text[start:stop].replace(
+            "判据本体见 `specs/general/git.adoc`「分阶段交付（大任务）」",
+            "判据见规范「交付时机」") + text[stop:])
         self._run()
         self.assertIn("分阶段交付（大任务）", self.error_texts())
 
@@ -25539,6 +25550,168 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, self.CNB))
         self._run_guard()
         self.assertIn("specs/platform/cnb.adoc", self.error_texts())
+
+
+class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
+    """钉住『猜到的行为先报、待人工确认』防线（**用户提出**）。
+
+    用户口径：『可以猜我的行为，但是不要直接执行，需要人工确认』，并指明『这一句不止是说提交』；
+    第二轮补上**例外**：『只有检查出问题，比如代码编译错误（少了啥多了啥）、少了用例、文档的逻辑
+    错误、引用错误这种无需确认（没有争议）的场景，可以直接执行调整或修复』。
+
+    故本道两侧都要钉：① **默认动作**——猜出来的那一步须先报、待人工确认；② **例外**——只有一种
+    正确修法、且不改判任何既有取值的客观错误可直接修。少了②，"先报"会被读成"连编译错误也要问"。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本** + 规则数据 `execution.toml` 按原样落进夹具；
+    每个用例在内存副本上做一处定点改动后落进临时根再跑防线。手抄节选会与现场漂移，故不手抄。
+    """
+
+    FILES = ("specs/general/planning.adoc", "specs/core/execution.adoc",
+             "specs/general/git.adoc", "prompts/_common.txt", "prompts/review.adoc")
+    PLANNING, CORE, GIT, COMMON, REVIEW = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+        self._orig_common = getattr(cm, "COMMON_PROMPT_FILE", None)
+        setattr(cm, "COMMON_PROMPT_FILE", os.path.join(self.root, self.COMMON))
+
+    def tearDown(self) -> None:
+        setattr(cm, "COMMON_PROMPT_FILE", self._orig_common)
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_guess_confirm_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_removed_reports(self):
+        # 反例①：判据本体整条被摘（只剩必加载层那一句底线）
+        self._run_guard_with(
+            self.PLANNING,
+            "* **猜到的行为不是指令：先报、待人工确认（L1）**",
+            "* **旧的一条（L1）**")
+        self.assertIn("猜到的行为不是指令", self.error_texts())
+
+    def test_default_no_action_removed_reports(self):
+        # 反例②：默认动作被抽——"猜得准"重新变成授权
+        self._run_guard_with(self.PLANNING, "默认动作是「不做」", "默认动作是看情况")
+        self.assertIn("默认动作是「不做」", self.error_texts())
+
+    def test_exception_removed_reports(self):
+        # 反例③：例外条被整条摘掉——"先报待确认"退化成连编译错误也要先问
+        self._run_guard_with(
+            self.PLANNING, "**例外：无争议的客观错误可直接修（L1）**", "**旧的一条（L1）**")
+        self.assertIn("例外：无争议的客观错误可直接修", self.error_texts())
+
+    def test_exception_uniqueness_removed_reports(self):
+        # 反例④：例外的唯一修法判据被抽——"无争议"退化成"我觉得没问题"
+        self._run_guard_with(self.PLANNING, "**只有一种正确修法**", "**看着没问题**")
+        self.assertIn("只有一种正确修法", self.error_texts())
+
+    def test_exception_no_rejudge_removed_reports(self):
+        # 反例⑤：例外的"不改判既有取值"被抽——允许借"修错误"为名改断言
+        self._run_guard_with(self.PLANNING, "**不改判任何既有取值**", "**改判也行**")
+        self.assertIn("不改判任何既有取值", self.error_texts())
+
+    def test_core_baseline_removed_reports(self):
+        # 反例⑥：必加载层的底线被删（每次工作都加载的那一层读不到这条）
+        self._run_guard_with(
+            self.CORE,
+            "只有一种正确修法、且不改判任何既有取值的客观错误",
+            "某些情况")
+        self.assertIn("只有一种正确修法", self.error_texts())
+
+    def test_anchor_count_removed_reports(self):
+        # 反例⑦：锚点清单被删项（文档一字不少、按文档核的步骤全绿）
+        self._write_all_valid()
+        rel = "script/specs-rules/execution.toml"
+        path = os.path.join(self.root, *rel.split("/"))
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        text = text.replace('    "须报、须等人工确认",\n', "", 1)
+        self.write(rel, text)
+        self._run_guard()
+        self.assertIn("只剩", self.error_texts())
+
+    def test_prompt_exception_removed_reports(self):
+        # 反例⑧：提示词片段的例外被抽——复制到未知项目的那一份只剩"什么都先问"
+        self._run_guard_with(
+            self.COMMON,
+            "只有一种正确修法、且不改判任何既有取值",
+            "某些情况")
+        self.assertIn("只有一种正确修法", self.error_texts())
+
+    def test_review_step3_line_removed_reports(self):
+        # 反例⑨：review 那侧对"无争议"的界线脱钩——两边各读各的
+        self._run_guard_with(
+            self.REVIEW,
+            "**\"无争议\"按通用口径判**",
+            "**无争议的直接改**")
+        self.assertIn("无争议", self.error_texts())
+
+    def test_review_step4_pointer_removed_reports(self):
+        # 反例⑩：第 4 步不再回指同一条界线
+        self._run_guard_with(
+            self.REVIEW,
+            "判断的界线与第 3 步同一条",
+            "按你的判断处理")
+        self.assertIn("第 3 步同一条", self.error_texts())
+
+    def test_planning_file_missing_reports(self):
+        # 反例⑪：判据本体所在文件缺失（不得静默放行）
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, self.PLANNING))
+        self._run_guard()
+        self.assertIn("specs/general/planning.adoc", self.error_texts())
+
+    def test_git_judgement_first_removed_reports(self):
+        # 反例⑫：`git.adoc` 的「判据先取、先例不是授权」整条被摘——只留在片段里时，
+        # 规范侧的交付链读不到它，先例又变成授权（本列为空壳时实测报绿）
+        self._run_guard_with(
+            self.GIT, "* **判据先取，且先例不是授权（L1）**", "* **旧条（L1）**")
+        self.assertIn("判据先取，且先例不是授权", self.error_texts())
+
+    def test_git_downgrade_removed_reports(self):
+        # 反例⑬：`git.adoc` 的「降级不成立」整条被摘——建不了 PR 又成了「只提交」的许可
+        self._run_guard_with(self.GIT, "* **降级不成立（L1）**", "* **旧条（L1）**")
+        self.assertIn("降级不成立", self.error_texts())
+
+    def test_common_env_judgement_removed_reports(self):
+        # 反例⑭：片段里的「环境判据须先取」被摘——复制到未知项目的那一份不判执行环境
+        self._run_guard_with(
+            self.COMMON, "**环境判据须先取、且不得被", "**旧条、不得被")
+        self.assertIn("环境判据须先取", self.error_texts())
+
+    def test_common_downgrade_removed_reports(self):
+        # 反例⑮：片段里的「降级不成立、做不到须停下问」被摘——静默降级无据可拦
+        self._run_guard_with(
+            self.COMMON, "**降级不成立、做不到须停下问（L1）**", "**旧条（L1）**")
+        self.assertIn("降级不成立、做不到须停下问", self.error_texts())
 
 
 if __name__ == "__main__":
