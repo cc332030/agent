@@ -4330,7 +4330,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 163  # 同源实取：`CHECKS` 序列唯一名（新增 `check_local_service_assert_guard` 后为 163；本条不新开防线，数不抬）
-GUARD_TEST_BASELINE = 2194  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「`!important` 是最后一步」5 条反例后实取；合并 `main` 后按现场实测取 2194）
+GUARD_TEST_BASELINE = 2212  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（「猜到的行为先报、待人工确认」的 16 条反例后按现场实测取 2212；原记 2206 是手工求和、与收集面实取不符）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12532,6 +12532,47 @@ def check_user_requirement_guard():
     phase_done()
 
 
+def check_guess_confirm_guard():
+    """『猜到的行为不是指令：先报、待人工确认』防线（**用户明确提出**）。
+
+    失效形态（用户实测）：执行者把上下文里推断出的"下一步动作"当成指令直接做掉——改另一处、
+    顺手提交/推送/建 PR、替用户选定一个选项——事后才说明，或干脆把"我猜你要 X"写成"已完成 X"。
+    用户口径：**可以猜他的行为，但不要直接执行，需要人工确认**；这句不止管提交，是一条约着
+    "我该怎么干活"的通用规则。
+
+    判据本体唯一落点在通用层 `specs/general/planning.adoc`「猜到的行为先报、待人工确认」；
+    必加载层 `specs/core/execution.adoc`「指令执行」留**底线 + 判定标准 + 回指**（常驻层只放
+    L1 底线，展开与依据论证按 `specs-project-maintainer/spec-lifecycle.adoc` 归通用层）。
+    交付链侧（`specs/general/git.adoc`「分阶段交付（大任务）」）与提示词公共片段（`delivery`）
+    是**同口径落点**——前者是"顺手多走一步"最常发生的地方，后者会被未知项目复制执行。
+
+    **另一半是例外**（用户第二轮口径）：**只有一种正确修法、且不改判任何既有取值**的
+    客观错误（编译/语法错误、悬空引用、文档逻辑错误、已定结论该有的用例缺项）可直接修、
+    无需确认。少了这半条，"先报待确认"会被读成连编译错误也要先问——那是把一条防越界的
+    规则读成了停工令。故防线的核对面**两边都要核**：例外条的判据（唯一修法 / 不改判 /
+    三条缺一即回默认）与 `prompts/review.adoc` 第 3、4 步的"无争议"界线须是**同一条**。
+
+    **按判据本体自己的正文核**（不是整节）：相邻条目（「逐字执行用户指令」「歧义先问、不自行假设」
+    「每个任务都当尽力」）字样相近，按整节核会把被抽走的要点兜住。
+
+    只钉"判据是否仍在"——"某次到底有没有先报、有没有等人工确认"属运行时事实与语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("猜到的行为先报、待人工确认防线检查（可以猜，不得直接执行）")
+    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
+                                      "execution.toml")):
+        err("缺少 script/specs-rules/execution.toml——『猜到的行为先报、待人工确认』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    rel_pl = "specs/general/planning.adoc"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel_pl.split("/"))):
+        err(f"缺少文件 {rel_pl}——「猜到的行为先报、待人工确认」的判据本体失去落点"
+            "（必加载层只剩底线，报的形态、分工与边界无处可查）", rel_pl)
+    run_rule_guard("check_guess_confirm_guard")
+    phase_done()
+
+
 def check_staged_delivery_guard():
     """『分阶段交付（大任务）』防线（**用户提出**）：**大任务分阶段执行时分阶段提交与推送**，
     以免中断后成果丢失。
@@ -12736,6 +12777,7 @@ CHECKS = (
     check_ui_performance_guard,
     check_pr_scope_guard,
     check_changelog_timing_prompt_guard,
+    check_guess_confirm_guard,
 )
 
 
