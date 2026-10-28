@@ -9,13 +9,16 @@ clean_tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格�
 
 用法（在目标项目根目录执行）:
   python3 clean_tmp.py                仅显示 tmp 内容，不删除（安全模式，见下）
-  python3 clean_tmp.py --all          清空 tmp 下全部内容（显式确认）
-  python3 clean_tmp.py a.log          删除 tmp/a.log
-  python3 clean_tmp.py sub b.log      删除多个
+  python3 clean_tmp.py --all          列出 tmp 顶层的待删条目，不删除（等价于确认清单）
+  python3 clean_tmp.py --all --yes    清空 tmp 下全部内容（两步确认，见下）
+  python3 clean_tmp.py a.log          列出 tmp/a.log 将被删，不删除（干跑）
+  python3 clean_tmp.py a.log --yes    删除 tmp/a.log
+  python3 clean_tmp.py sub b.log --yes  删除多个
 
   # 远程加载（Linux/macOS，本仓库脚本的 https 地址替换 <script-url>）：
-  curl -s <script-url> | python3 - --all            # 清空
-  curl -s <script-url> | python3 - a.log sub/b.log # 删除指定
+  curl -s <script-url> | python3 - --all            # 先看把哪些删掉
+  curl -s <script-url> | python3 - --all --yes      # 确认后真删
+  curl -s <script-url> | python3 - a.log sub/b.log --yes  # 删除指定
 
   # Windows PowerShell（先下载到本地再执行）：
   Invoke-WebRequest <script-url> -OutFile clean_tmp.py
@@ -27,7 +30,14 @@ clean_tmp.py - 删除 tmp 目录下文件/目录的安全清理脚本，严格�
     也会被识别为越界而拒绝，防止清空链接指向的外部目录；
   - 每个目标路径经 os.path.realpath 规范化后校验，必须位于 tmp 内；
     任何路径穿越（../、/、绝对路径、符号链接指向 tmp 外）都会被拒绝；
-  - 全量清空 tmp 必须显式传入 --all，防止远程执行时无差别误删。
+  - 删除必须两步、两种用法同一条判据：先列出将删的条目（`--all`，或直接给相对路径的干跑），
+    再带 `--yes` 才真删——一步就把整棵 tmp 清掉时，误用路径无从拦截（本项目实证的失效形态：
+    脚本自身被下载进 tmp、连同前面各阶段的产出被一并删掉）。全量清空的列出与确认是同一条
+    命令的两次运行（`--all` → `--all --yes`）；指定目标则是同一批参数的一次干跑作列出。
+
+tmp 内部的排布（一级按用途分、任务目录怎么命名、外部来源副本与产出的分家）不由本脚本规定，
+见项目规范里 tmp/ 临时产物的那一条；本脚本只认「CWD 下的 tmp/」这一个边界，**不判用途**
+（"哪些算产出、哪些该留"没有外部判据，靠开关去猜只会让保留与否取决于记不记得传参）。
 """
 import argparse
 import os
@@ -73,7 +83,8 @@ def remove_item(full: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Safe clean tmp (based on CWD)")
-    parser.add_argument("--all", action="store_true", help="clear all under tmp (explicit)")
+    parser.add_argument("--all", action="store_true", help="list top-level entries under tmp")
+    parser.add_argument("--yes", action="store_true", help="confirm and really delete (with --all)")
     parser.add_argument("targets", nargs="*", help="relative paths under tmp")
     args = parser.parse_args()
 
@@ -88,16 +99,28 @@ def main() -> int:
         return 0
 
     if args.all:
+        entries = sorted(os.listdir(root))
+        if not entries:
+            print(f"tmp is empty, nothing to clean: {root}")
+            return 0
+        if not args.yes:
+            print(f"Would delete {len(entries)} top-level entr{'y' if len(entries) == 1 else 'ies'} under: {root}")
+            for entry in entries:
+                print(f"  {entry}")
+            print("Nothing deleted. Re-run with --all --yes to delete them.")
+            return 0
         print(f"Cleaning all under: {root}")
-        for entry in os.listdir(root):
+        for entry in entries:
             remove_item(os.path.join(root, entry))
         print("tmp cleaned.")
         return 0
 
     if not args.targets:
-        print("No target specified. Use --all to clear entire tmp, or list relative paths to delete.")
+        print("No target specified. Use --all to list top-level entries, --all --yes to clear "
+              "entire tmp, or list relative paths to delete (add --yes to really delete).")
         return 0
 
+    pending = []
     for target in args.targets:
         try:
             full = resolve_safe(root, target)
@@ -105,11 +128,19 @@ def main() -> int:
             print(f"REJECTED: {e}")
             continue
         if os.path.lexists(full):
+            if not args.yes:
+                pending.append(full)
+                continue
             remove_item(full)
             print(f"deleted: {full}")
         else:
             print(f"skip (not exist): {full}")
 
+    if pending:
+        print(f"Would delete {len(pending)} target(s) under: {root}")
+        for full in pending:
+            print(f"  {os.path.relpath(full, root)}")
+        print("Nothing deleted. Re-run with --yes to delete them.")
     return 0
 
 

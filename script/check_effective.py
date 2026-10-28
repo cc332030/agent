@@ -80,6 +80,16 @@ MECHANISMS = [
      "check_install_codeblock",      "check_install_codeblock"),
     ("临时产物清理脚本可用",                     "specs/core/execution.adoc",       "script/clean_tmp.py",
      "script/clean_tmp.py",        "存在清理脚本"),
+    ("tmp/ 的布局与命名（一级按用途分、任务目录可定位、规划与进度分家、副本与产出分家、分档只改形态）",
+     "specs/core/execution.adoc", "script/check_specs.py",
+     "check_tmp_layout_guard",
+     "check_tmp_layout_guard 钉住「tmp/ 的布局与命名」小节五组要点仍在（用途四类与不按日期/轮次分、任务目录以任务命名且规划与进度各成一份、进度逐次更新与新任务即时补进规划、副本当只读输入且结论另按对象归集、分档只改展开粒度并回指档位来源），并核提示词公共片段同口径一条；"
+     "「这次任务把文件放对了没」「某份文件算不算产出」属运行时事实与语义判断"),
+    ("清理脚本全量清空须两步确认、且不判用途（哪些算产出没有外部判据）",
+     "specs/general/script.adoc", "script/check_specs.py",
+     "check_clean_tmp_guard",
+     "check_clean_tmp_guard 钉住 `specs/general/script.adoc`「临时产物清理（脚本约定）」的两步确认与『不判用途』仍在，并核 `script/clean_tmp.py` 三处同名事实（只认 CWD 下的 tmp/ 且不判用途、`--all --yes` 两步、无 `--yes` 时只列不删）；"
+     "「某次到底删没删」「哪一份算产出」属运行时事实与语义判断"),
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py",
      "script/check_specs_test.py", "20+ 用例"),
     ("每次操作自带可判定的时限、超时后排查并换手段继续（不限于子 agent 派发）", "specs/general/collab.adoc", "script/check_specs.py",
