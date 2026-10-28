@@ -9958,7 +9958,10 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         "* **解决冲突后须核查是否丢失内容（L1）**：不得凭\"没有冲突标记了\"就认为解决完毕。"
         "**判定标准**：① 用\"**整体取一侧**\"收尾、不做逐处对照；② 只核\"文件能编译\"；"
         "③ 汇报\"冲突已解决\"却不给出**核查判据**。**该用哪些判据随对象定**：文本类按内容侧对照，"
-        "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n\n"
+        "**改名/移动/删除与文件数**按版本管理工具的识别口径，**版本文档类**逐条核对两侧条目的并集。\n"
+        "* **\"取一侧\"只能逐处取，不得逐文件取（L1）**：解决冲突时**每一处冲突各自裁决**；"
+        "**不得**以整份文件为单位取一侧。**判据是\"对侧在本次合并之前才有的内容有没有被删\"**。"
+        "**判定标准**：① 冲突文件按整份文件取一侧收尾；② 两侧改的是同一段时只留一侧。\n\n"
         "== 压缩提交（提交历史整理）\n"
         "* **压缩不等于解冲突（L1）**：整体取一侧后压成一个提交是把丢内容藏进干净的提交里；"
         "**压缩不能替代解冲突**。\n"
@@ -10071,6 +10074,23 @@ class TestCheckConflictResolutionGuard(CheckSpecsTestCase):
         self.write("specs/general/version-control.adoc", vc)
         cm.check_conflict_resolution_guard()
         self.assertIn("解决冲突后须核查是否丢失内容", self.error_texts())
+
+    def test_side_pick_per_file_reports(self):
+        # 反例（丢数据那条）：把"逐处取"抽掉、只留"整体取一侧" -> 逐文件取一侧仍算合规
+        self._write_valid()
+        vc = self.VC.replace("* **\"取一侧\"只能逐处取，不得逐文件取（L1）**：", "* **附注**：")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("逐处取", self.error_texts())
+
+    def test_side_pick_criterion_sentence_removed_reports(self):
+        # 反例（丢数据那条）：可核对的判据句被抽 -> "取一侧"没有可核的失效形态
+        self._write_valid()
+        vc = self.VC.replace(
+            "**判据是\"对侧在本次合并之前才有的内容有没有被删\"**。", "务必小心。")
+        self.write("specs/general/version-control.adoc", vc)
+        cm.check_conflict_resolution_guard()
+        self.assertIn("对侧在本次合并之前才有的内容有没有被删", self.error_texts())
 
     def test_integrity_criteria_removed_reports(self):
         # 反例：失效形态与三档核查判据被抽掉 → "核查"退化成"没有冲突标记就算完"
@@ -25277,8 +25297,8 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
     """
 
     FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc", "AGENTS_COMMON.adoc",
-             "README.adoc")
-    CODING, WEB, COMMON, README = FILES
+             "README.adoc", "library/adoption.adoc")
+    CODING, WEB, COMMON, README, ADOPTION = FILES
 
     def setUp(self) -> None:
         super().setUp()
@@ -25430,6 +25450,72 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         self._run_guard_with(self.WEB, "**`!important` 的落点（载体）**",
                              "**样式写法（可选）**")
         self.assertIn("落点", self.error_texts())
+
+    def test_page_grouping_rejected_reports(self):
+        # 反例（#303 补回）：分组又被拆成互相隔离的块 -> 与通用层那条同节、须报红
+        self._run_guard_with(self.CODING,
+                             "**不得**把分组拆成互相隔离的块",
+                             "**建议**把各分组分别装进独立卡片")
+        self.assertIn("把分组拆成互相隔离的块", self.error_texts())
+
+    def test_page_search_removed_reports(self):
+        # 反例（#303 补回）：页内检索那条被抽 -> 设置页只能逐组翻找
+        self._run_guard_with(self.CODING, "**分组须能被检索到（L1）**",
+                             "**分组与条目尽量便于查找（L2）**")
+        self.assertIn("分组须能被检索到", self.error_texts())
+
+    def test_page_search_scope_weakened_reports(self):
+        # 反例（#303 补回）：检索的生效范围被抽 -> 读成"当前分组的检索"
+        self._run_guard_with(self.CODING,
+                             "② 检索要用户先逐组展开或逐组切过去才能看到结果",
+                             "② 检索入口可选")
+        self.assertIn("逐组展开或逐组切过去", self.error_texts())
+
+    def test_web_grouping_carrier_removed_reports(self):
+        # 反例（#303 补回）：栈层载体被抽 -> 通用层那两半在前端没有落点
+        self._run_guard_with(self.WEB, "**分组组织与页内检索的载体（L1）**",
+                             "**分组与检索（建议）**")
+        self.assertIn("分组组织与页内检索的载体", self.error_texts())
+
+    def test_web_grouping_true_source_section_removed_reports(self):
+        # 反例（#303 补回）：栈层的「与通用层的关系」整节被摘 -> 分组那两半在栈层没有真源回指
+        self._write_all_valid()
+        text = self.base[self.WEB]
+        start = text.index("== 与通用层的关系（防第二真源）")
+        self.write(self.WEB, text[:start])
+        self._run_guard()
+        self.assertIn("与通用层的关系", self.error_texts())
+
+    def test_library_adoption_line_removed_reports(self):
+        # 反例（#303 补回）：图书馆侧那条登记被整条删掉 -> 取舍归属与外部材料未规定的说明一并消失
+        self._write_all_valid()
+        text = self.base[self.ADOPTION]
+        start = text.rindex("\n* **「内容多的页面按分组组织")
+        self.write(self.ADOPTION, text[:start] + "\n")
+        self._run_guard()
+        self.assertIn("缺少 library/adoption.adoc 的对应条目", self.error_texts())
+
+    def test_library_adoption_second_unnamed_clause_removed_reports(self):
+        # 反例（#303 补回）：该行里三句「外部材料未规定」只留两句 -> 前两句被点掉时
+        # 「**没有**规定」还有一个同名出现兜着，按出现次数核的锚点核不出来
+        self._write_all_valid()
+        text = self.base[self.ADOPTION]
+        self.assertIn("、**未**规定\"检索的生效范围", text)
+        self.write(self.ADOPTION, text.replace("、**未**规定\"检索的生效范围",
+                                               "、也未规定\"检索的生效范围", 1))
+        self._run_guard()
+        self.assertIn("**未**规定", self.error_texts())
+
+    def test_dispatch_grouping_feature_removed_reports(self):
+        # 反例（#303 补回）：加载门里「页面内容多」的识别特征被删 -> 写设置页时永不加载该节
+        self._run_guard_with(self.COMMON, "含**页面内容多**",
+                             "含**其它界面事项**")
+        self.assertIn("含**页面内容多**", self.error_texts())
+
+    def test_readme_grouping_reverted_reports(self):
+        # 反例（#303 补回）：README 目录说明回退 -> 按 README 学习的人不知有分组与页内检索
+        self._run_guard_with(self.README, "**分组组织与页内检索的载体**", "")
+        self.assertIn("**分组组织与页内检索的载体**", self.error_texts())
 
     def test_dispatcher_style_priority_gate_removed_reports(self):
         # 反例⑲：加载门少了「要写/改样式优先级」这一识别特征 -> 只会写 CSS 时永不加载该节
