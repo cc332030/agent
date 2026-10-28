@@ -139,7 +139,7 @@ MECHANISMS = [
     ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据"),
     ("引用 javadoc 的文档路径基准按引用所在位置（项目根或模块根相对，推荐、不限制文档路径）", "specs/stack/java.adoc + specs/general/doc.adoc", "script/check_specs.py",
-     "check_javadoc_path_base_guard", "check_javadoc_path_base_guard 钉住两处同口径（Java 栈「javadoc」的推荐面 + 两条理由 + 双引号包裹与 failOnError；通用层「引用路径」的平台无关那一处），**反向拦「口径被改回强制、或推荐面被收窄成只剩一种」**——"
+     "check_javadoc_path_base_guard", "check_javadoc_path_base_guard 钉住两处同口径（Java 栈「javadoc」的推荐面 + 两条理由 + **英文双引号包裹**；通用层「引用路径」的平台无关那一处），**反向拦「口径被改回强制、或推荐面被收窄成只剩一种」**——"
      "强制面下项目里以仓库根为基准的既有 `@see` 只能靠搬文档处置（本条对应用户提出的真实偏差）；"
      "『某条 `@see` 相对谁、路径层数对不对』属语义判断，交人/子 agent 复核"),
     ("Java 测试类命名是推荐（允许自定义、AI 生成用默认名字；四类后缀非禁令，构建边界仍强）", "specs/stack/java-testing.adoc", "script/check_specs.py",
@@ -579,8 +579,14 @@ MECHANISMS = [
      "check_ref_scope_wording_guard", "check_ref_scope_wording_guard 钉住本仓库维护范围内的 .adoc 不得出现\"本仓库私有…不随规范分发\"\"私有内容不随规范分发\"\"不随规范分发\"三类错误形态（平台事实：本仓库所有内容都会被发布，区别只在\"默认引用什么\"），并豁免引用/纠正该表述本身的句子与\"私有落点/私有抓手名\"这类自足性用语、豁免 CHANGELOG 历史条目；『某处该不该被引用方按入口加载』属判定"),
     ("引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断整份文档编译）", "AGENTS.adoc", "script/check_specs.py",
      "check_quote_line_guard", "check_quote_line_guard 钉住仓库维护范围内全部 .adoc 的引文行形态：行首 `> ` 即命中（该形态被 AsciiDoc 的 `listdef-callout` 吃掉、`index` 取空串后在 `List.calc_style()` 里 `assert False`，整份文件编译失败；页面侧 Asciidoctor.js 渲染成引用块、看不出问题）；行内 `>`（比较运算符、shell 重定向）不误伤；写引文用 `[quote]` + 正文行；『某段确实该是引文还是该改写成正文』"),
-    ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）", "CHANGELOG.adoc", "script/check_specs.py",
-     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条不得超长（实证失效：日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连）；『条目是否记对了变更点、有没有漏记』"),
+    ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）、版本线连续（不重号不断号）", "CHANGELOG.adoc", "script/check_specs.py",
+     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态（机械面）：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条上限 400 字、带『同 PR 追加/补充』这类自称的条目即报、**版本线不重号不断号**（按版本组走，同版本多变更点不算重号）。实证失效两桩：①日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连，同一版本被记成第二、第三条；②一次「压缩条目」把两条并成一条，版本线从此断号（3.43 → 3.41）而没有任何一处会报。『条目是否记对了变更点、有没有漏记』"),
+    ("变更日志只被「人改」、不被「追加」（重写型文件、同一版同一变更点就地并入、脚本与流水线同受约束），条目按一句话的体量写（不写验证过程与『对引用方的净影响』）", "specs/general/changelog.adoc「登记时机」「条目书写」", "script/check_specs.py",
+     "check_changelog_writable_guard",
+     "check_changelog_writable_guard 钉住两处要点：① 写入方式（重写型文件、不得以 `>>`/`tee -a`/`os.O_APPEND`/`append` 模式落盘、同一版同一变更点就地并入不另起一条、脚本与流水线同受约束）；② 体量（「条目书写」的体量判据：不写验证过程与『对引用方的净影响』这类过程性内容）。缺口来源：用户口径『解决 changelog 频繁被加内容的问题』——旧判据只管「怎么记一条」，没管「怎么往里写」，追加式写入让同一版本被记成多条、每条越写越长，且没有一步读回全文；『这一条算不算一个变更点、够不够影响的份量』"),
+    ("变更日志只允许在主动声明的那一轮修改，一次提交只记当前版本（版本线连续）", "specs/general/changelog.adoc「登记时机」「组织形态」", "script/check_specs.py",
+     "check_changelog_edit_guard",
+     "check_changelog_edit_guard 钉住三处要点：① 修改面（**只允许在主动声明的那一轮修改**、同一任务的后续轮次未获新声明时也不得回头再改、**例外只一种**——已写入的条目本身有错可就地订正且不得借订正顺手添内容）；② 提交面（**一次提交只记当前版本**，把别的版本组的条目一并带进本次提交即追加）；③「组织形态」的**版本线连续**（不重号不断号，没有内容的版本整组删掉、不留空号、不得自造假条目补号）。缺口来源：用户口径『日志只被「人改」、不被「追加」，只允许主动声明时修改 changelog』——前几轮钉住了「什么时候记一条」与「怎么写进去」，缺的是**谁可以在哪一轮动它**与**一次提交动到哪些条目**；机械面的一半（追加标志、版本线）在 `check_changelog_entry_guard`。『这次到底有没有得到声明』『这轮是不是同一任务的后续轮次』"),
     ("变更日志排序方向恒为时间倒序（版本倒序即时间倒序）并以发布版本为一级分组、版本内按类型分组；两种条目形态（流水式/表格式）择一，表格式须有分组列/类型列/变更点/影响四列且影响列不得退化为变更点的同义重复、破坏性变更须逐行标注", "specs/general/changelog.adoc", "script/check_specs.py",
      "check_changelog_structure_guard",
      "check_changelog_structure_guard 钉住三处：①组织形态（**排序方向恒为时间倒序、版本倒序即时间倒序**——版本单调递增时二者一致，故不存在『两种要择一的排序』、正序即错；按版本分组为默认、版本号即发布标识、两种分组口径择一且**不并存**、类型闭集、空分组不写）；②表格形态的判据（四列列义、判据依赖关系与三条反向禁令（不得用类型分级代替破坏性变更标注 / 不得把影响写成变更点的同义重复 / 影响列写不出读者要做的动作即说明不该记）、破坏性变更逐行标注、表格里一条=一个变更点、要素齐备底线四项（类型/变更点/影响/标记））；③图书馆依据（Keep a Changelog / Conventional Commits / Conventional Changelog 三者齐备，且**如实标注是业界约定而非标准**——Keep a Changelog 自述没有标准格式）。实证失效（用户报告）：一个版本改了很多东西时单行流水式日志不可检索，用户对比两个 tag 后要求「根据模块和功能分类，做成一个表格」；反向失效是**换成表格后把影响列省掉**、**用类型列代替破坏性变更标注**，以及**把排序方向写成正序**或把『版本倒序』与『时间倒序』读成两种可择一的排序（用户口径：排序方式还是时间倒序、版本是越来越大的、版本倒序和时间倒序是一样的）。『某条条目是否真的写清了影响、表格是否真的可检索』"),
