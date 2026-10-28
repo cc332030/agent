@@ -2113,21 +2113,6 @@ _LIBRARY_USAGE_ANCHORS = [
     "**终止条件（L1）**",
     "**只取一段（馆特别大时）**",
 ]
-_LIB_ROOT_FILES = [
-    "AGENTS.adoc",
-    "AGENTS_COMMON.adoc",
-    "AGENTS.md",
-    "PUBLIC.adoc",
-    "README.adoc",
-    "PROMPTS.adoc",
-    "CHANGELOG.adoc",
-    "check_specs.py",
-    "check_effective.py",
-    "clean_tmp.py",
-    "_common.txt",
-    "review.adoc",
-    "refactor.adoc",
-]
 _LOCATING_COMMIT_PREREQ_EXEMPT = [
     "不得",
     "不要",

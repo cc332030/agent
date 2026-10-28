@@ -45,8 +45,8 @@
 === 版本与变更记录（本仓库落点）
 
 * **统一变更日志**：本仓库的对外变更集中记录于根目录 `CHANGELOG.adoc`（**时间倒序、最新在上**），不分散在各文档；条目只记影响、不记过程。
-* **适用范围（与规范变更的边界）**：该文件记录本仓库**自身**的变更；**`specs/` 规范文件的变更默认不入 changelog、由其 git 历史承载**（唯一例外见下条）。
-* **登记时机**：变更日志**只在用户主动声明时才写**、未声明时不得自动追加——判据本体在 `specs/general/changelog.adoc`「登记时机」（本文件不复述；本仓库的落点即上面那个 `CHANGELOG.adoc`）。**读入端同样要有**（平台唤起读到的是提示词）：`env-guard` 专用口径与各提示词读入说明各一句，由 `check_changelog_timing_prompt_guard` 钉住。**本仓库的例外只有一处**：本仓库交付的正是**这套规范集合本身**——条目被写进 `CHANGELOG.adoc`、未声明时也会被引用方读到，故**新增或改动「对外可观察行为」的改动**（条文/防线/公开面/提示词的行为随版本变化，读者升级后行为会变）在用户主动声明时按通用层那条例外处理；**判据只认行为是否变化**——纯勘误、措辞与排版整理、重命名与搬迁、防线内部重构**一律不写**。
+* **适用范围（与规范变更的边界）**：该文件记录本仓库**自身**的变更；**`specs/` 规范文件的变更默认不入 changelog、由其 git 历史承载**。
+* **登记时机**：变更日志**只在用户主动声明时才写**、未声明时不得自动追加——判据本体在 `specs/general/changelog.adoc`「登记时机」（本文件不复述；本仓库的落点即上面那个 `CHANGELOG.adoc`）。**读入端同样要有**（平台唤起读到的是提示词）：`env-guard` 专用口径与各提示词读入说明各一句，由 `check_changelog_timing_prompt_guard` 钉住。**本仓库没有任何例外**：判据是**有没有得到这条指令**，不是改动"对外可见不可见"——本仓库交付的正是这套规范集合本身，它的变更由 git 历史承载，**不得以"维护这套规范集合的对外变更"为理由自认该记一条**（**唯一**的口子就是人工主动声明）。
 * **版本线**：本仓库无对外版本号载体，故版本线集中记录在 changelog 条目中。
 * **更新粒度与提交压合**：文档与脚本在**尚未提交之前**的调整按 `specs/core/execution.adoc`「文档与代码对应同步」的『未提交前的更改归并』处理；"压缩提交"按 `specs/platform/cnb.adoc`「压缩提交」执行。
 
@@ -88,4 +88,4 @@
 * 维护方自查层的登记（`specs-project-maintainer/`，五份，用途各见其文件头）：`specs-project-maintainer/spec-lifecycle.adoc`、`specs-project-maintainer/priority.adoc`、`specs-project-maintainer/verify.adoc`、`specs-project-maintainer/context.adoc`、`specs-project-maintainer/guards.adoc`；**技能文档**（按 `specs/general/collab.adoc`「专家与技能」单独成篇）在 `specs-project-maintainer/skills/`——判据本体各按其正文回指、**不做预建**。
 
 [quote]
-注：`script/` 下的 `clean_tmp.py`、`fetch-specs.py`（+ 同名入口）是**供引用方项目**使用、随通用规范分发的工具，虽在本仓库 `script/` 下，但**不属于**本项目自身规范；其落点与取回方式以 `AGENTS_COMMON.adoc`「取规范到本地副本」为唯一真源（本文件不复述）——规范副本与**下载来的安装脚本**都只落那一处（用户家目录下的一个路径），没有第二个落点。
+注：`script/` 下的 `fetch-specs.py`（+ 同名入口）是**供引用方项目**使用、随通用规范分发的工具，虽在本仓库 `script/` 下，但**不属于**本项目自身规范；其落点与取回方式以 `AGENTS_COMMON.adoc`「取规范到本地副本」为唯一真源（本文件不复述）——规范副本与**下载来的安装脚本**都只落那一处（用户家目录下的一个路径），没有第二个落点。

@@ -102,7 +102,7 @@
 只读 `git diff --cached --diff-filter=AD` 的状态行、不读工作区文件内容、非 git 目录跳过），
 **不对引用方项目做任何代码/工作区检查**——引用方只使用公共内容（入口见 `PUBLIC.adoc`：
 `AGENTS_COMMON.adoc` + `specs/`（含安装与取回口径）、公共片段 `prompts/_common.txt`、
-随规范分发的 `script/clean_tmp.py`），其内部操作在本仓库的校验中不可见。
+随规范分发的 `script/fetch-specs.py` 及其平台入口），其内部操作在本仓库的校验中不可见。
 
 用法：
   python3 script/check_specs.py             # 阶段级进度 + 错误清单（默认）
@@ -426,14 +426,15 @@
      由 `check_cache_guard` 钉住；「这一处算不算同一份数据的第二份缓存」「这次刷新算不算有
      变动」「某个接口算不算给了确定的一份」属语义判断与运行时事实，交人/子 agent 复核。
  100. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
-     否则禁止修改 changelog』，判据本体（通用层「登记时机」）、公共片段专用口径、
-     `check_changelog_timing_guard` 三处**都在**，条目照样被自行追加——平台按评论唤起时执行者
-     读到的是**提示词的读入清单**，清单里没有这条。故钉三处：每个提示词实际注入 `env-guard`
-     片段且读入说明提到「变更日志」（只注入不进清单等于没写，由 `check_env_marker_guard` 核）、
-     片段专用口径含 `CHANGELOG.*` 禁令、本仓库落点 `AGENTS.adoc` 给出**唯一的例外**（维护这套
-     规范集合自身的对外变更）并保住例外怎么判（判据只认行为是否变化——纯勘误、措辞与排版整理、
-     重命名与搬迁仍不写）。由 `check_changelog_timing_prompt_guard` 钉住；「某次改动算不算对外
-     可观察行为的变化」「这次到底有没有得到用户声明」属语义判断与运行时事实，交人/子 agent 复核。
+     否则禁止修改 changelog』『changelog 修改只有一种情况，那就是人工主动声明，不管是什么原因』。
+     判据本体（通用层「登记时机」）、公共片段专用口径、`check_changelog_timing_guard` 三处**都在**，
+     条目照样被自行追加——平台按评论唤起时执行者读到的是**提示词的读入清单**，清单里没有这条。
+     故钉三处：每个提示词实际注入 `env-guard` 片段且读入说明提到「变更日志」（只注入不进清单等于
+     没写，由 `check_env_marker_guard` 核）、片段专用口径含 `CHANGELOG.*` 禁令、本仓库落点
+     `AGENTS.adoc` 写明**本仓库没有任何例外**（判据是那条指令本身，不是改动对外可见不可见）——
+     原先这里留了『维护这套规范集合自身的对外变更』这个例外，它正是执行者自认该记一条的口子，
+     已撤。由 `check_changelog_timing_prompt_guard` 钉住；「这次到底有没有得到用户声明」属
+     运行时事实，交人/子 agent 复核。
  101. 已有 PR 时不得私开 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，不允许私开 pr
      （有 pr 的情况下）」——**已有承载本次事项的合并请求时，改动一律做在该 PR 的源分支上**，
      开新 PR 属**派发者**的动作、须用户显式允许；同一处改动也不得同时落在两个 PR 上。
@@ -3944,9 +3945,11 @@ def check_spec_fetch_guard():
         (INSTALL_REL, ("fetch-specs", "用户家目录"),
          "入口的安装与取回口径须写明取文件抓手与它的落点（用户家目录下的那一处）——"
          "否则安装时又回到手拼下载命令"),
-        (INSTALL_REL, ("clean_tmp.py", "下载"),
-         "入口的安装与取回口径须写明：**下载来的文件（含安装脚本）都只落这一处**——"
-         "只写规范副本的落点时，清理脚本等下载物仍会被手工存到别处，"
+        # 与「落点只有一处」互不替代：那一句若只写规范副本，下载物（取规范脚本与平台入口）
+        # 仍会被手工存到别处，用户口径『下载的文件一律只落这一个地方』就对不上。
+        (INSTALL_REL, ("这一处", "规范副本", "安装脚本"),
+         "入口的安装与取回口径须写明：**下载来的文件都只落这一处**——"
+         "只写规范副本的落点时，取规范脚本等下载物仍会被手工存到别处，"
          "用户口径『下载的文件一律只落这一个地方』就对不上了"),
         ("AGENTS_COMMON.adoc", ("fetch-specs",),
          "公共入口的「加载方式」须写明随规范分发的取文件抓手——引用方按入口加载时才知道有它"),
@@ -3986,7 +3989,7 @@ def check_shared_cache_guard():
                  ("cache_slot_dir", "urlsplit")),
                 ("脚本不得删除落点里的既有文件（清理属破坏性操作）",
                  ("不删除",)),
-                ("安装脚本（本脚本与其平台入口、清理脚本）须一并取到落点（用户口径："
+                ("安装脚本（本脚本与其平台入口）须一并取到落点（用户口径："
                  "下载的文件一律只落这一个地方）",
                  ("INSTALL_SCRIPTS", "fetch_install_scripts")),
                 ("安装脚本在落点里只保留文件名、跨来源共用（不落来源槽）",
@@ -4401,8 +4404,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 171  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`、`check_clean_tmp_guard`）
-GUARD_TEST_BASELINE = 2298  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
+GUARD_WIRING_BASELINE = 170  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2295  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（2288 + 删掉 `clean_tmp.py` 带走的 3 条 + 本轮另加 10 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6655,27 +6658,6 @@ def check_tmp_layout_guard():
     phase_done()
 
 
-def check_clean_tmp_guard():
-    """『清理脚本两步确认』防线：`clean_tmp.py --all` 先列后删、且脚本不判用途。
-
-    为什么需要它：`tmp/` 的布局定成一处分层判据后，"哪些该留、哪些能删"看起来可以交给
-    脚本去判——但**"哪些算产出"没有外部判据**（`tmp/analysis/<对象>/` 与
-    `<任务>/findings/` 都是要留给人看的结论），做成 `--keep-*` 一类开关只会让保留与否取决于
-    记不记得传参；而真正会出事的是另一头：`--all` 一次就把整棵 `tmp/` 清掉，脚本自身被
-    下载进 `tmp/` 时连它和各阶段产出一起删掉（本项目实证的失效形态）。
-
-    故本道钉三处**同名**事实：判据本体在 `specs/general/script.adoc`「临时产物清理（脚本约定）」，
-    脚本侧核头注的边界声明、`--all --yes` 两步、以及无确认时只列不删。
-
-    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`（`check_clean_tmp_guard`）；
-    "某次到底删没删""哪一份算产出"属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），
-    交人/子 agent 复核。
-    """
-    phase("清理脚本的两步确认防线检查（先列后删、不判用途）")
-    run_rule_guard("check_clean_tmp_guard")
-    phase_done()
-
-
 def check_ci_cd_guard():
     """『CI/CD 与平台协作防线』：CICD 校验链完整性与 CNB 对象钉定要点。
 
@@ -6900,7 +6882,7 @@ def check_public_content_has_no_private_refs():
     phase("公共内容私有引用检查（③可控性）")
     # 私有物名 → 说明；匹配时要求同行出现"维护语境"词，避免把合法提及误判为引用
     private_names = ("script/check_specs.py", "script/check_effective.py",
-                     "script/clean_tmp.py", "PROMPTS.adoc", "AGENTS.adoc")
+                     "PROMPTS.adoc", "AGENTS.adoc")
     context_words = ("本仓库", "本项目自身", "校验脚本", "机械校验", "工具声明",
                      "check_specs", "check_effective", "check_priority_guard",
                      "check_principle_guard", "check_verify_guard",
@@ -7329,7 +7311,7 @@ def check_checklist_guard():
             continue
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-        for name in sorted(set(re.findall(r"`(check_[a-z_]+|clean_tmp\.py|check_specs\.py|"
+        for name in sorted(set(re.findall(r"`(check_[a-z_]+|check_specs\.py|"
                                           r"check_effective\.py)`", text))):
             if name.endswith(".py"):
                 if name not in script_names:
@@ -8193,6 +8175,17 @@ def check_wiring_guard():
 LIBRARY_SOURCE_MARKERS = _RULES_TOKENS["LIBRARY_SOURCE_MARKERS"]
 
 
+# 根级文件名的核对面：**本仓库根下真实存在的文件名**（按需取，不缓存——`REPO_ROOT`
+# 在单测里每个用例都换）。判据是"根下真有这一份"，故不另列白名单（见 `check_library_guard`
+# 引用可解析那一条的注释）。
+def _library_root_names():
+    try:
+        with os.scandir(REPO_ROOT) as it:
+            return {e.name for e in it if e.is_file()}
+    except OSError:
+        return set()
+
+
 def _lib_resolve(target: str):
     """把馆内引用的写法解析为**仓库根相对路径**（单一基准），无法解析/越界则返回 None。
 
@@ -8225,17 +8218,33 @@ def _lib_resolve(target: str):
     return local + "/" if (is_dir and not local.endswith("/")) else local
 
 
-def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: bool = False):
+def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: bool = False,
+                          root_names=None):
     """核对一条馆内引用的落点是否为**本仓库内真实存在的文件/目录**。
 
-    `m` 为写法（反引号内的路径或 `link:` 目标）；`desc` 为报错里的引用描述。
+    `m` 为写法（反引号内的路径或 `link:` 目标）；`desc` 为报错里的引用描述；
+    `root_names` 给出**本仓库根下真实存在的文件名**（根级裸文件名写法的核对面，见
+    `_library_root_names`）——给了它即表示这一条是根级文件名写法：不在册就是悬空。
     """
     if _is_placeholder_ref(m):
+        return
+    if root_names is not None:
+        # 根级裸文件名写法：**先看本仓库根下是否真有这一份**（`README.md` 一类通用名在
+        # 别的项目里也有，馆内提它们时不是指本仓库根下那份），**根下没有再看同一个馆里
+        # 有没有同名的主题文件**（馆是平铺的，正文里写 `sources.adoc` 这种短名时指的是
+        # 同一目录的兄弟文件，见 `library/README.adoc`「文件名协议」）。
+        # 两处都没有才是悬空：挂一个不存在的名字就是死链，判据取"真有这一份"、
+        # 不另列白名单（白名单会让册外的真引用静默通过）。
+        if m.strip() in root_names or os.path.isfile(os.path.join(LIBRARY_DIR, m.strip())):
+            return
+        err(f"{desc} 指向不存在的文件——"
+            "悬空引用等于依据链断在这里（本仓库根下与图书馆里都没有这一份；判据取"
+            "『真有该文件』，不另列白名单——白名单会让册外的真引用静默通过）", rel, j)
         return
     is_dir = bool(m.endswith("/"))
     resolved = _lib_resolve(m)
     if resolved is None:
-        return
+        return                    # 不是本仓库内的引用（URL、`#锚点`、根绝对路径，各有报法）
     if resolved == ".." or resolved.startswith("../"):
         if allow_escape:
             err(f"{desc} 越出仓库根——馆内引用须指向本仓库内的真实文件", rel, j)
@@ -8250,9 +8259,6 @@ def _check_library_target(m: str, desc: str, rel: str, j: int, allow_escape: boo
             "图书馆不在默认引用面内，读者在本仓库内，故按仓库根基准核对）", rel, j)
 
 
-# 根级文件名白名单（馆内以 `xxx.adoc` / `xxx.py` 形态引用本仓库根或已知目录下的文件时，
-# 只有在此列内的写法才被当作"路径"核对存在性——防止把普通词/文件名约定当路径误报）。
-_LIB_ROOT_FILES = _RULES_TOKENS["_LIB_ROOT_FILES"]
 LIBRARY_QUOTE_ANCHORS = _RULES_TOKENS["LIBRARY_QUOTE_ANCHORS"]
 
 
@@ -8350,15 +8356,20 @@ def check_library_guard():
             # **也收根级文件名写法**（`AGENTS.adoc`、`PUBLIC.adoc`、`README.adoc` 等）：
             # 馆内很自然地会写"登记与维护说明见 `AGENTS.adoc`"，漏收即这类引用悬空
             # 无人发现（实测：把 `AGENTS.adoc` 改成不存在的名字，检查原本不报）。
-            # 只认**扩展名在册**的根级文件名（下方白名单），避免把普通词当路径。
+            # 只认**扩展名在册**的根级文件名，避免把普通词当路径；根级名另须**是本仓库根下
+            # 真有同名主张**的那一份（`README.md`、`CONTRIBUTING.md` 一类通用名在各项目里都有，
+            # 馆内提它们时不是指本仓库根下那份）——判据取"仓库根下真有这个文件"，故新增/删除
+            # 根级文件**不必同步一份白名单**（那会是第二真源，删掉它时也随之失掉这条约束）。
+            root_names = _library_root_names()
             for m in re.findall(r"`((?:(?:specs|library|specs-project-maintainer|script|"
                                 r"prompts)/[^`\s]*)|(?:[A-Za-z0-9_.-]+\.(?:adoc|py|txt|md|"
                                 r"yml|yaml|json|sh|bat|cmd)))`", line):
-                if "/" not in m and m not in _LIB_ROOT_FILES:
-                    continue                   # 非根级文件名白名单内 → 当普通词，不核
                 if _is_placeholder_ref(m):
                     continue
-                _check_library_target(m, f"图书馆内的引用 `{m}`", rel, j)
+                # 根级裸文件名另走一条判据（本仓库根下真有这一份才算得上引用），
+                # 带目录的写法仍按仓库根基准解析（见 `_lib_resolve`）。
+                _check_library_target(m, f"图书馆内的引用 `{m}`", rel, j,
+                                      root_names=None if "/" in m else root_names)
             # link: 写法：**与反引号同一基准**（见 _lib_resolve）。
             # 馆内 link: 很自然会写根级名（`link:AGENTS_COMMON.adoc[]`、`link:CHANGELOG.adoc[]`），
             # 原实现只按"本文件所在目录"解析 → 同一句引用两种写法结论相反：
@@ -10134,7 +10145,7 @@ def check_comment_preservation_guard():
               ("临时产物", "合并"),
               ("调用", "删除评论的接口")),
              "平台层须有「评论不得删除」条：禁令本体（含 NPC 生成的评论）、不可逆与留证落点的"
-             "理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界"),
+             "理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与清理本地临时产物和禁合并的边界"),
             ("specs/general/collab.adoc",
              (("评论不得删除", "平台无关"),
               ("不得删除", "留证落点", "不可逆"),
@@ -11466,24 +11477,25 @@ def check_changelog_timing_prompt_guard():
     执行者按清单读、清单里没有这条，于是照样把"改了东西"读成"该记一条"并自认对外可见地追加。
     本道钉住"三处都在"：公共片段里的专用口径（由 `check_env_marker_guard` 核要点）、
     每个提示词实际注入该片段、每个提示词的读入说明提到「变更日志」，以及本仓库落点
-    `AGENTS.adoc` 给出**唯一的例外**（这套规范集合自身的对外变更）并保住"判据只认行为变化"。
+    `AGENTS.adoc` 的本仓库口径——**本仓库没有任何例外**。
 
-    只钉「要点是否仍在」——「某次改动算不算对外可观察行为的变化」「这次到底有没有得到用户
-    声明」属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    用户口径（两轮递进）：『除非主动声明，否则禁止修改 changelog』→『changelog 修改只有一种
+    情况下，那就是人工主动声明，不管是什么原因，都不应该再犯』。**只钉"要点是否仍在"**——
+    「这次到底有没有得到用户声明」属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
-    phase("变更日志默认不动防线检查（提示词读入端 + 本仓库例外）")
+    phase("变更日志默认不动防线检查（提示词读入端 + 本仓库无例外）")
     rel_agents = "AGENTS.adoc"
     path = os.path.join(REPO_ROOT, rel_agents)
     if not os.path.isfile(path):
-        err(f"缺少 {rel_agents}——本仓库的落点与例外无处承载", rel_agents)
+        err(f"缺少 {rel_agents}——本仓库的落点与「没有例外」的口径无处承载", rel_agents)
         phase_done()
         return
     with open(path, encoding="utf-8") as fh:
         agents = fh.read()
     for key, desc in (("登记时机", "本仓库落点须回指判据本体"),
-                      ("本仓库的例外只有一处", "须写明唯一的例外及其范围"),
-                      ("判据只认行为是否变化", "须写出例外怎么判——"
-                       "只写「例外」不写判据，任何一次改动都能被读成例外")):
+                      ("本仓库没有任何例外", "须写明本仓库没有例外（口子一开，每一轮都能自认该记一条）"),
+                      ("有没有得到这条指令", "须写出判据是这条指令本身，不是改动对外可见不可见"),
+                      ("人工主动声明", "须写出唯一口子就是人工主动声明")):
         if key not in agents:
             err(f"{rel_agents} 的变更日志登记时机条缺失『{key}』——{desc}", rel_agents)
     phase_done()
@@ -13051,7 +13063,6 @@ CHECKS = (
     check_guess_confirm_guard,
     check_cache_guard,
     check_tmp_layout_guard,
-    check_clean_tmp_guard,
 )
 
 
