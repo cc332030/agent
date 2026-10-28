@@ -50,7 +50,6 @@ import stat
 import subprocess
 import sys
 import tempfile
-import tomllib
 import unittest
 from unittest import mock
 
@@ -164,7 +163,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
                            "script/specs-rules/local-service.toml",
                            # 本道（猜到的行为先报、待人工确认）的判据措辞外置在该文件里
-                           "script/specs-rules/execution.toml")
+                           "script/specs-rules/execution.toml",
+                           # 本道（缓存统一管理、先缓存后在线）的判据措辞外置在该文件里
+                           "script/specs-rules/cache.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -8508,6 +8509,8 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
         "② **空话**；③ **同义反复**；④ **可有可无的铺垫**；"
         "⑤ **反向兜底**——把本条并不禁止的另一种做法专门拦掉，越细越像是在给它立一个**首因**；"
+        "⑥ 见下。⑦ **不存在的反面对照**——**当前概念已注定**的取值写成\"须为 X、不得是 Y\"；"
+        "**判据是\"那一面是否真的可选\"**。**例外：它另立了一条规则时不在此列**。"
         "**边界与反例不在此列**。\n"
         "* **陈述句不得降格为表意不明（L2）**：删掉**不承载信息的限定语**；"
         "确属有边界的判断**须写出边界**。\n"
@@ -8573,6 +8576,8 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
             "* **每一句都要有承载（L2）**：**判定标准（任一命中即违规）**：① **复述**；"
             "② **空话**；③ **同义反复**；④ **可有可无的铺垫**；"
             "⑤ **反向兜底**——把本条并不禁止的另一种做法专门拦掉，越细越像是在给它立一个**首因**；"
+            "⑥ 见下。⑦ **不存在的反面对照**——**当前概念已注定**的取值写成\"须为 X、不得是 Y\"；"
+            "**判据是\"那一面是否真的可选\"**。**例外：它另立了一条规则时不在此列**。"
             "**边界与反例不在此列**。\n",
             "* **每一句都要有承载（L2）**：注意别写废话。\n"))
         cm.check_info_density_guard()
@@ -8586,9 +8591,18 @@ class TestCheckInfoDensityGuard(CheckSpecsTestCase):
         cm.check_info_density_guard()
         self.assertIn("反向兜底", self.error_texts())
 
+    def test_impossible_contrast_removed_reports(self):
+        # 反例（用户提出）：抽掉判定标准⑦「不存在的反面对照」——AI 最常写的那一类
+        # （概念已注定、根本编不出反面：「端口是数字」）又没有任何判据，会一直照写
+        self._write(section=self.SECTION.replace(
+            "⑦ **不存在的反面对照**——**当前概念已注定**的取值写成\"须为 X、不得是 Y\"；"
+            "**判据是\"那一面是否真的可选\"**。", ""))
+        cm.check_info_density_guard()
+        self.assertIn("不存在的反面对照", self.error_texts())
+
     def test_backward_guard_boundary_removed_reports(self):
         # 反例：抽掉「边界与反例不在此列」→ ⑥ 被反用，正当的防反用（边界与反例）一并被删
-        self._write(section=self.SECTION.replace("；**边界与反例不在此列**", ""))
+        self._write(section=self.SECTION.replace("。**边界与反例不在此列**", "。"))
         cm.check_info_density_guard()
         self.assertIn("边界与反例不在此列", self.error_texts())
 
@@ -23297,6 +23311,35 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
                      "**文档质量硬线**")
         self._run()
         self.assertIn("specs/general/doc.adoc", self.error_texts())
+    def test_impossible_contrast_removed_reports(self):
+        # 反例⑳（用户提出『AI 经常做没有意义的强调，如何避免』）：本命令的扫描面里
+        # 只留「反向兜底」、⑦「不存在的反面对照」被抽 -> 概念已注定、根本编不出反面的
+        # 那一类（「端口是数字」）扫不到，压表述只压掉重复与铺垫
+        self._mutate(self.CMD, "**不存在的反面对照**（概念本身已注定的取值被写成",
+                     "**多余的强调**（看情况）")
+        self._run()
+        self.assertIn("不存在的反面对照", self.error_texts())
+
+    def test_impossible_contrast_boundary_removed_reports(self):
+        # 反例⑳b：⑦ 的防误删边界被抽 -> 能举出实际反例的正当例外与边界被一并删掉（撞 P3）
+        self._mutate(self.CMD, "**能举出实际反例的例外与边界不在此列**",
+                     "**统统删掉**")
+        self._run()
+        self.assertIn("能举出实际反例的例外与边界不在此列", self.error_texts())
+
+    def test_entry_scan_surface_removed_reports(self):
+        # 反例⑳c：统一入口的扫描面登记只写反向兜底 -> 命令正文写了也少一处可发现性
+        self._mutate(self.ENTRY, "**含不存在的反面对照**", "**还有别的**")
+        self._run()
+        self.assertIn("不存在的反面对照", self.error_texts())
+
+    def test_noncanonical_name_forbidden(self):
+        # 反例⑳d：两类惯犯换成同义的散文名 -> 与真源（判定标准⑥⑦）的回指断链
+        self._mutate(self.CMD, "**不存在的反面对照**（概念本身已注定的取值被写成",
+                     "**编不出来的反例**（概念本身已注定的取值被写成")
+        self._run()
+        self.assertIn("编不出来的反例", self.error_texts())
+
     def test_valid_passes(self):
         # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
         self._write_valid()
@@ -25043,60 +25086,25 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         # 反例⑭（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
         self._write_all_valid()
         tokens_rel = "script/specs-rules/_tokens.toml"
-        ui_rel = "script/specs-rules/ui.toml"
         with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
             tokens = fh.read()
-        # 削掉本清单末尾两组（末组之后就是收尾 `]`）：剩下的仍是合法 TOML，少了恰恰是
+        start = tokens.index("UI_STYLE_ANCHORS = [")
+        tail_mark = tokens.index("\"不批量替换既有组件、不为统一外观重写既有页面\"", start)
+        cut = tokens.rindex('    [\n        "存量随动迁移",', start, tail_mark)
+        cut_end = tokens.index("官方规定\",\n    ],\n", tail_mark) + len("官方规定\",\n    ],\n")
+        # 削掉尾部两组（存量 + 依据行）后补一个换行：剩下的仍是合法 TOML，少了恰恰是
         # `anchor_count` 该报出的那一形态（清单被删项、正文一字不少）。
-        cut = tokens.rindex('    [\n        "分组与页内检索的依据行",')
-        list_end = tokens.index("\n]", cut) + len("\n]")
-        trimmed_text = tokens[:cut] + "\n]" + tokens[list_end:]
+        self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
         # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，不读夹具里的文件，
         # 故须就地替换（否则这条用例核的是一个永远不再变化的常量、必假绿）。用完还原。
         original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
-        # 削法取"按同一份夹具重算"，不按组名挑——组名清单会过期，按名删时中间插进来的
-        # 新组删不掉、条数不小于原数，这一步反而假绿（本仓库实测）。
-        trimmed = tomllib.loads(trimmed_text)["tokens"]["UI_STYLE_ANCHORS"]
-        # 判据是**锚点项数**（`anchor_count` 逐组累加组内项数），不是组数。
-        count = lambda groups: sum(len(g[1]) for g in groups)
-        self.assertLess(count(trimmed), count(original))
+        trimmed = [g for g in original
+                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
+        self.assertLess(len(trimmed), len(original))
         cm._RULES_TOKENS["UI_STYLE_ANCHORS"] = trimmed
         self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_STYLE_ANCHORS", original)
-        # 红不红不得取决于"基线数值与削后条数谁大谁小"：那由两条固定数值决定，改一次清单
-        # 就可能翻转。基线取**与清单无关的结构性取值**——比原数大 1（`min` 只拦"少于基线"，
-        # 原数 + 1 必然把削后条数判红）；改的是夹具那份 `ui.toml`，不是仓库里的真文件。
-        with open(os.path.join(self.root, ui_rel), encoding="utf-8") as fh:
-            ui = fh.read()
-        baseline = re.search(r'token_list = "UI_STYLE_ANCHORS"\nmin = (\d+)', ui)
-        self.assertIsNotNone(baseline, "夹具失效：ui.toml 里找不到该清单的条数基线")
-        self.write(ui_rel, ui.replace(
-            baseline.group(0),
-            f'token_list = "UI_STYLE_ANCHORS"\nmin = {count(original) + 1}'))
-        self.write(tokens_rel, trimmed_text)
-        cm.RULES = None
         self._run_guard()
         # 只核文件名不够：须落成"清单条数"这一步自己的文案（正文缺项那一步在这里不该报）。
-        self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
-        self.assertIn("锚点", self.error_texts())
-
-    def test_anchor_list_baseline_raised_one_reports(self):
-        # 反例⑮（基线抬过清单条数）：清单一字不少、`min` 被抬到条数之上 -> 条数这一步报出——
-        # 钉住"清单与基线是**逐项**对的"（按组数取条数时，抬一项基线也未必落得成红）。
-        self._write_all_valid()
-        tokens_rel = "script/specs-rules/_tokens.toml"
-        ui_rel = "script/specs-rules/ui.toml"
-        original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
-        with open(os.path.join(self.root, ui_rel), encoding="utf-8") as fh:
-            ui = fh.read()
-        baseline = re.search(r'token_list = "UI_STYLE_ANCHORS"\nmin = (\d+)', ui)
-        self.assertIsNotNone(baseline, "夹具失效：ui.toml 里找不到该清单的条数基线")
-        self.write(ui_rel, ui.replace(
-            baseline.group(0),
-            f'token_list = "UI_STYLE_ANCHORS"\nmin = {sum(len(g[1]) for g in original) + 1}'))
-        with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
-            self.assertEqual(tomllib.loads(fh.read())["tokens"]["UI_STYLE_ANCHORS"], original)
-        cm.RULES = None
-        self._run_guard()
         self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
 
@@ -25749,6 +25757,207 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
             self.COMMON, "**降级不成立、做不到须停下问（L1）**", "**旧条（L1）**")
         self.assertIn("降级不成立、做不到须停下问", self.error_texts())
 
+
+
+
+class TestCheckCacheGuard(CheckSpecsTestCase):
+    """钉住『缓存（统一管理、先缓存后在线）』防线（**用户提出**）。
+
+    用户口径：缓存要统一管理（一份数据别管成多份）；实时查看时先给缓存再异步换在线、
+    只在有变动时更新（不空白、不闪动）；必要时标出这份是缓存还是在线、有多旧。
+    故本道把这几句落成四件可核对的事：一处缓存入口、先缓存后在线、有变动才更新、
+    来源与时间可辨识。
+
+    **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`、
+    前端载体 `specs/stack/web.adoc`、加载门 `AGENTS_COMMON.adoc`、README、规则数据
+    `script/specs-rules/cache.toml` 与 `_tokens.toml`）——每个用例在内存副本上做一处定点
+    改动后落进临时根再跑防线。手抄节选会与现场漂移，故一律不手抄；也**不写仓库里的真文件**。
+    """
+
+    FILES = ("specs/general/coding.adoc", "specs/stack/web.adoc",
+             "AGENTS_COMMON.adoc", "README.adoc")
+    CODING, WEB, COMMON, README = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 父类改的是 `sys.modules` 里那份 `check_specs`，本文件的 `cm` 是按路径另加载的一份
+        # ——两者不是同一个模块对象，故夹具根在此再钉一次（理由同 `TestCheckUiPerformanceGuard`）。
+        cm.REPO_ROOT = self.root
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_cache_guard()
+        # 规则缓存须还原（理由同 `TestCheckSqlAnnotationBindingGuard._run_guard`）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：判据本体整节被摘掉
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("== 缓存（统一管理、先缓存后在线）")
+        end = text.index("\n== 表达式与调用写法", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("缓存（统一管理、先缓存后在线）", self.error_texts())
+
+    def test_single_entry_removed_reports(self):
+        # 反例②：一处缓存入口被抽 -> 同一份数据被页面各存一份重新成为默许形态
+        self._run_guard_with(self.CODING, "**一份数据只有一处缓存入口（L1）**",
+                             "**缓存入口不限（L3）**")
+        self.assertIn("一份数据只有一处缓存入口", self.error_texts())
+
+    def test_cache_first_removed_reports(self):
+        # 反例③：先缓存后在线被抽 -> 先白屏等在线数据（用户点名要避免的空白与闪动）
+        self._run_guard_with(self.CODING, "先取缓存并立即呈现，再异步取在线数据",
+                             "等在线数据回来再渲染")
+        self.assertIn("先取缓存并立即呈现，再异步取在线数据", self.error_texts())
+
+    def test_update_on_change_removed_reports(self):
+        # 反例④：有变动才更新被抽 -> 每次返回都无条件重绘
+        self._run_guard_with(self.CODING, "**只在有变动时才更新（L1）**",
+                             "**每次都可重建（L3）**")
+        self.assertIn("只在有变动时才更新", self.error_texts())
+
+    def test_source_marker_removed_reports(self):
+        # 反例⑤：来源与时间标识被抽 -> 用户无从知道这份数据有多旧
+        self._run_guard_with(self.CODING, "**数据来源与时间要能看出来（L2）**",
+                             "**数据来源无需标识（L3）**")
+        self.assertIn("数据来源与时间要能看出来", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑥：边界被抽 -> 凭据类取值会被按「先缓存后在线」处理
+        self._run_guard_with(self.CODING, "权限、身份、一次性凭据",
+                             "其余取值")
+        self.assertIn("权限、身份、一次性凭据", self.error_texts())
+
+    def test_basis_line_removed_reports(self):
+        # 反例⑦：依据行的取舍归属被抹掉
+        self._run_guard_with(self.CODING, "是本集合的判据化取舍**——通行材料给的是缓存机制",
+                             "是本集合的说明**——通行材料给的是缓存机制")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_web_backref_removed_reports(self):
+        # 反例⑧：栈层不再回指真源 -> 判据在两处各自漂移
+        # 只改「缓存（载体）」节里那一处（同文件的「界面（载体）」节有同样一句话，
+        # 按整份文件替换会命中别处、核不到本节）。
+        self._write_all_valid()
+        text = self.base[self.WEB]
+        start = text.index("== 缓存（载体）")
+        end = text.index("== 与通用层的关系（防第二真源）", start)
+        section = text[start:end]
+        self.assertIn("不复述、也不另立一套", section)
+        self.write(self.WEB, text[:start]
+                   + section.replace("不复述、也不另立一套", "不复述、也不另设", 1)
+                   + text[end:])
+        self._run_guard()
+        self.assertIn("也不另立一套", self.error_texts())
+
+    def test_web_second_write_point_removed_reports(self):
+        # 反例⑨：栈层的第二个读写点判定被抽 -> 「一处入口」在栈层没有落地位置
+        self._run_guard_with(self.WEB, "`localStorage`/`sessionStorage`/`indexedDB` 读写点",
+                             "本地存储读写点")
+        self.assertIn("localStorage", self.error_texts())
+
+    def test_two_sides_cache_split_removed_reports(self):
+        # 反例：两处缓存分开判被抽 -> 「先给缓存再换在线」被照搬到接口上，
+        # 且界面缓存与后端接口缓存混成一件事（用户点名要区分的那一条）
+        self._run_guard_with(self.CODING, "**先分清两处缓存（L1）**",
+                             "**缓存一处即可（L3）**")
+        self.assertIn("先分清两处缓存", self.error_texts())
+
+    def test_backend_api_deterministic_removed_reports(self):
+        # 反例：后端接口「返回哪一份是确定的」被抽 -> 接口也变成先给旧的后给新的
+        self._run_guard_with(self.CODING, "**后端接口：返回哪一份是确定的（L1）**",
+                             "**后端接口可给两份（L3）**")
+        self.assertIn("后端接口：返回哪一份是确定的", self.error_texts())
+
+    def test_single_response_removed_reports(self):
+        # 反例：一家之言式的「一个响应就是一个结果」被抽 -> 接口又能先给旧的后给新的
+        self._run_guard_with(self.CODING, "一个响应就是一个结果", "接口可分次给")
+        self.assertIn("一个响应就是一个结果", self.error_texts())
+
+    def test_cache_first_scope_removed_reports(self):
+        # 反例：界面侧的适用面判据被抽 -> 读者把「先缓存后在线」再糊回接口
+        self._run_guard_with(self.CODING, "给程序用的取数", "别的取数")
+        self.assertIn("给程序用的取数", self.error_texts())
+
+    def test_api_cache_carrier_removed_reports(self):
+        # 反例：栈层「接口缓存不属界面缓存」被抽 -> 前端代服务端定返回哪一份
+        self._run_guard_with(self.WEB, "**接口缓存的载体（不属界面）**",
+                             "**接口缓存归前端定（L3）**")
+        self.assertIn("接口缓存的载体（不属界面）", self.error_texts())
+
+    def test_dispatcher_gate_removed_reports(self):
+        # 反例⑩：加载门被抽 -> 写缓存的人永不加载该节，判据存在而走不到它
+        self._run_guard_with(self.COMMON, "要**用到缓存**", "要**留意缓存**")
+        self.assertIn("要**用到缓存**", self.error_texts())
+
+    def test_readme_sync_removed_reports(self):
+        # 反例⑪：README 目录说明未同步 -> 这一节加了也没人知道
+        self._run_guard_with(self.README, "先给缓存再换在线", "先取缓存")
+        self.assertIn("先给缓存再换在线", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑫：锚点清单被削（现场正文一字未动）-> 防线零证据，须报红
+        self._write_all_valid()
+        tokens_path = os.path.join(self.root, "script", "specs-rules", "_tokens.toml")
+        with open(tokens_path, encoding="utf-8") as fh:
+            tokens = fh.read()
+        self.assertIn("CACHE_ANCHORS = [", tokens)
+        start = tokens.index("CACHE_ANCHORS = [")
+        end = tokens.index("\n]", start)
+        trimmed_body = ('CACHE_ANCHORS = [\n    [\n        "依据行",\n        [\n'
+                        '            "RFC 9111",\n        ],\n'
+                        '        "依据行被删后，边界无从核对",\n    ],')
+        self.write("script/specs-rules/_tokens.toml",
+                   tokens[:start] + trimmed_body + tokens[end:])
+        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换；用完还原。
+        original = cm._RULES_TOKENS["CACHE_ANCHORS"]
+        trimmed = [g for g in original if g[0] != "依据行"]
+        self.assertLess(len(trimmed), len(original))
+        cm._RULES_TOKENS["CACHE_ANCHORS"] = trimmed
+        self.addCleanup(cm._RULES_TOKENS.__setitem__, "CACHE_ANCHORS", original)
+        self._run_guard()
+        self.assertIn("CACHE_ANCHORS", self.error_texts())
+
+    def test_two_sides_carrier_header_removed_reports(self):
+        # 反例⑬：栈层节首「两处缓存的载体各在哪一侧」被抽 -> 「接口已经缓存了」被读成
+        # 界面侧可以不先给缓存，而「先缓存后在线只管界面」的适用面判据在栈层没有落点
+        self._run_guard_with(self.WEB, "**两者不是同一处入口、也不是同一份判据**",
+                             "两者相关")
+        self.assertIn("两处缓存的载体各在哪一侧", self.error_texts())
+
+    def test_two_sides_immunity_sentence_removed_reports(self):
+        # 反例⑭：节首「前端不得以『接口已经缓存了』为由省掉界面侧的入口」被抽 ->
+        # 「不得互免」只剩一句原则，两处缓存又混成一件事
+        self._run_guard_with(self.WEB, "前端**不得**以「接口已经缓存了」为由省掉界面侧的入口",
+                             "前端可省掉界面侧的入口")
+        self.assertIn("两处缓存的载体各在哪一侧", self.error_texts())
 
 if __name__ == "__main__":
     unittest.main()
