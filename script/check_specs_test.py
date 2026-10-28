@@ -165,7 +165,12 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（猜到的行为先报、待人工确认）的判据措辞外置在该文件里
                            "script/specs-rules/execution.toml",
                            # 本道（缓存统一管理、先缓存后在线）的判据措辞外置在该文件里
-                           "script/specs-rules/cache.toml")
+                           "script/specs-rules/cache.toml",
+                           # 本道（冲突与压缩提交）的判据措辞外置在该文件里
+                           "script/specs-rules/version-control.toml",
+                           # 本道与相邻几道（提交信息、注释保留）的判据措辞外置在这两份里
+                           "script/specs-rules/git.toml",
+                           "script/specs-rules/dispatcher.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -25414,8 +25419,8 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
 
     def test_dispatcher_gate_removed_reports(self):
         # 反例⑫：加载门被抽 -> 写页面时永不加载该节
-        self._run_guard_with(self.COMMON, "含**界面**：要写/改给人看的界面与样式",
-                             "含**样式约定**：要写/改样式时")
+        self._run_guard_with(self.COMMON, "含**界面**与**样式优先级**",
+                             "含**样式约定**")
         self.assertIn("界面", self.error_texts())
 
     def test_readme_not_synced_reports(self):
@@ -25508,9 +25513,9 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
 
     def test_dispatch_grouping_feature_removed_reports(self):
         # 反例（#303 补回）：加载门里「页面内容多」的识别特征被删 -> 写设置页时永不加载该节
-        self._run_guard_with(self.COMMON, "含**页面内容多**",
-                             "含**其它界面事项**")
-        self.assertIn("含**页面内容多**", self.error_texts())
+        self._run_guard_with(self.COMMON, "**页面内容多**到要分组",
+                             "**其它界面事项**")
+        self.assertIn("**页面内容多**", self.error_texts())
 
     def test_readme_grouping_reverted_reports(self):
         # 反例（#303 补回）：README 目录说明回退 -> 按 README 学习的人不知有分组与页内检索
@@ -25519,8 +25524,8 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
 
     def test_dispatcher_style_priority_gate_removed_reports(self):
         # 反例⑲：加载门少了「要写/改样式优先级」这一识别特征 -> 只会写 CSS 时永不加载该节
-        self._run_guard_with(self.COMMON, "含**样式优先级**",
-                             "含**样式整理**")
+        self._run_guard_with(self.COMMON, "**样式优先级**、**页面内容多**",
+                             "**样式整理**")
         self.assertIn("样式优先级", self.error_texts())
 
     def test_anchor_list_shrunk_reports(self):
@@ -26399,6 +26404,209 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
         self._run_guard_with(self.WEB, "前端**不得**以「接口已经缓存了」为由省掉界面侧的入口",
                              "前端可省掉界面侧的入口")
         self.assertIn("两处缓存的载体各在哪一侧", self.error_texts())
+
+class TestCheckTmpLayoutGuard(CheckSpecsTestCase):
+    """钉住『tmp/ 的布局与命名』（用户口径：每一项任务都文档先行、规划先行，规划与过程落在
+    `tmp/` 并实时更新、新任务即时补进去；`tmp/` 下的文件也要走规划、避免乱丢乱放；单次小任务/
+    新项目/大规模重构流程不同，怎么兼容；下载其他项目源码、分析其他项目时源码与产出放哪）。
+
+    失效形态：`tmp/` 只有一句『按任务/文件类型分类建子文件夹』——按日期/轮次分或直接堆在根下
+    都无从判为不合规，分析结论写进被参照项目的目录里，重取一次副本就把结论覆盖掉。
+    规则数据在 `script/specs-rules/execution.toml`（含提示词公共片段侧同口径一组）。
+    """
+
+    EXECUTION = "specs/core/execution.adoc"
+    PROMPT = "prompts/_common.txt"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.EXECUTION, self.PROMPT):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def _run(self):
+        cm.check_tmp_layout_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_tmp_layout_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_usages_section_dropped_reports(self):
+        # 反例①：整节被抽——tmp/ 退回那句泛指，「乱丢乱放」照旧
+        self._mutate(self.EXECUTION, "用途四类", "随便分几类")
+        self.assertIn("用途四类", self._run())
+
+    def test_time_based_split_dropped_reports(self):
+        # 反例②：禁止按日期/轮次分被抽——一级目录回到按时间散放
+        self._mutate(self.EXECUTION, "不按日期/轮次分、不堆在根下", "可自行安排")
+        self.assertIn("不按日期/轮次分、不堆在根下", self._run())
+
+    def test_task_dir_split_dropped_reports(self):
+        # 反例③：规划与进度分开放被抽——规划读不出"当初定的是什么"
+        self._mutate(self.EXECUTION, "规划与进度各成一份分开放", "规划与进度放在一起")
+        self.assertIn("规划与进度各成一份分开放", self._run())
+
+    def test_progress_update_dropped_reports(self):
+        # 反例④：进度逐次更新/新任务即时补进规划 被抽——只剩落盘那一瞬
+        self._mutate(self.EXECUTION, "进度逐次更新、新任务即时补进规划", "进度事后补")
+        self.assertIn("进度逐次更新、新任务即时补进规划", self._run())
+
+    def test_copy_vs_output_dropped_reports(self):
+        # 反例⑤：副本与产出分开放被抽——重取副本会把结论覆盖掉
+        self._mutate(self.EXECUTION, "结论另按对象归集", "结论与副本放一起")
+        self.assertIn("结论另按对象归集", self._run())
+
+    def test_copy_readonly_dropped_reports(self):
+        # 反例⑥：「副本当只读输入」被抽——在被参照项目目录里就地改、就地生成产物
+        self._mutate(self.EXECUTION, "副本按来源分目录、当只读输入", "副本按需放置")
+        self.assertIn("副本按来源分目录、当只读输入", self._run())
+
+    def test_tier_reference_dropped_reports(self):
+        # 反例⑦：分档回指被抽——本集合长出自己的分档，与通用层各自漂移
+        self._mutate(self.EXECUTION, "分档只改展开粒度", "分档自定")
+        self.assertIn("分档只改展开粒度", self._run())
+
+    def test_section_renamed_reports(self):
+        # 反例⑧：小节被改名——取不到节即报红（"核不到"与"核过且通过"必须分得清）
+        self._mutate(self.EXECUTION, "=== tmp/ 的布局与命名", "=== 临时文件")
+        self.assertIn("tmp/ 的布局与命名", self._run())
+
+    def test_prompt_snippet_dropped_reports(self):
+        # 反例⑨：提示词公共片段侧同口径一条被抽——片段会被未知项目复制执行，那份里就没有这条
+        self._mutate(self.PROMPT, "规划与进度落在 `tmp/`、按用途排布（L1）", "规划写进 tmp")
+        self.assertIn("规划与进度落在 `tmp/`、按用途排布", self._run())
+
+
+class TestCheckCleanTmpGuard(CheckSpecsTestCase):
+    """钉住『清理脚本两步确认』（用户对 `tmp/` 布局的后续一问里选定的处置）。
+
+    失效形态：`tmp/` 按用途分层之后，"哪些能删"被交给清理脚本去判——而"哪些算产出"没有
+    外部判据；同时 `--all` 一次就把整棵 `tmp/` 清掉，脚本自身被下载进 `tmp/` 时连它带
+    各阶段产出一起删掉。规则数据在 `script/specs-rules/execution.toml`。
+    """
+
+    SPEC = "specs/general/script.adoc"
+    SCRIPT = "script/clean_tmp.py"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.SPEC, self.SCRIPT):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def _run(self):
+        cm.check_clean_tmp_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_clean_tmp_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_spec_two_step_dropped_reports(self):
+        # 反例①：判据本体的『两步确认』被抽——一次清空即可抹掉整棵 tmp/
+        self._mutate(self.SPEC, "删除须两步确认（L2）", "清空由使用者自行确认")
+        self.assertIn("删除须两步确认（L2）", self._run())
+
+    def test_spec_list_then_confirm_dropped_reports(self):
+        # 反例②：『先列出、再确认』被抽——只剩"要确认"一句，看不到将删的是哪些
+        self._mutate(self.SPEC, "先列出将被删的条目、再显式确认才真删", "须确认后再删")
+        self.assertIn("先列出将被删的条目、再显式确认才真删", self._run())
+
+    def test_spec_no_yes_bypass_dropped_reports(self):
+        # 反例③：两种用法同一条口令兜底的那句被抽——只剩全量那一条两步，
+        # 指定目标不带确认即真删的那条路又长回来（判据的适用面被收窄成一条用法）
+        self._mutate(self.SPEC, "不得留下不带 `--yes` 也照删的那条路", "全量清空尤须如此")
+        self.assertIn("不得留下不带 `--yes` 也照删的那条路", self._run())
+
+    def test_spec_no_purpose_judgement_dropped_reports(self):
+        # 反例③：『脚本不判用途』被抽——清理器被当成按用途保留的开关
+        self._mutate(self.SPEC, "脚本不判用途", "脚本可按用途选择")
+        self.assertIn("脚本不判用途", self._run())
+
+    def test_spec_section_renamed_reports(self):
+        # 反例④：小节被改名——取不到节即报红（"核不到"与"核过且通过"必须分得清）
+        self._mutate(self.SPEC, "== 临时产物清理（脚本约定）", "== 临时产物处理")
+        self.assertIn("临时产物清理（脚本约定）", self._run())
+
+    def test_script_boundary_dropped_reports(self):
+        # 反例⑤：脚本头注的边界声明被抽——"只认 CWD 下的 tmp/"消失
+        self._mutate(self.SCRIPT, "本脚本只认「CWD 下的 tmp/」这一个边界", "清理 tmp 下的内容")
+        self.assertIn("本脚本只认「CWD 下的 tmp/」这一个边界", self._run())
+
+    def test_script_no_purpose_judgement_dropped_reports(self):
+        # 反例⑥：脚本侧『不判用途』被抽——脚本默认开始判用途
+        self._mutate(self.SCRIPT, "**不判用途**", "按用途判断")
+        self.assertIn("**不判用途**", self._run())
+
+    def test_script_two_step_dropped_reports(self):
+        # 反例⑦：`--all --yes` 两步被抽——退回一次 `--all` 即清空（脚本里有多处同形字样，
+        # 故整个词逐处抹掉：只改第一处时其余几处仍兜住，等于没抽）
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.SCRIPT), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("--all --yes", text)
+        self._write_valid()
+        self.write(self.SCRIPT, text.replace("--all --yes", "--force"))
+        self.assertIn("--all --yes", self._run())
+
+    def test_script_dry_run_output_dropped_reports(self):
+        # 反例⑧：无确认时的清单输出被抽——"先看清单"这一步没有输出，确认无从做
+        self._mutate(self.SCRIPT, "Would delete", "Deleting")
+        self.assertIn("Would delete", self._run())
+
+    def test_script_hint_message_dropped_reports(self):
+        # 反例⑨：无确认时的后续提示被抽——看到清单却不知道下一步怎么确认
+        self._mutate(self.SCRIPT, "Nothing deleted. Re-run with --all --yes",
+                     "Nothing deleted.")
+        self.assertIn("Nothing deleted. Re-run with --all --yes", self._run())
+
+    def test_script_targets_two_step_dropped_reports(self):
+        # 反例⑩：指定目标的删除退回一步——`--all` 两步了、指定目标却仍一次删掉，
+        # 全量那条判据照绿（两种用法各走各的口令，等于两步确认只兑现了一半）
+        self._mutate(self.SCRIPT, "Re-run with --yes to delete them.",
+                     "Re-run with the same targets to delete them.")
+        self.assertIn("Re-run with --yes to delete them.", self._run())
+
+    def test_rules_entry_removed_reports(self):
+        # 反例⑪：规则数据里整道判据被抽走——防线静默变成空转，必须报红
+        self._write_valid()
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, "script/specs-rules/execution.toml"),
+                  encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn("check_clean_tmp_guard", rules)
+        self.write("script/specs-rules/execution.toml", rules.split("[[guards.check_clean_tmp_guard]]")[0])
+        self.assertIn("check_clean_tmp_guard", self._run())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -96,7 +96,11 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
   - **临时产物留在工作目录 `tmp/` 下**（见 `specs/core/execution.adoc`「临时产物」）：新版本
     脚本在真身与落点都不可写时中转落在这里；运行前已存在的旧副本由本脚本自己按项目清理脚本
-    的用法清掉（`_clean_self_tmp`），本轮新写的那几份留着——调用方可能还要读它们；
+    的用法清掉（`_clean_self_tmp`），本轮新写的那几份留着——调用方可能还要读它们。
+    **这里是唯一的例外落点**：`tmp/` 内部按用途分层（同节「tmp/ 的布局与命名」），而本节这几份
+    中转副本**不建任务目录**——它们是本脚本自己的状态、名字由 `SELF_UPDATE_SUFFIX` 钉死，
+    且清理由 `_clean_self_tmp` 按名字白名单做，不经人手；配套的 `clean_tmp.py` 与入口脚本
+    一律落**落点根下**、不进 `tmp/`（全量清空时最先被连带删掉的就是它们）；
   - `--keep` 之外**不做备份**：落点是那份文件自己的位置，被改动过的副本按"以远程为准"覆盖掉
     ——**须留本地改动时用 `--keep`**；
   - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满；
@@ -612,8 +616,10 @@ def _clean_self_tmp(cwd):
     同名的中转文件）：清理本身是破坏性动作，脚本不做"顺手清空 `tmp/`"这种事（见
     specs/core/execution.adoc「破坏性操作」）。清理方式按项目提供的清理脚本走
     （见 specs/general/script.adoc「临时产物清理」）：它按**当前工作目录**当项目根、收相对路径，
-    故本函数以 `cwd` 起 `subprocess`；清理脚本不在 `tmp/` 里（调用方可能并没有把它取下来）时
-    自己删——**判据与清理脚本同一条**（目标必须落在 `tmp/` 内、名字在白名单里）。
+    故本函数以 `cwd` 起 `subprocess`，清理脚本按**落点根下**那一份找（`install_scripts_dir()`，
+    本脚本把它与入口脚本一并落在那里）：它不落 `tmp/`（`--all` 一次清空会先删掉它，见
+    `specs/general/script.adoc`「临时文件」）；找不到时自己删——**判据与清理脚本同一条**
+    （目标必须落在 `tmp/` 内、名字在白名单里）。
 
     **本轮新写的那几份不清**：它们可能就是调用方的壳正要换上去的源（删了等于把刚做好的事抹了），
     故本函数只清**运行前已存在**的旧副本——由调用方在进入本轮、取回新版本**之前**调用。
@@ -626,10 +632,16 @@ def _clean_self_tmp(cwd):
                or name == os.path.basename(INSTALL_SCRIPTS[0])]
     if not victims:
         return
-    cleaner = os.path.join(cwd, SELF_TMP_DIR, CLEAN_TMP_SCRIPT)
-    if os.path.isfile(cleaner):
+    # 清理脚本自己按 `tmp/` 起相对路径（`resolve_safe` 已拼上 `tmp/`），故这里只传名字
+    del_rel = list(victims)
+    for cleaner in (os.path.join(install_scripts_dir(), CLEAN_TMP_SCRIPT),
+                    os.path.join(cwd, SELF_TMP_DIR, CLEAN_TMP_SCRIPT)):
+        if not os.path.isfile(cleaner):
+            continue
         try:
-            subprocess.run([sys.executable, cleaner, *[f"{SELF_TMP_DIR}/{n}" for n in victims]],
+            # `--yes`：清理脚本的删除口令（见 specs/general/script.adoc「临时产物清理」）。
+            # 删哪几个由本函数的白名单定，口令只是把"两步确认"的那一步显式写出来。
+            subprocess.run([sys.executable, cleaner, *del_rel, "--yes"],
                            cwd=cwd, capture_output=True, timeout=TIMEOUT_SECONDS)
             return
         except (OSError, subprocess.SubprocessError):

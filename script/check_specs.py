@@ -4401,8 +4401,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 169  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`）
-GUARD_TEST_BASELINE = 2264  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
+GUARD_WIRING_BASELINE = 171  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`、`check_clean_tmp_guard`）
+GUARD_TEST_BASELINE = 2298  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6631,6 +6631,48 @@ def check_reusable_scenario_guard():
     """
     phase("要复用的验证场景归入测试源码防线检查（不落成一次性脚本）")
     run_rule_guard("check_reusable_scenario_guard")
+    phase_done()
+
+
+def check_tmp_layout_guard():
+    """『tmp/ 的布局与命名』防线：临时产物落在哪、怎么排、副本与产出怎么分。
+
+    用户提出：每一项任务都要**文档先行、规划先行**，规划与过程落在 `tmp/` 并**实时更新**、
+    执行中新发现的待办**即时补进去**；`tmp/` 下的文件也要**走规划、避免乱丢乱放**。
+    单次小任务、新项目开发、大规模重构的流程不同——问的是**怎么兼容**；要下载其他多个项目的
+    源码、分析其他项目时，**源码与分析产出又放哪**（要求参照业界规范）。
+
+    与相邻几条的分工：`specs/general/planning.adoc`「规划落盘后才动手」管**要不要落盘**、
+    「临时产物」上面那几条管**落在哪、要不要清理、什么地方不能用临时产物**，本条只管
+    **`tmp/` 内部怎么排布**（一级分类、任务目录命名、进度与规划分家、副本与产出分家、分档只改形态）。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`（`check_tmp_layout_guard`；
+    含提示词公共片段侧同口径一条）；"这次任务把文件放对了没""某份文件算不算产出"属运行时
+    事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("tmp/ 的布局与命名防线检查（按用途分层、规划与进度分家）")
+    run_rule_guard("check_tmp_layout_guard")
+    phase_done()
+
+
+def check_clean_tmp_guard():
+    """『清理脚本两步确认』防线：`clean_tmp.py --all` 先列后删、且脚本不判用途。
+
+    为什么需要它：`tmp/` 的布局定成一处分层判据后，"哪些该留、哪些能删"看起来可以交给
+    脚本去判——但**"哪些算产出"没有外部判据**（`tmp/analysis/<对象>/` 与
+    `<任务>/findings/` 都是要留给人看的结论），做成 `--keep-*` 一类开关只会让保留与否取决于
+    记不记得传参；而真正会出事的是另一头：`--all` 一次就把整棵 `tmp/` 清掉，脚本自身被
+    下载进 `tmp/` 时连它和各阶段产出一起删掉（本项目实证的失效形态）。
+
+    故本道钉三处**同名**事实：判据本体在 `specs/general/script.adoc`「临时产物清理（脚本约定）」，
+    脚本侧核头注的边界声明、`--all --yes` 两步、以及无确认时只列不删。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`（`check_clean_tmp_guard`）；
+    "某次到底删没删""哪一份算产出"属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("清理脚本的两步确认防线检查（先列后删、不判用途）")
+    run_rule_guard("check_clean_tmp_guard")
     phase_done()
 
 
@@ -13008,6 +13050,8 @@ CHECKS = (
     check_changelog_timing_prompt_guard,
     check_guess_confirm_guard,
     check_cache_guard,
+    check_tmp_layout_guard,
+    check_clean_tmp_guard,
 )
 
 
