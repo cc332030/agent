@@ -4871,8 +4871,9 @@ class TestCheckJavadocPathBaseGuard(CheckSpecsTestCase):
         "* **代码与设计文档双向引用**：类/方法的 javadoc 用 `@see \"..\"` 指向设计文档；"
         "**路径基准**优先用\"项目根或模块根相对\"（推荐、非必须——**不限制文档路径**）；"
         "**模块根相对**不受源文件所在包层级影响、**项目根相对**在 IDE 里可解析；"
-        "文档路径须用英文双引号包裹（裸 `@see doc/...adoc` 会被当作成员引用解析并报错，"
-        "`failOnError` 会中断构建）。\n")
+        "裸 `@see doc/...adoc` 会被当作成员引用解析并报错，`failOnError` 会中断构建；"
+        "**文档路径**一律用英文双引号包裹（`@see \"doc/design/some.adoc\"`），"
+        "加引号后即为文本引用、按字面记录路径，不必改成 `<a href>` 链接形态。\n")
 
     def _write_valid(self):
         self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
@@ -4950,6 +4951,132 @@ class TestCheckJavadocPathBaseGuard(CheckSpecsTestCase):
                    "不限制被引用文档的存放路径；项目根与模块根两处都推荐）\n")
         cm.check_javadoc_path_base_guard()
         self.assertIn("specs/general/doc.adoc", self.error_texts())
+
+
+class TestCheckJavadocTestDirectionGuard(CheckSpecsTestCase):
+    """钉住『源类不 @see 测试类、关系由测试侧单边承载』。
+
+    失效形态（本仓库实测）：规范原写"源类 javadoc `@see` 其各类测试类"，执行者照做，
+    而**主源码 javadoc 解析不到 `src/test/java`**——裸类名 `reference not found`
+    （`failOnError` 断构建）、加引号降级成纯文本（`See Also:` 里就是一串带引号的字面量）。
+    故要拦三种退回：规则改回旧形态、原因被删（下一个人以为换个写法就行）、
+    引号边界被删（把加引号当修法）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_java = cm.JAVA_STACK_FILE
+        self._orig_design = cm.DEPENDENCY_VIEW_FILE
+        cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
+        cm.DEPENDENCY_VIEW_FILE = os.path.join(self.root, "specs", "general", "doc-design.adoc")
+
+    def tearDown(self) -> None:
+        cm.JAVA_STACK_FILE = self._orig_java
+        cm.DEPENDENCY_VIEW_FILE = self._orig_design
+        super().tearDown()
+
+    JAVA_BULLET = (
+        "* **测试类 javadoc `@see` 源类与同被测类的其他测试类**；"
+        "**源类 javadoc 不得 `@see` 其测试类**——测试类在 `src/test/java`，"
+        "主源码 javadoc 的解析范围内没有它：裸类名按类引用解析、必报 `reference not found`"
+        "（`failOnError` 即断构建），加引号则降级成**纯文本**、仍不成引用。"
+        "**故类间关系只由测试类一侧承载**。\n"
+        '* **代码与设计文档双向引用**：注意 **加引号只对“路径”这一类成立**，'
+        '**类名不要靠加引号绕过解析失败**。**文档路径**一律用英文双引号包裹'
+        '（`@see \"doc/design/some.adoc\"`），加引号后即为文本引用、按字面记录路径，'
+        '**不必改成 `<a href>` 链接形态**；源类一侧要让人找得到各类测试类，'
+        '写进类级说明正文（测试类名用英文双引号包裹）。\n')
+
+    GENERAL = ("= 文档设计\n\n=== 类间关系与双向引用\n"
+               "* **类间关系由代码文档注释互引承载**：**对应关系写进代码文档注释、"
+               "指向可解析的一方**；**反向不成立**——多数语言里测试源码"
+               "不在主源码的文档解析范围内，故由**测试侧单边承载**。"
+               "**指向文件的引用按各语言的引用写法写、能照路径找到目标即可**——"
+               "这类引用是**文本引用**、**不要求写成可点的链接**；"
+               "同一源类的**多个测试类**逐个写出。\n")
+
+    def _write_valid(self):
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        self.write("specs/general/doc-design.adoc", self.GENERAL)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_javadoc_test_direction_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_old_direction_reports(self):
+        # 反例：方向改回旧形态（源类 @see 其各类测试类）
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **源类与各类测试类在 javadoc 中互相引用**：源类 javadoc `@see` 其各类测试类。\n"
+                   '* **代码与设计文档双向引用**：**加引号只对“路径”这一类成立**，'
+                   '**类名不要靠加引号绕过解析失败**。**文档路径**一律用英文双引号包裹，'
+                   '加引号后即为文本引用、**不必改成 `<a href>` 链接形态**；'
+                   '找得到各类测试类，写进类级说明正文。\n')
+        self.write("specs/general/doc-design.adoc", self.GENERAL)
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_cause_removed_reports(self):
+        # 反例：原因被删（只留结论）——下一个人会以为"换个写法就行"
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **测试类 javadoc `@see` 源类**；**源类 javadoc 不得 `@see` 其测试类**——"
+                   "**故类间关系只由测试类一侧承载**。\n"
+                   '* **代码与设计文档双向引用**：**加引号只对“路径”这一类成立**，'
+                   '**类名不要靠加引号绕过解析失败**。**文档路径**一律用英文双引号包裹，'
+                   '加引号后即为文本引用、**不必改成 `<a href>` 链接形态**；'
+                   '找得到各类测试类，写进类级说明正文。\n')
+        self.write("specs/general/doc-design.adoc", self.GENERAL)
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_quote_boundary_removed_reports(self):
+        # 反例：引号边界被删——执行者会把"加引号"当修法（本仓库实测走过的弯路）
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **测试类 javadoc `@see` 源类**；**源类 javadoc 不得 `@see` 其测试类**——"
+                   "测试类在 `src/test/java`，主源码 javadoc 的解析范围内没有它："
+                   "裸类名报 `reference not found`，加引号则降级成**纯文本**。"
+                   "**故类间关系只由测试类一侧承载**。\n")
+        self.write("specs/general/doc-design.adoc", self.GENERAL)
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_quote_wording_removed_reports(self):
+        # 反例：双引号口径被抽掉、只剩"看解析"——用户点名要的是英文双引号包裹路径，
+        # 缺了这句，执行者会自行升级成 `<a href>` 或干脆不写
+        self.write("specs/stack/java.adoc",
+                   "= Java\n\n== javadoc\n"
+                   "* **测试类 javadoc `@see` 源类**；**源类 javadoc 不得 `@see` 其测试类**——"
+                   "测试类在 `src/test/java`，主源码 javadoc 的解析范围内没有它："
+                   "裸类名报 `reference not found`，加引号则降级成**纯文本**。"
+                   "**故类间关系只由测试类一侧承载**。\n"
+                   '* **代码与设计文档双向引用**：**加引号只对“路径”这一类成立**，'
+                   '**类名不要靠加引号绕过解析失败**；路径按解析情况处理。\n')
+        self.write("specs/general/doc-design.adoc", self.GENERAL)
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/stack/java.adoc", self.error_texts())
+
+    def test_general_layer_link_requirement_removed_reports(self):
+        # 反例：通用层没写"照着路径能找到目标即可、不要求写成链接"——各方会各自发挥
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        self.write("specs/general/doc-design.adoc",
+                   "= 文档设计\n\n=== 类间关系与双向引用\n"
+                   "* **类间关系由代码文档注释互引承载**：**对应关系写进代码文档注释、"
+                   "指向可解析的一方**；**反向不成立**——多数语言里测试源码"
+                   "不在主源码的文档解析范围内，故由**测试侧单边承载**。\n")
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/general/doc-design.adoc", self.error_texts())
+
+    def test_general_layer_mutual_wording_reports(self):
+        # 反例：通用层只写"互相引用"——非 Java 语言与引用方项目照搬出解析不了的引用
+        self.write("specs/stack/java.adoc", "= Java\n\n== javadoc\n" + self.JAVA_BULLET)
+        self.write("specs/general/doc-design.adoc",
+                   "= 文档设计\n\n=== 类间关系与双向引用\n"
+                   "* **类间关系由代码文档注释互引承载**：源文件、测试之间**互相引用**。\n")
+        cm.check_javadoc_test_direction_guard()
+        self.assertIn("specs/general/doc-design.adoc", self.error_texts())
 
 
 class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
@@ -11161,15 +11288,243 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
     def test_overlong_entry_reports(self):
-        # 反例：单行条目过长（混入了实现细节/清单，应拆条或删减）
+        # 反例：单行条目过长（混入了验证过程/清单，应拆条或删减）
+        # 日期须落在体量判据的生效分界之后，否则属历史条目、按定义不受上限约束
         self.write("CHANGELOG.adoc",
-                   "= 变更日志\n\n- 1.1 | 2026-09-12 | " + "细节" * 1200 + "\n")
+                   "= 变更日志\n\n- 1.1 | 2030-01-01 | " + "细节" * 250 + "\n")
         cm.check_changelog_entry_guard()
         self.assertIn("条目过长", self.error_texts())
+
+    def test_overlong_entry_before_cutoff_passes(self):
+        # 正例：历史条目再长也不受体量上限约束——历史是记录、不是待编辑的正文。
+        # 实测失效：为凑「单条 400 字」把整份历史重写，176 条历史一条没原样留下。
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.1 | 2026-09-12 | " + "细节" * 250 + "\n")
+        cm.check_changelog_entry_guard()
+        self.assertNotIn("条目过长", self.error_texts())
+
+    def test_same_version_appended_reports(self):
+        # 反例：同一版本被**追加**了第二条（追加式写入的典型产物：`同 PR 追加` 又添一条）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.2 | 2026-09-13 | 同 PR 追加：补一条\n"
+                   "- 1.2 | 2026-09-12 | 新增某项能力\n- 1.1 | 2026-09-11 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("追加", self.error_texts())
+
+    def test_same_version_plain_rows_pass(self):
+        # 正例：同一版本的多行是**多个变更点**（一个变更点一条），不是追加
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.2 | 2026-09-11 | 新增某项能力\n"
+                   "- 1.2 | 2026-09-12 | 修正某处缺陷\n- 1.1 | 2026-09-11 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_distinct_versions_same_day_pass(self):
+        # 正例：同一天的不同版本各自成行（不是"同一版本拆多条"）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.2 | 2026-09-12 | 新增某项能力\n"
+                   "- 1.1 | 2026-09-12 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertEqual(cm.errors, [])
 
     def test_missing_changelog_reports(self):
         cm.check_changelog_entry_guard()
         self.assertIn("缺少统一变更日志", self.error_texts())
+
+
+class TestCheckChangelogWritableGuard(CheckSpecsTestCase):
+    """钉住『变更日志写入形态防线』：日志只被「人改」、不被「追加」，条目按一句话的体量写。
+
+    用户口径（本轮）：『解决 changelog 频繁被加内容的问题』。失效形态不是某一轮写多了，
+    而是**写入方式本身**——把日志当追加区往里塞，同一版本被记成多条、每条越写越长，
+    且没有一步读回全文。故钉两处：写入方式（重写型 + 就地并入 + 脚本与流水线同受约束）
+    与体量（不得写验证过程与『净影响』这类过程性内容）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_file = cm.CHANGELOG_STRUCTURE_FILE
+        self.ran = []
+        cm.CHANGELOG_STRUCTURE_FILE = os.path.join(
+            self.root, "specs", "general", "changelog.adoc")
+
+    def tearDown(self) -> None:
+        cm.CHANGELOG_STRUCTURE_FILE = self._orig_file
+        super().tearDown()
+
+    WRITABLE_BODY = (
+        "= 变更日志编写规范（通用层）\n\n"
+        "* **日志只被「人改」，不被「追加」**：变更日志是**重写型文件**——读入整份、"
+        "就地增删改、写回，不得以追加（`>>`、`tee -a`、`append` 模式）落盘；"
+        "同一版、同一变更点须**就地并入**，不另起一条。"
+        "**脚本与流水线同样受此约束**：除人主动声明、当次手写外，任何自动化步骤不得写它。\n"
+        "* **一句话**：摘要一句话说清，**体量判据（L1）**：条目里**不得出现**验证过程、"
+        "**不得出现**\"对引用方的净影响\"这类自我辩白。\n")
+
+    def test_guard_passes_with_full_wording(self):
+        self.write("specs/general/changelog.adoc", self.WRITABLE_BODY)
+        cm.check_changelog_writable_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_rewrite_only_rule_missing_reports(self):
+        # 反例：重写型 + 不得追加的判据被抽掉（日志回到追加区）
+        self.write("specs/general/changelog.adoc",
+                   self.WRITABLE_BODY.replace(
+                       "**重写型文件**", "普通文本文件"))
+        cm.check_changelog_writable_guard()
+        self.assertIn("写入形态防线被破坏", self.error_texts())
+
+    def test_merge_in_place_missing_reports(self):
+        # 反例：就地并入的规则被抽掉（每条新观察都新开一行）
+        self.write("specs/general/changelog.adoc",
+                   self.WRITABLE_BODY.replace("就地并入", "另建一条"))
+        cm.check_changelog_writable_guard()
+        self.assertIn("就地并入", self.error_texts())
+
+    def test_script_scope_missing_reports(self):
+        # 反例：约束没有扩到脚本与流水线（自动追加换个执行者照样发生）
+        self.write("specs/general/changelog.adoc",
+                   self.WRITABLE_BODY.replace("脚本与流水线同样受此约束", "由执行者自行把握"))
+        cm.check_changelog_writable_guard()
+        self.assertIn("脚本与流水线同样受此约束", self.error_texts())
+
+    def test_volume_rule_missing_reports(self):
+        # 反例：体量判据被抽掉（条目会一路长到两三千字）
+        self.write("specs/general/changelog.adoc",
+                   self.WRITABLE_BODY.replace("体量判据（L1）", "建议")
+                   .replace("**不得出现**验证过程", "尽量少写过程"))
+        cm.check_changelog_writable_guard()
+        self.assertIn("体量判据", self.error_texts())
+
+    def test_rule_steps_are_wired(self):
+        # 接线自检：脚本里确实调用了本道防线的规则（抽掉 `run_rule_guard` 那一行即整道空转）
+        self.write("specs/general/changelog.adoc", self.WRITABLE_BODY)
+        run_rule_guard = cm.run_rule_guard
+        cm.run_rule_guard = lambda guard: self.ran.append(guard)
+        try:
+            cm.check_changelog_writable_guard()
+        finally:
+            cm.run_rule_guard = run_rule_guard
+        self.assertIn("check_changelog_writable_guard", self.ran)
+
+
+class TestCheckChangelogEditGuard(CheckSpecsTestCase):
+    """钉住『变更日志修改面防线』：只在主动声明的那一轮修改、一次提交只记当前版本。
+
+    用户口径：『日志只被「人改」、不被「追加」，只允许主动声明时修改 changelog』。
+    前几轮钉的是「什么时候记一条」与「怎么写进去」，缺的是两端——**谁可以在哪一轮动它**、
+    **一次提交动到哪些条目**。故本类钉三处退回：修改面收窄句被删、例外被删、
+    提交面被删，以及「版本线连续」这条机械可核对面的丢失。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_file = cm.CHANGELOG_STRUCTURE_FILE
+        self.ran = []
+        cm.CHANGELOG_STRUCTURE_FILE = os.path.join(
+            self.root, "specs", "general", "changelog.adoc")
+
+    def tearDown(self) -> None:
+        cm.CHANGELOG_STRUCTURE_FILE = self._orig_file
+        super().tearDown()
+
+    BODY = (
+        "= 变更日志编写规范（通用层）\n\n"
+        "* **只允许在主动声明的那一轮修改（L1）**：修改面就是「登记时机」里那次声明；"
+        "**同一任务的后续轮次未获新声明时，也不得回头再改**。"
+        "**例外只一种**：本次实跑发现**已写入的条目本身有错**（断号、同一版本被拆成多条、"
+        "条目与事实不符），可就地订正该条——**不得借订正顺手添内容**。\n"
+        "* **一次提交只记当前版本（L1）**：**该提交只承载**\"当前这一个版本\"的条目——"
+        "把别的版本组的条目一并带进这个提交即**追加**。\n"
+        "* **版本线连续（L1）**：同一份日志里版本号**不重号、不断号**；没有内容可写的版本"
+        "**就地把这个版本组整体删掉**、不得留一个空号。\n")
+
+    def _write(self, body=None):
+        self.write("specs/general/changelog.adoc", body if body is not None else self.BODY)
+
+    def test_passes_with_full_wording(self):
+        self._write()
+        cm.check_changelog_edit_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_round_scope_removed_reports(self):
+        # 反例：后续轮次不得回头再改这一句被删（改动已提交、下一轮再补一条就没人拦）
+        self._write(self.BODY.replace(
+            "**同一任务的后续轮次未获新声明时，也不得回头再改**", ""))
+        cm.check_changelog_edit_guard()
+        self.assertIn("修改面防线被破坏", self.error_texts())
+
+    def test_exception_removed_reports(self):
+        # 反例：唯一例外被删（断号、重号只能靠删条掩盖）
+        self._write(self.BODY.replace(
+            "**例外只一种**：本次实跑发现**已写入的条目本身有错**（断号、同一版本被拆成多条、"
+            "条目与事实不符），可就地订正该条——**不得借订正顺手添内容**。", ""))
+        cm.check_changelog_edit_guard()
+        self.assertIn("例外只一种", self.error_texts())
+
+    def test_commit_scope_removed_reports(self):
+        # 反例：一次提交只记当前版本被抽掉（一次提交顺手带上别的版本组）
+        self._write(self.BODY.replace("**一次提交只记当前版本（L1）**", "提交随意"))
+        cm.check_changelog_edit_guard()
+        self.assertIn("修改面防线被破坏", self.error_texts())
+
+    def test_version_line_rule_removed_reports(self):
+        # 反例：版本线连续被抽掉（压缩条目把两条并成一条、断号无人发现）
+        self._write(self.BODY.replace("**版本线连续（L1）**", "版本随意"))
+        cm.check_changelog_edit_guard()
+        self.assertIn("版本线连续", self.error_texts())
+
+    def test_rule_steps_are_wired(self):
+        # 接线自检：脚本里确实调用了本道防线的规则（抽掉 `run_rule_guard` 那一行即整道空转）
+        self._write()
+        run_rule_guard = cm.run_rule_guard
+        cm.run_rule_guard = lambda guard: self.ran.append(guard)
+        try:
+            cm.check_changelog_edit_guard()
+        finally:
+            cm.run_rule_guard = run_rule_guard
+        self.assertIn("check_changelog_edit_guard", self.ran)
+
+
+class TestChangelogAppendMarkers(CheckSpecsTestCase):
+    """追加标志与版本线：`check_changelog_entry_guard` 的机械面。
+
+    本仓库实测的两桩失效：①条目自称「同 PR 追加/补充」——它不是变更点、是对既有条目的补充；
+    ②一次「压缩条目」把两条并成一条，版本线从此断号（3.43 → 3.41），而**没有任何一处会报**。
+    """
+
+    def test_append_marker_variant_reports(self):
+        # 反例：换一种自称号（`补充：`）照样是往里加过
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.2 | 2026-09-13 | 补充：再补一句\n"
+                   "- 1.2 | 2026-09-12 | 新增某项能力\n- 1.1 | 2026-09-11 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("追加", self.error_texts())
+
+    def test_version_gap_reports(self):
+        # 反例：版本线断号（压缩条目把两条并成一条的产物）
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.3 | 2026-09-13 | 第三项\n"
+                   "- 1.1 | 2026-09-11 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("断号", self.error_texts())
+
+    def test_version_gap_with_heading_reports(self):
+        # 反例：表格式（版本组标题）同样核版本线
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n== 1.3（2026-09-13）\n\n| 类型 | 变更点 | 影响\n\n"
+                   "== 1.1（2026-09-11）\n\n| 类型 | 变更点 | 影响\n")
+        cm.check_changelog_entry_guard()
+        self.assertIn("断号", self.error_texts())
+
+    def test_contiguous_version_line_passes(self):
+        # 正例：同版本多变更点 + 相邻版本连号
+        self.write("CHANGELOG.adoc",
+                   "= 变更日志\n\n- 1.3 | 2026-09-13 | 第三项\n"
+                   "- 1.2 | 2026-09-12 | 第二项\n- 1.2 | 2026-09-12 | 另一变更点\n"
+                   "- 1.1 | 2026-09-11 | 初始发布\n")
+        cm.check_changelog_entry_guard()
+        self.assertEqual(cm.errors, [])
 
 
 class TestCheckChangelogStructureGuard(CheckSpecsTestCase):

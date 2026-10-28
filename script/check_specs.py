@@ -1227,8 +1227,34 @@ HISTORICAL_FILES = _RULES_TOKENS["HISTORICAL_FILES"]
 # 变更日志被当成追加区，同一条目被**多行续写**（heredoc / 多次 append），
 # 结果形态看不出来，还容易与下一条粘连。单行是**机械可判定**的（行首 `- 版本 | 日期 |`
 # 之后不得出现续行），故在此钉住，不靠人工抽查。
+#
+# 本轮再加两条同源的机械面（用户口径：『解决 changelog 频繁被加内容的问题』）：
+# ① **体量**——摘要是一句话，一条写进两三千字（验证过程、反向验证、对引用方的净影响）
+#    时读者拿不到那一句，且越堆越长的条目会让下一轮继续追加；故单条上限收到 400 字。
+#    **只管新增**：`CHANGELOG_ENTRY_MAX_FROM` 之前的历史条目是记录、不是待编辑的正文，
+#    不得为了满足这条判据去改写它们（改写历史等于把当初的结论换成此刻的复述，
+#    "内容不减少"无从核对）。实测：为凑这条上限把历史条目整篇重写，176 条历史一条没原样留下。
+# ② **同一版本不得拆成多条**——追加式写入的典型产物是同一版本被记成第二条、第三条
+#    （"同 PR 追加"），而规范要求一个变更点一条、同日多版本各自成行；版本号重复即此处报红。
+#    历史里的 `多版本同日` 不在此列（那是不同版本号）。两条都只钉**形态**，
+#    "某条算不算一个变更点、够不够有价值"仍属语义判断（见 `GUARD_CHECK_LIMITS`）。
 CHANGELOG_ENTRY_RE = re.compile(r"^-\s+[0-9][^|\n]*\|\s*\d{4}-\d{2}-\d{2}\s*\|")
-CHANGELOG_ENTRY_MAX = 2000
+CHANGELOG_ENTRY_MAX = 400
+# 体量判据的生效分界：早于该日期的条目属**历史**，不受 400 字上限约束（见上方 ①）。
+# 取值为"本条判据引入那一版之前"的日期，此后新写的条目一律受约束。
+# **分界只能落在引入上限的那一版之前**：上限是此后新写条目的约束，既有的长条目
+# 一条都不该被它追认为违规——追认的唯一出路就是改写历史，而这正是要防的事。
+CHANGELOG_ENTRY_MAX_FROM = "2026-10-27"
+CHANGELOG_ENTRY_VERSION_RE = re.compile(r"^-\s+([0-9][^|\n]*?)\s*\|")
+# 追加式写入的**标志**：同一版本被记成第二条时，后一条通常自带这层出处（`同 PR 追加`、
+# `补充`、`追加`）。判据因此落在「同版本 + 带追加标志」上——历史里同日多行是**同一个版本的
+# 多个变更点**（一个变更点一条），按版本号一刀切会把它们全判违规。
+CHANGELOG_APPEND_MARKER = "同 PR 追加"
+# 同一形态的另几种自称（本轮实测：`同 PR 追加` 只是其中一种写法，换词即绕过）。判据只认
+# 「新的那条自己说自己是补上去的」这件事——它**不是**一个变更点，是对既有条目的补充。
+CHANGELOG_APPEND_MARKERS = (CHANGELOG_APPEND_MARKER, "同 PR 补充", "追加：", "补充：")
+# 版本组标题（表格式）：`== 1.1（2026-08-21）` / `== 1.1`。
+CHANGELOG_VERSION_HEADING_RE = re.compile(r"^==+\s*v?([0-9]+(?:\.[0-9]+)*)\s*(?:[（(]|$)")
 
 # 『变更日志组织形态与表格形态防线』要点（`specs/general/changelog.adoc`）。
 # 失效形态（用户报告、实测）：项目在一个版本里改了很多东西时，单行流水式日志**不可检索、
@@ -4375,8 +4401,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 164  # 同源实取：`CHECKS` 序列唯一名（新增 `check_cache_guard` 后为 164）
-GUARD_TEST_BASELINE = 2237  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（`TestCheckCacheGuard` 补两条反例后按现场实测取 2237）
+GUARD_WIRING_BASELINE = 169  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`）
+GUARD_TEST_BASELINE = 2264  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -5848,6 +5874,35 @@ def check_javadoc_path_base_guard():
         err("缺少 specs/general/doc.adoc——『javadoc 文档路径基准』的通用层落点丢失"
             "（引用方按通用文档规范加载时学不到这条推荐）", "specs/general/doc.adoc")
     run_rule_guard("check_javadoc_path_base_guard")
+    phase_done()
+
+
+def check_javadoc_test_direction_guard():
+    """『源类不 @see 测试类、关系由测试侧单边承载』防线。
+
+    本条对应一处实测过的真实失效：规范原写"源类 javadoc `@see` 其各类测试类"，
+    执行者照做——但**主源码 javadoc 的解析范围里没有 `src/test/java`**（JDK 实测）：
+    裸类名报 `error: reference not found`（`failOnError` 即断构建）；改用
+    `@see "XxxTests"` 则不报错，却把目标降级成**纯文本**（生成的文档 `See Also:`
+    一段就是带引号的一串字面量，不成链接）——**两种写法都不成引用**。
+
+    故这是**规则本身写错了方向**，不是写法问题：类间关系只由**测试类一侧**承载
+    （测试类在 `src/test/java`、`@see` 源类解析正常）。本条钉三面——正文方向、
+    不可解析的原因、引号只对路径成立——任一面缺失，下一个人就会把规则改回旧形态、
+    用加引号去绕类名解析失败（本仓库实测的弯路）。
+    引号口径按用户点名：路径引用用**英文双引号包裹**即为合格（文本引用、按字面记录路径、
+    照路径找得到目标），不要求改成 `<a href>` 链接形态。
+
+    通用层同口径一并核：只写"互相引用"会让非 Java 语言与引用方项目照搬出解析不了的引用。
+    """
+    phase("『源类不 @see 测试类』防线检查")
+    if not os.path.isfile(JAVA_STACK_FILE):
+        err("缺少 specs/stack/java.adoc——『源类不 @see 测试类』的 Java 落点丢失",
+            "specs/stack/java.adoc")
+    if not os.path.isfile(DEPENDENCY_VIEW_FILE):
+        err("缺少 specs/general/doc-design.adoc——『类间关系只写可解析方向』的通用层落点丢失",
+            "specs/general/doc-design.adoc")
+    run_rule_guard("check_javadoc_test_direction_guard")
     phase_done()
 
 
@@ -8600,14 +8655,22 @@ def check_changelog_entry_guard():
         return
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().split("\n")
+    seen_version = {}
     for j, line in enumerate(lines, 1):
         if not CHANGELOG_ENTRY_RE.match(line):
             continue
-        if len(line) > CHANGELOG_ENTRY_MAX:
+        if len(line) > CHANGELOG_ENTRY_MAX and _changelog_entry_after(line):
             err(f"变更日志条目过长（{len(line)} 字符 > {CHANGELOG_ENTRY_MAX}）——"
                 "单行条目须一句话说清'改了什么、给谁带来什么影响'，"
+                "验证过程、反向验证与'对引用方的净影响'都属过程、不写进条目，"
                 "超出即说明该拆成多条或删减（specs/general/changelog.adoc「条目书写」）",
                 "CHANGELOG.adoc", j)
+        match = CHANGELOG_ENTRY_VERSION_RE.match(line)
+        if match:
+            version = match.group(1)
+            # 判据**与条目顺序无关**：同一版本出现带追加标志的条目、且该版本不止一条，
+            # 即"往里加过"——首次出现也算（追加的条常被写在最上面，见 `CHANGELOG.adoc` 的倒序）。
+            seen_version.setdefault(version, []).append((j, line))
         nxt = lines[j] if j < len(lines) else ""
         if nxt.strip() and not CHANGELOG_ENTRY_RE.match(nxt) and \
                 not nxt.lstrip().startswith("="):
@@ -8615,6 +8678,123 @@ def check_changelog_entry_guard():
                 "条目须单行 `版本号 | 日期 | 变更摘要`、条目内不换行；"
                 "被续写的条目会与下一条粘连、渲染成一整段"
                 "（specs/general/changelog.adoc「条目书写」）", "CHANGELOG.adoc", j)
+    for version, rows in seen_version.items():
+        for j, line in rows:
+            marker = next((m for m in CHANGELOG_APPEND_MARKERS if m in line), None)
+            if marker is None:
+                continue
+            err(f"变更日志条目自称是**追加**（第 {j} 行含『{marker}』）——"
+                "同版本的另一条要写的补充须**就地并进那一条**、不另起一条；"
+                "追加式写入（`>>`、`tee -a`、`append`、带『同 PR 追加/补充』的新条）"
+                "是本条要治的失效形态（specs/general/changelog.adoc「登记时机」）",
+                "CHANGELOG.adoc", j)
+    _check_changelog_version_line(lines)
+    phase_done()
+
+
+def _changelog_entry_after(line):
+    """条目是否受**体量上限**约束：只看新增，历史条目不受。
+
+    实测失效：为凑「单条 400 字」上限把整份历史条目重写——176 条历史一条没原样留下，
+    条目间的边界被抹成一句式复述。历史是记录、不是待编辑的正文，改写它就等于让
+    「内容不减少」无从核对。故按日期分界：`CHANGELOG_ENTRY_MAX_FROM` 之前一律放过。
+    日期取不到时按**新增**处理（保守：宁可提示，不静默放过新写的长条目）。
+    """
+    match = re.match(r"^-\s*[0-9][^|\n]*\|\s*(\d{4}-\d{2}-\d{2})", line)
+    if not match:
+        return True
+    return match.group(1) >= CHANGELOG_ENTRY_MAX_FROM
+
+
+def _check_changelog_version_line(lines):
+    """版本线连续：**不重号、不断号**（`specs/general/changelog.adoc`「组织形态」）。
+
+    本仓库实测失效：一次「把长条目压缩」把同一版本的两条并成一条，版本线里从此少了一个号
+    （3.43 → 3.41），而**没有任何一处会报出来**——条目形态、体量、追加标志都看不出来。
+    故把「日志被压缩／被删改」这件事落到一个可机械核对的量上：**版本号序列**。
+
+    判据按**版本组**走（与「以发布版本为一级分组」同口径）：同一版本的多个变更点各占一条
+    是规范内的形态（一个变更点一条），故**只在「进入新版本号」时**要求与上一个版本号恰好
+    相接一步——同版本内的连续多条不算重号。两份日志按版本分组时号走得通即可，
+    断号即某条被整条删掉或改写时漏抄。分支号变化（`1.7 → 2.0`）不从上一个号连出来，跳过。
+    只钉「号走得通」——「某个版本该不该有、那条内容对不对」仍属语义判断。
+    """
+    versions = []
+    for j, line in enumerate(lines, 1):
+        if CHANGELOG_ENTRY_RE.match(line):
+            match = CHANGELOG_ENTRY_VERSION_RE.match(line)
+            if match:
+                versions.append((_changelog_version_tuple(match.group(1)), j, match.group(1)))
+            continue
+        match = CHANGELOG_VERSION_HEADING_RE.match(line)
+        if match:
+            versions.append((_changelog_version_tuple(match.group(1)), j, match.group(1)))
+    groups = []
+    for version, j, raw in versions:
+        if groups and groups[-1][0] == version:
+            continue
+        groups.append((version, j, raw))
+    for (prev, j_prev, raw_prev), (cur, j_cur, raw_cur) in zip(groups, groups[1:]):
+        same_branch = cur[0] == prev[0]
+        if not same_branch:
+            continue  # 主版本号变了（1.x → 2.0）：起点由发布决定，不从上一个号连出来。
+        if abs(cur[-1] - prev[-1]) != 1:
+            err(f"变更日志的版本线**断号**：第 {j_prev} 行的 {raw_prev} 与第 {j_cur} 行的 "
+                f"{raw_cur} 之间少了一个版本号——删条目／把两条并成一条时，**号也要走得通**："
+                "真正没有内容的版本**就地整组删掉**、让前后相邻的号相接，不得留空号，"
+                "也不得自造一条假条目去补号（specs/general/changelog.adoc「组织形态」版本线连续）",
+                "CHANGELOG.adoc", j_cur)
+
+
+def _changelog_version_tuple(raw):
+    """`3.42` → `(3, 42)`；`3.42.1` → `(3, 42)`（补丁号不参与连续性判断）。"""
+    parts = [int(p) for p in raw.split(".") if p.isdigit()]
+    return tuple(parts[:2]) if len(parts) >= 2 else tuple(parts)
+
+
+def check_changelog_edit_guard():
+    """『变更日志修改面防线』：只允许在**主动声明的那一轮**修改，一次提交只记当前版本。
+
+    用户口径（本轮）：『日志只被「人改」、不被「追加」，只允许主动声明时修改 changelog』。
+    前几轮已经把「什么时候记一条」和「怎么写进去」钉住了（`check_changelog_timing_guard` /
+    `check_changelog_writable_guard`），缺的是两端：**谁可以在哪一轮动它**、
+    **一次提交动到哪些条目**。失效形态（本仓库实测）：改动早已提交、下一轮又回头补条，
+    或一次提交顺手把别的版本组的条目一起带进去——日志于是持续被加内容，而每一轮都自称
+    「只在声明时写」。
+
+    故本条钉两处要点：修改面（只在主动声明的那一轮、后续轮次不得回头再改、例外只有
+    「已写入的条目本身有错」可就地订正）与提交面（一次提交只承载当前版本）。
+    机械面同源的一半（追加标志、版本线不重号不断号）落在 `check_changelog_entry_guard`——
+    那两条证明它真的没被「追加」过，本道证明规则还在。
+
+    只钉「要点是否仍在」——「这次到底有没有得到声明」「这轮是不是同一任务的后续轮次」
+    属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("变更日志修改面检查（一轮一声明 + 一次提交一版本）")
+    if not os.path.isfile(CHANGELOG_STRUCTURE_FILE):
+        err("缺少 specs/general/changelog.adoc——『只允许主动声明时修改』无处承载",
+            "specs/general/changelog.adoc")
+        phase_done()
+        return
+    run_rule_guard("check_changelog_edit_guard")
+    phase_done()
+
+
+def check_changelog_writable_guard():
+    """『变更日志写入形态防线』：日志只被「人改」、不被「追加」，条目按一句话的体量写。
+
+    用户口径（本轮）：『解决 changelog 频繁被加内容的问题』。失效形态不是某一轮写多了，
+    而是**写入方式本身**——把日志当追加区（`>>`、`tee -a`、`append` 模式）往里塞，
+    同一版本被记成第二条、每条越写越长（验证过程与自我辩白都塞进去），而**没有一步读回全文**，
+    于是先前记错了也发现不了、下一轮接着追加。故判据分两处：写入方式（重写型 + 就地并入，
+    脚本与流水线同受约束）与体量（不得写验证过程与『净影响』这类过程性内容）。
+    条目形态的机械面（单行、体量上限、同一版本不得拆多条）在 `check_changelog_entry_guard`。
+
+    只钉「要点是否仍在」与「条目形态是否守规」——「这一条算不算一个变更点、
+    够不够『影响』的份量」属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("变更日志写入形态检查（重写型 + 体量与就地并入）")
+    run_rule_guard("check_changelog_writable_guard")
     phase_done()
 
 
@@ -12704,6 +12884,8 @@ CHECKS = (
     check_library_locating_guard,
     check_ref_scope_wording_guard,
     check_changelog_entry_guard,
+    check_changelog_writable_guard,
+    check_changelog_edit_guard,
     check_changelog_structure_guard,
     check_commit_message_guard,
     check_http_semantics_guard,
@@ -12795,6 +12977,7 @@ CHECKS = (
     check_getter_bridge_guard,
     check_javadoc_path_base_guard,
     check_java_test_naming_hint_guard,
+    check_javadoc_test_direction_guard,
     check_validation_entry_guard,
     check_http_contract_guard,
     check_baseline_sync_guard,
