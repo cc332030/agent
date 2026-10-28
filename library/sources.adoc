@@ -153,7 +153,7 @@
 == PEP 508 / 锁文件（依赖声明与可重现）
 
 * PEP 508（正式文本标识与标题）：Dependency specification for Python Software Packages。用途：`specs/general/dependency.adoc`"声明明确的版本/受控范围、锁文件与可重现"的依据之一。
-* 同类可援引的官方材料：`npm ci` 与 `package-lock.json` 的官方文档、Maven 的 `<dependencyManagement>`（Maven 官方 POM 参考）、Poetry/pip 的锁文件机制——分别对应各生态的"锁定模式、可重现构建"。**说明**：以上材料名取自各项目官方文档的文档名（静态可查），**未**逐字摘录其正文。
+* 同类可援引的官方材料：`npm ci` 与 npm 锁文件的官方文档、Maven 的 `<dependencyManagement>`（Maven 官方 POM 参考）、Poetry/pip 的锁文件机制——分别对应各生态的"锁定模式、可重现构建"。**说明**：以上材料名取自各项目官方文档的文档名（静态可查），**未**逐字摘录其正文。
 
 == POSIX
 

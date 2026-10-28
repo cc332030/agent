@@ -78,18 +78,11 @@ MECHANISMS = [
      "check_refs_exist",      "可验证性由 check_refs_exist/check_link_refs/check_section_refs 兜底，其余交人 review"),
     ("入口模板代码块逐字保留（换行/空行不丢失）", "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_install_codeblock",      "check_install_codeblock"),
-    ("临时产物清理脚本可用",                     "specs/core/execution.adoc",       "script/clean_tmp.py",
-     "script/clean_tmp.py",        "存在清理脚本"),
     ("tmp/ 的布局与命名（一级按用途分、任务目录可定位、规划与进度分家、副本与产出分家、分档只改形态）",
      "specs/core/execution.adoc", "script/check_specs.py",
      "check_tmp_layout_guard",
      "check_tmp_layout_guard 钉住「tmp/ 的布局与命名」小节五组要点仍在（用途四类与不按日期/轮次分、任务目录以任务命名且规划与进度各成一份、进度逐次更新与新任务即时补进规划、副本当只读输入且结论另按对象归集、分档只改展开粒度并回指档位来源），并核提示词公共片段同口径一条；"
      "「这次任务把文件放对了没」「某份文件算不算产出」属运行时事实与语义判断"),
-    ("清理脚本全量清空须两步确认、且不判用途（哪些算产出没有外部判据）",
-     "specs/general/script.adoc", "script/check_specs.py",
-     "check_clean_tmp_guard",
-     "check_clean_tmp_guard 钉住 `specs/general/script.adoc`「临时产物清理（脚本约定）」的两步确认与『不判用途』仍在，并核 `script/clean_tmp.py` 三处同名事实（只认 CWD 下的 tmp/ 且不判用途、`--all --yes` 两步、无 `--yes` 时只列不删）；"
-     "「某次到底删没删」「哪一份算产出」属运行时事实与语义判断"),
     ("完整性校验配套测试",                       "AGENTS.adoc",                 "script/check_specs_test.py",
      "script/check_specs_test.py", "20+ 用例"),
     ("每次操作自带可判定的时限、超时后排查并换手段继续（不限于子 agent 派发）", "specs/general/collab.adoc", "script/check_specs.py",
@@ -282,16 +275,18 @@ MECHANISMS = [
      "以及与抓手登记；『某次是否真的自行新增或改写了条目、用户声明到底成不成立』"
      "属运行时行为与语义判断（提交内容与评论记录），机械无法判定"),
     ("变更日志默认不动须在**读入端**可见：公共片段 `env-guard` 的专用口径写明禁令、"
-     "每个提示词注入该片段且读入说明提到「变更日志」、本仓库落点给出**唯一的例外**并不让例外失判",
+     "每个提示词注入该片段且读入说明提到「变更日志」、本仓库落点写明**本仓库没有任何例外**",
      "prompts/_common.txt + prompts/ + AGENTS.adoc", "script/check_specs.py",
      "check_changelog_timing_prompt_guard",
      "check_changelog_timing_prompt_guard 钉住 `AGENTS.adoc` 的『登记时机』回指、"
-     "『本仓库的例外只有一处』与『判据只认行为是否变化』（缺例外则本集合自身的对外变更无处登记，"
-     "缺判据则任何一次改动都能自称例外）；片段与提示词那两半由 `check_env_marker_guard` 核"
+     "『本仓库没有任何例外』与『有没有得到这条指令』（缺前者则口子重新打开，每一轮都能自认该记一条；"
+     "缺后者则『例外』只剩一个名字、按自己的理由往里装）；片段与提示词那两半由 `check_env_marker_guard` 核"
      "（专用口径含 `CHANGELOG.*`、每个提示词读入说明提到「变更日志」）。"
      "**本仓库实证**：判据本体、公共片段、专用防线三处都在，条目仍被自行追加——"
      "平台按评论唤起时执行者读到的是提示词的读入清单，清单里没有这条；"
-     "『某次改动算不算对外可观察行为的变化』『这次到底有没有得到用户声明』属语义判断与运行时事实"),
+     "用户后续口径『changelog 修改只有一种情况下，那就是人工主动声明，不管是什么原因』，"
+     "故原先『维护这套规范集合自身的对外变更』那条例外已撤。"
+     "『这次到底有没有得到用户声明』属运行时事实"),
     ("规范保持通用（规则与实例分离）：本仓库默认不写实例——用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号"
      "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）与 `CHANGELOG.adoc`",
      "AGENTS.adoc「规范组织与自身重构（本仓库落点）」", "script/check_specs.py",
@@ -707,7 +702,7 @@ MECHANISMS = [
      "取规范脚本两条路径齐；缺取规范脚本路径则新实例不知道"
      "如何去下载规范，用户实测点名；落点=用户家目录/用户路径下的 `.cache/agent-specs`，按**要点**核"
      "『用户侧词的任一写法 + 落点名同现』、不核某一种写法的字面值；`fetch-specs`+『再运行一次』；"
-     "下载来的**安装脚本**（取规范脚本与其平台入口、清理脚本）同样落这一处——"
+     "下载来的**安装脚本**（取规范脚本与其平台入口）同样落这一处——"
      "用户口径是『所有下载的文件』，故 `check_shared_cache_guard` 另钉住脚本侧那几件"
      "（`INSTALL_SCRIPTS` 清单、落点里只保留文件名、落点里的入口须能直接跑），"
      "公共入口侧则钉住『下载的文件一律只落这一处』这条要点），"
@@ -881,7 +876,7 @@ MECHANISMS = [
     ("评论不得删除：任何情况下不得删除 Issue/PR 的评论（含 NPC 生成的）",
      "specs/platform/cnb.adoc + specs/core/execution.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_comment_preservation_guard",
-     "check_comment_preservation_guard 钉住三处落点（平台层「评论不得删除（L1）」：禁令本体含 NPC 生成的评论、不可逆与留证落点的理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与临时产物清理和禁合并的边界；通用层「派发入口」的平台无关同口径条；必加载层「破坏性操作」写明本条**不是**『先确认即可执行』的一类）与调度器识别特征、README 目录说明同步；**重点拦『把禁令删掉』与『降级成先确认即可删』两种降级**"),
+     "check_comment_preservation_guard 钉住三处落点（平台层「评论不得删除（L1）」：禁令本体含 NPC 生成的评论、不可逆与留证落点的理由、编辑同效、更正而非抹掉的正当处置、四条判定标准、与清理本地临时产物和禁合并的边界；通用层「派发入口」的平台无关同口径条；必加载层「破坏性操作」写明本条**不是**『先确认即可执行』的一类）与调度器识别特征、README 目录说明同步；**重点拦『把禁令删掉』与『降级成先确认即可删』两种降级**"),
     ("脚本头部注释（文档头）先行：动手先把用途/用法/参数/环境变量/行为边界/关键约定与设计决策写进文档头（细节不随维护丢失）",
      "specs/general/script.adoc", "script/check_specs.py",
      "check_script_header_guard",

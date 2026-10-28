@@ -66,8 +66,8 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 落点下按来源地址分目录（见 `cache_slot_dir`）——换过 `--base` 取到的不同来源副本互不覆盖；
     且**只进不出**：本脚本不删除落点里的任何文件（含换源留下的旧副本），要清理由人来做
     （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）。
-  - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：规范副本进来源槽，取规范脚本与本脚本
-    配套的 `clean_tmp.py` 落**落点根下**——跨来源共用一份，下次重装直接跑落点里的入口，
+  - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：规范副本进来源槽，取规范脚本与它的
+    平台入口落**落点根下**——跨来源共用一份，下次重装直接跑落点里的入口，
     不必再手工下载一遍（用户口径：下载的文件一律只落这一个地方）。
   - **交接文件也落在脚本旁边**（`<脚本路径>.handoff`，见 `hand_off_self`）：它记着"待换的新版本
     在哪"，是**本脚本自己的状态**、不是规范副本；换完即删，且不参与落点的只读收紧那一套
@@ -95,12 +95,11 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
   - **临时产物留在工作目录 `tmp/` 下**（见 `specs/core/execution.adoc`「临时产物」）：新版本
-    脚本在真身与落点都不可写时中转落在这里；运行前已存在的旧副本由本脚本自己按项目清理脚本
-    的用法清掉（`_clean_self_tmp`），本轮新写的那几份留着——调用方可能还要读它们。
+    脚本在真身与落点都不可写时中转落在这里；运行前已存在的旧副本由本脚本自己按**同一套边界**
+    清掉（`_clean_self_tmp`），本轮新写的那几份留着——调用方可能还要读它们。
     **这里是唯一的例外落点**：`tmp/` 内部按用途分层（同节「tmp/ 的布局与命名」），而本节这几份
     中转副本**不建任务目录**——它们是本脚本自己的状态、名字由 `SELF_UPDATE_SUFFIX` 钉死，
-    且清理由 `_clean_self_tmp` 按名字白名单做，不经人手；配套的 `clean_tmp.py` 与入口脚本
-    一律落**落点根下**、不进 `tmp/`（全量清空时最先被连带删掉的就是它们）；
+    且清理由 `_clean_self_tmp` 按名字白名单做，不经人手；入口脚本一律落**落点根下**、不进 `tmp/`；
   - `--keep` 之外**不做备份**：落点是那份文件自己的位置，被改动过的副本按"以远程为准"覆盖掉
     ——**须留本地改动时用 `--keep`**；
   - 并发受限（见 `DEFAULT_WORKERS`），不把对端打满；
@@ -112,7 +111,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 安全保证：
   - **只读远端、只写落点目录内**：落点不是调用方给的路径，而是本脚本按本机用户目录算出来的
     固定位置，故不存在"借参数写到任意位置"的越界面；
-  - 不删除任何既有文件（含落点目录里的多余文件）——清理走项目的清理脚本；
+  - 不删除任何既有文件（含落点目录里的多余文件）——清理属不可逆操作，由人按项目规范做；
   - **落点里的内容只由本脚本写**：落点取完即只读，**任何项目都不得改动它**
     （要改就先把权限放开——那一步刻意、可见、须自担后果）。**项目只读、不改**：项目要留
     自己的东西写进项目自己，不得往落点里塞文件、也不得改落点里的规范副本——改了就是
@@ -153,7 +152,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -169,10 +167,9 @@ OPTIONAL_FILES = ("README.adoc",)
 # 与本脚本同处的安装脚本：一并取到落点**根下**（不在来源槽里）——跨来源共用一份。
 # 用户口径是"下载的文件一律只落这一个地方"，故下载完就不必再来第二次；
 # 薄壳也一并取回：只取逻辑代码时，落点里那份没法直接跑（入口层三件事见 specs/general/script.adoc）。
-INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat",
-                   "script/clean_tmp.py")
+INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat")
 # 其中**入口**（各平台的薄壳）：落点取的字节不带文件模式，故取完给它们补回可执行位
-# （见 `_ensure_executable`）。逻辑代码与清理脚本**不在内**——它们不是给人直接敲的命令，
+# （见 `_ensure_executable`）。逻辑代码**不在内**——它不是给人直接敲的命令，
 # 落点里唯一的入口是入口脚本（见 specs/general/script.adoc「入口脚本须能直接执行」）。
 ENTRY_SCRIPTS = ("script/fetch-specs.sh", "script/fetch-specs.bat")
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
@@ -186,7 +183,6 @@ SELF_HANDOFF_SUFFIX = ".handoff"
 SELF_TMP_DIR = "tmp"
 # 新版本脚本的文件名后缀（与本轮真身同名不同后缀，见 `_self_update_candidates`）
 SELF_UPDATE_SUFFIX = ".update"
-CLEAN_TMP_SCRIPT = "clean_tmp.py"
 # 落点取完即**只读**：目录只留"进入 + 列出 + 读"（5=rwx+r-x），文件只留读位（4=r--）。
 # 用绝对值（两个独立的十进制常量）而不是 `0o` 字面量：权限位取值是**本脚本的取舍**，
 # 写成常量便于核对与单测（见 specs/general/script.adoc「注释里的取值：写常量名」）。
@@ -214,7 +210,7 @@ def parse_args(argv=None):
     parser.add_argument("--force", action="store_true",
                         help="忽略本地副本、强制重取（与 --keep 相反，即默认行为）")
     parser.add_argument("--no-scripts", action="store_true",
-                        help="只取规范副本，不把安装脚本（本脚本与其平台入口、清理脚本）取到落点"
+                        help="只取规范副本，不把安装脚本（本脚本与其平台入口）取到落点"
                              "（脚本的**自身更新**不受它影响：那一件是本脚本自己、不是落点里的物）")
     parser.add_argument("--list", action="store_true",
                         help="只打印将要取的文件清单，不下载")
@@ -609,46 +605,40 @@ def _discard_handoff_note(note):
         pass
 
 
-def _clean_self_tmp(cwd):
+def _clean_self_tmp(cwd, keep=()):
     """把上次"更新自身"留在工作目录 `tmp/` 里的旧副本清掉。
 
-    清理**只碰本脚本自己放进去的那几种名字**（`SELF_UPDATE_SUFFIX` 结尾的文件、与取规范脚本
-    同名的中转文件）：清理本身是破坏性动作，脚本不做"顺手清空 `tmp/`"这种事（见
-    specs/core/execution.adoc「破坏性操作」）。清理方式按项目提供的清理脚本走
-    （见 specs/general/script.adoc「临时产物清理」）：它按**当前工作目录**当项目根、收相对路径，
-    故本函数以 `cwd` 起 `subprocess`，清理脚本按**落点根下**那一份找（`install_scripts_dir()`，
-    本脚本把它与入口脚本一并落在那里）：它不落 `tmp/`（`--all` 一次清空会先删掉它，见
-    `specs/general/script.adoc`「临时文件」）；找不到时自己删——**判据与清理脚本同一条**
-    （目标必须落在 `tmp/` 内、名字在白名单里）。
+    清理**只碰本脚本自己放进去的那几份**（`SELF_UPDATE_SUFFIX` 结尾的中转件，以及落点里不带
+    后缀、本轮被复制到 `tmp/` 那一份，由调用方经 `keep` 给出全路径）：清理本身是破坏性动作，
+    脚本不做"顺手清空 `tmp/`"这种事（见 specs/core/execution.adoc「破坏性操作」）。边界判据
+    只有一条——**目标是 `listdir` 列出的那一项、且名字/全路径在白名单里**；不拼外部输入，故
+    不存在 `../` 或绝对路径这类越界面。`tmp/` 自身是符号链接时整条跳过——那种情形下"落点还在
+    `tmp/` 内"只是字面上成立，实际删的是链接指向的外部目录（见 specs/general/script.adoc「安全」）。
+
+    **不带后缀的那份不能按名字认**：`tmp/` 下同名的 `fetch-specs.py` 可能是用户从落点复制过来
+    参考/试跑的一份普通文件（多项目共用落点、只有它会带这个短名），按名字删会把人的东西静默删掉
+    ——上一版由清理脚本的两步确认兜住这一步，现在没有确认，故判据改成"只认本轮自己认得的那一份"
+    （`keep` 里的全路径），其余同名的**一律不碰**。
+
+    不借外部的清理脚本：清理脚本是引用方项目自己的东西，本脚本在自己的工作目录里不该假定
+    它在、更不该按"先找它、找不到再自己删"分两条判据（同一件事两套实现必然漂移）。
 
     **本轮新写的那几份不清**：它们可能就是调用方的壳正要换上去的源（删了等于把刚做好的事抹了），
     故本函数只清**运行前已存在**的旧副本——由调用方在进入本轮、取回新版本**之前**调用。
     """
     tmp = os.path.join(cwd, SELF_TMP_DIR)
-    if not os.path.isdir(tmp):
+    if os.path.islink(tmp) or not os.path.isdir(tmp):
         return
-    victims = [name for name in os.listdir(tmp)
-               if name.endswith(SELF_UPDATE_SUFFIX)
-               or name == os.path.basename(INSTALL_SCRIPTS[0])]
-    if not victims:
-        return
-    # 清理脚本自己按 `tmp/` 起相对路径（`resolve_safe` 已拼上 `tmp/`），故这里只传名字
-    del_rel = list(victims)
-    for cleaner in (os.path.join(install_scripts_dir(), CLEAN_TMP_SCRIPT),
-                    os.path.join(cwd, SELF_TMP_DIR, CLEAN_TMP_SCRIPT)):
-        if not os.path.isfile(cleaner):
+    protected = {os.path.abspath(p) for p in keep}
+    for name in os.listdir(tmp):
+        victim = os.path.join(tmp, name)
+        if not (name.endswith(SELF_UPDATE_SUFFIX)
+                or os.path.abspath(victim) in protected):
             continue
+        if os.path.isdir(victim) and not os.path.islink(victim):
+            continue                # 同名的是目录：不是本脚本落的那几份，不碰（rmtree 是另一件事）
         try:
-            # `--yes`：清理脚本的删除口令（见 specs/general/script.adoc「临时产物清理」）。
-            # 删哪几个由本函数的白名单定，口令只是把"两步确认"的那一步显式写出来。
-            subprocess.run([sys.executable, cleaner, *del_rel, "--yes"],
-                           cwd=cwd, capture_output=True, timeout=TIMEOUT_SECONDS)
-            return
-        except (OSError, subprocess.SubprocessError):
-            pass                    # 清理脚本跑不起来（解释器/权限）：退回自己删，判据不变
-    for name in victims:
-        try:
-            os.remove(os.path.join(tmp, name))
+            os.remove(victim)
         except OSError:
             pass
 
@@ -983,8 +973,11 @@ def main(argv=None):
     # **没换成**（远端一致 / 真身换不动 / 无处落盘）时返回，那几种情形它已各自如实警告完毕。
     # 只在非 `--keep` 与 `--list` 时做（`--list` 是"只看清单、不下载"）。
     if not args.keep and not args.list:
-        # 先清掉**上一轮**留下的旧副本（本轮的还没写，见 `_clean_self_tmp`）
-        _clean_self_tmp(os.getcwd())
+        # 先清掉**上一轮**留下的旧副本（本轮的还没写，见 `_clean_self_tmp`）；
+        # `keep` 只传本轮认得的那一份（`tmp/` 兜底落点上的同名中转件）——不带后缀的那份
+        # 不能按名字认，否则用户从落点复制过来的同名文件会被静默删掉。
+        tmp_fallback = os.path.join(os.getcwd(), SELF_TMP_DIR, os.path.basename(INSTALL_SCRIPTS[0]))
+        _clean_self_tmp(os.getcwd(), keep=[tmp_fallback])
         update_self(base, out_dir, os.getcwd())
 
     try:
