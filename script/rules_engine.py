@@ -1359,7 +1359,16 @@ def load_rules(path: str):
 
 
 def _load_toml(path: str):
-    """按 TOML 解析一份规则文件；语法/结构非法一律抛 `RulesError`（不静默退回）。
+    """按 TOML 解析一份规则文件（见 `load_toml_text`；本函数只负责按 UTF-8 读盘）。"""
+    try:
+        with open(path, "rb") as fh:
+            return load_toml_text(fh.read().decode("utf-8"), path)
+    except UnicodeDecodeError as exc:
+        raise RulesError(f"规则文件 {path} 不是 UTF-8 编码：{exc}")
+
+
+def load_toml_text(text: str, path: str = "<规则文本>"):
+    """解析 TOML 文本；语法非法抛 `RulesError`（不静默退回）。
 
     解析器用标准库 `tomllib`（Python 3.11+）——**不引入第三方依赖**：引擎是校验链的
     确定项，装依赖才跑得起来等于"缺工具就静默跳过"（见 `specs/general/ci-cd.adoc`）。
@@ -1367,8 +1376,7 @@ def _load_toml(path: str):
     不必等加载期才发现"两处各写一半"。
     """
     try:
-        with open(path, "rb") as fh:
-            return tomllib.load(fh)
+        return tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise RulesError(f"规则文件 {path} 不是合法 TOML：{exc}")
 

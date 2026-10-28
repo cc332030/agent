@@ -50,6 +50,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 
@@ -25042,25 +25043,60 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         # 反例⑭（锚点清单自身的条数）：正文一字不少、清单被削掉一组 -> 只有条数这一步报得出
         self._write_all_valid()
         tokens_rel = "script/specs-rules/_tokens.toml"
+        ui_rel = "script/specs-rules/ui.toml"
         with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
             tokens = fh.read()
-        start = tokens.index("UI_STYLE_ANCHORS = [")
-        tail_mark = tokens.index("\"不批量替换既有组件、不为统一外观重写既有页面\"", start)
-        cut = tokens.rindex('    [\n        "存量随动迁移",', start, tail_mark)
-        cut_end = tokens.index("官方规定\",\n    ],\n", tail_mark) + len("官方规定\",\n    ],\n")
-        # 削掉尾部两组（存量 + 依据行）后补一个换行：剩下的仍是合法 TOML，少了恰恰是
+        # 削掉本清单末尾两组（末组之后就是收尾 `]`）：剩下的仍是合法 TOML，少了恰恰是
         # `anchor_count` 该报出的那一形态（清单被删项、正文一字不少）。
-        self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
+        cut = tokens.rindex('    [\n        "分组与页内检索的依据行",')
+        list_end = tokens.index("\n]", cut) + len("\n]")
+        trimmed_text = tokens[:cut] + "\n]" + tokens[list_end:]
         # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，不读夹具里的文件，
         # 故须就地替换（否则这条用例核的是一个永远不再变化的常量、必假绿）。用完还原。
         original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
-        trimmed = [g for g in original
-                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
-        self.assertLess(len(trimmed), len(original))
+        # 削法取"按同一份夹具重算"，不按组名挑——组名清单会过期，按名删时中间插进来的
+        # 新组删不掉、条数不小于原数，这一步反而假绿（本仓库实测）。
+        trimmed = tomllib.loads(trimmed_text)["tokens"]["UI_STYLE_ANCHORS"]
+        # 判据是**锚点项数**（`anchor_count` 逐组累加组内项数），不是组数。
+        count = lambda groups: sum(len(g[1]) for g in groups)
+        self.assertLess(count(trimmed), count(original))
         cm._RULES_TOKENS["UI_STYLE_ANCHORS"] = trimmed
         self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_STYLE_ANCHORS", original)
+        # 红不红不得取决于"基线数值与削后条数谁大谁小"：那由两条固定数值决定，改一次清单
+        # 就可能翻转。基线取**与清单无关的结构性取值**——比原数大 1（`min` 只拦"少于基线"，
+        # 原数 + 1 必然把削后条数判红）；改的是夹具那份 `ui.toml`，不是仓库里的真文件。
+        with open(os.path.join(self.root, ui_rel), encoding="utf-8") as fh:
+            ui = fh.read()
+        baseline = re.search(r'token_list = "UI_STYLE_ANCHORS"\nmin = (\d+)', ui)
+        self.assertIsNotNone(baseline, "夹具失效：ui.toml 里找不到该清单的条数基线")
+        self.write(ui_rel, ui.replace(
+            baseline.group(0),
+            f'token_list = "UI_STYLE_ANCHORS"\nmin = {count(original) + 1}'))
+        self.write(tokens_rel, trimmed_text)
+        cm.RULES = None
         self._run_guard()
         # 只核文件名不够：须落成"清单条数"这一步自己的文案（正文缺项那一步在这里不该报）。
+        self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
+        self.assertIn("锚点", self.error_texts())
+
+    def test_anchor_list_baseline_raised_one_reports(self):
+        # 反例⑮（基线抬过清单条数）：清单一字不少、`min` 被抬到条数之上 -> 条数这一步报出——
+        # 钉住"清单与基线是**逐项**对的"（按组数取条数时，抬一项基线也未必落得成红）。
+        self._write_all_valid()
+        tokens_rel = "script/specs-rules/_tokens.toml"
+        ui_rel = "script/specs-rules/ui.toml"
+        original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
+        with open(os.path.join(self.root, ui_rel), encoding="utf-8") as fh:
+            ui = fh.read()
+        baseline = re.search(r'token_list = "UI_STYLE_ANCHORS"\nmin = (\d+)', ui)
+        self.assertIsNotNone(baseline, "夹具失效：ui.toml 里找不到该清单的条数基线")
+        self.write(ui_rel, ui.replace(
+            baseline.group(0),
+            f'token_list = "UI_STYLE_ANCHORS"\nmin = {sum(len(g[1]) for g in original) + 1}'))
+        with open(os.path.join(self.root, tokens_rel), encoding="utf-8") as fh:
+            self.assertEqual(tomllib.loads(fh.read())["tokens"]["UI_STYLE_ANCHORS"], original)
+        cm.RULES = None
+        self._run_guard()
         self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
 
