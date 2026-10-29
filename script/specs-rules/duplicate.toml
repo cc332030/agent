@@ -164,6 +164,7 @@ files = [
     "specs/stack/python.adoc",
     "specs/stack/spring.adoc",
     "specs/stack/web.adoc",
+    "specs/stack/windows.adoc",
 ]
 # 阈值取 20：本轮实证的漏网形态是 21 字（`library/mirrors.adoc` 里"每级先实测可用、不跳级、
 # 不覆盖既有配置"），低于 20 的多为"文件基名/节名"这类本就该出现的词。

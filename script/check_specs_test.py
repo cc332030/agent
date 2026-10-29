@@ -174,7 +174,12 @@ class CheckSpecsTestCase(unittest.TestCase):
                            # 本道（卡住时先自证）的判据措辞外置在该文件里
                            "script/specs-rules/self-serve.toml",
                            # 本道（降级式表述：review 必查 + 一键优化规范借用同一份判据）同在该文件里
-                           "script/specs-rules/degradation.toml")
+                           "script/specs-rules/degradation.toml",
+                           # 本道（列表结构不得被写坏）与其余按节核的防线同用这几份规则数据
+                           "script/specs-rules/list.toml",
+                           "script/specs-rules/table.toml",
+                           "script/specs-rules/declarative.toml",
+                           "script/specs-rules/ci-cd.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -5723,6 +5728,146 @@ class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         super().tearDown()
+
+
+class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
+    """钉住『Windows 下不为跑界面而把窗口开到用户眼前』（用户口径：windows 下如果要打开窗口
+    测试界面、验证布局，**不要在前台打开**——隐藏窗口或后台都行、**能达到目的就可以**，
+    影响用户干活不行）。
+
+    失效形态：跑一次带界面的测试就把窗口弹到前台、控制台窗口留在桌面上，还拿「弹出来了」
+    当跑起来的证据——抢走用户的输入焦点、打断他手上的事。本条与「看显示效果不接管桌面」
+    判据形态不同（那条管判据怎么取、本条管 Windows 上窗口该不该出现在用户眼前）。
+    故按四组锚点核 `specs/stack/windows.adoc`「开窗口不得影响正在用这台机器的用户」，
+    并钉加载门（调度器技术栈层登记 + 识别特征）、提示词公共片段与公开面 README 同步。
+    """
+
+    WIN = "specs/stack/windows.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+    RULES = "script/specs-rules/verify.toml"
+    SECTION = "== 开窗口不得影响正在用这台机器的用户"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.WIN, self.COMMON, self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_windows_window_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"开个窗口看一眼"）
+        self._mutate(self.WIN, "不得把窗口开到用户眼前（L1）", "开窗口看效果")
+        cm.check_windows_window_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_hidden_or_background_dropped_reports(self):
+        # 反例②：取值被抽（"隐藏窗口或后台运行"没了，条文退回一句口号）
+        self._mutate(self.WIN, "一律取**隐藏窗口或后台运行**的形态", "尽量少开窗口")
+        cm.check_windows_window_guard()
+        self.assertIn("隐藏窗口或后台运行", self.error_texts())
+
+    def test_treated_as_evidence_dropped_reports(self):
+        # 反例③：「不从弹窗看结果」被抽——执行者仍拿窗口可见当跑起来的证据
+        self._mutate(self.WIN, '不从"窗口弹出来了"看结果', "")
+        cm.check_windows_window_guard()
+        self.assertIn("窗口弹出来了", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        # 反例④：判定标准被抽（控制台窗口留在桌面上无处拦）
+        self._mutate(self.WIN, "以正常可见窗口启动应用", "尽量用可见窗口")
+        cm.check_windows_window_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_offscreen_instance_dropped_reports(self):
+        # 反例⑤：「被别的窗口盖住也取得到」被抽——执行者以为只能摆到最上层
+        self._mutate(self.WIN, "不在最上层、被别的窗口盖住", "只有它在最上层时")
+        cm.check_windows_window_guard()
+        self.assertIn("不在最上层", self.error_texts())
+
+    def test_no_foreground_switch_dropped_reports(self):
+        # 反例⑥：「不切前台窗口、不动鼠标键盘」被抽
+        self._mutate(self.WIN, "不切换前台窗口、不动鼠标键盘", "必要时切到前台")
+        cm.check_windows_window_guard()
+        self.assertIn("不切换前台窗口", self.error_texts())
+
+    def test_exemption_dropped_reports(self):
+        # 反例⑦：例外被抽（真机交互被本条一并拦掉）
+        self._mutate(self.WIN, "例外只有两类", "本无例外")
+        cm.check_windows_window_guard()
+        self.assertIn("例外", self.error_texts())
+
+    def test_tested_in_practice_dropped_reports(self):
+        # 反例⑧：'实际试过取不到'被抽（"取不到"变成凭印象的挡箭牌）
+        self._mutate(self.WIN, "实际试过取不到", "**可能**取不到")
+        cm.check_windows_window_guard()
+        self.assertIn("实际试过", self.error_texts())
+
+    def test_dispatch_registration_dropped_reports(self):
+        # 反例⑨：调度器未登记该栈（要开窗口时永远不加载、规则实际失效）
+        self._mutate(self.COMMON, "specs/stack/windows.adoc", "specs/stack/other.adoc")
+        cm.check_windows_window_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑩：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "Windows 下不为跑界面而把窗口开到用户眼前（L1）", "视情况开窗")
+        cm.check_windows_window_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑪：公开面 README 未登记
+        self._mutate(self.README, "Windows 下不为跑界面而把窗口开到用户眼前", "开窗说明")
+        cm.check_windows_window_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑫：规范文件整体缺失
+        cm.check_windows_window_guard()
+        self.assertIn("缺少 specs/stack/windows.adoc", self.error_texts())
+
+    def test_adjacent_section_does_not_mask(self):
+        # 反例⑬：本条整节被抽掉，但同文件里「看显示效果不接管桌面」那条仍有"不接管桌面""实际试过"
+        # 这类同形字样——核对面若落在整份文件上就会被兜住、报绿。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.WIN), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index(self.SECTION)
+        self._write_valid()
+        self.write(self.WIN, text[:start])
+        cm.check_windows_window_guard()
+        self.assertIn("开窗口不得影响正在用这台机器的用户", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑭：**锚点清单自身**被削（规范正文一字不少、正文核全绿）
+        self._write_valid()
+        with open(os.path.join(self.root, self.RULES), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.write(self.RULES,
+                   rules.replace('min = 12\ntoken_list = "WINDOWS_WINDOW_TOKENS"',
+                                 'min = 99\ntoken_list = "WINDOWS_WINDOW_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_windows_window_guard()
+        self.assertIn("WINDOWS_WINDOW_TOKENS", self.error_texts())
 
 
 class TestCheckReusableScenarioGuard(CheckSpecsTestCase):

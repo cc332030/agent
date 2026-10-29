@@ -242,6 +242,56 @@ tokens = [
 kind = "file_tokens"
 message = "公开面 README 未登记「验证手法取最轻路径」{missing}——公开面只看得见「跑全量」、看不见「最轻路径」，这条判据对读者不存在"
 
+# Windows 下不为跑界面而把窗口开到用户眼前（用户提出）：判据本体在
+# `specs/stack/windows.adoc`「开窗口不得影响正在用这台机器的用户」——用户口径：
+# windows 下要开窗口跑界面/验证布局时不要在前台打开，隐藏或后台都行、能达到目的就可以，
+# 影响用户干活不行。锚点清单只写一处（`_tokens.toml` 的 `WINDOWS_WINDOW_TOKENS`）。
+[[guards.check_windows_window_guard]]
+file = "specs/stack/windows.adoc"
+section = "开窗口不得影响正在用这台机器的用户"
+token_list = "WINDOWS_WINDOW_TOKENS"
+kind = "section_groups"
+
+# 与上面成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿。
+[[guards.check_windows_window_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 12
+token_list = "WINDOWS_WINDOW_TOKENS"
+
+# 提示词侧同口径（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有该边界）。
+[[guards.check_windows_window_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "Windows 下不为跑界面而把窗口开到用户眼前（L1）",
+    "隐藏窗口或后台运行",
+    "不切前台窗口、不动鼠标键盘",
+    "specs/stack/windows.adoc",
+]
+kind = "text_block_groups"
+message = "提示词公共片段缺失「Windows 下不为跑界面而把窗口开到用户眼前」的要点 {missing}——缺条文则执行者在 Windows 上照旧把窗口开到前台抢焦点；缺「隐藏或后台」则没有取值；缺「不切前台、不动鼠标键盘」则看效果仍靠切前台；缺落点则判据无从追溯"
+
+# 公开面同步（读者不从目录说明知道有这条，就仍按"开个窗口看一眼"行事）
+[[guards.check_windows_window_guard]]
+file = "README.adoc"
+tokens = [
+    "Windows 下不为跑界面而把窗口开到用户眼前",
+    "specs/stack/windows.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「Windows 下不为跑界面而把窗口开到用户眼前」{missing}——公开面只看得见通用口径，这条按 Windows 的取值对读者不存在"
+
+# 调度器须能被触发（否则在 Windows 上开窗口时这一条永远不会被加载）。
+[[guards.check_windows_window_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "specs/stack/windows.adoc",
+    "要开窗口跑界面/验证布局",
+]
+kind = "file_tokens"
+message = "加载调度器缺少 Windows 平台栈的登记与识别特征 {missing}——缺则要开窗口跑界面时 `specs/stack/windows.adoc` 永远不加载，规则实际失效"
+
 # 需要看显示效果时不接管桌面（用户提出）：判据本体在 `specs/general/verify.adoc`
 # 「编译/运行验证」——用户实际在用这台机器，切前台/动鼠标键盘抢焦点，整屏图还把桌面
 # 一并拍下来。锚点清单只写一处（`_tokens.toml` 的 `NO_DESKTOP_TAKEOVER_TOKENS`）。

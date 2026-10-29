@@ -626,7 +626,11 @@ def run_rule_guard(guard: str) -> None:
 # 这个数是"拦无声膨胀"的天花板、不是目标：它随用量调整（余量小则先归位、再决定要不要抬），
 # 且属本仓库自身的机械天花板、不写入公共内容。往常驻层加实质内容前先归位——
 # 调度器每条只留**检测特征 + 落点链接**（规则正文归目标文件），依据类内容归图书馆。
-RESIDENT_BUDGET = 60000
+# 2026-10 由 60000 上调为 61000：新增 `specs/stack/windows.adoc` 这一技术栈的调度器登记
+# （用户口径：windows 下开窗口跑界面/验证布局不得在前台打开）使必加载层落到 60188 字节、
+# 超原天花板 188 字节；登记已按「先归位、再新增」压到最短（检测特征 + 落点，规则正文全在
+# 目标文件），实测上调后余量约 1.3%，下一次仍应先归位、再考虑抬数。
+RESIDENT_BUDGET = 61000
 # 项目自身入口 AGENTS.adoc 的体积上限（字节）：它**同为每次会话无条件加载的常驻物**
 # （项目根入口，先于 AGENTS_COMMON.adoc 被读），故须与本仓库自己的必加载层一并设限。
 # 它是项目自身规范、不是公共内容（引用方不使用），故单列一个上限、不与 RESIDENT_BUDGET 合并。
@@ -1944,6 +1948,7 @@ POINTER_SCAN_FILES = (
     "specs/stack/python.adoc",
     "specs/stack/spring.adoc",
     "specs/stack/web.adoc",
+    "specs/stack/windows.adoc",
 )
 
 
@@ -4404,8 +4409,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 173  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_degradation_scan_guard`，上一轮 `check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2329  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮含 `TestCheckChangelogEditGuard` 2 条与 `TestChangelogUndeclaredEdits` 5 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 174  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`，上一轮 `check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2344  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮新增 `TestCheckWindowsWindowGuard` 15 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6616,6 +6621,23 @@ def check_no_desktop_takeover_guard():
     """
     phase("看显示效果时不接管桌面防线检查（只截那一个目标）")
     run_rule_guard("check_no_desktop_takeover_guard")
+    phase_done()
+
+
+def check_windows_window_guard():
+    """『Windows 下不为跑界面而把窗口开到用户眼前』防线：隐藏或后台，能达到目的就行。
+
+    用户口径：windows 下要开窗口跑界面、验证布局时**不要在前台打开**——隐藏窗口或后台
+    打开都可以，能达到目的就可以；影响用户干活不行。与「看显示效果时不接管桌面」判据形态
+    不同：那条给通用取值（判据怎么取），本条给 **Windows 上的取值形态**（窗口该不该出现在
+    用户眼前），故不属双份真源。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    的 `WINDOWS_WINDOW_TOKENS`）；"某次启动到底有没有把窗口摆到前台、隐藏启动在本机这个
+    版本上可不可行"属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("Windows 开窗口不打扰用户防线检查（隐藏或后台）")
+    run_rule_guard("check_windows_window_guard")
     phase_done()
 
 
@@ -13119,6 +13141,7 @@ CHECKS = (
     check_lifecycle_guard,
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
+    check_windows_window_guard,
     check_reusable_scenario_guard,
     check_local_only_guard,
     check_local_service_assert_guard,
