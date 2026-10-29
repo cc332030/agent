@@ -104,6 +104,18 @@
 * 标准名：NIST Special Publication 800-63B, Digital Identity Guidelines: Authentication and Lifecycle Management。
 * 用途：`specs/general/security.adoc`「不自行发明加密与认证」——口令与随机数要求（口令经 KDF 处理、不得自造随机数）。
 
+== ISO/IEC 29100、NIST SP 800-122 与 NIST SP 800-188（隐私保护、PII 保密性与去标识）
+
+被引用处：`specs/general/desensitize.adoc`（脱敏规范的依据行与「依据与已知取舍」节）、`specs/general/testing.adoc`「用例编写」的「用例数据一律脱敏」条（该条现在只有一跳引用、判据本体在脱敏规范）。
+
+* **ISO/IEC 29100**（Information technology — Security techniques — Privacy framework）：隐私保护框架，定义个人可识别信息（PII）的**最小化、去标识**等原则。**取样状态（如实标注）**：**未逐字取回**（标准为付费文本，官方目录页在本环境返回 403），故只引**标准名与编号**、不引其正文措辞。**同义性差异**：该框架讲的是**个人信息处理的原则**，**未**规定"写出的内容里一个真实标识都不许留"——本条规则、判定标准与例外清单是本集合据其方向做的判据化取舍。
+* **NIST SP 800-122**（Guide to Protecting the Confidentiality of Personally Identifiable Information (PII)）：PII 保密性指南。**取样状态**：标题与摘要**已取回官方页面核对**（摘要逐字：`PII should be protected from inappropriate access, use, and disclosure`，并称按上下文识别、逐例判保护级别）；正文未逐字取回，故不引其条款措辞。用途：**"这份信息属于什么类别、要不要保"**的判据方向。
+* **NIST SP 800-188**（De-Identifying Government Datasets: Techniques and Governance）：去标识技术与治理。**取样状态**：标题与摘要**已取回官方页面核对**（摘要逐字：`De-identification is a general term for any process of removing the association between a set of identifying data and the data subject`，并强调去标识后仍要能产出有意义的分析）。用途：**"换成什么、换到什么程度"**的方向——去标识不是把内容抹成一片空白，**形态与可用性要保住**。
+* **OWASP ASVS**（应用安全验证标准）：其「Data Protection」一节要求敏感数据先分级、再定保护要求，对外只返回唯一必要数据（如卡号只留部分位数）；其「Security Logging and Error Handling」一节要求记录敏感数据时按保护级别处理、许可记录时只以散列或掩码形态出现。被引用处：`specs/general/desensitize.adoc`「落点」的日志与对外响应两条。
+* **OWASP Logging Cheat Sheet**：日志侧的权威约定——源码、会话标识、访问令牌、PII、口令、连接串、加密密钥与主秘密、支付卡数据等**须在记录前**被删除、掩码、散列或加密；**内网名称与地址、文件路径、连接串**列为需要特别处理的条目，个人数据可用删除、打散、假名化等去标识手段。被引用处同上（日志条的依据）。
+
+**本集合据此推出的取舍（脱敏的范围、换法与例外）**：外部材料只给**方向与下限**（个人信息应最小化、去标识；去标识后仍须可用；日志须在写入前处理），**未**规定"一个真实标识都不许留""用户贴过来的也要换""换位置不算脱敏""截图也要先核"；本集合把它判据化到**可核对的形态**——**识别 → 归类 → 换法**的顺序、**同一份信息在全仓换成同一个虚构值**、**一次换全**（含已进历史的取值）、**用户提供过不构成授权**、例外收成一档（用户**主动声明**、只对当次成立）。**"脱敏"与"能复现"在这里并不冲突**：判据成立靠的是**结构与形态**（数据量、关联关系、边界位置），不是那几个字面名字——这正是 NIST SP 800-188 那句"去标识后仍要能产出有意义的分析"所指的方向。
+
 == OWASP 与 CWE（安全风险与弱点）
 
 * OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据。
@@ -584,4 +596,4 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本」约束。
 * **图书馆的规则**：本文件**保留版本与状态信息**，用途不同——这里要回答"**这条依据今天还成立吗**"，故必须暴露换版与取代关系（这是正文不写、而图书馆要写的分工）。
-* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；GB/T 7713.1-2025（现行，代替 GB/T 7713.1-2006）/ GB/T 7713.2-2022 / GB/T 7713.3-2014 / GB/T 7713.4-2025 / GB/T 41210-2021（GB/T 7713-1987 已废止）；Java Object Serialization Specification（未逐字取回）；`java.io.Serial`（JDK 14，未逐字取回）；Project Lombok 官方文档；Google Java Style Guide（含 4.8 局部变量类型推断 / 4.5 换行）；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。
+* **本集合的取值（便于日后复核）**：Keep a Changelog 1.1.0；Conventional Commits 1.0.0；IEEE 1028-2008（已转非现行，由 ISO/IEC/IEEE 1028:2025 取代）；IEEE 1016-2009；ISO/IEC/IEEE 29119-4:2021；ISO/IEC/IEEE 25010:2023；ISO/IEC/IEEE 29148:2018；ISO/IEC Directives Part 2 Edition 9.0 (2021)；ISO 10007:2017；ISO 9001:2015；ISO 9241-110:2020；ISO/IEC 29100:2011；RFC 2119 / RFC 8174；RFC 3629；RFC 3339；RFC 6749 / RFC 9700 / RFC 7617 / RFC 8018；RFC 9110（STD 97，已取代 RFC 7233 等）/ RFC 9457（已取代 RFC 7807）；RFC 8820（BCP 190，Updates RFC 3986）；NIST SP 800-63B / NIST SP 800-122 / NIST SP 800-188；OWASP Top 10:2021；OWASP ASVS 5.0；CWE-502 / CWE-208 / CWE-209 / CWE-489；SemVer 2.0.0；POSIX；git 官方文档（现行 main）；Maven Surefire / Failsafe 官方默认 includes；Microsoft Learn；The Twelve-Factor App；DORA / GitHub Docs；JaCoCo / PIT；MADR 4.0.0 / ADR 资料汇总 / AWS Prescriptive Guidance；ISO 30401:2018（+ Amd 1:2022、Amd 2:2024）；GB/T 7713.1-2025（现行，代替 GB/T 7713.1-2006）/ GB/T 7713.2-2022 / GB/T 7713.3-2014 / GB/T 7713.4-2025 / GB/T 41210-2021（GB/T 7713-1987 已废止）；Java Object Serialization Specification（未逐字取回）；`java.io.Serial`（JDK 14，未逐字取回）；Project Lombok 官方文档；Google Java Style Guide（含 4.8 局部变量类型推断 / 4.5 换行）；Google Shell Style Guide / ShellCheck；阿里巴巴 Java 开发手册。

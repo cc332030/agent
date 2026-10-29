@@ -162,6 +162,8 @@ class CheckSpecsTestCase(unittest.TestCase):
                            "script/specs-rules/cnb.toml",
                            # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
                            "script/specs-rules/local-service.toml",
+                           # 本道（用例数据的脱敏）的判据措辞外置在该文件里
+                           "script/specs-rules/desensitize.toml",
                            # 本道（猜到的行为先报、待人工确认）的判据措辞外置在该文件里
                            "script/specs-rules/execution.toml",
                            # 本道（缓存统一管理、先缓存后在线）的判据措辞外置在该文件里
@@ -6345,6 +6347,161 @@ class TestCheckLocalServiceAssertGuard(CheckSpecsTestCase):
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.check_local_service_assert_guard()
         self.assertIn("LOCAL_SERVICE_ASSERT_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
+class TestTestDataDesensitizeGuard(CheckSpecsTestCase):
+    """钉住『取值一律脱敏』（脱敏规范）。
+
+    用户口径：**用户可能会粘贴一个问题给你，让你检查并修复；确定是问题、且需要用测试用例
+    覆盖时，不允许直接使用用户提供的信息**（会直接暴露内网隐私），**须用相同类型的其他信息
+    替代**；随后追问"**是不是可以再扩展一下，应该要归到脱敏规范？参考业界规范**"——判据本体
+    因此从测试规范迁到通用层 `specs/general/desensitize.adoc`，测试规范只留一跳引用。
+
+    与相邻几道成三角：`TestCheckLocalOnlyGuard` 管用例**连到哪**、
+    `TestCheckLocalServiceAssertGuard` 管请求的**落点**、`security.adoc`「敏感信息」管
+    **运行时不许泄漏什么**；本条管**写出来的内容里写了什么字面取值**。故核判据本体
+    （换法/范围/落点/截图四组锚点）与各处载体（调度器识别特征、提示词公共片段的复制面、
+    公开面 README、测试规范的一跳引用）。规则数据在 `script/specs-rules/desensitize.toml`
+    （锚点清单在 `_tokens.toml` 的 `TEST_DATA_DESENSITIZE_TOKENS`）。
+    """
+
+    DESENSITIZE = "specs/general/desensitize.adoc"
+    TESTING = "specs/general/testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPTS = "prompts/_common.txt"
+    README = "README.adoc"
+    RULES = "script/specs-rules/desensitize.toml"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_valid(self):
+        for rel in (self.DESENSITIZE, self.TESTING, self.COMMON, self.PROMPTS, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_test_data_desensitize_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_value_rule_dropped_reports(self):
+        # 反例①：换法条文被抽——"照用户给的原样复现"照旧合法，真实环境信息直接写出去
+        self._mutate(self.DESENSITIZE, "换法按类别取（L1）", "取值另行处理")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("换法按类别取", self.error_texts())
+
+    def test_same_type_value_dropped_reports(self):
+        # 反例②：'同类型的虚构取值'被抽——脱敏被读成随便换个名字（判据随之失效）
+        # 取值节里两处带这串字样，须同时抽掉才判得出"这条要点真没了"
+        self._write_valid()
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.DESENSITIZE), encoding="utf-8") as fh:
+            text = fh.read()
+        self.write(self.DESENSITIZE, text.replace("同类型的虚构取值", "别的名字"))
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("同类型的虚构取值", self.error_texts())
+
+    def test_no_authorization_dropped_reports(self):
+        # 反例③：『用户提供过不构成授权』被抽——用户贴过就被当成允许
+        self._mutate(self.DESENSITIZE, "用户提供过不构成授权（L1）", "用户提供过即视为可用")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("用户提供过不构成授权", self.error_texts())
+
+    def test_sweep_all_dropped_reports(self):
+        # 反例④：只换用户点名那一处——同一份信息在其他落点照旧留着
+        self._mutate(self.DESENSITIZE, "只换用户点名的那一处不算脱敏", "可逐处替换")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("只换用户点名的那一处不算脱敏", self.error_texts())
+
+    def test_mask_before_write_dropped_reports(self):
+        # 反例⑤：掩码时机被抽——先写全值再事后清洗（全值已落盘，等于没做）
+        self._mutate(self.DESENSITIZE, "掩码在写入前完成", "事后统一清洗")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("掩码在写入前完成", self.error_texts())
+
+    def test_landing_scope_dropped_reports(self):
+        # 反例⑥：落点清单被抽——脱敏只发生在源码里，提交信息/评论/截图照旧留着
+        self._mutate(self.DESENSITIZE, "凡会被别人读到的地方都算落点（L1）", "源码里注意即可")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("凡会被别人读到的地方都算落点", self.error_texts())
+
+    def test_screenshot_dropped_reports(self):
+        # 反例⑦：截图条被抽——地址栏、账号、真实数据行、令牌随图片一并贴出去
+        self._mutate(self.DESENSITIZE, "截图先核后发（L1）", "截图可直接贴")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("截图先核后发", self.error_texts())
+
+    def test_source_dropped_reports(self):
+        # 反例⑧：依据行被抽——"换成什么、换到什么程度"无出处
+        # 依据行与节末各出现一次，两处都在才判得出"依据没了"
+        self._write_valid()
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.DESENSITIZE), encoding="utf-8") as fh:
+            text = fh.read()
+        self.write(self.DESENSITIZE, text.replace("NIST SP 800-188", "相关标准"))
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("NIST SP 800-188", self.error_texts())
+
+    def test_testing_pointer_dropped_reports(self):
+        # 反例⑨：测试规范那一侧的一跳引用被抽——测试侧不再指向脱敏规范
+        self._mutate(self.TESTING, "specs/general/desensitize.adoc", "别处")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("脱敏", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑩：调度器识别特征被抽——要写用例/日志/提交时这一条永远不被加载
+        self._mutate(self.COMMON, "specs/general/desensitize.adoc", "specs/general/security.adoc")
+        cm.check_test_data_desensitize_guard()
+        self.assertNotEqual("", self.error_texts())
+
+    def test_prompt_fragment_dropped_reports(self):
+        # 反例⑪：复制面被抽——执行者是按提示词被唤起的，片段里没有等于没人跟它说过
+        self._mutate(self.PROMPTS, "取值一律脱敏（L1）", "测试用例注意事项")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑫：公开面未同步——读者仍把"照用户给的原样写出去"当成严谨
+        self._mutate(self.README, "脱敏（`desensitize.adoc`", "安全说明")
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑬：判据本体整体缺失
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("缺少 specs/general/desensitize.adoc", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑭：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里。
+        self._write_valid()
+        path = os.path.join(self.root, self.RULES)
+        with open(path, encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn('min = 13\ntoken_list = "TEST_DATA_DESENSITIZE_TOKENS"', rules)
+        self.write(self.RULES,
+                   rules.replace('min = 13\ntoken_list = "TEST_DATA_DESENSITIZE_TOKENS"',
+                                 'min = 99\ntoken_list = "TEST_DATA_DESENSITIZE_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_test_data_desensitize_guard()
+        self.assertIn("TEST_DATA_DESENSITIZE_TOKENS", self.error_texts())
 
     def tearDown(self) -> None:
         cm.RULES = None
@@ -25481,7 +25638,6 @@ class TestFetchSpecsSwapOnReadOnlyRealScript(CheckSpecsTestCase):
             restart.assert_called_once()
         finally:
             os.chmod(real, 0o644)
-
 
 class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
     """钉住『长方法的反复调用点：在本处加透传』防线（**用户提出**）。

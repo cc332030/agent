@@ -1914,6 +1914,7 @@ POINTER_SCAN_FILES = (
     "specs/general/collab.adoc",
     "specs/general/context.adoc",
     "specs/general/dependency.adoc",
+    "specs/general/desensitize.adoc",
     "specs/general/doc-design.adoc",
     "specs/general/doc-lifecycle.adoc",
     "specs/general/doc-module.adoc",
@@ -4446,8 +4447,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 175  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2355  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮新增 `TestCheckFetchProgressGuard` 11 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 176  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2374  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本 PR 内 `TestTestDataDesensitizeGuard` 由 14 条扩到 15 条（脱敏判据本体迁到通用层，反例按「换法/范围/落点/截图/依据/一跳引用/载体」逐组抽锚点），复审轮把被回退的 3 条用例补回（`test_writable_bit_restore_removed_reports`、`TestFetchSpecsSwapOnReadOnlyRealScript` 2 条），见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -6497,6 +6498,29 @@ def check_local_only_guard():
     """
     phase("用例只允许在本机跑防线检查（不依赖本机之外的机器）")
     run_rule_guard("check_local_only_guard")
+    phase_done()
+
+
+def check_test_data_desensitize_guard():
+    """『取值一律脱敏』（脱敏规范）防线：判据本体与各处载体是否仍在。
+
+    用户口径：**用户可能会粘贴一个问题给你，让你检查并修复；确定是问题、且需要用测试用例
+    覆盖时，不允许直接使用用户提供的信息**——那会把内网隐私直接写出来（真实库名/表名、
+    服务名、内网地址一类），而内容一旦写出（提交、评论、截图），这份信息就随仓库与通知扩散、
+    事后无从收回；**须用相同类型的其他信息替代**。随后用户追问"**是不是可以再扩展一下，
+    应该要归到脱敏规范？参考业界规范**"——判据本体因此从测试规范迁到通用层
+    `specs/general/desensitize.adoc`（换法分类、一次换全的范围、每一处落点、截图与附件），
+    测试规范只留一跳引用；相邻的 `check_local_only_guard`（用例连到哪）、
+    `check_local_service_assert_guard`（请求的落点）与 `specs/general/security.adoc`
+    「敏感信息」（运行时不许泄漏什么）都不管**写出来的内容里写了什么字面取值**。
+
+    **规则数据**：锚点与各处载体在 `script/specs-rules/desensitize.toml`（清单在 `_tokens.toml`
+    的 `TEST_DATA_DESENSITIZE_TOKENS`）；提示词公共片段是**复制面**（会被未知项目执行），
+    故单列一组核它。**"这个取值是不是真实环境信息""这次是不是真换全了"属语义判断**（见
+    `GUARD_CHECK_LIMITS`）——文本侧只证"要求仍在"，证不了"某次真的脱敏了"。
+    """
+    phase("取值一律脱敏防线检查（脱敏规范与载体）")
+    run_rule_guard("check_test_data_desensitize_guard")
     phase_done()
 
 
@@ -8759,7 +8783,6 @@ def check_changelog_entry_guard():
     文件**不在场不报缺失**：本仓库已不设变更日志（用户明确要求『直接删除 CHANGELOG.adoc，
     不需要了』，2026-10-29 起）——该决定覆盖「须有统一变更日志」的默认要求；一旦在场
     （将来重建），下方条目形态、追加标志与版本线判据照常全核，缺席不构成免检。
-
 """
     phase("变更日志条目形态检查（单行条目）")
     path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
@@ -13186,6 +13209,7 @@ CHECKS = (
     check_reusable_scenario_guard,
     check_local_only_guard,
     check_local_service_assert_guard,
+    check_test_data_desensitize_guard,
     check_adoption_guard,
     check_ci_cd_guard,
     check_yaml_string_quote_guard,

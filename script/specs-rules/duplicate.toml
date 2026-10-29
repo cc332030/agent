@@ -130,6 +130,7 @@ files = [
     "specs/general/collab.adoc",
     "specs/general/context.adoc",
     "specs/general/dependency.adoc",
+    "specs/general/desensitize.adoc",
     "specs/general/doc-design.adoc",
     "specs/general/doc-lifecycle.adoc",
     "specs/general/doc-module.adoc",
