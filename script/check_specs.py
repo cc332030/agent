@@ -4404,8 +4404,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 170  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2295  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（2288 + 删掉 `clean_tmp.py` 带走的 3 条 + 本轮另加 10 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 171  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2296  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（2288 + 删掉 `clean_tmp.py` 带走的 3 条 + 本轮另加 11 条 = 2302，去掉重复抄录的 `TestCheckTemplateSeparationGuard` 带走的 6 条后按 `unittest.TestLoader` 实取 2296；见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12892,6 +12892,39 @@ def check_staged_delivery_guard():
     phase_done()
 
 
+def check_task_completion_guard():
+    """『完成＝按任务要求走到最后一步、并逐条核对每一步』防线（**用户提出**）。
+
+    失效形态（用户点名、部分 agent 的预设行为）：执行者在步骤中途收尾，把"要不要继续"交回
+    用户——"xx任务已完成，结果xx，剩余xx任务，如果要继续，请跟我说"一类句式**看上去像礼貌
+    的确认**，实际是**任务没做完却报了完成**：要求里写到的、自己规划了的步骤还在半途，而任务
+    本身既没被阻塞、也没有做不到的地方。用户要求本条优先级高：**全部完成再汇报**。
+
+    **与相邻各条的分工**（三条相邻、都谈"停下来"，不写分工即被读成同一条）：①「用户要求是
+    第一优先级」（P8）管"**读准了却做不到**"——须停下问；本条管"**做得到却没做完**"——不许问；
+    ②`no-self-dispatch`（不得发评论唤起自己）禁的是"**再发起一次执行**"，本条禁的是"**把没做完
+    当成可以交出去的状态**"；③`delivery` 的「输出通道只有两条」把"必须停下确认"限定在方向/
+    前提不成立、不可逆后果一类——**"要不要继续"不在该例外之内**。
+
+    判据本体唯一落点在必加载层 `specs/core/execution.adoc`「一件事的定义与展开」的那条 bullet；
+    提示词公共片段 `intro-rules` 是同口径的复制面（提示词会被复制到未知项目执行，那里正是
+    "预设按步骤提示"最常发生的地方）。故本道核两处，**按 bullet 自己的正文核**（不是整节）：
+    同节的「事做完才算做完」只判"事"、不判"步骤链走没走到最后"，「一次执行里可做几件事」判的是
+    "几件事做没做"，字样相近，按整节核会把被抽走的要点兜住。
+
+    只钉「判据是否仍在」——"这次到底做完没有、有没有中途把'要不要继续'交回去"属运行时事实与
+    语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("任务完成判据防线检查（走到最后一步 + 逐条核对，不得做一半就问）")
+    rel = "specs/core/execution.adoc"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+        err(f"缺少 {rel}——『完成＝走到最后一步』的判据本体失去落点", rel)
+        phase_done()
+        return
+    run_rule_guard("check_task_completion_guard")
+    phase_done()
+
+
 CHECKS = (
     check_refs_exist,
     check_link_refs,
@@ -13063,6 +13096,7 @@ CHECKS = (
     check_guess_confirm_guard,
     check_cache_guard,
     check_tmp_layout_guard,
+    check_task_completion_guard,
 )
 
 
