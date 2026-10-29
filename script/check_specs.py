@@ -4404,8 +4404,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 171  # 同源实取：`CHECKS` 序列唯一名（并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2296  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（2288 + 删掉 `clean_tmp.py` 带走的 3 条 + 本轮另加 11 条 = 2302，去掉重复抄录的 `TestCheckTemplateSeparationGuard` 带走的 6 条后按 `unittest.TestLoader` 实取 2296；见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 173  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_degradation_scan_guard`，上一轮 `check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2329  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮含 `TestCheckChangelogEditGuard` 2 条与 `TestChangelogUndeclaredEdits` 5 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -8805,23 +8805,141 @@ def _changelog_version_tuple(raw):
     return tuple(parts[:2]) if len(parts) >= 2 else tuple(parts)
 
 
+# 『变更日志未声明即改』的**行为面**核对（`check_changelog_edit_guard` 的机械那一半）。
+#
+# 用户口径（第三次复发后的原话）：『又动了 changelog，规范又失效，什么原因引起的，触发主动声明，
+# 否则禁止修改 changelog，是禁止！！！』。真实失效形态（本仓库实测）：**该轮的声明句里没有
+# changelog，改动却进了同一个提交**——判据文本、规则数据、`check_effective` 台账三处都是绿的，
+# 因为**没有一步看改动本身**：三道 `check_changelog_*_guard` 全在核「规则文本还在不在」，
+# 而"这一轮到底有没有得到声明""这轮是不是同一任务的后续轮次"被一并划进了运行时事实——
+# 于是判据写得再全，也只是**自觉**。这里把那句话落成可机械核对的事实。
+#
+# **两条判据，都只看 git 取得到的事实**：
+# ① 声明面：提交说明里**点名** `CHANGELOG`（或变更日志/更新日志）才算声明——用户说"记一条/改
+#    changelog"即算，不另要求"主动声明"这类措辞（判据是有没有这条指令，不是它用了哪个词）；
+# ② 归属面：那次**声明所在提交**之后，同一分支上不得再有提交动 `CHANGELOG.*`——声明以轮次
+#    为单位，后续轮次未获新声明时回头再改即违规（本仓库实测的正是这一形态）。
+# 换 `CHANGELOG.adoc` 自身**那一版**不受影响：它就在声明所在的那个提交里（「一次提交只记当前版本」）。
+CHANGELOG_DECL_WORDS = ("CHANGELOG", "changelog", "变更日志", "更新日志")
+# 判据引入的**日期下界**：此前的提交是历史，不追认（追认的唯一出路是改写历史）。
+# 取值为本判据进 PR 的那一天——此日之后（含当日）一律受约束；只看更早的提交即无告警。
+CHANGELOG_DECL_SINCE = "2026-10-29"
+# 判据判的是**变更日志本身**：`CHANGELOG.adoc`。不收 `CHANGELOG.md`/`.txt` 一类的同名件——
+# 判据里写的「唯一口子」是给这份文件用的，放宽到任意后缀只会让无关文件也进核对面。
+CHANGELOG_FILE_RE = re.compile(r"(^|/)CHANGELOG\.adoc$")
+
+
+def _git_run(args):
+    """在本仓库跑一条 git 命令，取不到返回 `None`（**取不到即不核**，绝不猜）。"""
+    try:
+        proc = subprocess.run(["git"] + args, cwd=REPO_ROOT, capture_output=True,
+                              text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _numstat_paths(numstat_text):
+    """从 `git show --numstat` 的输出里取**被动过的文件路径**。
+
+    行首两列是增删计数，其后才是路径；**重命名/复制**的路径列是 `旧\t新` 两段（整行变成
+    4 段），旧写法取"最后一段"只拿得到新名，旧名这一侧看不见——两边都收，去重保序。
+    """
+    out = []
+    for ln in numstat_text.splitlines():
+        cols = ln.split("\t")
+        if len(cols) < 3:
+            continue
+        for rel in cols[2:]:
+            rel = rel.strip()
+            if rel and rel not in out:
+                out.append(rel)
+    return out
+
+
+def _changelog_decl_commits():
+    """取 `(sha, 提交说明首行, 动过的 CHANGELOG 文件, 整条说明里是否点名变更日志)`，新 → 旧。
+
+    只取 `CHANGELOG_DECL_SINCE` 之后（含当日）的提交；不在本仓库的 git 工作区（单测临时目录等）时返回
+    `None`——**取不到事实就不核**，绝不猜。
+    """
+    root = _git_run(["rev-parse", "--show-toplevel"])
+    if root is None or os.path.realpath(root.strip()) != os.path.realpath(REPO_ROOT):
+        return None
+    # **不用 `--since`**：`--since` 按提交者日期过滤，且「日期恰为下界当天」的提交在此环境里被整批
+    # 滤掉（实测：当天提交的 `--since=<当天>` 返回空），恰恰漏掉最该核的那一批。
+    # 改为取最近的若干提交、在代码里按下界比日期。
+    log = _git_run(["log", "-n", "80", "--format=%H%x1f%ad%x1f%B%x1e", "--date=short", "--", "."])
+    if not log:
+        return []
+    out = []
+    for rec in log.split("\x1e"):
+        parts = rec.strip("\n").split("\x1f")
+        if len(parts) < 3:
+            continue
+        sha, date = parts[0].strip(), parts[1].strip()
+        message = parts[2]
+        subject = message.splitlines()[0] if message.strip() else ""
+        if date and date < CHANGELOG_DECL_SINCE:
+            continue  # 判据引入之前的历史：不追认
+        files = _git_run(["show", "--format=", "--numstat", sha])
+        if files is None:
+            continue
+        # `--numstat` 的行形如 `<增>\t<删>\t<路径>`（只取路径列）——**不读工作区**，只读那次提交
+        # 自己记录的文件清单（与「自身侧暂存区自查」同一条实现边界）。
+        touched = _numstat_paths(files)
+        # 认**整条说明**：判据是有没有这条指令，不是它落在首行还是正文——只认首行时，
+        # 「变更日志：新增一条」写在正文里的提交照样报红，而它其实已获声明。
+        declared = any(w in message for w in CHANGELOG_DECL_WORDS)
+        out.append((sha, subject, touched, declared))
+    return out
+
+
+def _check_changelog_undeclared_edits(commits=None):
+    """行为面①+②：动了 `CHANGELOG.*` 却没声明，或声明之后又回头再动，即报红。
+
+    规则文本只能证明"规矩写着"，证明不了"这一轮没动它"。判据只认 git 取得到的事实：
+    **①声明面**——这次提交改没改 `CHANGELOG.*`、说明里有没有点名它（用户说"记一条/改 changelog"
+    即算声明，**不另要求"主动声明"这类措辞**：判据是有没有这条指令，不是它用了哪个词）；
+    **②归属面**——那次声明所在提交之后、`HEAD` 之前，不得再有提交动它（声明以轮次为单位，
+    本仓库实测的复发形态正是：上一轮点了 changelog，这一轮的声明句里没有它，却照样加了一条）。
+
+    只看 `CHANGELOG_DECL_SINCE` 之后的提交：更早的是历史，不追认（追认的唯一出路是改写历史）。
+    """
+    if commits is None:
+        commits = _changelog_decl_commits()
+    if not commits:
+        return
+    for sha, subject, touched, declared in commits:  # 新 → 旧
+        # 只认**真动了 `CHANGELOG.*`** 的提交：入参是「动过的变更日志文件」清单，
+        # 不在这里二次过滤（过滤写错一次，误伤的就是全部日常提交）。
+        changed = [f for f in touched if CHANGELOG_FILE_RE.search(f)]
+        if declared and changed:
+            break  # 已走到那次声明：它本身与更旧的提交都不属本轮
+        if changed:
+            err(f"提交 {sha[:8]}（{subject.strip()}）动了 {changed[0]}，而提交说明里**没点名变更日志**"
+                "——变更日志的默认动作是「不新增、不修改」，**唯一口子是人主动声明**"
+                "（用户说\"记一条/改 changelog\"即算声明）；声明以轮次为单位，**同一任务的后续轮次"
+                "未获新声明时，也不得回头再改**（specs/general/changelog.adoc「登记时机」"
+                "「只允许在主动声明的那一轮修改」）", changed[0])
+
+
 def check_changelog_edit_guard():
     """『变更日志修改面防线』：只允许在**主动声明的那一轮**修改，一次提交只记当前版本。
 
-    用户口径（本轮）：『日志只被「人改」、不被「追加」，只允许主动声明时修改 changelog』。
+    用户口径：『日志只被「人改」、不被「追加」，只允许主动声明时修改 changelog』。
     前几轮已经把「什么时候记一条」和「怎么写进去」钉住了（`check_changelog_timing_guard` /
     `check_changelog_writable_guard`），缺的是两端：**谁可以在哪一轮动它**、
     **一次提交动到哪些条目**。失效形态（本仓库实测）：改动早已提交、下一轮又回头补条，
     或一次提交顺手把别的版本组的条目一起带进去——日志于是持续被加内容，而每一轮都自称
     「只在声明时写」。
 
-    故本条钉两处要点：修改面（只在主动声明的那一轮、后续轮次不得回头再改、例外只有
-    「已写入的条目本身有错」可就地订正）与提交面（一次提交只承载当前版本）。
-    机械面同源的一半（追加标志、版本线不重号不断号）落在 `check_changelog_entry_guard`——
-    那两条证明它真的没被「追加」过，本道证明规则还在。
+    故本条钉两处要点：修改面（只在主动声明的那一轮，**动它之前须写明拿到的声明句**，
+    **声明以轮次为单位**、后续轮次不得回头再改）与提交面（一次提交只承载当前版本）。
+    机械面同源的一半（追加标志、版本线不重号不断号）落在 `check_changelog_entry_guard`。
 
-    只钉「要点是否仍在」——「这次到底有没有得到声明」「这轮是不是同一任务的后续轮次」
-    属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    文本面之后还有**行为面**（`_check_changelog_undeclared_edits`）：动了 `CHANGELOG.*` 而提交
+    说明里没点名它即报红——只核文本时，"这一轮到底有没有得到声明"只能靠自觉，本仓库已复发三次。
     """
     phase("变更日志修改面检查（一轮一声明 + 一次提交一版本）")
     if not os.path.isfile(CHANGELOG_STRUCTURE_FILE):
@@ -8830,6 +8948,7 @@ def check_changelog_edit_guard():
         phase_done()
         return
     run_rule_guard("check_changelog_edit_guard")
+    _check_changelog_undeclared_edits()
     phase_done()
 
 
@@ -12686,6 +12805,50 @@ def check_operation_timeout_guard():
     phase_done()
 
 
+def check_self_serve_guard():
+    """『卡住时先自证：缺什么自己找、有问题自己排、有疑问自己查』防线（**用户提出**）。
+
+    失效形态（用户实测）：执行者卡在**缺件**（工具/依赖/组件/文档没装没取）或**第一层猜测**
+    上，就把问题原样交回发起人——而答案本来就取得到（用户口径：客户反问一句就能给出方向，
+    说明这一步本该自己做，属偷懒）。本道钉的是**判据本体仍在**：通用层
+    `specs/general/planning.adoc`「卡住时先自证」一节（自取/自排/自证三件事 ＋ 与
+    「猜到的行为先报」的分界（"取事实"还是"做取舍"）＋ 交回人的唯一形态 ＋ 依据行），
+    承接面 `specs/general/collab.adoc`「操作超时与超时后的处置」（缺件该去取、不是该问人），
+    复制面 `prompts/_common.txt`（`timeout` / `baseline-and-compat` 两个片段——提示词会被
+    未知项目复制执行，判据只写在规范本体里时，按题面出发的执行者读不到它）。
+
+    **一律按该节/该片段自己的正文核**（不是整份文件）：`planning.adoc` 的相邻节
+    「换一条路时的收尾与穷尽」含"换源/换参数/最小复现"一类同样字样，按整份文件核时把本节
+    抽空也报不出来。只钉要点文本仍在——"某次到底装过没有、查过几处、是不是真的一问就能
+    答上来"属**运行时事实与语义判断**（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("『卡住时先自证』防线检查（缺什么自己找、有问题自己排、有疑问自己查）")
+    run_rule_guard("check_self_serve_guard")
+    phase_done()
+
+
+def check_degradation_scan_guard():
+    """『降级式表述』防线（**用户提出**）：review 要查出来、一键优化规范也要处理，且**两处共用一份判据**。
+
+    失效形态（用户实测）：把**本可自行取到证据**的事写成"已记录 / 已说明 / 跳过 + 未确证"就收尾——
+    措辞完整、语气也不含糊，**结论与事实对不上**才是它的特征，于是既没人把它当问题报出、
+    也没人把它当冗余收敛；两类任务（检查修复、优化公共规范）都从它旁边走过去。
+
+    判据本体唯一落点在通用层 `specs/general/review.adoc`「review 的默认检查面」的
+    『降级式表述属必查的问题形态』（含"两份命令共用这一条、本条是真源"），两侧只**点名与回指**：
+    `prompts/review.adoc` 的检查面点名、`prompts/spec-refine.adoc` 的扫描面**借用而不重写**。
+    复制面 `prompts/_common.txt` 的 `timeout` 片段带同口径（提示词会被未知项目复制执行）。
+    **按该节自己的正文核**（不是整份文件）。规则数据落点＝`script/specs-rules/degradation.toml`
+    （与 `check_self_serve_guard` 的 `self-serve.toml` 分开：同一防线的规则只能有一处落点）。
+
+    只钉「判据与两份回指是否仍在」——"这次到底有没有把没做成的写成做过的"属**语义判断**
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("『降级式表述』防线检查（review 必查 + 一键优化规范借用同一份判据）")
+    run_rule_guard("check_degradation_scan_guard")
+    phase_done()
+
+
 def check_role_skill_handoff_guard():
     """『专家与技能（默认按角色/技能移交，主 agent 只编排）』防线（**用户提出**）。
 
@@ -13097,6 +13260,8 @@ CHECKS = (
     check_cache_guard,
     check_tmp_layout_guard,
     check_task_completion_guard,
+    check_self_serve_guard,
+    check_degradation_scan_guard,
 )
 
 

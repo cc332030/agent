@@ -1,0 +1,49 @@
+# 『降级式表述』防线（用户点名的失效：把本可自行取到证据的事写成"已记录/已说明"就收尾）。
+# 缺它时的失效：措辞完整、语气也不含糊，**结论与事实对不上**才是它的特征，于是检查修复
+# 与优化公共规范两类任务都从它旁边走过去——既没人把它当问题报出，也没人把它当冗余收敛。
+# 用户口径：review 要查出来、一键优化规范也要处理，且**借用 review 的部分逻辑、不用写两份**。
+# 判据本体的唯一落点在 `specs/general/review.adoc`「review 的默认检查面」；本文件只给"要点在不在"。
+# 两份命令各自**只点名与回指**——判定标准不抄第二份（抄了就是第二真源，改一处必漏另一处）。
+
+[[guards.check_degradation_scan_guard]]
+file = "specs/general/review.adoc"
+section = "review 的默认检查面（只查问题，不动存量）"
+kind = "section_groups"
+groups = [
+    [
+        "降级式表述的判定标准",
+        [
+            "**降级式表述属必查的问题形态（L1，用户提出）**",
+            "`prompts/review.adoc` 与 `prompts/spec-refine.adoc` **共用这一条**",
+            "**结论与事实对不上**",
+            "**本条是真源**",
+        ],
+        "缺它时这类问题在 review 里的承接面整个消失：措辞完整的『已记录/已说明』不会被当成问题报出来，两份命令也就没有可回指的真源",
+    ],
+]
+message = "『降级式表述』防线被破坏：{file} 的「review 的默认检查面」节缺失要点 {missing}——{desc}；本条对应用户报告的真实失效（把没做成的事写成做过的），不得删除、不得降级"
+
+# review 命令侧：**检查面点名**（判定标准不在题面里写第二份，只回指真源）。
+[[guards.check_degradation_scan_guard]]
+file = "prompts/review.adoc"
+kind = "file_tokens"
+tokens = ["**检查面含『降级式表述』（L1）**",
+          "specs/general/review.adoc",
+          "**本处不复述**"]
+message = "『降级式表述』防线被破坏：{file} 的「全量检查」步缺失要点 {missing}——题面不点名这一类时，执行者按题面逐条检查、正好不查它；而判定标准必须回指真源、不得在题面里再写一份"
+
+# 一键优化规范侧：**借用而不重写**（用户口径：能不能借用 review 的部分逻辑、不用写两份）。
+[[guards.check_degradation_scan_guard]]
+file = "prompts/spec-refine.adoc"
+kind = "file_tokens"
+tokens = ["**另含『降级式表述』**",
+          "`specs/general/review.adoc`",
+          "**判据借用而不重写（L1）**"]
+message = "『降级式表述』防线被破坏：{file} 的扫描面与落地步缺失要点 {missing}——缺它时本命令会自己再写一份判定标准（第二真源），或干脆不扫这一类"
+
+# 复制面：提示词公共片段（会被未知项目执行）须带上同口径。
+[[guards.check_degradation_scan_guard]]
+file = "prompts/_common.txt"
+kind = "file_tokens"
+tokens = ["降级式表述与本节同罪", "举反例同样只是示例、不以此为限"]
+message = "『降级式表述』防线被破坏：{file} 缺失要点 {missing}——片段会被复制到未知项目执行，那边就只有『先自取』而没有『不得把没做成写成做过的』；示例句缺『举反例同样只是示例』时，被读成封闭清单的那一半换到反例上照样复发"
