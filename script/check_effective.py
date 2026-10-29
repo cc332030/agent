@@ -108,6 +108,15 @@ MECHANISMS = [
      "在必加载层，另两处是登记（公共入口「最高优先级铁律」、维护方不可降级清单 P8）；"
      "「某次交付是不是真的降级了、卡点是不是真的提给了用户」属运行时事实与语义判断，"
      "交人/子 agent 复核"),
+    ("完成＝按任务要求走到最后一步、并逐条核对每一步（不得做一部分就问用户要不要继续）",
+     "specs/core/execution.adoc + prompts/_common.txt", "script/check_specs.py",
+     "check_task_completion_guard",
+     "check_task_completion_guard 按**那条 bullet 自己的正文**核（不是整节：「事做完才算做完」判\"事\"、"
+     "「一次执行里可做几件事」判\"几件事做没做\"，字样相近，按整节核会把抽走的要点兜住）：判据本体"
+     "（完成＝走到最后一步 + 逐条核对每一步 ＋ 做一部分再问『要不要继续』按未完成判 ＋ 四条判定标准 ＋ "
+     "与「用户要求是第一优先级」的分工『做不完才问，做得完不许问』 ＋ 依据行含取舍归属）在必加载层，"
+     "复制面是提示词公共片段 `intro-rules`（会被未知项目执行）；"
+     "「这次到底做完没有、有没有中途把『要不要继续』交回去」属运行时事实与语义判断，交人/子 agent 复核"),
     ("用户打错字不是他的真值：先纠正、按纠正后的意思做", "specs/core/execution.adoc + library/corrections.adoc", "script/check_specs.py",
      "check_correction_guard",
      "check_correction_guard 按**该条 bullet 自己的正文**核（不是整节：「逐字执行用户指令」带『明显打错字除外』、"
