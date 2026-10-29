@@ -108,6 +108,21 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - **"更新自身"会重跑一次**：换上新版脚本后当轮就 `os.execv` 重启（挂 `--self-updated` 作刹车，
     见 `_restart_with`）——重启后的那一轮按新脚本的清单口径取，用户侧看到的仍是**一次运行**。
 
+== 输出（用户口径：「显示文件下载进度及其他明细，下载完成不要关闭窗口」）
+  - **开跑先交代一轮的规模**：共取几份、来源、落点、并发（一份都还没回来时，这就是唯一的
+    "它在干活"的信号）；
+  - **每取完一份打一行进度**（`[3/27] 刷新 specs/stack/java.adoc -- 12.3 KB（1.2s）`，
+    见 `_progress`）：份数、状态（新取/刷新/未变/保留/重试/失败）、字节、耗时——**逐份**、不攒到
+    收尾，故卡住时看得见卡在哪一份；
+  - **收尾给总账与明细**：共取几份、用时，以及按状态分组的清单（新取/刷新/内容一致/失败）；
+  - **进度与警告走 stderr、结果走 stdout**：stdout 会被调用方重定向，进度混进去就成了噪音；
+  - **跑完不关窗口是入口的事、不是本脚本的事**（职责边界见 `specs/general/script.adoc`
+    「跨环境脚本」）：`fetch-specs.bat` / `fetch-specs.sh` 在**自己开了（或占着）终端**时
+    结束停住等一次回车，管道重定向与 CI 里照旧立刻退出——本脚本自己不探测终端、也不等输入
+    （它被别的程序调起时，"等一次回车"会变成一个不返回的命令）。入口的判据只看**标准输入
+    挂在终端上**（`[ -t 0 ]`）：控制终端在重定向时照样可写，拿它当判据会让重定向那条路
+    挂在那里等一次回车。
+
 安全保证：
   - **只读远端、只写落点目录内**：落点不是调用方给的路径，而是本脚本按本机用户目录算出来的
     固定位置，故不存在"借参数写到任意位置"的越界面；
@@ -153,6 +168,8 @@ import re
 import shutil
 import stat
 import sys
+import threading
+import time
 import urllib.parse
 import urllib.request
 
@@ -195,6 +212,52 @@ _WRITABLE_DIR_MODE = 0o755
 EXIT_OK = 0
 EXIT_INCOMPLETE = 1
 EXIT_USAGE = 2
+
+# 进度行**逐份**打（取完一份打一行）：一份规范只有几 KB 到几百 KB，下载本身没有可插针的
+# 中间态；而"卡住时看得见卡在哪一份"正是要买的东西（用户口径：「显示文件下载进度及其他
+# 明细」）。故不画进度条，只用**已取份数 + 状态 + 字节 + 耗时**这几项事实——它们与本轮
+# 结果一一对应，人核对明细时不必再认第二套数字。
+_PROGRESS_LOCK = threading.Lock()
+# 本轮已取完的份数（进度行的分子；`main` 每轮开头清零，同一进程内跑两次不接着数）
+_DONE = 0
+
+
+def _progress(total, rel, state, detail, seconds, counts=True):
+    """打**一行**进度（`[3/27] 刷新 specs/stack/java.adoc -- 12.3 KB（1.2s）`）。
+
+    `total` 为 0（总数没算出来）时省掉分母；`rel` 原样打印——它就是失败清单里定位用的那
+    一个名字（见 `main`），两处同一个名字才有可核对性。
+
+    `counts=False` 只打明细、**不推进分子**：分子是"这一轮已经有几份取完了"，重试那一行
+    不是某一份的终态（它接着还要再取一次），数进去收尾就会出现 `[48/47]`。
+
+    **写 stderr、逐行 flush**：进度与既有的警告/说明同一路，stdout 仍只留落点与结果
+    （调用方会拿 stdout 做重定向，进度混进去就是"结果里多了一堆噪音"）；管道与重定向有
+    缓冲，攒到进程结束才吐等于"卡住时什么都看不见"（见 `_flush`）。
+
+    并发 worker 各自取完即打、由锁串行化——攒到收尾统一打就等于没有进度。
+    """
+    global _DONE
+    # 计数与写出放在**同一段临界区**里、直接写 stderr（不经 `_flush`）：`threading.Lock`
+    # 不可重入，`_progress` 持锁后再调一个自己也取锁的函数就是自锁——本仓库实测：第一份取完
+    # 就整轮挂住，而进度行一行都没打出来（分母与行要原子，正好就是这一段的边界）。
+    with _PROGRESS_LOCK:
+        prefix = f"[{_DONE}/{total}]" if total else "[--]"
+        if counts:
+            _DONE += 1
+        sys.stderr.write(f"  {prefix} {state} {rel} -- {detail}（{seconds:.1f}s）\n")
+        sys.stderr.flush()
+
+
+def _flush(text):
+    """立刻写 stderr 并 flush：管道/重定向下有缓冲，不 flush 等于没有进度。
+
+    与 `_progress` 共用同一把锁：`main` 里那几行说明不能插进某一份的进度行中间。
+    **只给"不持锁的调用方"用**（`main`）；`_progress` 已在锁内，直接写 stderr。
+    """
+    with _PROGRESS_LOCK:
+        sys.stderr.write(text)
+        sys.stderr.flush()
 
 
 def parse_args(argv=None):
@@ -643,8 +706,12 @@ def _clean_self_tmp(cwd, keep=()):
             pass
 
 
-def download_one(base, rel, out_dir, keep):
+def download_one(base, rel, out_dir, keep, total=0):
     """取一份文件、按**内容**决定落不落盘。返回 (rel, 状态, 说明)。
+
+    `total` 只用于进度行的分母（0＝未知，不印分母）；进度行是本函数唯一的对外输出，
+    不另返回一份"人看的文本"——同一件事两个来源必然漂移。
+    
 
     状态取值：`new`（本地没有，新落盘）/ `updated`（远端内容不同，已刷新）/ `same`
     （内容一致，不动）/ `keep`（`--keep` 下本地已有非空，未核内容）/ `fail`。
@@ -673,18 +740,23 @@ def download_one(base, rel, out_dir, keep):
     `--keep` 恢复旧的增量语义（本地已有且非空即不取、只补缺失项）：需要"不动我本地那份"
     时用；要最新内容按默认走即可。
     """
+    started = time.monotonic()
     dest = target_path(out_dir, rel)
     # 本地已有那份（不是"非空"那份）：判据是**本地存在**——空文件同样是"以前取到过的那一份"
     # 的位置，取回失败必须把它保住（否则 `> dest` 截断留下的空文件会被当成"本地没有"，
     # 失败一次即把副本变成 `0 B`，而 `0 B` 的文件在任何 `open()` 里都读得通、不像"没有"）
     before = local_bytes(dest) if os.path.isfile(dest) else None
     if keep and before:
+        _progress(total, rel, "保留", f"{len(before)} B（--keep：不动本地那份）",
+                  time.monotonic() - started)
         return rel, "keep", "已存在（--keep）"
     last_err = None
     for attempt in (1, 2):          # 失败重试一次，避免偶发抖动让整批失败
         try:
             data = fetch_text(base, rel).encode("utf-8")
             if before is not None and data == before:
+                _progress(total, rel, "未变", f"{len(data)} B（与远程一致）",
+                          time.monotonic() - started)
                 return rel, "same", f"{len(data)} B（与远程一致）"
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             _ensure_writable(out_dir, dest)
@@ -693,6 +765,8 @@ def download_one(base, rel, out_dir, keep):
                 fh.write(data)
             os.replace(tmp, dest)
             _make_read_only(dest, is_dir=False)
+            _progress(total, rel, "刷新" if before is not None else "新取", f"{len(data)} B",
+                      time.monotonic() - started)
             return rel, ("updated" if before is not None else "new"), f"{len(data)} B"
         except (OSError, http.client.HTTPException) as e:
             # 网络类错误统一按 OSError 处理；`HTTPException`（IncompleteRead/BadStatusLine）
@@ -705,13 +779,19 @@ def download_one(base, rel, out_dir, keep):
                     os.remove(f"{dest}.part")
             except OSError:
                 pass
-            if attempt == 2:
-                break
-    return rel, "fail", (f"{last_err}（本地已有那一份原样保留）" if before is not None
-                         else str(last_err))
+            if attempt == 1:
+                # 重试也是"明细"的一部分：卡在同一个文件上重试时，人要知道是哪一份、为什么
+                _progress(total, rel, "重试", str(last_err), time.monotonic() - started,
+                          counts=False)
+                continue
+            break
+    detail = (f"{last_err}（本地已有那一份原样保留）" if before is not None
+              else str(last_err))
+    _progress(total, rel, "失败", detail, time.monotonic() - started)
+    return rel, "fail", detail
 
 
-def fetch_install_scripts(base, out_dir, keep):
+def fetch_install_scripts(base, out_dir, keep, total=0):
     """把安装脚本一并取到落点**根下**。返回与 `download_one` 同形的结果列表。
 
     清单由 `INSTALL_SCRIPTS` 给出（相对来源根，本仓库里就是 `script/` 下那几个），
@@ -723,7 +803,7 @@ def fetch_install_scripts(base, out_dir, keep):
     """
     results = []
     for rel in INSTALL_SCRIPTS:
-        results.append(download_one(base, rel, out_dir, keep))
+        results.append(download_one(base, rel, out_dir, keep, total))
     # 执行位不在这里补：本函数的返回结果与"补位"无关，且 `--no-scripts` 时整组不跑
     # （那里正是漏补的形态），统一由 `ensure_landing_executables` 在每轮收尾无条件补
     return results
@@ -952,6 +1032,8 @@ def resolve_out_dir(args):
 
 
 def main(argv=None):
+    global _DONE
+    _DONE = 0
     args = parse_args(argv)
     # 上一轮留下的新版本：先换上它、再照它的清单口径干活（见 `hand_off_self`）
     hand_off_self()
@@ -1006,9 +1088,14 @@ def main(argv=None):
 
     # `--force` 与默认同为"以远程为准"，此处只保留它的写法（与 `--keep` 相反）；
     # `--keep` 下 `download_one` 自己判"本地已有即不动"
+    total = len(targets) + len(optional) + (0 if args.no_scripts else len(INSTALL_SCRIPTS))
+    # 开跑前先交代**这一轮取多少份、从哪来、落到哪**：一份都还没回来时这几行是唯一的
+    # "它在干活"的信号；进度行的分子分母以这里的 `total` 为口径。
+    started = time.monotonic()
+    _flush(f"取规范开始：共 {total} 份（来源 {base}，落点 {out_dir}，并发 {args.workers}）\n")
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = [pool.submit(download_one, base, rel, out_dir, args.keep)
+        futures = [pool.submit(download_one, base, rel, out_dir, args.keep, total)
                    for rel in sorted(targets)]
         # 按完成先后收结果（顺序不影响处置：结果按 `rel` 分类，不按落盘次序）
         for fut in concurrent.futures.as_completed(futures):
@@ -1022,17 +1109,21 @@ def main(argv=None):
                 # 落点根停在 `755`），那恰好把"取完即只读"这条在最需要它的一轮里丢掉。
                 # 这里拿不到 `rel`（future 与结果一一对应、但异常不带 rel），故按 "?" 报
                 # 由下游"失败项数"体现——重跑一次即可从 `[失败]` 行看到具体是哪一份。
+                # 这一格照旧算**这一份的终态**（它不会再回来），分子要跟着走——否则收尾的
+                # 「共取 N 份」与最后一行的 `[n/total]` 对不上。
+                _progress(total, "?", "失败", f"取回时发生意外异常: {e!r}", 0.0)
                 results.append(("?", "fail", f"取回时发生意外异常: {e!r}"))
     for rel in optional:
         try:
-            results.append(download_one(base, rel, out_dir, args.keep))
+            results.append(download_one(base, rel, out_dir, args.keep, total))
         except Exception as e:          # noqa: BLE001 - 同上（README.adoc 等有则取项）
+            _progress(total, rel, "失败", f"取回时发生意外异常: {e!r}", 0.0)
             results.append((rel, "fail", f"取回时发生意外异常: {e!r}"))
     # 安装脚本落**落点根下**（不在来源槽里）：这是"下载的文件一律只落这一个地方"里
     # 「安装脚本」那一半——取完规范就不必再手工下载一遍入口（见脚本头部「落点」）。
     # 清单在 `INSTALL_SCRIPTS`，与本脚本同处 `script/`；`--no-scripts` 时整组跳过。
     if not args.no_scripts:
-        results.extend(fetch_install_scripts(base, install_scripts_dir(), args.keep))
+        results.extend(fetch_install_scripts(base, install_scripts_dir(), args.keep, total))
 
     # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本的来源槽
     # + 安装脚本）**一次收紧**——只收紧一部分时另一半仍是可写的，"落点是只读的"这句话
@@ -1058,10 +1149,13 @@ def main(argv=None):
     kept = [r for r in results if r[1] == "keep"]
     failed = [r for r in results if r[1] == "fail"]
 
+    # 收尾先说一句**总账**：进度行是逐份的流水账，看完那一屏需要一行能核对"这批是不是
+    # 全取到了"的结论，它也是失败清单之前的第一眼。
     print(f"落点: {out_dir}")
     if not args.no_scripts:
         print(f"安装脚本: {install_scripts_dir()}（落点根下）")
     print(f"来源: {base}")
+    print(f"共取 {len(results)} 份，用时 {time.monotonic() - started:.1f}s")
     if unhardened:
         print(f"警告: 落点有 {unhardened} 处**没能收紧成只读**"
               "（多为只读挂载、调用方非属主、落点所在目录已不可写，或 Windows）——"

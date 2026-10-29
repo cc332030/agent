@@ -179,7 +179,9 @@ class CheckSpecsTestCase(unittest.TestCase):
                            "script/specs-rules/list.toml",
                            "script/specs-rules/table.toml",
                            "script/specs-rules/declarative.toml",
-                           "script/specs-rules/ci-cd.toml")
+                           "script/specs-rules/ci-cd.toml",
+                           # 本道（取规范进度与停住窗口）的判据措辞外置在该文件里
+                           "script/specs-rules/progress.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -18578,7 +18580,13 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '  echo "错误: 未找到解释器 python3/python，无法运行 fetch-specs.py" >&2\n'
         '  exit 127\n'
         'fi\n'
-        'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+        '"$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+        'status=$?\n'
+        'if [ -t 0 ]; then\n'
+        '  printf \'\\n按回车键关闭窗口…\'\n'
+        '  read -r _ || true\n'
+        'fi\n'
+        'exit "$status"\n'
     )
 
     def setUp(self) -> None:
@@ -18604,8 +18612,9 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                      b'  echo Error: no python interpreter found 1>&2\r\n'
                      b'  exit /b 127\r\n'
                      b')\r\n'
-                     b'%FETCH_SPECS_RUNTIME% "%~dp0fetch-specs.py" %*\r\n'
-                     b'exit /b %errorlevel%\r\n')
+                     b'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                     b'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                     b'exit /b %FETCH_SPECS_STATUS%\r\n')
         # 入口（**兼具安装口径**）：既有各节要点 + 入口模板代码块（承载"怎么取/取不到怎么办/怎么更新"三要点）
         self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY)
         self.write("README.adoc", "工具 fetch-specs：落点、取回与更新方式见 AGENTS_COMMON.adoc"
@@ -18694,12 +18703,15 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("CRLF", self.error_texts())
 
     def test_bat_exit_code_missing_reports(self):
-        # 反例：入口不返回退出码 → "失败也成功"，调用方无法判定
+        # 反例：入口不返回退出码 → "失败也成功"，调用方无法判定。
+        # 断言取"没把退出码原样交回去"这件事本身（判据用的是 `exit /b %FETCH_SPECS_STATUS%`），
+        # 不钉 `errorlevel` 这个字样——停住用的 `pause` 本身也会改 errorlevel，故判据改成
+        # "先把退出码存下来、再原样返回"（见 `check_spec_fetch_guard` 的 `entry_checks`）。
         self._write_valid()
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
             fh.write(b'@echo off\r\npython3 "%~dp0fetch-specs.py" %*\r\n')
         cm.check_spec_fetch_guard()
-        self.assertIn("errorlevel", self.error_texts())
+        self.assertIn("exit /b %FETCH_SPECS_STATUS%", self.error_texts())
 
     def test_non_atomic_write_reports(self):
         # 反例：退回"直接 wb 覆盖"→ 传输中断会把原有好副本截断成半份
@@ -19429,6 +19441,165 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    self.SCRIPT_PY.replace("不得把本地副本删掉", "落盘前先清空本地"))
         cm.check_spec_fetch_guard()
         self.assertIn("把本地副本删掉", self.error_texts())
+
+
+class TestCheckFetchProgressGuard(CheckSpecsTestCase):
+    """钉住『取规范看得见进度、跑完不关窗口』（用户口径：「fetch-specs 显示文件下载进度及
+    其他明细，下载完成不要关闭窗口」）。
+
+    失效形态：下载几十份却一声不吭、跑完窗口立刻关掉——用户既看不到取了哪些、也来不及看
+    失败清单。两类事实分开核：**进度与明细**在逻辑代码一侧（逐份打完即吐、直接写 stderr 并
+    flush），**跑完停住**在入口一侧（`.sh` 不得用 `exec` 换掉壳——换了之后取退出码与停住那
+    两段一行都不跑；无终端时立刻退出）。两条都是本轮实测的假绿形态。
+    """
+
+    FETCH = "script/fetch-specs.py"
+    SH = "script/fetch-specs.sh"
+    BAT = "script/fetch-specs.bat"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+        self.write_rules_fixture()
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        """把仓库里**真实的那几份**原样落进夹具（判据本体自带正例，不手抄）。"""
+        for rel in (self.FETCH, self.SH):
+            self.write_real_file(rel)
+        # `.bat` 是 CRLF，`write()` 一律按 LF 写，故按字节原样落
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.BAT), "rb") as fh:
+            data = fh.read()
+        with open(os.path.join(self.root, self.BAT), "wb") as fh:
+            fh.write(data)
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_fetch_progress_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_progress_line_removed_reports(self):
+        # 反例：整段进度输出被抽掉（回到"一声不吭跑完"）→ 卡住时什么都没得看
+        self._write_valid()
+        self.write(self.FETCH,
+                   self.read_rel(self.FETCH)
+                   .replace("def _progress(total, rel, state, detail, seconds, counts=True):",
+                            "def _progress_gone(total, rel, state, detail, seconds, counts=True):"))
+        cm.check_fetch_progress_guard()
+        self.assertIn("_progress", self.error_texts())
+
+    def test_flush_removed_reports(self):
+        # 反例：只 write 不 flush → 管道与重定向下攒到进程结束才吐，等于没有进度
+        self._write_valid()
+        self.write(self.FETCH,
+                   self.read_rel(self.FETCH).replace("sys.stderr.flush()", "pass"))
+        cm.check_fetch_progress_guard()
+        self.assertIn("flush", self.error_texts())
+
+    def test_self_lock_note_removed_reports(self):
+        # 反例：把"`threading.Lock` 不可重入、自锁"这条注释删掉 → 下一个人照旧把计数与
+        # 写出分两段取锁，第一份取完整轮挂住而进度行一行都打不出来（本轮实测）
+        self._write_valid()
+        text = self.read_rel(self.FETCH)
+        text = text.replace("不可重入", "可重入").replace("自锁", "顺序")
+        self.write(self.FETCH, text)
+        cm.check_fetch_progress_guard()
+        errs = self.error_texts()
+        self.assertIn("不可重入", errs)
+
+    def test_total_line_removed_reports(self):
+        # 反例：收尾只剩逐份流水账、没有总账 → 人看完那一屏无从核对这批是不是全取到了
+        self._write_valid()
+        self.write(self.FETCH,
+                   self.read_rel(self.FETCH)
+                   .replace('print(f"共取 {len(results)} 份，用时', 'print(f"用时'))
+        cm.check_fetch_progress_guard()
+        self.assertIn("共取 {len(results)} 份", self.error_texts())
+
+    def test_output_section_removed_reports(self):
+        # 反例：头部「输出」整节被摘 → 停住窗口归谁、无终端时怎么办都没有落点
+        self._write_valid()
+        text = self.read_rel(self.FETCH)
+        text = text.replace(
+            "== 输出（用户口径：「显示文件下载进度及其他明细，下载完成不要关闭窗口」）",
+            "== 输出")
+        self.write(self.FETCH, text)
+        cm.check_fetch_progress_guard()
+        self.assertIn("输出", self.error_texts())
+
+    def test_sh_prompt_removed_reports(self):
+        # 反例：`.sh` 跑完就退 → 双击启动的窗口立刻关掉，进度与失败清单来不及看
+        self._write_valid()
+        self.write(self.SH, self.read_rel(self.SH).replace("按回车键关闭窗口", "已结束"))
+        cm.check_fetch_progress_guard()
+        self.assertIn("按回车键关闭窗口", self.error_texts())
+
+    def test_sh_exec_regression_reports(self):
+        # 反例（**本轮实测的假绿形态**）：`.sh` 回到 `exec` 跑逻辑代码 → 壳被换掉，
+        # 后面「取退出码 + 停住」那两段一行都不跑，窗口照旧秒关。
+        self._write_valid()
+        text = self.read_rel(self.SH).replace(
+            '"$runtime" "$script_dir/fetch-specs.py" "$@"',
+            'exec "$runtime" "$script_dir/fetch-specs.py" "$@"')
+        text = text.replace("status=$?", "status=0")
+        self.write(self.SH, text)
+        cm.check_fetch_progress_guard()
+        self.assertIn("status=$?", self.error_texts())
+
+    def test_sh_prompt_without_tty_guard_reports(self):
+        # 反例：不看有没有终端就停住 → 管道/CI 里挂上一个永不返回的命令
+        self._write_valid()
+        self.write(self.SH, self.read_rel(self.SH).replace("[ -t 0 ]", "[ -n \"${HOME:-}\" ]"))
+        cm.check_fetch_progress_guard()
+        self.assertIn("-t 0", self.error_texts())
+
+    def test_retry_counted_as_done_reports(self):
+        # 反例（**review 实测**）：重试那一行也推进分子 → 一份失败重试过的文件会被数两次，
+        # 收尾出现 `[48/47]`，分子与分母对不上，这一屏数字就没法拿来核对。
+        self._write_valid()
+        self.write(self.FETCH,
+                   self.read_rel(self.FETCH)
+                   .replace("counts=False", "counts=True")
+                   .replace('"重试", str(last_err), time.monotonic() - started',
+                            '"重试", "x", time.monotonic() - started'))
+        cm.check_fetch_progress_guard()
+        self.assertIn("counts=False", self.error_texts())
+
+    def test_bat_pause_removed_reports(self):
+        # 反例：`.bat` 跑完就退 → Windows 下双击的窗口立刻关掉
+        self._write_valid()
+        with open(os.path.join(self.root, self.BAT), "rb") as fh:
+            data = fh.read()
+        self._write_bat(data.replace(b" & pause", b""))
+        cm.check_fetch_progress_guard()
+        self.assertIn("pause", self.error_texts())
+
+    def test_bat_status_not_saved_reports(self):
+        # 反例：不先存退出码、直接 `exit /b %errorlevel%` → `pause` 自己会改 errorlevel，
+        # 一次失败会被报成成功（「失败也成功」）
+        self._write_valid()
+        with open(os.path.join(self.root, self.BAT), "rb") as fh:
+            data = fh.read()
+        self._write_bat(data
+                        .replace(b'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n', b"")
+                        .replace(b"exit /b %FETCH_SPECS_STATUS%", b"exit /b %errorlevel%"))
+        cm.check_fetch_progress_guard()
+        self.assertIn("FETCH_SPECS_STATUS", self.error_texts())
+
+    def read_rel(self, rel: str) -> str:
+        with open(os.path.join(self.root, rel), encoding="utf-8", newline="") as fh:
+            return fh.read()
+
+    def _write_bat(self, data: bytes) -> None:
+        with open(os.path.join(self.root, self.BAT), "wb") as fh:
+            fh.write(data)
 
 
 class TestCheckGuardOrderGuard(CheckSpecsTestCase):
