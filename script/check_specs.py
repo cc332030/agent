@@ -462,6 +462,15 @@
      地址换成内网 IP 或域名时没有任何检查会发声。由 `check_local_service_assert_guard` 钉住；
      「这套用例里那条断言跑起来到底拦不拦得住」属运行时事实，以断言件自身的用例为准。
 
+ 103. 路径与运行期取值的唯一真源（**用户提出**）：同一份取值只许有**一处定义**——落点那两层
+     目录名、来源地址、入口与有则取的文件清单、安装脚本名单、网络超时与并发、临时产物与交接
+     文件后缀，全部定义在 `script/specs-config.toml`；执行侧（`script/fetch-specs.py`）与判据侧
+     本脚本的模块级常量一律**从它算出**，代码里不再写第二份字面量；文档不复述取值、只回指。
+     判定标准三段（配置在且必填项齐／两侧常量从配置算出／文档只引一句）。**失效形态**：同一个
+     落点在执行侧常量、判据侧常量、入口模板三处各写一份——脚本换了落点而文档仍写旧路径时，
+     新开实例按文档找不到副本，而全部检查照旧全绿。由 `check_paths_single_source_guard` 钉住；
+     「这些取值定得对不对」属语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -489,6 +498,7 @@ except AttributeError:
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rules_engine  # noqa: E402  （须先补 sys.path：本脚本可能按文件路径被加载）
+import pathconfig   # noqa: E402  （同上）
 
 
 class RulesContext:
@@ -556,6 +566,26 @@ class RulesContext:
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _bootstrap_path_config():
+    """导入期读出运行期配置（路径与运行期取值的唯一真源）：模块级常量要用，不能等 `main()`。
+
+    读不到时返回 `None`，**不在这里报错**——"配置缺失"由 `check_paths_single_source_guard`
+    单独报一条（本函数在导入期、`errors` 还没就位）；其余常量按空串退化，避免导入期直接崩。
+    """
+    try:
+        return pathconfig.load(REPO_ROOT)
+    except pathconfig.ConfigError:
+        return None
+
+
+_PATHCFG = _bootstrap_path_config()
+# 路径与运行期取值的**唯一真源**（`script/specs-config.toml`）：本脚本从这里取值，
+# 不再自己另写一份字面量——同一份落点原先在执行侧、判据侧、文档模板各有一份。
+PATH_CONFIG_REL = pathconfig.CONFIG_REL
+# 公开内容站点：入口模板与取规范脚本的地址由它拼出（同一真源里的 `[source].base_url`）
+PUBLIC_BASE = _PATHCFG.base_url if _PATHCFG else ""
 
 # 规则数据落点：与本脚本同目录的规则**目录**（随 `REPO_ROOT` 走，单测可重定向）。
 def _rules_spec():
@@ -3559,10 +3589,12 @@ def check_install_codeblock():
     # 不含 `= Agent 规范入口` 这类可精炼的标题/小节——入口文档的"最小集"由
     # `specs/general/entry-doc.adoc` 作真源（用户口径：模板以用户手工编辑的形态为准，
     # 不因机械判据往回补标题与三节）。
+    # 两条站内地址由配置里的来源地址拼出（判据不自己留一份地址）
+    site_entry, site_fetch = _site_url("AGENTS_COMMON.adoc"), _site_url("script/fetch-specs.py")
     REQUIRED_LINES = [
         "本项目的 agent 执行规范入口为：",
-        "https://agent.c332030.com/AGENTS_COMMON.adoc",
-        "https://agent.c332030.com/script/fetch-specs.py",
+        site_entry,
+        site_fetch,
         "读取该入口及其引用的 specs/ 规范，并持续遵守其全部要求。",
         "规范属强制约束：**开工前必须先读取规范再执行**，不得因未读取/记不全而跳过或放宽任何条款。",
     ]
@@ -3576,8 +3608,8 @@ def check_install_codeblock():
             err(f"{INSTALL_REL} 模板代码块缺失或行被合并/改写：未找到独立成行的『{s}』"
                 "（模板须逐字原样保留，不得折叠换行）", INSTALL_REL)
 
-    # 同一路径不得在模板里出现两次（**用户点名**：入口模板里
-    # `https://agent.c332030.com/AGENTS_COMMON.adoc` 重复出现）。成因是本仓库实测的
+    # 同一路径不得在模板里出现两次（**用户点名**：入口模板里规范入口那条地址重复出现，
+    # 原话见 `script/specs-config.toml` 头部的用户口径）。成因是本仓库实测的
     # 一次合并：安装口径并入公共入口、`INSTALL.adoc` 被删后，模板里原来指向安装文档的
     # 那一行被改成入口自己的地址——于是同一个 URL 出现两次、对外两个不同名目
     # （"规范入口"与"安装与更新的文档入口"）指向同一份文件，读的人以为有两个落点。
@@ -3600,7 +3632,7 @@ def check_install_codeblock():
         install_text = fh.read()
     # 取规范脚本路径须在模板正文里（缺它时新实例不知道如何去下载规范）
     for key, desc in (
-            ("https://agent.c332030.com/script/fetch-specs.py",
+            (site_fetch,
              "取规范脚本路径须写进入口模板——缺它时新实例不知道如何去下载规范"),):
         if key not in install_text:
             err(f"{INSTALL_REL} 入口模板缺『{key}』——{desc}", INSTALL_REL)
@@ -3727,10 +3759,10 @@ INSTALL_FETCH_SOURCE_POINT = "头部注释"
 INSTALL_FETCH_SECTION = "取规范到本地副本"
 # 副本落点：同一条要点可以有多种等价写法，故按**要点**核、不核某一种写法的字面值——
 # 『用户家目录』与『用户路径』同指用户家目录（`~` 的写法亦然）；核字面值时一次措辞精炼
-# 就会让判据空转（本仓库实测：那句话被压成 `~/.cache/agent-specs` 后旧字面判据报红，
+# 就会让判据空转（本仓库实测：那句话被压成落点的 `~/<落点>` 写法后旧字面判据报红，
 # 而"落点只有一处"这条要求本身并未被削弱）。
 HOME_WORDINGS = ("用户家目录", "用户路径", "家目录", "~")
-LANDING_NAME = ".cache/agent-specs"
+# 落点那一串从配置取（同 `check_entry_doc_manifest` 一节的同名常量）：判据侧不另写一份
 INSTALL_NO_PYTHON_POINTS = (
     (("装一个 python 3",), "须给第一条处置：按本平台既有的软件分发方式装一个 python 3（并说明"
                         "脚本自身**不得代为安装**）"),
@@ -3837,11 +3869,17 @@ def _check_install_no_python_section():
                         if l.strip() and l.strip() != "----"]
     for keys, desc in INSTALL_FETCH_POINTER_KEYS:
         if keys == ("__home_wording__",):
-            if not any(any(k in line for k in HOME_WORDINGS) and LANDING_NAME in line
-                       for line in lines_in_section):
+            # 落点那一条的**收敛形态**：要么写全落点（用户侧词 + 落点串同行），要么写"落在
+            # 用户家目录下的一处"+ 指向运行期配置（唯一真源）的回指——后者是本轮去重后的
+            # 形态：路径取值只有配置一处定义，文档复述一遍就是第二个来源。
+            written = any(any(k in line for k in HOME_WORDINGS) and LANDING_NAME in line
+                          for line in lines_in_section)
+            pointed = any(any(k in line for k in HOME_WORDINGS) and PATH_CONFIG_REL in line
+                          for line in lines_in_section)
+            if not (written or pointed):
                 err(f"{INSTALL_REL}『{INSTALL_FETCH_SECTION}』一节缺失落点（"
-                    f"{'、'.join(HOME_WORDINGS)} 任一写法须与 `{LANDING_NAME}` "
-                    "落在同一行上）——" + desc, INSTALL_REL)
+                    f"{'、'.join(HOME_WORDINGS)} 任一写法须与 `{LANDING_NAME}` 或"
+                    f"`{PATH_CONFIG_REL}`（唯一真源）落在同一行上）——" + desc, INSTALL_REL)
             continue
         if not any(all(k in line for k in keys) for line in lines_in_section):
             err(f"{INSTALL_REL}『{INSTALL_FETCH_SECTION}』一节缺失 {list(keys)}"
@@ -4015,8 +4053,7 @@ def check_shared_cache_guard():
         # 正向判据：这些要点必须在（缺一即"只有这一个落点"无从谈起）
         for desc, keys in (
                 ("落点须由用户家目录算出（不分系统、不分环境，只有这一处）",
-                 ("expanduser", "CACHE_HOME_DIR", "CACHE_APP_DIR",
-                  "CACHE_HOME_DIR, CACHE_APP_DIR")),
+                 ("expanduser", "LANDING_REL", "*LANDING_REL")),
                 ("家目录取不到时须报错退出、不得静默换地方",
                  ("not os.path.isdir", "raise ValueError")),
                 ("Windows 的个人目录须**当刻现取**（KnownFolder 在注册表里随改随取），"
@@ -4060,12 +4097,14 @@ def check_shared_cache_guard():
     # 怎么再取一次"的工序侧唯一真源）。其余文档**不得再抄一遍落点路径** —— 抄一份即多一个漂移点，
     # 而"抄过来的那句"与真源不一致时，读者无从判断以哪处为准（用户本轮点名：
     # "依旧有很多相同的描述在不同的地方，不满足精炼性的要求"）。
-    # 判据按**要点**核：要么自己写出落点（用户侧词 + 落点名同现），要么给出指向真源的
-    # 引用；既不写落点、也不给引用（只留"用户级缓存"这类笼统说法）即报红。
+    # 判据按**要点**核：要么自己写出落点（用户侧词 + 落点名同现），要么写成"用户家目录下的
+    # 那一处"+ 回指 `PATH_CONFIG_REL`（取值本身只有一处定义，复述一遍就是第二个来源）——
+    # 两条都算"写明了落点"；既不写、也不给引用（只留"用户级缓存"这类笼统说法）即报红。
     for rel, desc, landing_owner in (
         (INSTALL_REL,
          "公共入口的「取规范到本地副本」是本落点与取回方式的**唯一真源**：它必须自己写明落点"
-         "（用户家目录/用户路径下的 `.cache/agent-specs`），不得改成指向别处的引用",
+         f"（{HOME_WORDINGS[0]}/用户路径下的那一处，或同处回指 `{PATH_CONFIG_REL}`），"
+         "不得改成指向别处的引用",
          True),
         ("README.adoc",
          "README 的取法说明须让读者知道副本落在哪：写明落点，或给出指向入口的引用",
@@ -4078,11 +4117,12 @@ def check_shared_cache_guard():
         if not os.path.isfile(path):
             continue
         text = open(path, encoding="utf-8").read()
-        written = LANDING_NAME in text and any(k in text for k in HOME_WORDINGS)
+        written = (any(k in text for k in HOME_WORDINGS)
+                   and (LANDING_NAME in text or PATH_CONFIG_REL in text))
         referenced = LANDING_REFERENCE_MARKER in text
         if landing_owner and not written:
-            err(f"取规范落点防线被破坏：{rel} 未写明落点"
-                f"（用户家目录/用户路径下的 `{LANDING_NAME}`）——{desc}", rel)
+            err(f"取规范落点防线被破坏：{rel} 未写明落点（用户家目录/用户路径下的那一处，"
+                f"或同处回指 `{PATH_CONFIG_REL}`）——{desc}", rel)
         elif not landing_owner and not written and not referenced:
             err(f"取规范落点防线被破坏：{rel} 既未写明落点、也未指向真源——{desc}；"
                 "按『同一描述只写一处』它只该给一行引用"
@@ -4094,6 +4134,288 @@ def check_shared_cache_guard():
                 f"（真源＝`{INSTALL_REL}`「取规范到本地副本」），"
                 f"引用须含『{LANDING_REFERENCE_MARKER}』", rel)
     phase_done()
+
+
+# ---- 『路径与运行期取值的唯一真源』（配置一处定义，执行侧与判据侧都来取）----
+# 本道防线的**核对对象**是"同一份取值有没有长出第二份来源"：原先同一个落点在三处各有一份
+# ——执行侧 `script/fetch-specs.py` 的常量（权威）、判据侧本脚本的 `LANDING_NAME`（自己另写
+# 一份）、人的约定（入口模板里那一行路径）。三处各自漂移时没有任何东西报红：脚本换了落点、
+# 文档仍写着旧路径，新开实例按文档找不到副本，而全部检查照旧全绿。
+#
+# 故判据分三段（缺一段都会让"唯一真源"退化成一句声明）：
+#   ① **配置在、必填项齐**：`script/specs-config.toml` 是唯一定义处，缺项即报；
+#   ② **两侧都来取**：执行侧与判据侧的模块级常量必须是**从配置算出来的**，不得就地写字面量
+#      ——这是本条的核心：配置写了却没人读，等于第二份来源还在（只是换了个地方藏）；
+#   ③ **文档只引一句**：入口与项目规范**不得复述**那些取值（复述即第二个来源），
+#      须用一行回指指向配置。
+# 边界（如实标注）：本道防线核**形态**（有没有第二份、是不是从配置算的），不核"这个取值
+# 定得对不对"——那属语义判断，交人/子 agent 复核。
+PATH_CONFIG_KEYS = (
+    (("landing", "home_dir"), "落点父目录名（家目录下第一层）"),
+    (("landing", "app_dir"), "落点目录名（家目录下第二层）"),
+    (("source", "base_url"), "规范来源的默认地址"),
+    (("manifest", "entry"), "取文件清单的来源文件（入口文档）"),
+    (("manifest", "optional"), "有则取的文件清单"),
+    (("scripts", "all"), "随规范分发的安装脚本名单"),
+    (("scripts", "entry"), "其中给人直接敲的入口（取完补可执行位）"),
+    (("network", "timeout_seconds"), "单次请求超时"),
+    (("network", "workers"), "并发请求数"),
+    (("temporary", "dir"), "临时产物根目录名"),
+)
+# 执行侧与判据侧各自的**接线形态**：模块级常量必须从配置读出的对象上取值。
+# 核的是"取"这个动作本身——只核配置里有键、不核有没有人读时，配置可以写完就没人用，
+# 而脚本里悄悄写回字面量也不报红（本仓库实测过的空转形态）。
+PATH_CONFIG_WIRING = (
+    ("script/fetch-specs.py", "_PATHCONFIG",
+     ("DEFAULT_BASE", "CACHE_HOME_DIR", "CACHE_APP_DIR", "MANIFEST_FILE",
+      "INSTALL_SCRIPTS", "TIMEOUT_SECONDS", "DEFAULT_WORKERS", "SELF_TMP_DIR")),
+    ("script/check_specs.py", "_PATHCFG",
+     ("LANDING_NAME", "PUBLIC_BASE")),
+)
+# 不得在代码里再写一份的**落点字面量**（出现即报：同一份取值长出第二处定义）。
+# 判据只针对"落点"这一处最容易被复述的取值：另两项（来源地址、脚本名单）改动频率低、
+# 且各自还有别处正当引用（文档里那条地址是给人点的链接），故不并入本组。
+# 字面量本身也由配置拼出（本判据不得自己再抄一份——那正是它要治的形态）：路径两段各加引号。
+# 判据对象是"**落点整串**"（`<home_dir>/<app_dir>`）：只核其中一段会把"落在哪"判丢——
+# 两段各写一处、中间换个斜杠都算没复述，而读者要的正是那条完整路径。
+PATH_CONFIG_FORBIDDEN_LITERALS = (
+    ((_PATHCFG.landing_name if _PATHCFG else ""), "落点路径的字面量"),)
+# 文档侧：这几份**不得复述**落点取值（它们都要谈副本落在哪，故最容易被抄一份），
+# 每一份须给出指向配置的回指（含 `PATH_CONFIG_REL` 那一串）。
+PATH_CONFIG_DOCS = (
+    ("AGENTS_COMMON.adoc", "公共入口（含安装与取回口径）"),
+    ("README.adoc", "读者入口清单"),
+    ("AGENTS.adoc", "本仓库项目自身规范入口"),
+)
+# 正文里**不得复述**的取值清单与"算作回指"的标记（清单在 `_tokens.toml`，本节不写取值本身）。
+# 为什么单列这一段：代码侧只核"常量是不是从配置算的"，而**文档、脚本注释、规则数据、维护方
+# 台账**同样是正文——本仓库实证：代码侧收敛之后，配置注释、读取层文档头、台账那一行仍各抄
+# 一份，改配置时它们必然静默漂移，而检查全绿。故这一段把"复述"本身做成可核对的。
+PATH_VALUE_SOURCES = _RULES_TOKENS["PATH_VALUE_SOURCES"]
+# 判据本体那一节的锚点组（规则数据按名引用同一份：夹具核"这一节在"时也取它，
+# 不另抄一份锚点——抄一份就是本条要治的第二份来源）
+PATH_VALUE_GUARD_ANCHORS = _RULES_TOKENS["PATH_VALUE_GUARD_ANCHORS"]
+# 复述的扫描面。**回指标记（`PATH_VALUE_CITES`）不在这一侧取**：判"同一段里有没有回指"的
+# 是引擎的 `prose_mentions`，标记由规则数据直接喂给它——判据侧再取一份就是第三份来源
+# （本仓库实证：取了却没人用，改规则数据时它只会静默漂移）。
+# 另加**公共入口模板里的地址表**：模板是**给新实例照抄的"下一站"**（它照着那里去取规范，
+# 那时项目里还没有配置可读），不是"对某个取值的复述"。把它判成复述，等于要求给新实例一张
+# 写着"地址见配置"的空表——那份配置正是它还没下载的东西。故这一份不进扫描面
+# （同一地址在该块里出现两次属另一件事，由 `check_install_codeblock` 核）。
+PATH_VALUE_PROSE_SOURCES = _RULES_TOKENS["PATH_VALUE_PROSE_SOURCES"]
+PATH_VALUE_PROSE_EXEMPT = (INSTALL_REL,)
+# 判据只对"有辨识度的那一串"成立：过短的取值在正文里到处都是，命中它是巧合、不是复述
+# （本仓库实测：临时目录名只有三个字母，`tmp_dir`/`tmp/` 一类字样在全库到处出现）。
+PROSE_VALUE_MIN_LEN = 4
+
+
+def check_paths_single_source_guard():
+    """『路径与运行期取值的唯一真源』：配置一处定义，执行侧与判据侧都来取，文档只引一句。
+
+    用户口径：『系统里配置、日志等涉及到的路径信息，应该是唯一真源，不能每个地方写一份』
+    『类似这样的信息应该放配置里，然后配置的路径可以再定义（也是唯一真源）』。
+
+    判据三段（见上方 `PATH_CONFIG_*` 的说明）：配置在且必填项齐 / 两侧常量从配置算出 /
+    文档不复述取值、只回指。**为什么不能只核第一段**：配置写全了而没人读时，"唯一真源"
+    只是一句声明——脚本里那份字面量照旧生效，改配置不改变任何行为（本仓库实测的形态：
+    声明与执行分家，两处各自漂移而检查全绿）。
+    """
+    phase("路径与运行期取值唯一真源检查")
+    # 现场读一次本轮的配置：**核这一次**的取值（导入期那份可能与现场的仓库无关——
+    # 单测把仓库指到夹具后，判据若仍用导入期那份，就是"对着旧值核、核过与否都不说明任何事"）。
+    # 读不出来时退回导入期那份：缺配置/缺项由下面 ① 单独报，不在这里重复。
+    try:
+        live_cfg = pathconfig.load(REPO_ROOT)
+    except pathconfig.ConfigError:
+        live_cfg = _PATHCFG
+
+    # 判据本体的措辞（通用条 + 本仓库落点那一段）全在规则数据里，改措辞不动脚本；
+    # 本函数只保留**取值接线**（哪几处常量必须从配置算、正文不许复述、读取层就近优先）——
+    # 那几件事的原语在引擎里（`prose_mentions` 等），措辞在 `values.toml`。
+    # ① 配置在、必填项齐（缺项时执行侧与判据侧的同名常量会各自退回自己的默认值）
+    # **判据本体那一节**（`specs/general/coding.adoc`「取值的唯一来源」）由规则数据核——
+    # 但规则数据按**现场仓库根**取文件：把规则步骤放在本函数最前面时，单测换到夹具根后
+    # 拿真实仓库的规则去核夹具、报红与"核过且通过"就分不清了；故先核本函数自己那几件
+    # 可机械核对的事实，再跑规则步骤（它认的根与本节其余各段一致）。
+    cfg = live_cfg
+    if cfg is None:
+        err(f"缺少或读不出运行期配置 `{PATH_CONFIG_REL}`——路径与运行期取值只有这一处来源，"
+            "配置不在时执行侧与判据侧只能各写各的（那正是本条要治的形态）", PATH_CONFIG_REL)
+    else:
+        for (section, key), desc in PATH_CONFIG_KEYS:
+            table = getattr(cfg, "_data", {}).get(section)
+            if not isinstance(table, dict) or key not in table:
+                err(f"运行期配置 `{PATH_CONFIG_REL}` 缺少必填项 `[{section}].{key}`——{desc}；"
+                    "缺项时调用方不得自己补一个默认值，否则同一取值重新长出第二份来源",
+                    PATH_CONFIG_REL)
+    # ② 两侧常量必须是**从配置算出来的**（不是就地写字面量）
+    for rel, holder, names in PATH_CONFIG_WIRING:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少 {rel}——取值接线（哪几个常量从配置取）无从核对", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for name in names:
+            m = re.search(rf"^{name} = (.+)$", text, re.M)
+            if not m:
+                err(f"{rel} 里没有模块级常量 `{name}`——取值接线断裂：它应当从配置读出的"
+                    f"`{holder}` 上取，少了它这一段接线就没人核", rel)
+                continue
+            if holder not in m.group(1):
+                err(f"{rel} 的 `{name}` 不是从配置（`{holder}`）取的值：`{m.group(1).strip()}`——"
+                    "路径与运行期取值只有 `"
+                    f"{PATH_CONFIG_REL}` 这一处来源，就地写字面量即第二份来源"
+                    "（改配置不改变行为，而检查照旧全绿）", rel)
+    # ②-b 落点那两个字面量不得在代码里再出现（出现即第二处定义）
+    for rel in ("script/fetch-specs.py", "script/check_specs.py"):
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for literal, desc in PATH_CONFIG_FORBIDDEN_LITERALS:
+            if literal and literal in text:
+                err(f"{rel} 里又出现了 {literal}——{desc}；落点只有 `{PATH_CONFIG_REL}`"
+                    " 这一处定义，代码里再写一份即两处各自漂移", rel)
+    # ③ 文档不复述取值、只回指（复述即第二个来源：改配置必漏文档）
+    for rel, desc in PATH_CONFIG_DOCS:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        if not any(literal in text for literal, _desc in PATH_CONFIG_FORBIDDEN_LITERALS):
+            # 落点那两段字面量都不出现：要么已经收敛成回指，要么根根本没写落点
+            # （后者由 `check_shared_cache_guard` 单独核，此处只核"回指有没有给"）
+            continue
+        if PATH_CONFIG_REL not in text:
+            err(f"{rel}（{desc}）里写着落点路径、却没有指向 `{PATH_CONFIG_REL}` 的回指——"
+                "同一份取值写在两处，两处必然各自漂移；收敛形态是**配置一处定义 + 文档一句回指**",
+                rel)
+    # ④ 正文一律不复述取值（文档、脚本注释、规则数据、维护方台账都算正文）
+    _check_path_values_not_restated(cfg)
+    # ⑤ 配置随分发物走时，读取层须就近找得到它
+    _check_config_beside_module()
+    # ⑥ 判据本体那一节（通用条）的要点仍在（规则数据 `script/specs-rules/values.toml`）
+    run_rule_guard("check_paths_single_source_guard")
+    phase_done()
+
+
+def _path_values(cfg=None):
+    """把 `PATH_VALUE_SOURCES` 里的**键名**换成现场取值（清单里不写取值，值只从配置来）。
+
+    `cfg` 不给时用导入期读到的那一份（模块级常量那一侧）；**核这一次**的取值时由调用方把
+    "当场读到的那一份配置"传进来——用导入期的那份核，换一份配置跑时判据对着旧值核，
+    核过与否都不说明任何事（本仓库实测：单测把配置指向夹具后，判据仍在核真实仓库的取值）。
+    """
+    cfg = _PATHCFG if cfg is None else cfg
+    if cfg is None:
+        return []
+    out = []
+    for name, origin, desc in PATH_VALUE_SOURCES:
+        getter = {"landing_home_dir": lambda c: c.landing_home_dir,
+                  "landing_app_dir": lambda c: c.landing_app_dir,
+                  "base_url": lambda c: c.base_url,
+                  "tmp_dir": lambda c: c.tmp_dir,
+                  "self_update_suffix": lambda c: c.self_update_suffix,
+                  "self_handoff_suffix": lambda c: c.self_handoff_suffix}.get(name)
+        if getter is None:
+            err(f"规则数据 `PATH_VALUE_SOURCES` 里有一个核不到的键 `{name}`——"
+                "取值清单与读取层的能力须一一对应，否则该取值没有任何抓手",
+                "script/specs-rules/_tokens.toml")
+            continue
+        try:
+            value = getter(cfg)
+        except pathconfig.ConfigError:
+            # 缺项已由「配置在、必填项齐」那一段报过；这里不得再崩一次
+            # （判据崩掉与"核过且通过"在输出上都是"没报这一条"）
+            continue
+        out.append((value, origin, desc))
+    return out
+
+
+def _check_path_values_not_restated(cfg=None):
+    """正文里**只许回指、不许复述**取值：同一段落里没有指向定义处的引用即报红。
+
+    判据是**引用形态**（提真源的名字），不是"这些字不许出现"——谈这件事的地方天然要提它；
+    要治的是"提了、却没引真源"的那一处。粒度取**段落**：按整份文件判时，同文件里另一处
+    给了回指就会把复述那一处兜住（本仓库实测）。
+    """
+    values = _path_values(cfg)
+    if not values:
+        return
+    for rel in PATH_VALUE_PROSE_SOURCES:
+        if rel in PATH_VALUE_PROSE_EXEMPT:
+            continue
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for value, origin, desc in values:
+            # 太短的值（几个字符）在正文里到处都是，命中它等于把整份文档判红——
+            # 那不是"复述"，只是碰巧同形。判据只对"有辨识度的那一串"成立。
+            if not value or len(value) < PROSE_VALUE_MIN_LEN:
+                continue
+            if value not in text:
+                continue
+            err(f"正文里复述了「{desc}」——取值只有 {origin} 这一处定义，正文再写一遍即"
+                "第二个来源（改配置必漏这里，而这里永远不会报红）；收敛形态是"
+                "**一句回指**", rel)
+            break
+
+
+# 读取层（`pathconfig.py`，配置的唯一读取实现）的文件名：执行侧要先加载它才读得到配置，
+# 故它须与执行脚本一起进配置的分发名单。判据只按**文件名**比对，不写死目录。
+PATHCONFIG_MODULE_NAME = "pathconfig.py"
+
+
+def _check_pathconfig_distributed():
+    """读取层（`pathconfig.py`）须在配置的**分发名单**里：执行侧要先加载它才读得到配置。
+
+    失效形态（本仓库实测）：名单只列执行脚本与两个壳时，落点根下有 `fetch-specs.py` 与配置、
+    却没有读取层——从落点再跑一次直接 `ModuleNotFoundError`，而它在仓库里跑得好好的。
+    判据按**要点**核：`[scripts].all` 里须有一条指向读取层（比对文件名，不写死目录）。
+    """
+    try:
+        cfg = pathconfig.load(REPO_ROOT)
+        scripts = tuple(cfg.install_scripts)
+    except pathconfig.ConfigError:
+        return  # 配置缺失/缺项由「配置在、必填项齐」那一段单独报，不在本处重复
+    module_name = PATHCONFIG_MODULE_NAME
+    if not any(os.path.basename(str(rel)) == module_name for rel in scripts):
+        err(f"运行期配置 `{PATH_CONFIG_REL}` 的 `[scripts].all` 里没有读取层 `{module_name}`——"
+            "执行侧要先加载它才读得到配置，只分发执行脚本与壳时，落点里再跑一次当场"
+            "`ModuleNotFoundError`（而仓库里跑得好好的）", PATH_CONFIG_REL)
+
+
+def _check_config_beside_module():
+    """配置随分发物走时，读取层须**先找与自己同处的那一份**（否则被分发出去的那一份读不到）。
+
+    判据是"取值跟着自己走"：`pathconfig.py` 与其加载函数须有"同处优先"这一路——只按仓库内
+    相对路径找时，配置被一起取到落点根下、读取层在落点里跑，当场退出（本仓库实测过的路径）。
+    还有一件事同属这条：**读取层本身也在分发名单里**——执行侧要先加载它才读得到配置，
+    只取执行脚本+壳时，落点里跑起来当场 `ModuleNotFoundError`（本仓库实测过的形态）。
+    """
+    _check_pathconfig_distributed()
+    rel = "script/pathconfig.py"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        # 读的是**判据侧自己**那一份实现（本仓库的读取层），不是被测项目的文件：
+        # 夹具根里通常不备它，此时读真实仓库那一份、而不是把"夹具没建它"报成违规。
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            os.path.basename(rel))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——读取层不在，配置随分发物走时无从取值", rel)
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    for token, why in (
+            ("def config_beside_module(", "读取层没有「同处优先」的实现——配置被一起分发到别处时读不到"),
+            ("config_beside_module() or config_path(root)", "加载函数没有走「同处优先」这一路")):
+        if token not in text:
+            err(f"{rel} 缺少 `{token}`——{why}", rel)
 
 
 ENTRY_PLACEHOLDER_LINES = (
@@ -4150,25 +4472,36 @@ ENTRY_DOC_SPEC = "specs/general/entry-doc.adoc"
 # 入口模板里须能一站直达的三条路径（按字面核——它们是"下一站"的地址，少了任何一条，
 # 新实例就只能回来问用户或自己猜）。核的是**路径本身在不在模板正文**，**不核它挂在哪
 # 一节**——模板的小节结构以用户手工编辑的形态为准（用户已点名不要那三节）。
+# 站内地址由配置里的来源地址拼出（来源地址只有 `script/specs-config.toml` 一处定义，
+# 本处不再各写一份字面量：改了来源、判据跟着走，而不是判据把旧地址按在模板里）。
+def _site_url(rel):
+    """站内文件地址：来源地址 + 仓库内相对路径（来源地址取自配置）。"""
+    return f"{PUBLIC_BASE}/{rel}" if PUBLIC_BASE else ""
+
+
 ENTRY_DOC_PATH_POINTS = (
-    ("https://agent.c332030.com/AGENTS_COMMON.adoc", "规范路径（本项目的执行规范入口，安装与取回口径也在其中）"),
-    ("https://agent.c332030.com/script/fetch-specs.py", "取规范脚本路径（下一次怎么下载规范）"),
+    (lambda: _site_url("AGENTS_COMMON.adoc"), "规范路径（本项目的执行规范入口，安装与取回口径也在其中）"),
+    (lambda: _site_url("script/fetch-specs.py"), "取规范脚本路径（下一次怎么下载规范）"),
 )
 # 副本落点与取回方式两要点（按模板正文核，不依赖小节标题）
 # 同一条要点可以有多种等价写法，故判据按**要点**核、不核某一种写法的字面值：
-# 『用户家目录』与『用户路径』同指用户家目录（`~` 的写法亦然）；`~/.cache/agent-specs`
-# 与『用户家目录下的 `.cache/agent-specs`』同理。核字面值时，一次措辞精炼就会让判据空转
-# （本轮实测：模板那行由「用户家目录下的 `.cache/agent-specs`」压成 `~/.cache/agent-specs`
+# 『用户家目录』与『用户路径』同指用户家目录（`~` 的写法亦然）；`~/<落点>` 这种写法
+# 与『用户家目录下的 `<落点>`』同理。核字面值时，一次措辞精炼就会让判据空转
+# （本轮实测：模板那行由「用户家目录下的 `<落点>`」压成 `~/<落点>`
 # 后，旧字面判据报红，而"落点只有一处"这条要求本身并未被削弱）。
 HOME_WORDINGS = ("用户家目录", "用户路径", "家目录", "~")
 # 落点"指向真源"的识别特征：同一描述只写一处，其余位置给一行引用时必须点名真源
 # （公共入口「取规范到本地副本」是落点与取回方式的唯一真源）。判据按要点核、
 # 不核句式——"唯一真源/唯一落点/见（公共入口）…"任一形态都算给了引用。
 LANDING_REFERENCE_MARKER = "唯一真源"
-LANDING_NAME = ".cache/agent-specs"
+# 落点那一串**从配置取**（`script/specs-config.toml` 的 `[landing]`，唯一真源）：判据侧不再
+# 自己另写一份——原先这里有一份与本脚本常量并列的字面值，那正是"路径各写一份"的形态。
+# 取不到配置时按空串处理（由 `check_paths_single_source_guard` 单独报"配置缺失"，
+# 不在本处重复报同一件事）。
+LANDING_NAME = _PATHCFG.landing_name if _PATHCFG else ""
 ENTRY_DOC_COPY_POINTS = (
     (HOME_WORDINGS,
-     "落点：用户家目录/用户路径下的 `.cache/agent-specs`（只有这一个）"),
+     f"落点：用户家目录/用户路径下的 `{LANDING_NAME or '<home_dir>/<app_dir>'}`（只有这一个）"),
     (("fetch-specs", "再运行一次"), "取回与更新方式：脚本名 + 「再运行一次即是更新」"),
 )
 # 「判据与工序分家」的**单一真源声明**（去重要求的机械抓手）：同一件事的两半各有唯一落点——
@@ -4261,17 +4594,25 @@ def check_entry_doc_manifest():
     #   * 路径链（规范入口 / 取规范脚本）——新实例要能一站直达；
     #   * 副本落点（用户侧词 + 落点名同现）与取回/更新方式——新实例据此定位副本。
     # 判据按**要点**核、不核某一种写法的字面值（措辞精炼不该报红，笼统说法才该报红）。
-    for key, desc in ENTRY_DOC_PATH_POINTS:
+    for make_key, desc in ENTRY_DOC_PATH_POINTS:
+        key = make_key()
+        if not key:
+            err(f"{INSTALL_REL} 核不到站内地址——来源地址只定义在 `{PATH_CONFIG_REL}` 里，"
+                "配置缺失时这条判据无从核对（不得退回写死的地址，那就是第二份来源）",
+                INSTALL_REL)
+            continue
         if key not in body:
             err(f"{INSTALL_REL} 入口模板缺失 {key}——{desc}；入口文档要能一站直达这些路径，"
                 "缺一条时新实例就不知道该去哪儿重装/更新/怎么下载规范"
                 "（用户实测点名：取规范脚本没进入口文档）", INSTALL_REL)
-    if LANDING_NAME not in body or not any(k in body for k in HOME_WORDINGS):
+    if not any(k in body for k in HOME_WORDINGS) \
+            or not (LANDING_NAME in body or PATH_CONFIG_REL in body):
         err(f"{INSTALL_REL} 入口模板未写明副本落点"
-            "（用户家目录/用户路径下的 `.cache/agent-specs`）——新实例是靠模板里这一处去定位"
-            "副本的，只写『用户级缓存』这类笼统说法时它仍要猜路径；判据是用户侧词"
-            f"（{list(HOME_WORDINGS)} 之一）与 `{LANDING_NAME}` 同现，"
-            "只出现其中一个时该要求已被换成别的说法，机械判据随之空转", INSTALL_REL)
+            f"（用户家目录/用户路径下的那一处，或同处回指 `{PATH_CONFIG_REL}`）——"
+            "新实例是靠模板里这一处去定位副本的，只写『用户级缓存』这类笼统说法时它仍要猜路径；"
+            f"判据是用户侧词（{list(HOME_WORDINGS)} 之一）与 `{LANDING_NAME}` 或"
+            f"`{PATH_CONFIG_REL}` 同现，只出现其中一个时该要求已被换成别的说法，"
+            "机械判据随之空转", INSTALL_REL)
     for keys, desc in ENTRY_DOC_COPY_POINTS:
         if keys is HOME_WORDINGS:
             continue  # 落点已单独核过
@@ -4454,8 +4795,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 176  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2374  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本 PR 内 `TestTestDataDesensitizeGuard` 由 14 条扩到 15 条（脱敏判据本体迁到通用层，反例按「换法/范围/落点/截图/依据/一跳引用/载体」逐组抽锚点），复审轮把被回退的 3 条用例补回（`test_writable_bit_restore_removed_reports`、`TestFetchSpecsSwapOnReadOnlyRealScript` 2 条），见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 177  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_paths_single_source_guard`；上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2394  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -13196,6 +13537,7 @@ CHECKS = (
     check_fetch_progress_guard,
     check_shared_cache_guard,
     check_readonly_landing_guard,
+    check_paths_single_source_guard,
     check_entry_doc_manifest,
     check_install_repeat_update_guard,
     check_guard_manifest,

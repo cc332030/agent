@@ -1,0 +1,25 @@
+# 『取值的唯一来源』规则数据（`check_paths_single_source_guard`）。
+#
+# 用户口径：『系统里配置、日志等涉及到的路径信息，应该是唯一真源，不能每个地方写一份』
+# 『类似这样的信息应该放配置里，然后配置的路径可以再定义』『我说的不单单是那几个脚本，
+# 而是**以后所有的开发**』。第三句把这件事从"本仓库的几个脚本"抬成**通用判据**——故判据本体
+# 在 `specs/general/coding.adoc`「取值的唯一来源」，本文件只服务它在**本仓库**的落点。
+#
+# 一类规则一个文件（按被测落点切分）：本文件放**判据本体的锚点引用**，而"取值接线"
+# "正文不许复述""读取层就近优先"几件事是**脚本里现场核的**（不是规则步骤）——它们的原语是
+# 引擎的 `prose_mentions`，**取值清单与回指标记**同处本目录的 `_tokens.toml`
+# （`PATH_VALUE_SOURCES` / `PATH_VALUE_CITES` / `PATH_VALUE_PROSE_SOURCES` /
+# `PATH_VALUE_GUARD_ANCHORS`），脚本按名引用同一份、这里不再各指一处。
+# 本文件不写取值本身（写进来就是第二个来源）。
+
+# ① 判据本体：通用条（识别判据 + 六条 L1 + 三条例外 + 存量边界 + 依据行）。
+# 核的是这一节自己的正文，不是"这一节在不在"——只核存在性时，把"文档只引一句、不复述取值"
+# 抽走照样全绿。
+[[guards.check_paths_single_source_guard]]
+file = "specs/general/coding.adoc"
+section = "取值的唯一来源（配置、路径、常量、名单、阈值——任何会被两处用到的取值）"
+kind = "section_groups"
+# `groups_source`：锚点组从 `_tokens.toml` 的同名清单取（与 `token_list` 同义，
+# 这个名字说明它是「另一份数据里的清单」而不是就地展开的组）
+groups_source = "PATH_VALUE_GUARD_ANCHORS"
+message = "『取值的唯一来源』防线被破坏：{file} 该节缺失要点 {missing}——{desc}；该条对应用户口径（取值只许一处、出处可再定义、**以后所有的开发**都按它办），不得删除、不得降级"

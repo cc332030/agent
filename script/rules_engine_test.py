@@ -907,6 +907,45 @@ class TestPointerNoVerbatim(unittest.TestCase):
         self.assertEqual(self._run({"doc.adoc": doc, "assets/a.png": png}), [])
 
 
+class TestProseMentions(unittest.TestCase):
+    """『同一取值被正文复述』原语：正文里出现取值即报红，除非同一段落里给了**回指**。
+
+    判据刻意是"引用形态"（提真源的名字）而不是"这些字不许出现"——谈这件事的地方天然要提它，
+    要治的是**只提及、不引真源**的那一处（那才是第二份来源）。故用例覆盖两向：
+    复述且无回指即报、同一段落有回指即放行、回指写在**别的段落**不算。
+    """
+
+    def _run(self, text, **extra):
+        step = {"kind": "prose_mentions_generated", "file": "a.toml",
+                "values": extra.pop("values", ["agent-specs", "30 秒"]),
+                "cite_tokens": extra.pop("cite_tokens", ["specs-config.toml"]),
+                "message": "{file} 复述了 {hit} 而未回指 {cite}"}
+        step.update(extra)
+        ctx = FakeCtx({"a.toml": text})
+        _rules({"g": [step]}, ctx).run("g")
+        return ctx.errors
+
+    def test_value_without_cite_reports(self):
+        # 两个取值同一段里各报一条（判据按"取值"逐项算，一处漏复述不漏另一处）
+        errs = self._run("# 落点＝agent-specs，超时 30 秒\n")
+        self.assertEqual(len(errs), 2)
+        self.assertIn("agent-specs", errs[0][1])
+
+    def test_value_with_cite_in_same_paragraph_passes(self):
+        # 同一段里给了回指：提这件事可以、取值去真源读
+        self.assertEqual([], self._run("# 落点与超时见 `specs-config.toml`（不复述取值）\n"))
+
+    def test_cite_in_other_paragraph_does_not_excuse(self):
+        # 回指写在**别的段落**：复述那一处仍算第二份来源（按整份文件判会把它兜住）
+        text = "取值见 `specs-config.toml`。\n\n# 落点就是 agent-specs。\n"
+        errs = self._run(text)
+        self.assertEqual(len(errs), 1)
+
+    def test_absence_passes(self):
+        # 一处都没提：不是本节的事，不报（防"没写也算违规"）
+        self.assertEqual([], self._run("# 本文件不谈落点\n"))
+
+
 class TestSeparationInvariants(unittest.TestCase):
     """『规则与脚本的隔离』的确定项：规则数据是纯数据、一类规则一个文件、引擎不承载措辞。"""
 

@@ -13,7 +13,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 
 用法（在目标项目根目录执行，入口名随平台而异、只给脚本名即可）：
   fetch-specs                          # 取到落点（用户家目录下的 `<落点父目录>/<落点名>`，见下「落点」）
-  fetch-specs --base <URL>             # 换规范来源（默认 https://agent.c332030.com，同源镜像可用）
+  fetch-specs --base <URL>             # 换规范来源（默认取配置 `[source].base_url`，同源镜像可用）
   fetch-specs --keep                   # 保留本地已有的非空副本（不动已取到的那一份）
   fetch-specs --force                  # 同默认（保留写法，与 --keep 相反）
   fetch-specs --list                   # 只打印将要取的文件清单，不下载
@@ -52,7 +52,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     **不建议**改用 `curl … | python3 -`：**它同样要 python**。
 
 环境变量：
-  AGENT_SPECS_BASE   规范来源地址，等价于 --base（默认取仓库站点）
+  AGENT_SPECS_BASE   规范来源地址，等价于 --base（默认值在配置 `[source].base_url`）
   STALE_SELF_PATH    已撤掉的旧形态（**留作反例，不再使用**）：本轮取到的新版本路径当时靠环境
                      变量交给调用方的壳——**子进程设的环境变量回不到调起它的父壳**（本仓库实证：
                      壳那条路永远读不到），故改成走文件：路径写在本脚本自己的路径 + `.handoff`
@@ -60,6 +60,9 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
                      （见下「交接文件」）。
 
 落点（**只有一处**：用户家目录下的 `<落点父目录>/<落点名>`＝`CACHE_HOME_DIR`/`CACHE_APP_DIR`）：
+  **那几处取值与其余运行期取值全在配置里**（`script/specs-config.toml` 的 `[landing]` 等段，
+  由同目录的 `pathconfig.py` 读入）——本脚本与判据侧取的是同一份，改落点只改配置一处；
+  本节只讲**本脚本自己的取舍**（为什么不按平台换、为什么只进不出），不复述那几个字面值。
   - 落点**不按平台取目录**：不管什么系统、什么环境都是用户家目录下的这一个路径（用户口径），
     家目录取不到时报错退出、**不静默换地方**——换落点等于让「副本在哪」变成环境相关的事实，
     入口文档写下的那一个路径就与实际的落点对不上了（公共入口「取规范到本地副本」只写这一个落点）；
@@ -177,6 +180,7 @@ import argparse
 import concurrent.futures
 import ctypes
 import http.client
+import importlib.util
 import os
 import re
 import shutil
@@ -185,10 +189,108 @@ import sys
 import threading
 import time
 import urllib.parse
+import tomllib
 import urllib.request
 import uuid
 
-DEFAULT_BASE = "https://agent.c332030.com"
+# 运行期配置的落点：**先看本脚本旁边**、再看仓库里的 `script/` 下。
+#
+# 为什么就近优先（本仓库实测的失效形态）：薄壳与逻辑代码会被**一起取到落点根下**
+# （`<落点>/fetch-specs.py`），落点里没有 `script/` 那一层——只按 `script/` 定位时，
+# 从落点跑起来的那一份找不到配置、直接退出。就近优先则在两种跑法下都成立（项目里跑、
+# 落点里跑），而且落点里的那份配置正是"与本脚本同一版"的那一份（预置的读取）。
+CONFIG_BESIDE_SCRIPT = "specs-config.toml"
+CONFIG_IN_SCRIPTS_DIR = "script/specs-config.toml"
+# 读取层自己的文件名：**读配置这件事只有一份实现**（`pathconfig.py`），执行侧、判据侧、
+# 落点里分发出去的那一份，走的都是它。下面按"配置在旁边"那条路把它就地加载起来
+# （本脚本在落点里跑时没有 `script/` 了，只能按文件路径加载）。
+PATHCONFIG_MODULE = "pathconfig.py"
+
+
+def _config_candidates():
+    """配置的两处可能落点：**本脚本旁边**优先，其次仓库的 `script/` 下（相对入口层两级）。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return (os.path.join(here, CONFIG_BESIDE_SCRIPT),
+            os.path.join(os.path.dirname(here), *CONFIG_IN_SCRIPTS_DIR.split("/")))
+
+
+def _module_beside(config_file, filename):
+    """在 `config_file` 同处找 `filename` 并返回全路径；不在时返回 `None`。"""
+    candidate = os.path.join(os.path.dirname(os.path.abspath(config_file)), filename)
+    return candidate if os.path.isfile(candidate) else None
+
+
+def _import_pathconfig(module_path):
+    """按**文件路径**加载读取层（`pathconfig.py`），返回模块。
+
+    为什么按文件路径加载而不是 `import`：本脚本从落点跑时，读取层就躺在它旁边，
+    那里没有 `script/` 这一层、也不在 `sys.path` 上。`sys.modules` 先登记再执行——
+    模块互相 import 时不会重复执行。
+    """
+    name = os.path.splitext(PATHCONFIG_MODULE)[0]
+    spec = importlib.util.spec_from_file_location(f"_{name}", module_path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _find_pathconfig():
+    """读取层（`pathconfig.py`）的落点：与**配置**同处——就近那份配置旁边优先，其次仓库 `script/`。"""
+    for candidate in _config_candidates():
+        if os.path.isfile(candidate):
+            module = _module_beside(candidate, PATHCONFIG_MODULE)
+            if module:
+                return module
+    return None
+
+
+def _load_pathconfig():
+    """读运行期配置（`script/specs-config.toml`，随规范一起分发到落点根下）。
+
+    读的是**同目录的 `pathconfig.py`**——那是唯一的读取实现：再在本脚本里内联一份，
+    取值一旦加键/改结构，两份读取层必然各自漂移，而"改配置不改变行为"这种形态检查不出来。
+
+    **配置或读取层缺失即报错退出、不退回脚本里写死的默认值**：退回默认值等于把配置文件
+    变成可选装饰，两份来源又回来了。故这里直接抛给调用方——`main` 尚未开始，退出码按
+    "参数或前置条件错误"给。
+    """
+    module_path = _find_pathconfig()
+    if module_path is None:
+        print(f"错误: 找不到运行期配置的读取层 {PATHCONFIG_MODULE}——路径与运行期取值只有"
+              f" {CONFIG_IN_SCRIPTS_DIR} 这一处来源，读取层须与它同处", file=sys.stderr)
+        print("说明: 从仓库或落点取回读取层后再跑本脚本（它与本脚本、配置一并分发）。",
+              file=sys.stderr)
+        raise SystemExit(2)
+    pathconfig = _import_pathconfig(module_path)
+    if pathconfig is None:
+        print(f"错误: 无法加载读取层 {module_path}", file=sys.stderr)
+        raise SystemExit(2)
+    # 配置的落点由读取层定位（就近优先：本脚本旁边 → 仓库 `script/` 下）——定位只有一处实现
+    config_path = (pathconfig.config_beside_module()
+                   or pathconfig.config_path(os.path.dirname(os.path.dirname(
+                       os.path.abspath(__file__)))))
+    if not os.path.isfile(config_path):
+        print(f"错误: 找不到运行期配置 {CONFIG_BESIDE_SCRIPT}——路径与运行期取值只有这一处来源，"
+              f"本脚本旁边与 {CONFIG_IN_SCRIPTS_DIR} 都没有它", file=sys.stderr)
+        print("说明: 从仓库或落点取回该配置后再跑本脚本（它与本脚本一并分发）。", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        return pathconfig.load_file(config_path)
+    except pathconfig.ConfigError as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+
+# 路径与运行期取值**只在配置里**（`script/specs-config.toml`，唯一真源）：落点那两层目录名、
+# 来源默认地址、入口/有则取的文件清单、安装脚本名单、网络超时与并发、临时产物与交接文件后缀
+# ——全都从那里读，本脚本不再各写一份（用户口径：『路径信息应该是唯一真源，不能每个地方写一份』
+# 『配置的路径可以再定义』）。改动任一处只需改配置：执行侧与判据侧都经同一个读取层取值，
+# 文档侧只引一句，三处不会各自漂移。
+_PATHCONFIG = _load_pathconfig()
+DEFAULT_BASE = _PATHCONFIG.base_url
 
 
 class _GUID(ctypes.Structure):
@@ -198,31 +300,36 @@ class _GUID(ctypes.Structure):
 
 
 # 落点父目录：用户家目录下的这一层（落点只有这一个，不另按平台取目录）
-CACHE_HOME_DIR = ".cache"
+CACHE_HOME_DIR = _PATHCONFIG.landing_home_dir
 # 落点目录名：落点父目录下的这一层（`CACHE_HOME_DIR/CACHE_APP_DIR` 即那条用户路径）
-CACHE_APP_DIR = "agent-specs"
+CACHE_APP_DIR = _PATHCONFIG.landing_app_dir
+# 落点那两层的**分段形式**：拼本机路径一律用它（按平台分隔符；两段各拼一次的地方
+# 自然分成两份，上一轮就散在好几处）
+LANDING_REL = _PATHCONFIG.landing_rel
+# 落点写给人看的那一串（报错与 `--list` 里引用它）：与 `LANDING_REL` 同出一处、只是形态不同
+LANDING_NAME = _PATHCONFIG.landing_name
 # 入口 + 顶层说明文件；specs/ 下的文件从入口的调度器登记解析得到
-MANIFEST_FILE = "AGENTS_COMMON.adoc"
-OPTIONAL_FILES = ("README.adoc",)
+MANIFEST_FILE = _PATHCONFIG.manifest_entry
+OPTIONAL_FILES = _PATHCONFIG.manifest_optional
 # 与本脚本同处的安装脚本：一并取到落点**根下**（不在来源槽里）——跨来源共用一份。
 # 用户口径是"下载的文件一律只落这一个地方"，故下载完就不必再来第二次；
 # 薄壳也一并取回：只取逻辑代码时，落点里那份没法直接跑（入口层三件事见 specs/general/script.adoc）。
-INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat")
+INSTALL_SCRIPTS = _PATHCONFIG.install_scripts
 # 其中**入口**（各平台的薄壳）：落点取的字节不带文件模式，故取完给它们补回可执行位
 # （见 `_ensure_executable`）。逻辑代码**不在内**——它不是给人直接敲的命令，
 # 落点里唯一的入口是入口脚本（见 specs/general/script.adoc「入口脚本须能直接执行」）。
-ENTRY_SCRIPTS = ("script/fetch-specs.sh", "script/fetch-specs.bat")
+ENTRY_SCRIPTS = _PATHCONFIG.entry_scripts
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
-TIMEOUT_SECONDS = 30
-DEFAULT_WORKERS = 4
+TIMEOUT_SECONDS = _PATHCONFIG.timeout_seconds
+DEFAULT_WORKERS = _PATHCONFIG.workers
 # "待换的新版本在哪"的交接文件后缀（写在**本脚本自己的路径**之后）：见 `hand_off_self`。
 # 走文件而不是环境变量：**子进程设的环境变量回不到调起它的壳**（本仓库实证），
 # 而"换掉自己并且还能接着跑"这件事必须跨进程可见。
-SELF_HANDOFF_SUFFIX = ".handoff"
+SELF_HANDOFF_SUFFIX = _PATHCONFIG.self_handoff_suffix
 # 更新自身的工作目录：`tmp/` 下（临时产物见 specs/core/execution.adoc「临时产物」）。
-SELF_TMP_DIR = "tmp"
+SELF_TMP_DIR = _PATHCONFIG.tmp_dir
 # 新版本脚本的文件名后缀（与本轮真身同名不同后缀，见 `_self_update_candidates`）
-SELF_UPDATE_SUFFIX = ".update"
+SELF_UPDATE_SUFFIX = _PATHCONFIG.self_update_suffix
 # 落点取完即**只读**：目录只留"进入 + 列出 + 读"（5=rwx+r-x），文件只留读位（4=r--）。
 # 用绝对值（两个独立的十进制常量）而不是 `0o` 字面量：权限位取值是**本脚本的取舍**，
 # 写成常量便于核对与单测（见 specs/general/script.adoc「注释里的取值：写常量名」）。
@@ -290,7 +397,7 @@ def parse_args(argv=None):
     )
     parser.add_argument("--base",
                         default=os.environ.get("AGENT_SPECS_BASE", DEFAULT_BASE),
-                        help="规范来源地址（默认 https://agent.c332030.com）")
+                        help="规范来源地址（默认取配置 [source].base_url）")
     parser.add_argument("--keep", action="store_true",
                         help="保留本地已有的非空副本（不动已取到的那一份、只补缺失项）")
     parser.add_argument("--force", action="store_true",
@@ -367,7 +474,7 @@ def target_path(out_dir, rel):
     安装脚本那一组的 `rel` 带来源侧的目录（`script/fetch-specs.py`），而落点根下只放
     文件名——见 `fetch_install_scripts`。
     """
-    if rel in INSTALL_SCRIPTS:
+    if rel in (*INSTALL_SCRIPTS, CONFIG_IN_SCRIPTS_DIR):
         return os.path.join(out_dir, os.path.basename(rel))
     return os.path.join(out_dir, *rel.split("/"))
 
@@ -835,7 +942,7 @@ def fetch_install_scripts(base, out_dir, keep, total=0):
     本地已有那一份（判据与理由见 `download_one`——同一套"内容不同才落盘 + 原子替换"）。
     """
     results = []
-    for rel in INSTALL_SCRIPTS:
+    for rel in (*INSTALL_SCRIPTS, CONFIG_IN_SCRIPTS_DIR):
         results.append(download_one(base, rel, out_dir, keep, total))
     # 执行位不在这里补：本函数的返回结果与"补位"无关，且 `--no-scripts` 时整组不跑
     # （那里正是漏补的形态），统一由 `ensure_landing_executables` 在每轮收尾无条件补
@@ -965,7 +1072,7 @@ def _is_within(node, stop):
     """`node` 是否**真的**在 `stop` 之内（路径边界，不是字符串前缀）。
 
     `node.startswith(stop)` 是字符串前缀、不做路径分段边界（本仓库实证）：
-    `~/.cache/agent-specs-backup` 会被判成在 `~/.cache/agent-specs` 之内——
+    `<落点>-backup` 会被判成在 `<落点>` 之内——
     两个目录只是名字前面重合，前者并不是落点的一部分。此判据误报时的后果不是"报错"而是
     **静默放权**：给落点旁边的兄弟目录补回写位，而"落点只读"这句话没人再核对。
     故按路径分段比：`os.path.commonpath` 相等才算在内（commonpath 已按分段归一，
@@ -1011,7 +1118,7 @@ def install_scripts_dir():
     ——"下载的东西一律只落这一个地方"这条要对得上：同一个人从哪个来源取，落点里都是
     同一份入口，下次重装直接跑它即可（见脚本头部「落点」）。
     """
-    return os.path.join(shared_cache_dir(), CACHE_HOME_DIR, CACHE_APP_DIR)
+    return os.path.join(shared_cache_dir(), *LANDING_REL)
 
 
 def _user_home_dir():
@@ -1128,7 +1235,7 @@ def shared_cache_dir():
             or not os.path.isdir(home):
         raise ValueError(
             f"本机取不到用户家目录（展开得到 {home!r}），无法定位用户家目录下的 "
-            f"{CACHE_HOME_DIR}/{CACHE_APP_DIR}")
+            f"{LANDING_NAME}")
     return home
 
 
@@ -1145,7 +1252,7 @@ def cache_slot_dir(home_dir, base):
     parsed = urllib.parse.urlsplit(base)
     slot = parsed.netloc + parsed.path.rstrip("/")
     slot = re.sub(r"[^A-Za-z0-9._-]+", "_", slot).strip("_") or "default"
-    return os.path.join(home_dir, CACHE_HOME_DIR, CACHE_APP_DIR, slot)
+    return os.path.join(home_dir, *LANDING_REL, slot)
 
 
 def resolve_out_dir(args):
@@ -1205,7 +1312,7 @@ def main(argv=None):
         for rel in sorted(targets + optional):
             print(rel)
         print(f"# 共 {len(targets)} 份（必取）+ {len(optional)} 份（有则取），来源 {base}")
-        print(f"# 落点: {out_dir}（用户家目录下的 {CACHE_HOME_DIR}/{CACHE_APP_DIR}）")
+        print(f"# 落点: {out_dir}（用户家目录下的 {LANDING_NAME}）")
         scripts_dir = install_scripts_dir()
         for rel in INSTALL_SCRIPTS:
             print(f"{rel}  ->  {target_path(scripts_dir, rel)}")
