@@ -170,7 +170,11 @@ class CheckSpecsTestCase(unittest.TestCase):
                            "script/specs-rules/version-control.toml",
                            # 本道与相邻几道（提交信息、注释保留）的判据措辞外置在这两份里
                            "script/specs-rules/git.toml",
-                           "script/specs-rules/dispatcher.toml")
+                           "script/specs-rules/dispatcher.toml",
+                           # 本道（卡住时先自证）的判据措辞外置在该文件里
+                           "script/specs-rules/self-serve.toml",
+                           # 本道（降级式表述：review 必查 + 一键优化规范借用同一份判据）同在该文件里
+                           "script/specs-rules/degradation.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -3822,6 +3826,10 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # 规则引擎实例按仓库快照缓存、防线内每次阶段只跑一遍：夹具换了仓库根之后必须重置，
+        # 否则拿到的是上一个用例的规则数据（本仓库实测：整类一起跑时报"规则配置里没有防线"）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
         self._orig_prompts = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE,
                               cm.README_FILE)
         cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
@@ -11528,7 +11536,8 @@ class TestCheckChangelogEditGuard(CheckSpecsTestCase):
 
     BODY = (
         "= 变更日志编写规范（通用层）\n\n"
-        "* **只允许在主动声明的那一轮修改（L1）**：修改面就是「登记时机」里那次声明；"
+        "* **只允许在主动声明的那一轮修改（L1）**：修改面就是「登记时机」里那次声明，"
+        "**动它之前须在交付说明里写明拿到的声明句**；**声明以轮次为单位**——本轮声明不覆盖下一轮，"
         "**同一任务的后续轮次未获新声明时，也不得回头再改**。"
         "**订正不是例外**：发现**已写入的条目本身有错**（断号、同一版本被拆成多条、"
         "条目与事实不符）可就地订正该条，**未获声明时连订正也不做**、只把事实报给用户——"
@@ -11590,6 +11599,68 @@ class TestCheckChangelogEditGuard(CheckSpecsTestCase):
         finally:
             cm.run_rule_guard = run_rule_guard
         self.assertIn("check_changelog_edit_guard", self.ran)
+
+    def test_declaration_sentence_removed_reports(self):
+        # 反例：『动它之前须写明拿到的声明句』被抽——写完再说、或只说"用户要求"都能自称有声明
+        self._write(self.BODY.replace(
+            "，**动它之前须在交付说明里写明拿到的声明句**", ""))
+        cm.check_changelog_edit_guard()
+        self.assertIn("修改面防线被破坏", self.error_texts())
+
+    def test_declaration_round_scope_removed_reports(self):
+        # 反例：『声明以轮次为单位』被抽——上一轮的声明被拿去覆盖本轮（本仓库实测的复发形态）
+        self._write(self.BODY.replace(
+            "**声明以轮次为单位**——本轮声明不覆盖下一轮，", ""))
+        cm.check_changelog_edit_guard()
+        self.assertIn("修改面防线被破坏", self.error_texts())
+
+
+class TestChangelogUndeclaredEdits(CheckSpecsTestCase):
+    """钉住『声明面』的行为核：动了 `CHANGELOG.*` 而提交说明里没点名它即报红。
+
+    本仓库实测的三次复发形态相同：**该轮声明句里没有 changelog，改动却进了同一个提交**，
+    而三道 `check_changelog_*_guard` 全在核「规则文本还在不在」——规则越写越全，行为一次没核。
+    故把判据落成 git 事实：按 `(sha, 说明, 动过的文件, 是否点名)` 喂进去核。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 本类只核「判据逻辑」：把仓库根指回真实仓库，`_changelog_decl_commits` 的
+        # 「是否本仓库」守卫才放行；**不读真实历史**，用例一律把 `(sha, 说明, 动过的文件,
+        # 是否点名)` 直接喂进去，故与当前分支无关。
+        cm.REPO_ROOT = self._orig[0]
+        cm.errors.clear()
+
+    def _run(self, commits):
+        cm._check_changelog_undeclared_edits(commits)
+
+    def test_declared_commit_passes(self):
+        # 正例：说明里点名 changelog（用户说"记一条/改 changelog"即算声明）
+        self._run([("a" * 40, "feat(specs): 补一条——按 changelog 声明登记", ["CHANGELOG.adoc"], True)])
+        self.assertEqual(cm.errors, [])
+
+    def test_undeclared_edit_reports(self):
+        # 反例：声明句里没有 changelog，改动照样进了提交（本 PR 的 `2d4ac1b` 就是这一形态）
+        self._run([("b" * 40, "fix(specs): 修两道防线的机械面", ["CHANGELOG.adoc"], False)])
+        self.assertIn("没点名变更日志", self.error_texts())
+
+    def test_edit_after_declaration_reports(self):
+        # 反例：更旧的那次提交点了 changelog，本轮没点却回头再改（声明以轮次为单位）
+        self._run([("c" * 40, "fix(specs): 再改一处", ["CHANGELOG.adoc"], False),
+                   ("d" * 40, "feat(specs): 按 changelog 声明登记", ["CHANGELOG.adoc"], True)])
+        self.assertIn("后续轮次", self.error_texts())
+
+    def test_non_changelog_commit_passes(self):
+        # 正例：没动变更日志的提交，说明写什么都要放过（不得误伤日常提交）
+        self._run([("e" * 40, "fix(specs): 修一处悬空引用", ["specs/general/coding.adoc"], False)])
+        self.assertEqual(cm.errors, [])
+
+    def test_numstat_paths_collects_rename_source(self):
+        # 反例：重命名提交的路径列是 `旧\t新` 两段——只取最后一段时旧名看不见，
+        # 「这次到底动没动 CHANGELOG.adoc」就核不到（git 会按相似度把它记成重命名）。
+        self.assertEqual(
+            ["CHANGELOG.adoc", "CHANGELOG.md"],
+            cm._numstat_paths("1\t1\tCHANGELOG.adoc\tCHANGELOG.md\n"))
 
 
 class TestChangelogAppendMarkers(CheckSpecsTestCase):
@@ -27164,6 +27235,231 @@ class TestCheckTaskCompletionGuard(CheckSpecsTestCase):
         # 反例⑩：片段不再回指判据本体——提示词侧自成一份判据，两处迟早漂移
         self._mutate(self.PROMPT, "一件事的定义与展开", "相关章节")
         self.assertIn("一件事的定义与展开", self._run())
+
+
+class TestCheckSelfServeGuard(CheckSpecsTestCase):
+    """钉住『卡住时先自证：缺什么自己找、有问题自己排、有疑问自己查』（用户提出）。
+
+    用户口径：缺组件时自动去找、有问题时自动排查、有疑问时自己去确认，不用什么都问客户；
+    **客户反问一句就能给出方案的，说明这一步本该自己做**（属偷懒）。
+
+    失效形态：执行者卡在缺件或第一层猜测上就把问题交回发起人，而答案本来就取得到。既有条文
+    没有一条管这件事：「歧义先问」判"要求读不准"、「猜到的行为先报」判"多做的那一步"、
+    「超时后先排查再换手段」判"某次操作不返回"。
+
+    **按该节自己的正文核**（不是整份文件）：`planning.adoc`「换一条路时的收尾与穷尽」含
+    『换源/换参数/最小复现』一类同样字样，按整份文件核会把被抽走的要点兜住。
+    """
+
+    PLANNING = "specs/general/planning.adoc"
+    COLLAB = "specs/general/collab.adoc"
+    PROMPT = "prompts/_common.txt"
+    REVIEW = "prompts/review.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.PLANNING, self.COLLAB, self.PROMPT, self.REVIEW):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def _run(self):
+        cm.check_self_serve_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_self_serve_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_fetch_first_dropped_reports(self):
+        # 反例①：自取被抽——"环境里没有"重新成为收尾理由
+        self._mutate(self.PLANNING, "缺组件先自取，不在缺件处停下（L1）", "缺件时说明即可")
+        self.assertIn("缺组件先自取", self._run())
+
+    def test_no_fetch_action_dropped_reports(self):
+        # 反例②：判定标准里的"一次取用动作都没有"被抽——没试过也能算尽力
+        self._mutate(self.PLANNING, "一次取用动作都没有", "试过一次")
+        self.assertIn("一次取用动作都没有", self._run())
+
+    def test_debug_first_dropped_reports(self):
+        # 反例③：自排被抽——第一层猜测重新可以当结论交回人
+        self._mutate(self.PLANNING, "有问题先自排，把排查做到取到证据（L1）", "有问题先问")
+        self.assertIn("有问题先自排", self._run())
+
+    def test_check_first_dropped_reports(self):
+        # 反例④：自查的可核对形态（查了哪几处、换过哪些手段）被抽——"该查没查"无从判
+        self._mutate(self.PLANNING, "查了哪几处、换过哪些手段、为什么它们都定不下来",
+                     "说明即可")
+        self.assertIn("换过哪些手段", self._run())
+
+    def test_boundary_with_guess_dropped_reports(self):
+        # 反例⑤：与「猜到的行为先报」的分界被抽——两条相邻且都谈"要不要动手"，会被读成冲突
+        self._mutate(self.PLANNING, '两条的分界是"取事实"还是"做取舍"', "以本条为准")
+        self.assertIn("取事实", self._run())
+
+    def test_return_form_dropped_reports(self):
+        # 反例⑥：交回人的唯一形态被抽——交回的问题里没有"试过什么"
+        self._mutate(self.PLANNING, "卡在哪、已试过什么、要谁定什么", "说明困难")
+        self.assertIn("已试过什么", self._run())
+
+    def test_collab_carry_dropped_reports(self):
+        # 反例⑦：承接面被抽——"超时/缺件"与"该问人"在那一节里连不起来
+        self._mutate(self.COLLAB, '缺失的组件是"该去取的"，不是"该问人的"（L1）',
+                     "缺件时应说明")
+        self.assertIn("该去取的", self._run())
+
+    def test_prompt_snippet_dropped_reports(self):
+        # 反例⑧：提示词公共片段侧同口径被抽——片段会被未知项目复制执行
+        self._mutate(self.PROMPT, "卡住时先自取、先自排、先自查", "缺件时记录")
+        self.assertIn("卡住时先自取", self._run())
+
+    def test_review_read_note_dropped_reports(self):
+        # 反例⑩：题的读入说明里"取不到就按地址再取"被抽——题面第一步就把缺件当成要回问的事
+        self._mutate(self.REVIEW, "取不到 `prompts/_common.txt` 时按它自己的地址再取一次",
+                     "取不到就说明")
+        self.assertIn("prompts/_common.txt", self._run())
+
+    def test_baseline_snippet_dropped_reports(self):
+        # 反例⑨：基线片段里"先自己取"被抽——"跑不起来不是不动手的理由"退回"记录一下就行"
+        self._mutate(self.PROMPT, "先按「缺什么自己取、有问题自己排、有疑问自己查」把它取到/排清",
+                     "如实记录")
+        self.assertIn("缺什么自己取", self._run())
+
+    def test_directional_choice_follow_practice_dropped_reports(self):
+        # 反例⑪：方向性事项"按推荐做完"被抽——"选哪个都可以"重新被拆成选项交回人
+        self._mutate(self.PLANNING, "**可以先按推荐做，做完再纠正（L1，方向性事项）**",
+                     "拿不准可以问")
+        self.assertIn("可以先按推荐做", self._run())
+
+    def test_directional_choice_boundary_dropped_reports(self):
+        # 反例⑫：与「要求读不准」的分工被抽——本节被读成"所有问题都可以自行决定"
+        self._mutate(self.PLANNING, "**方向性事项：不给选项、按推荐做完**", "都自行决定即可")
+        self.assertIn("按推荐做完", self._run())
+
+    def test_prompt_directional_choice_dropped_reports(self):
+        # 反例⑬：提示词片段侧同口径被抽——片段会被未知项目复制执行，那份里就没有这条
+        self._mutate(self.PROMPT, "**选哪个都可以的方向性事项：按推荐做完，不中断（L1）**",
+                     "拿不准就问")
+        self.assertIn("方向性事项：按推荐做完", self._run())
+
+    def test_starred_examples_dropped_reports(self):
+        # 反例⑭：示例句缺"不以此为限"被抽——清单被读成封闭枚举，只在举的这几件事上不中断
+        self._mutate(self.PLANNING, "**示例，本条适用于这一类事项的全部形态、不以其为限**",
+                     "都按推荐做完")
+        self.assertIn("不以其为限", self._run())
+
+    def test_prompt_starred_examples_dropped_reports(self):
+        # 反例⑮：提示词片段侧缺同一句——片段会被复制到未知项目执行，那份里示例照样是封闭清单
+        # 抽的是"示例清单不收窄"这一半：断言须指向被抽掉的那句本身，否则拦的是别处的问题
+        self._mutate(self.PROMPT, "；**举反例同样只是示例、不以此为限**", "")
+        self.assertIn("举反例同样只是示例", self._run())
+
+    def test_prompt_examples_narrowed_reports(self):
+        # 反例⑯：片段侧的示例清单被收窄成封闭枚举——只在举的这几件事上不中断
+        self._mutate(self.PROMPT, "、示例数据的数量只是示例", "")
+        self.assertIn("示例数据的数量只是示例", self._run())
+
+    def test_degradation_form_dropped_reports(self):
+        # 反例⑰：正文侧『降级式表述与本节同罪』被抽——"跳过 + 未确证"重新可以当交付
+        # 抽的是锚点句本身（不含标题）：抽掉标题时"未取到只能写成…"仍在，判据不会被兜住
+        self._mutate(self.PLANNING, "**降级式表述与本节同罪（L1，反向形态）**",
+                     "没取到时说明即可")
+        self.assertIn("降级式表述与本节同罪", self._run())
+
+    def test_prompt_degradation_form_dropped_reports(self):
+        # 反例⑱：片段侧背面那句被抽——只复制出去"先自取"、没有"不得写成已处置"
+        self._mutate(self.PROMPT, "降级式表述与本节同罪", "先自证")
+        self.assertIn("降级式表述", self._run())
+
+
+class TestCheckDegradationScanGuard(CheckSpecsTestCase):
+    """钉住『降级式表述』（用户提出）：review 要查出来、一键优化规范也要处理，**两处共用一份判据**。
+
+    用户口径：全库检查还有没有这种降级的情况；review 时要查出来、处理，一键优化规范也要处理——
+    而且一键优化规范**借用 review 的部分逻辑就行，不用写两份**。
+
+    失效形态：把本可自行取到证据的事写成"已记录 / 已说明 / 跳过 + 未确证"就收尾。措辞完整、
+    语气也不含糊，**结论与事实对不上**才是它的特征，于是检查修复与优化公共规范两类任务都从它
+    旁边走过去。判据本体落在 `specs/general/review.adoc`「review 的默认检查面」，两侧只点名与回指。
+    """
+
+    REVIEW_SPEC = "specs/general/review.adoc"
+    REVIEW_PROMPT = "prompts/review.adoc"
+    REFINE = "prompts/spec-refine.adoc"
+    PROMPT = "prompts/_common.txt"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.REVIEW_SPEC, self.REVIEW_PROMPT, self.REFINE, self.PROMPT):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def _run(self):
+        cm.check_degradation_scan_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_degradation_scan_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_criterion_dropped_reports(self):
+        # 反例①：判据本体被抽——"已记录"重新可以当交付，review 也没有可回指的真源
+        self._mutate(self.REVIEW_SPEC, "**降级式表述属必查的问题形态（L1，用户提出）**",
+                     "已记录即可")
+        self.assertIn("降级式表述属必查的问题形态", self._run())
+
+    def test_shared_source_dropped_reports(self):
+        # 反例②：判据本体被抽（同反例①的另一处形态："结论与事实对不上"是它的特征句）——
+        # 只剩轴名时"已记录"照样能当交付
+        self._mutate(self.REVIEW_SPEC, "**结论与事实对不上**", "措辞含糊")
+        self.assertIn("结论与事实对不上", self._run())
+
+    def test_review_scan_dropped_reports(self):
+        # 反例③：review 题面没点名这一类——按题面逐条检查，正好不查它
+        self._mutate(self.REVIEW_PROMPT, "**检查面含『降级式表述』（L1）**", "")
+        self.assertIn("检查面含『降级式表述』", self._run())
+
+    def test_refine_borrow_dropped_reports(self):
+        # 反例④：一键优化规范没写"借用而不重写"——要么不扫、要么自写第二份判据
+        self._mutate(self.REFINE, "**判据借用而不重写（L1）**", "")
+        self.assertIn("借用而不重写", self._run())
+
+    def test_refine_scan_dropped_reports(self):
+        # 反例⑤：一键优化规范的扫描面没点名这一类
+        self._mutate(self.REFINE, "**另含『降级式表述』**", "")
+        self.assertIn("另含『降级式表述』", self._run())
+
+    def test_prompt_surface_dropped_reports(self):
+        # 反例⑥：复制面漏了同口径——片段复制到未知项目后只剩"先自取"、没有背面那句
+        self._mutate(self.PROMPT, "降级式表述与本节同罪", "")
+        self.assertIn("降级式表述与本节同罪", self._run())
 
 
 if __name__ == "__main__":
