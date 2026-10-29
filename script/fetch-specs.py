@@ -158,6 +158,10 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     （落点根下那份就是"下次运行会读到的真身"），但**本轮这份脚本改不了**，故**如实警告**
     并留下待换标记，由下一轮接上（见 `_take_over_self`）。这是本机权限边界，不是脚本能绕的
     那一层——"看着换上了、其实没换"因此在这里被明确报出来，而不是静默。
+    但**落点收尾收紧留下的只读位不算这一类**：安装脚本自己也在收紧范围内（收尾整棵树收紧），
+    真身带着只读位时**换之前先把写位补回来**（`_take_over_self`／`hand_off_self`），不补位
+    就是每轮 `[Errno 13]` 的死循环（本仓库实测：本轮失败留标记、下一轮换的还是同一个只读
+    文件）；补位由收尾收紧收回，"落点取完即只读"不因此破。
 """
 
 import argparse
@@ -457,8 +461,8 @@ def _take_over_self(local, target):
         动不得（真写上去会把调用方自己的排布改掉），只留标记、不换不发：真身那一份已经由
         上一处的落盘换成了新版（`_self_update_candidates` 按 `sys.argv[0]` 定落点），它下次跑起来
         就是新版；
-      * **真身就是本轮这个文件**：拷上去、`os.execv` **当轮重启**——换得动即本函数不返回，
-        换不动（只读目录、非属主）则退回"留标记 + 如实警告"。
+      * **真身就是本轮这个文件**：补回真身的写位、拷上去、`os.execv` **当轮重启**——换得动
+        即本函数不返回，换不动（真属主/只读挂载那一层）则退回"留标记 + 如实警告"。
 
     **换成功这条路上没有交接文件**：真身已经换成新版、本轮已由新版接着跑完，下一轮读到它
     就是新版，标记只会白留一份（故这条路上顺手清掉既有的那份）。
@@ -472,6 +476,12 @@ def _take_over_self(local, target):
               "——不在脚本里代它重启；重跑一次即由真身接上", file=sys.stderr)
     else:
         try:
+            # 真身在落点里、带着收尾收紧留下的只读位（main 收尾把安装脚本自己也收紧了）：
+            # 不补写位直接 copyfile 会被只读位拒掉（Windows 上即 [Errno 13]，且**每轮复发**
+            # ——本轮失败留标记，下一轮 `hand_off_self` 换的还是同一个只读文件）。故
+            # **先补写位再换**（与 `_ensure_writable` 同一条"只加不减的例外"：补位只为换
+            # 这一步，重启后的那一轮收尾会把只读位收紧回去，见 main）。
+            _chmod_report(local, _WRITABLE_FILE_MODE)
             shutil.copyfile(target, local)
             os.chmod(local, os.stat(local).st_mode | stat.S_IXUSR)
         except OSError as e:
@@ -648,6 +658,10 @@ def hand_off_self():
               "不在脚本里代它重启", file=sys.stderr)
         return
     try:
+        # 同 `_take_over_self`：真身多半带着收尾收紧留下的只读位，先补写位再换（补位只为
+        # 换这一步，重启后的那一轮收尾收回）——不补位时只读位把它拒掉、标记永远消费不掉，
+        # "重跑一次即用上"就成了每轮复发的死循环（本仓库实测：Windows 上每轮 [Errno 13]）。
+        _chmod_report(os.path.abspath(__file__), _WRITABLE_FILE_MODE)
         shutil.copyfile(fresh, os.path.abspath(__file__))
         os.chmod(os.path.abspath(__file__), os.stat(os.path.abspath(__file__)).st_mode | stat.S_IXUSR)
     except OSError as e:

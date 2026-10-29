@@ -4344,7 +4344,10 @@ def check_fetch_self_update_guard():
         `os.access`/"最近可写的祖先"估的，与真实可写性不总一致（祖先可写、而 `tmp/` 这一级
         建不出来）——先选一处、写不进去就放弃时，后面那几处**写得进去的**也白丢，本轮自更新
         静默落空（本仓库实测：`_self_update_path` 只 `return` 首个候选，`makedirs` 失败即
-        `return None`，兜底那两处根本没试过）。
+        `return None`，兜底那两处根本没试过）；
+      * 换真身前**先补回真身的写位**：落点收尾把安装脚本自己也收紧成只读，直接 `copyfile`
+        会被只读位拒掉——Windows 上即每轮 `[Errno 13]` 的死循环（本轮失败留标记、下一轮
+        `hand_off_self` 换的还是同一个只读文件，本仓库实测）。
     **核对面只有脚本自己**：判据、取值与失败处置都在 `script/fetch-specs.py` 自己那一份里
     （头部注释 + `update_self`／`hand_off_self`／`_real_script`／`os.execv`），脚本即真源；
     公共入口**不写**这一条（用户口径：「fetch-specs.py 自己更新就行，不需要写出来」）——
@@ -4383,6 +4386,12 @@ def check_fetch_self_update_guard():
              "落盘须**逐处试**（候选由 `_self_update_candidates` 依次产出、第一处写失败时"
              "继续试下一处）——写位是估的、与真实可写性不总一致，只试第一处时兜底那几处"
              "（落点根下、`tmp/`）等于没试，本轮自更新**静默落空**"),
+            (("先补写位再换", "_WRITABLE_FILE_MODE"),
+             "换真身前须**先补回真身的写位**：落点收尾把安装脚本自己也收紧成只读，直接 "
+             "`copyfile` 会被只读位拒掉（Windows 上即 `[Errno 13]`，且**每轮复发**——本轮"
+             "失败留标记、下一轮 `hand_off_self` 换的还是同一个只读文件，交接标记永远消费"
+             "不掉，本仓库实测）；补位只服务换这一步、由收尾收紧收回，『落点取完即只读』"
+             "不因此破"),
         ):
             missing = [k for k in keys if k not in text]
             if missing:
@@ -8747,13 +8756,16 @@ def check_data_dictionary_guard():
 def check_changelog_entry_guard():
     """『变更日志条目形态防线』：条目须保持**单行**（写法见 `specs/general/changelog.adoc`）。
 
+    文件**不在场不报缺失**：本仓库已不设变更日志（用户明确要求『直接删除 CHANGELOG.adoc，
+    不需要了』，2026-10-29 起）——该决定覆盖「须有统一变更日志」的默认要求；一旦在场
+    （将来重建），下方条目形态、追加标志与版本线判据照常全核，缺席不构成免检。
+
 """
     phase("变更日志条目形态检查（单行条目）")
     path = os.path.join(REPO_ROOT, "CHANGELOG.adoc")
     if not os.path.isfile(path):
-        err("缺少统一变更日志 CHANGELOG.adoc——"
-            "变更记录将分散在各文档、多处不一致（见 specs/general/doc-design.adoc"
-            "「版本与变更记录」）", "CHANGELOG.adoc")
+        # 不设变更日志是用户的明示决定（见 docstring），不是文件丢了没人发现：缺文件走
+        # phase_done 直接过；在场才核形态——"删文件躲检查"与"重建后照常受核"两头都钉住。
         phase_done()
         return
     with open(path, encoding="utf-8") as fh:

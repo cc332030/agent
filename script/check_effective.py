@@ -303,7 +303,7 @@ MECHANISMS = [
      "故原先『维护这套规范集合自身的对外变更』那条例外已撤。"
      "『这次到底有没有得到用户声明』属运行时事实"),
     ("规范保持通用（规则与实例分离）：本仓库默认不写实例——用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号"
-     "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）与 `CHANGELOG.adoc`",
+     "一律不进规范文件、公共内容与提示词；实例只登记在图书馆（`library/adoption.adoc`／`library/sources.adoc`）",
      "AGENTS.adoc「规范组织与自身重构（本仓库落点）」", "script/check_specs.py",
      "check_rule_instance_separation_guard",
      "check_rule_instance_separation_guard 钉住本仓库该条（**规范保持通用**／默认动作是「不写」／实例的登记落点／失效形态与出处）"
@@ -599,8 +599,8 @@ MECHANISMS = [
      "check_ref_scope_wording_guard", "check_ref_scope_wording_guard 钉住本仓库维护范围内的 .adoc 不得出现\"本仓库私有…不随规范分发\"\"私有内容不随规范分发\"\"不随规范分发\"三类错误形态（平台事实：本仓库所有内容都会被发布，区别只在\"默认引用什么\"），并豁免引用/纠正该表述本身的句子与\"私有落点/私有抓手名\"这类自足性用语、豁免 CHANGELOG 历史条目；『某处该不该被引用方按入口加载』属判定"),
     ("引文段落不得用裸 `>` 起头（会被解析成 callout list 而中断整份文档编译）", "AGENTS.adoc", "script/check_specs.py",
      "check_quote_line_guard", "check_quote_line_guard 钉住仓库维护范围内全部 .adoc 的引文行形态：行首 `> ` 即命中（该形态被 AsciiDoc 的 `listdef-callout` 吃掉、`index` 取空串后在 `List.calc_style()` 里 `assert False`，整份文件编译失败；页面侧 Asciidoctor.js 渲染成引用块、看不出问题）；行内 `>`（比较运算符、shell 重定向）不误伤；写引文用 `[quote]` + 正文行；『某段确实该是引文还是该改写成正文』"),
-    ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）、版本线连续（不重号不断号）", "CHANGELOG.adoc", "script/check_specs.py",
-     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住 CHANGELOG.adoc 的条目形态（机械面）：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条上限 400 字、带『同 PR 追加/补充』这类自称的条目即报、**版本线不重号不断号**（按版本组走，同版本多变更点不算重号）。实证失效两桩：①日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连，同一版本被记成第二、第三条；②一次「压缩条目」把两条并成一条，版本线从此断号（3.43 → 3.41）而没有任何一处会报。『条目是否记对了变更点、有没有漏记』"),
+    ("变更日志条目须单行（版本号 | 日期 | 变更摘要，条目内不换行）、版本线连续（不重号不断号）", "specs/general/changelog.adoc「条目书写」「组织形态」", "script/check_specs.py",
+     "check_changelog_entry_guard", "check_changelog_entry_guard 钉住变更日志的条目形态（机械面；本仓库已不设 CHANGELOG.adoc——用户明示删除，文件在场时才核、缺席不报缺失）：条目行（`- 版本 | 日期 | 摘要`）之后不得紧跟续行、单条上限 400 字、带『同 PR 追加/补充』这类自称的条目即报、**版本线不重号不断号**（按版本组走，同版本多变更点不算重号）。实证失效两桩：①日志被当成追加区，同一条目被 heredoc/多次 append 续写成多行而与下一条粘连，同一版本被记成第二、第三条；②一次「压缩条目」把两条并成一条，版本线从此断号（3.43 → 3.41）而没有任何一处会报。『条目是否记对了变更点、有没有漏记』"),
     ("变更日志只被「人改」、不被「追加」（重写型文件、同一版同一变更点就地并入、脚本与流水线同受约束），条目按一句话的体量写（不写验证过程与『对引用方的净影响』）", "specs/general/changelog.adoc「登记时机」「条目书写」", "script/check_specs.py",
      "check_changelog_writable_guard",
      "check_changelog_writable_guard 钉住两处要点：① 写入方式（重写型文件、不得以 `>>`/`tee -a`/`os.O_APPEND`/`append` 模式落盘、同一版同一变更点就地并入不另起一条、脚本与流水线同受约束）；② 体量（「条目书写」的体量判据：不写验证过程与『对引用方的净影响』这类过程性内容）。缺口来源：用户口径『解决 changelog 频繁被加内容的问题』——旧判据只管「怎么记一条」，没管「怎么往里写」，追加式写入让同一版本被记成多条、每条越写越长，且没有一步读回全文；『这一条算不算一个变更点、够不够影响的份量』"),

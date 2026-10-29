@@ -11580,9 +11580,11 @@ class TestCheckChangelogEntryGuard(CheckSpecsTestCase):
         cm.check_changelog_entry_guard()
         self.assertEqual(cm.errors, [])
 
-    def test_missing_changelog_reports(self):
+    def test_missing_changelog_passes(self):
+        # 本仓库已不设变更日志（用户明示删除 CHANGELOG.adoc）：文件不在场不报缺失；
+        # 在场时条目形态、追加标志与版本线照常受核（其余用例即核在场形态）
         cm.check_changelog_entry_guard()
-        self.assertIn("缺少统一变更日志", self.error_texts())
+        self.assertEqual(cm.errors, [])
 
 
 class TestCheckChangelogWritableGuard(CheckSpecsTestCase):
@@ -19406,8 +19408,12 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             rc, so, se = self._run_fetch(base, home=home)
             self.assertNotEqual(0, rc)
             # 判据：**立即**失败，而不是等满重试超时——退回"监听 socket 没关"时这里是
-            # `timed out`，只有走到 `Connection refused` 才说明端口真的不可达
-            self.assertIn("connectionrefused", re.sub(r"\s+", "", se + so).lower())
+            # `timed out`，只有走到"连接被拒"才说明端口真的不可达。错误文案来自**系统**，
+            # 各平台不同（英文 `Connection refused`；中文 Windows `由于目标计算机积极拒绝，
+            # 无法连接`，WinError 10061），故按行为判（任一形态即视为被拒），不钉死一种语言
+            rejected = re.sub(r"\s+", "", se + so).lower()
+            self.assertTrue("connectionrefused" in rejected or "10061" in rejected
+                            or "积极拒绝" in rejected, se + so)
             with open(local, "rb") as fh:
                 self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
 
@@ -23949,6 +23955,15 @@ class TestCheckChangeNumberScopeGuard(CheckSpecsTestCase):
         repo = os.path.dirname(HERE)
         self._git_text = self._read(repo, self.GIT)
         self._rule_text = {rel: self._read(repo, rel) for rel in self.RULES}
+        # 基类把 REPO_ROOT 指到临时目录，而 COMMIT_MESSAGE_FILE 是导入期按真 SPECS_DIR
+        # 算出的常量（仓库真盘符）——两处不同盘时 `os.path.relpath` 直接 ValueError
+        # （本机实测 16 连炸）。与夹具同步：防线读的那份判据文件 = `_write_valid` 写的那份。
+        self._orig_commit_message_file = cm.COMMIT_MESSAGE_FILE
+        cm.COMMIT_MESSAGE_FILE = os.path.join(self.root, *self.GIT.split("/"))
+
+    def tearDown(self) -> None:
+        cm.COMMIT_MESSAGE_FILE = self._orig_commit_message_file
+        super().tearDown()
 
     @staticmethod
     def _read(repo: str, rel: str) -> str:
@@ -25395,6 +25410,77 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
                      "for target, why in [_self_update_candidates(out_dir, cwd).__next__()]:")
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_writable_bit_restore_removed_reports(self):
+        # 反例⑨（本仓库实测的死循环）：换真身前不补写位——落点收尾把安装脚本自己也收紧成
+        # 只读，直接 copyfile 被只读位拒掉（Windows 上即每轮 [Errno 13]），本轮留标记、
+        # 下一轮 hand_off_self 换的还是同一个只读文件，"重跑一次即用上"永远兑现不了
+        self._write_valid()
+        self._mutate(self.SCRIPT, "先补写位再换", "直接换")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+
+class TestFetchSpecsSwapOnReadOnlyRealScript(CheckSpecsTestCase):
+    """端到端实测：**真身带着落点收尾收紧的只读位时，自更新仍须换得动**（本仓库实测的死循环）。
+
+    失效形态：每轮收尾 `_make_read_only(install_scripts_dir(), is_dir=True)` 把安装脚本自己也
+    收紧成只读——Windows 上即 `FILE_ATTRIBUTE_READONLY`。于是下一轮：`update_self` 取到新版
+    → `_take_over_self` 直接 `copyfile` 上去 → `[Errno 13]` → 留交接标记；再下一轮
+    `hand_off_self` 读到标记 → 换的还是**同一个只读文件** → 同样 `[Errno 13]`——每轮重复
+    "更新/警告/说明"三行，标记永远消费不掉。修法：两处换真身前**先补写位再换**（补位由
+    重启后那一轮的收尾收紧收回，"落点取完即只读"不破）。重启一律 mock 掉，真身落在
+    `self.root` 里、不碰仓库真身。
+    """
+
+    def _load(self):
+        repo_root = os.path.dirname(HERE)
+        path = os.path.join(repo_root, "script", "fetch-specs.py")
+        spec = importlib.util.spec_from_file_location("fetch_specs_swap_under_test", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _make_scene(self, root):
+        """搭"只读真身 + 待换新版本 + 交接标记"最小现场，返回 (真身, 新版, 标记) 路径。"""
+        real = os.path.join(root, "fetch-specs.py")
+        fresh = os.path.join(root, ".fetch-specs.py.1.update")
+        note = real + ".handoff"
+        for path, text in ((real, "OLD = 1\n"), (fresh, "NEW = 2\n"), (note, fresh + "\n")):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        os.chmod(real, 0o444)  # 收尾收紧：POSIX 去写位 / Windows 打只读属性
+        return real, fresh, note
+
+    def test_hand_off_self_swaps_readonly_real_script(self):
+        mod = self._load()
+        real, fresh, note = self._make_scene(self.root)
+        try:
+            with mock.patch.object(mod, "__file__", real), \
+                    mock.patch.object(sys, "argv", [real, "--base", "http://x"]), \
+                    mock.patch.object(mod, "_restart_with") as restart:
+                mod.hand_off_self()
+            with open(real, encoding="utf-8") as fh:
+                self.assertEqual("NEW = 2\n", fh.read())
+            self.assertFalse(os.path.isfile(note))   # 标记消费掉，不再每轮复发
+            restart.assert_called_once()             # 换上后当轮重启
+            self.assertTrue(os.stat(real).st_mode & stat.S_IWRITE)  # 写位已补回
+        finally:
+            os.chmod(real, 0o644)
+
+    def test_take_over_self_swaps_readonly_real_script(self):
+        mod = self._load()
+        real, fresh, note = self._make_scene(self.root)
+        try:
+            with mock.patch.object(mod, "_real_script", return_value=os.path.abspath(real)), \
+                    mock.patch.object(mod, "_restart_with") as restart:
+                mod._take_over_self(os.path.abspath(real), fresh)
+            with open(real, encoding="utf-8") as fh:
+                self.assertEqual("NEW = 2\n", fh.read())
+            self.assertFalse(os.path.isfile(note))
+            restart.assert_called_once()
+        finally:
+            os.chmod(real, 0o644)
 
 
 class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
