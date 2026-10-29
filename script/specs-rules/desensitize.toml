@@ -1,0 +1,127 @@
+# 『取值一律脱敏（脱敏规范）』规则数据（`check_test_data_desensitize_guard`）。
+#
+# 本条补的是『用例只允许在本机跑』（`check_local_only_guard`）与『请求服务须有本机断言』
+# （`check_local_service_assert_guard`）以及 `specs/general/security.adoc`「敏感信息」
+# **都没管的那一面**：那些管代码运行时不许泄漏什么，本条管**写出来的内容里不许出现什么**——
+# 用户把问题连同真实库名/表名/服务名/内网地址贴过来时，照抄最省事（"照原样复现"听起来还更
+# 严谨），而内容一旦写出（提交、评论、截图），真实信息就随仓库与通知扩散、事后无从收回。
+# 用户口径：**不允许直接使用用户提供的信息，须用相同类型的其他信息替代**；随后追问
+# **是不是可以再扩展一下、归到脱敏规范、参考业界规范**——判据本体因此从测试规范迁到
+# `specs/general/desensitize.adoc`，测试规范只留一跳引用。
+#
+# 判据本体只有一处（通用层 `specs/general/desensitize.adoc` 整份文件）；
+# 其余各自只给载体：调度器 `AGENTS_COMMON.adoc` 给识别特征、提示词公共片段给复制面
+# （会被未知项目执行）、公开面 README 给一行登记、测试规范 `specs/general/testing.adoc`
+# 「用例编写」只留一跳引用（用例是这条规则的一处落点，不是它的本体）。
+# 代码侧本仓库自己的佐证走 `script/check_specs_test.py` 的 TestTestDataDesensitizeGuard
+# （用例在本机跑绿即"这条判据在本机成立"的取值）。
+
+[[guards.check_test_data_desensitize_guard]]
+kind = "exists"
+files = [
+    "specs/general/desensitize.adoc",
+    "AGENTS_COMMON.adoc",
+    "prompts/_common.txt",
+    "README.adoc",
+    "specs/general/testing.adoc",
+]
+message = "缺少文件 {file}——『取值一律脱敏』的判据本体/加载门/复制面/公开面/测试落点无一处承载它"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "specs/general/desensitize.adoc"
+kind = "section_groups"
+section = "取值"
+token_list = "TEST_DATA_DESENSITIZE_TOKENS"
+message = "脱敏规范「取值」节缺失要点 {missing}——{desc}"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "specs/general/desensitize.adoc"
+kind = "section_groups"
+section = "落点"
+token_list = "DESENSITIZE_LANDING_TOKENS"
+message = "脱敏规范「落点」节缺失要点 {missing}——{desc}"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "specs/general/desensitize.adoc"
+kind = "section_groups"
+section = "截图"
+token_list = "DESENSITIZE_SCREENSHOT_TOKENS"
+message = "脱敏规范「截图」节缺失要点 {missing}——{desc}"
+
+# 测试规范那一侧只留一跳引用：判据本体迁走后，若这里又抄回一份判据，就又成了两处真源。
+[[guards.check_test_data_desensitize_guard]]
+file = "specs/general/testing.adoc"
+section = "用例编写"
+tokens = [
+    "用例数据一律脱敏、不得带入真实内网信息（L1）",
+    "specs/general/desensitize.adoc",
+    "最真实场景优先",
+]
+kind = "file_tokens"
+message = "「用例编写」缺少『用例数据一律脱敏』的落点与一跳引用 {missing}——缺则测试侧不再指向脱敏规范，执行者换不出取值"
+
+# 与上条成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿，
+# "核过且通过"与"没核"无从区分——删锚点须与调基线一并发生。
+[[guards.check_test_data_desensitize_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 13
+token_list = "TEST_DATA_DESENSITIZE_TOKENS"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "specs/general/desensitize.adoc"
+kind = "section_groups"
+section = "依据"
+token_list = "DESENSITIZE_SOURCE_TOKENS"
+message = "脱敏规范「依据与已知取舍」节缺失要点 {missing}——{desc}"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 5
+token_list = "DESENSITIZE_SOURCE_TOKENS"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 6
+token_list = "DESENSITIZE_LANDING_TOKENS"
+
+[[guards.check_test_data_desensitize_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 3
+token_list = "DESENSITIZE_SCREENSHOT_TOKENS"
+
+# 调度器须能被触发（否则写测试用例时，这一条永远不会被加载）。
+[[guards.check_test_data_desensitize_guard]]
+file = "AGENTS_COMMON.adoc"
+anchor = ["涉及安全边界的代码，或写出的内容里带了用户侧的真实信息"]
+tokens = [
+    "贴了真实库名/表名/内网地址/账号/凭据",
+    "specs/general/desensitize.adoc",
+]
+kind = "line_tokens"
+message = "加载调度器缺少『取值一律脱敏』的识别特征 {missing}——缺则要写用例、日志、提交或平台正文时这一条永远不被加载"
+
+# 复制面（提示词会被未知项目执行）：边界在片段里，不在提示词正文里各写一份。
+[[guards.check_test_data_desensitize_guard]]
+file = "prompts/_common.txt"
+tokens = [
+    "取值一律脱敏（L1）",
+    "同类型的虚构取值",
+    "仅当次、不泛化",
+    "只换用户点名的那一处不算脱敏",
+    "范围是一次换全",
+]
+kind = "file_tokens"
+message = "提示词公共片段缺少『取值一律脱敏』的复制面 {missing}——这一条要治的正是『用户贴来的真实信息』，而执行者是按提示词被唤起的，片段里没有就等于没人跟它说过"
+
+# 公开面同步（读者不从公开面知道这条，仍会把"照用户给的原样写用例"当成严谨）。
+[[guards.check_test_data_desensitize_guard]]
+file = "README.adoc"
+tokens = [
+    "脱敏（`desensitize.adoc`",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记『脱敏』{missing}——公开面只看得见『用例在本机跑』，看不见『用例里不许写真实环境信息』，这条判据对读者不存在"
