@@ -18703,6 +18703,12 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '    """落点所在的那一层：用户家目录（os.path.expanduser）——本机所有项目共用一份"""\n'
         '    if not os.path.isdir(home):\n'
         '        raise ValueError("本机取不到用户家目录")\n'
+        'def _user_home_dir():\n'
+        '    """个人目录每轮现取、不写死也不缓存（每一轮现取、不写死）——见 shared_cache_dir 的调用处"""\n'
+        '    return _shell_known_folder("Profile") or os.path.expanduser("~")\n'
+        'def _shell_known_folder(name):\n'
+        '    """Windows 壳登记的 KnownFolder 当刻路径：SHGetKnownFolderPath(FOLDERID_Profile)\n'
+        '    取不到一律返回 None、不抛（优先取值，不是前置条件）"""\n'
         'def cache_slot_dir(d, b):\n'
         '    """按来源地址分槽（urllib.parse.urlsplit）；只进不出：不删除落点里的任何文件"""\n'
         '    return os.path.join(d, CACHE_HOME_DIR, CACHE_APP_DIR, b)\n'
@@ -19436,6 +19442,131 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                 self.assertFalse(os.path.exists(os.path.join(proj, ".cache")))
         finally:
             shutil.rmtree(proj, ignore_errors=True)
+
+    def test_windows_home_is_read_live_every_round(self):
+        """个人目录须**每轮现取**：Windows 上先问壳（KnownFolder 随注册表改随取）、
+        取不到才退回环境变量，且**同一进程里两次取值都重新问一遍**（不缓存）。
+
+        **失效形态**：只用 `expanduser("~")` 时，取值停留在"登录时设上的环境变量"——用户把
+        个人目录（我的文档一类）整体迁到别的路径之后，读到的仍是旧的一份，副本静默落到旧路径；
+        另一种形态是"取一次就存着"：同一次运行里个人目录迁走了，落点还停在上一次算出来的地方
+        （等价于写死）。用例把壳换成会改返回值的那一个，逐条判：① 壳的取值**优先于**环境变量；
+        ② 迁走之后**再取一次**即得到新路径。
+        """
+        import importlib.util, ctypes
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        spec = importlib.util.spec_from_file_location("fetch_specs_live_home", script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        work = tempfile.mkdtemp(prefix="fetch-live-home-")
+        self.addCleanup(shutil.rmtree, work, True)
+        old = os.path.join(work, "home-old")
+        new = os.path.join(work, "home-new")
+        os.makedirs(old)
+        os.makedirs(new)
+        state = {"path": old}
+
+        class _Shell32:
+            def SHGetKnownFolderPath(self, guid, flags, token, out):
+                buf = ctypes.create_unicode_buffer(state["path"])
+                ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = \
+                    ctypes.cast(buf, ctypes.c_void_p)
+                return 0
+
+        class _Ole32:
+            def CoTaskMemFree(self, buf):
+                pass
+
+        class _Windll:
+            shell32 = _Shell32()
+            ole32 = _Ole32()
+
+        saved = getattr(ctypes, "windll", None)
+        ctypes.windll = _Windll()
+        old_env = os.environ.get("USERPROFILE")
+        os.environ["USERPROFILE"] = os.path.join(work, "from-env")
+        try:
+            self.assertEqual(old, mod._user_home_dir(),
+                             "壳给出个人目录时须以它为准（不得拿登录时设上的环境变量顶替）")
+            state["path"] = new
+            self.assertEqual(new, mod._user_home_dir(),
+                             "个人目录迁走后**再取一次**须得到新路径（取一次就存着＝写死）")
+        finally:
+            ctypes.windll = saved
+            if old_env is None:
+                os.environ.pop("USERPROFILE", None)
+            else:
+                os.environ["USERPROFILE"] = old_env
+        # 壳不可用时退回环境变量（不得因此报成整批失败）
+        if saved is not None:
+            ctypes.windll = object()
+            try:
+                os.makedirs(os.path.join(work, "from-env"), exist_ok=True)
+                self.assertEqual(os.path.join(work, "from-env"), mod._user_home_dir(),
+                                 "壳那条路取不到时须退回环境变量/expanduser 那一套")
+            finally:
+                ctypes.windll = saved
+
+    def test_windows_home_migrated_away_does_not_fall_back_to_env(self):
+        """壳答出的家目录**已经不存在**时，不得退回环境变量——退回去正好拿到登录时那条旧值。
+
+        **失效形态**：`_shell_known_folder(...) or expanduser("~")` 把"壳答了、但答的那条
+        路径已经被挪走"与"壳说不出话"当成同一件事，退回环境变量后落点仍在被迁走的那一处。
+        判据：旧家目录不存在时落点必须**报错**——既不退回环境变量那条旧路径，也不换到别处。
+        """
+        import importlib.util, ctypes
+        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = os.path.join(real_root, "script", "fetch-specs.py")
+        spec = importlib.util.spec_from_file_location("fetch_specs_migrated_home", script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        work = tempfile.mkdtemp(prefix="fetch-migrated-home-")
+        self.addCleanup(shutil.rmtree, work, True)
+        gone = os.path.join(work, "home-gone")       # 壳会答出它，但它不存在
+        from_env = os.path.join(work, "from-env")
+        os.makedirs(from_env)
+        state = {"path": gone}
+
+        class _Shell32:
+            def SHGetKnownFolderPath(self, guid, flags, token, out):
+                buf = ctypes.create_unicode_buffer(state["path"])
+                ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = \
+                    ctypes.cast(buf, ctypes.c_void_p)
+                return 0
+
+        class _Ole32:
+            def CoTaskMemFree(self, buf):
+                pass
+
+        class _Windll:
+            shell32 = _Shell32()
+            ole32 = _Ole32()
+
+        saved = getattr(ctypes, "windll", None)
+        old_env = os.environ.get("USERPROFILE")
+        ctypes.windll = _Windll()
+        os.environ["USERPROFILE"] = from_env
+        try:
+            # 判**落点**而不是判 `_user_home_dir()`：后者若把失效的答案当成"没取到"，
+            # 退路在 macOS 上走 `expanduser("~")`→`HOME`、不读 `USERPROFILE`，本机跑不出来。
+            try:
+                mod.shared_cache_dir()
+            except ValueError:
+                pass                                  # 报错退出＝按"取不到"论，正是要的行为
+            else:
+                self.fail("壳答出的家目录已不存在时须报错、不得换地方")
+            state["path"] = from_env
+            self.assertEqual(from_env, mod._user_home_dir(),
+                             "壳答出新家目录后须即时跟随（迁回来也要跟得上）")
+        finally:
+            ctypes.windll = saved
+            if old_env is None:
+                os.environ.pop("USERPROFILE", None)
+            else:
+                os.environ["USERPROFILE"] = old_env
 
     def test_no_relocation_flags_in_script(self):
         """静态判据（用户口径：落点只有这一个）：脚本里不得再有换落点的入口与第二落点。
