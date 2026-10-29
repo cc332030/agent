@@ -3658,8 +3658,9 @@ INTERPRETER_FALLBACK_LINE_SPECS = (
      (("须**按次序探测解释器**（先 python3、再 python）——不得把 python3 直接写死成前提"
        "（本仓库实证：机器上只有 python、没有 python3 时，装不上规范）",
        (("command -v python3", ">/dev/null"), ("command -v python ", ">/dev/null"))),
-      ("须**用探测到的那个解释器**调用同目录的逻辑代码（`exec` 原样转交参数）",
-       (("exec", "$runtime", "fetch-specs.py", "$@"),)),
+      ("须**用探测到的那个解释器**调用同目录的逻辑代码并原样转交参数（且**不得用 `exec`**"
+       "把壳换掉——换掉之后取退出码、按需停住这两件事就没有机会执行了）",
+       (("\"$runtime\"", "fetch-specs.py", "\"$@\""),)),
       ("两者都没有时须**报错并退出非 0**（不静默继续）",
        (("未找到解释器",), ("exit 127",)))),
      (("command -v python3", ">/dev/null"), ("command -v python ", ">/dev/null"))),
@@ -3668,7 +3669,7 @@ INTERPRETER_FALLBACK_LINE_SPECS = (
        "Windows 上最常见的是 py 启动器，只探 python3 等于把大半个 Windows 装机量挡在门外",
        (("where py ",), ("where python3 ",), ("where python ",))),
       ("须**用探测到的那个解释器**调用同目录的逻辑代码并原样透传参数",
-       (("%FETCH_SPECS_RUNTIME%", "%~dp0fetch-specs.py", "%*"),)),
+       (("cmd /c", "%FETCH_SPECS_RUNTIME%", "%~dp0fetch-specs.py", "%*"),)),
       ("都没有时须**报错并退出非 0**（不静默继续）",
        (("exit /b 127",),))),
      (("where py ",), ("where python3 ",), ("where python ",))),
@@ -3907,12 +3908,14 @@ def check_spec_fetch_guard():
     # 入口形态：薄壳 + 同主名 + 退出码（两平台各自的可核对写法）
     entry_checks = (
         ("script/fetch-specs.sh",
-         (("exec", "fetch-specs.py"), ("$@",)),
-         "须用 `exec` 跑同目录的逻辑代码并原样转交 `$@`（入口只做定位、参数透传、退出码转交三件事）"),
+         (("fetch-specs.py",), ("$@",), ("status=$?",)),
+         "须跑同目录的逻辑代码、原样转交 `$@` 并**取它的退出码**（入口只做定位、参数透传、"
+         "退出码转交三件事）；**不得用 `exec` 换掉壳**——换掉之后取退出码与「下载完成不关窗口」"
+         "这两件事都没有机会执行（本仓库实测：`exec` 之后那一段一行都不跑）"),
         ("script/fetch-specs.bat",
-         (("%~dp0",), ("%*",), ("exit /b %errorlevel%",)),
-         "须定位同目录逻辑代码、`%*` 原样透传参数，并以 `exit /b %errorlevel%` 原样返回退出码"
-         "（缺则退出码是最后一条命令的，「失败也成功」）"),
+         (("%~dp0",), ("%*",), ("exit /b %FETCH_SPECS_STATUS%",)),
+         "须定位同目录逻辑代码、`%*` 原样透传参数，并把退出码**先存下来**再以 `exit /b` 原样返回"
+         "（缺则退出码是最后一条命令的（含停住用的 `pause`），「失败也成功」）"),
     )
     for rel, keys_groups, desc in entry_checks:
         path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -3968,6 +3971,31 @@ def check_spec_fetch_guard():
         missing = [k for k in keys if k not in text]
         if missing:
             err(f"规范抓取防线被破坏：{rel} 缺失 {missing}——{desc}", rel)
+    phase_done()
+
+
+def check_fetch_progress_guard():
+    """『取规范看得见进度、跑完不关窗口』防线（**用户提出**）。
+
+    用户口径：「fetch-specs 显示文件下载进度及其他明细，下载完成不要关闭窗口」。失效形态是
+    **下载几十份却一声不吭、跑完窗口立刻关掉**——用户既看不到取了哪些、也来不及看失败清单。
+
+    两类事实**分开核、互不替代**：
+      * **进度与明细**在逻辑代码这一侧（`script/fetch-specs.py`）：逐份打完即吐、直接写 stderr
+        并 flush、收尾有总账；攒到收尾统一打就等于没有进度（卡住时一行都看不见）；
+      * **跑完停住**在入口这一侧（`.sh` / `.bat`）：判据只认「自己开着一个终端」，管道、重定向、
+        CI 里照旧立刻退出——反过来，若逻辑代码自己等输入，它被别的程序调起时就成了一个
+        不返回的命令（职责边界见 `specs/general/script.adoc`「跨环境脚本」）。
+
+    本轮实测的两条失效形态也钉住了：①`_progress` 持锁后再调一个自己也取锁的函数 → 自锁，
+    第一份取完整轮挂住而进度行一行没打出来；②`.sh` 用 `exec` 跑逻辑代码 → 壳被换掉，后面
+    「取退出码 + 停住」那两段一行都不跑、窗口照旧秒关。
+
+    **规则数据**：锚点在 `script/specs-rules/progress.toml`；"某台机器上双击到底有没有新开
+    窗口""终端是不是真由入口开的"属运行时事实，交人/子 agent 复核。
+    """
+    phase("取规范进度与停住窗口防线检查（逐份进度 + 明细 + 跑完停住）")
+    run_rule_guard("check_fetch_progress_guard")
     phase_done()
 
 
@@ -4409,8 +4437,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 174  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`，上一轮 `check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2344  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮新增 `TestCheckWindowsWindowGuard` 15 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 175  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2355  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮新增 `TestCheckFetchProgressGuard` 11 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -13123,6 +13151,7 @@ CHECKS = (
     check_historical_notes,
     check_install_codeblock,
     check_spec_fetch_guard,
+    check_fetch_progress_guard,
     check_shared_cache_guard,
     check_readonly_landing_guard,
     check_entry_doc_manifest,

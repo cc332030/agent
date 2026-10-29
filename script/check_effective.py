@@ -633,6 +633,20 @@ MECHANISMS = [
      "check_public_content_coverage", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定"),
     ("安装取文件须有随规范分发的抓手：清单从入口自身解析、一次取全（不手拼逐条下载命令）", "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步"),
+    ("取规范须显示下载进度与明细、下载完成不关窗口（进度逐份即吐、入口按需停住）",
+     "script/fetch-specs.py", "script/check_specs.py",
+     "check_fetch_progress_guard",
+     "check_fetch_progress_guard 钉住用户口径「fetch-specs 显示文件下载进度及其他明细，下载完成"
+     "不要关闭窗口」的两半、且两半互不替代：①**进度与明细**在逻辑代码一侧（逐份打完即吐、直接写 "
+     "stderr 并 flush、进度行带份数/状态/字节/耗时且**分子只数终态**（重试那一行不推进，否则收尾"
+     "会出现 `[48/47]`）、收尾有总账、进度走 stderr 而结果走 stdout，并把 `threading.Lock` 不可重入"
+     "这条自锁陷阱写进注释）；②**跑完停住**在入口一侧（`.sh` 不得用 "
+     "`exec` 换掉壳——换了之后取退出码与停住那两段一行都不跑、窗口照旧秒关；停住只认「自己开着"
+     "一个终端」（判据取**标准输入**挂在终端上，`/dev/tty` 在重定向时照样可写、不能当判据），"
+     "管道/重定向/CI 里立刻退出；`.bat` 用 `cmd /c \"… & pause\"` 且**先把退出码存下来**"
+     "再返回——`pause` 自己会改 errorlevel）。规则数据在 `script/specs-rules/progress.toml`；"
+     "「某台机器上双击到底有没有新开窗口」「隐藏/后台在本机这个版本上可不可行」属运行时事实与"
+     "语义判断"),
     ("重新执行安装须能更新现有副本（安装脚本经常更新：以远程为准、内容不同才刷新，失败保留本地那一份）",
      "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_spec_fetch_guard",
