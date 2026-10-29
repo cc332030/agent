@@ -1,0 +1,67 @@
+# = 规范集合的运行期配置（**取值的唯一一处定义**）
+#
+# 定位：本文件是「这东西放在哪、按什么取值」的**唯一一处**定义。脚本读它、机械判据也核它；
+# 文档只**引一句**（写"取值见 `script/specs-config.toml`"），不再各抄一份。
+#
+# 为什么要有这个文件（用户口径）：『系统里配置、日志等涉及到的路径信息，应该是唯一真源，
+# 不能每个地方写一份』『类似这样的信息应该放配置里，然后配置的路径可以再定义』『我说的不单单
+# 是那几个脚本，而是**以后所有的开发**』——故这件事立为通用判据（`specs/general/coding.adoc`
+# 「取值的唯一来源」），本文件是那条判据在**本仓库**的落点：本仓库所有"会被两处用到的取值"
+# 都在这里，一处定义、两侧都来取、文档只引一句。
+#
+# 本文件自己的判据：`script/check_specs.py` 的 `check_paths_single_source_guard`——它核**四件事**：
+# ① 本文件在、必填键齐；② 执行侧与判据侧都从这一处取值（代码里不再出现第二份字面值）；
+# ③ 文档、注释、规则数据与维护方台账**不复述**取值（复述即第二份来源，只许一句回指）；
+# ④ 本文件随分发物一起走时，读取层就近找得到它。
+#
+# 谁读它：`script/check_specs.py`（判据侧）与 `script/fetch-specs.py`（执行侧）都经
+# `script/pathconfig.py` 读——**读取只有这一份实现**（执行侧按文件路径就地加载它，因为从
+# 落点跑时没有 `script/` 那一层、也不在 `sys.path` 上）。故 `pathconfig.py` 与薄壳、逻辑代码
+# 一起进 `[scripts].all`：落点里缺了读取层，执行脚本一启动就 `ModuleNotFoundError`。
+# **取值只有这一处**，"代码里不写第二份字面量"由上面那道判据核住。
+
+[landing]
+# 取回的规范副本落在**用户家目录**下的哪一处，以及取规范脚本自己落在哪一处（落点根下）。
+# `home_dir` 是家目录下的第一层，`app_dir` 是第二层，两者拼起来就是文档里说的那个落点
+# ——**只有这一个**，不按平台另取一套（用户口径：不管什么系统、什么环境都是这一个路径；
+# 理由见 `script/fetch-specs.py` 头部「落点」：换落点等于让"副本在哪"变成环境相关的事实）。
+home_dir = ".cache"
+app_dir = "agent-specs"
+
+[source]
+# 规范来源的默认地址（有对应的参数与环境变量可改，见 `script/fetch-specs.py` 头部）。
+# 换过来源时副本按来源地址分槽（不同来源的副本互不覆盖，见该脚本的 `cache_slot_dir`）。
+base_url = "https://agent.c332030.com"
+
+[manifest]
+# 取文件清单的**来源文件**：入口文档的加载调度器唯一登记了全部公共规范，清单从它解析。
+entry = "AGENTS_COMMON.adoc"
+# 有则取（仓库未放该文件时不算失败）
+optional = ["README.adoc"]
+
+[scripts]
+# 与本脚本同处 `script/` 的安装脚本：一并取到落点**根下**（不在来源槽里）——跨来源共用
+# 一份，下次重装直接跑落点里的入口。`entry` 是其中**给人直接敲**的那几个（取回的字节不带
+# 文件模式，故取完给它们补可执行位）；逻辑代码不在内，落点里唯一的入口是入口脚本
+# （见 `specs/general/script.adoc`「跨平台脚本」）。
+# `pathconfig.py` 也在名单里：执行侧（以及被分发出去的判据侧）要先 import 它才能读本文件，
+# 只取执行脚本+壳时落点里没有读取层，`fetch-specs.py` 一启动就 `ModuleNotFoundError`。
+all = ["script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat",
+       "script/pathconfig.py"]
+entry = ["script/fetch-specs.sh", "script/fetch-specs.bat"]
+# 本文件的仓库内路径（**由本文件自己声明**：读取层据此认出"配置是哪一份"，
+# 判据侧据此核对"文档引的那一句指向的还是它"）。
+config = "script/specs-config.toml"
+
+[network]
+# 单次请求超时（秒）与并发请求数（并发数取小值，不把对端打满）
+timeout_seconds = 30
+workers = 4
+
+[temporary]
+# 临时产物的根目录名（工作目录下）：临时产物一律落这里，不进落点、不进项目其他位置。
+# 目录布局与命名判据见 `specs/core/execution.adoc`「临时产物」。
+dir = "tmp"
+# 更新自身时新版本脚本的文件名后缀（与本轮真身同名不同后缀）与"待换标记"的文件名后缀
+self_update_suffix = ".update"
+self_handoff_suffix = ".handoff"

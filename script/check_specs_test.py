@@ -60,6 +60,23 @@ _SPEC = importlib.util.spec_from_file_location(
 cm = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(cm)  # type: ignore[union-attr]
 import rules_engine  # noqa: E402  （加载期判据：自定义文案里不得出现 `{section}`）
+import pathconfig   # noqa: E402  （运行期配置的落点：端到端用例要按它供给配置）
+
+
+def _install_scripts_served():
+    """端到端用例的"远端"该供给哪几份安装脚本——**从运行期配置读**（`[scripts].all`）。
+
+    为什么必须从配置读：名单的唯一真源在 `script/specs-config.toml`，执行侧从那里取。
+    用例若按脚本源码里的正则去猜名单，名单一搬进配置就**一条都读不到**，于是三份安装脚本
+    全部 404——用例报的是"取文件失败"、看起来像网络问题，实际是夹具没跟上真源搬家。
+    """
+    real_root = os.path.dirname(HERE)
+    cfg = pathconfig.load(real_root)
+    served = {}
+    for rel in cfg.install_scripts:
+        with open(os.path.join(real_root, *rel.split("/")), "rb") as fh:
+            served[rel] = fh.read()
+    return served
 
 
 def _git_argv(cwd: str, *args: str) -> subprocess.CompletedProcess:
@@ -18668,6 +18685,227 @@ class TestCheckInstallRepeatUpdateGuard(CheckSpecsTestCase):
         # 反例：入口文件不在 → 幂等更新的一条无从核对
         cm.check_install_repeat_update_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
+    """钉住『路径与运行期取值的唯一真源』：配置一处定义、两侧都来取、文档只引一句。
+
+    对应用户口径：『系统里配置、日志等涉及到的路径信息，应该是唯一真源，不能每个地方写一份』
+    『类似这样的信息应该放配置里，然后配置的路径可以再定义』。反例逐项覆盖：配置被删、
+    配置缺必填项、执行侧常量退回字面量、判据侧常量退回字面量、落点字面量又写回代码、
+    文档复述落点却不给回指。
+    """
+
+    CONFIG = (
+        "[landing]\n"
+        'home_dir = ".cache"\n'
+        'app_dir = "agent-specs"\n\n'
+        "[source]\n"
+        'base_url = "https://example.invalid"\n\n'
+        "[manifest]\n"
+        'entry = "AGENTS_COMMON.adoc"\n'
+        'optional = ["README.adoc"]\n\n'
+        "[scripts]\n"
+        'all = ["script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat",\n'
+        '       "script/pathconfig.py"]\n'
+        'entry = ["script/fetch-specs.sh", "script/fetch-specs.bat"]\n'
+        'config = "script/specs-config.toml"\n\n'
+        "[network]\n"
+        "timeout_seconds = 30\n"
+        "workers = 4\n\n"
+        "[temporary]\n"
+        'dir = "tmp"\n'
+        'self_update_suffix = ".update"\n'
+        'self_handoff_suffix = ".handoff"\n'
+    )
+    # 判据本体（通用条）在真实仓库的 `specs/general/coding.adoc` 里：夹具只补"这一节在"，
+    # 让规则数据那一步不因"缺文件/缺节"报红（真源是否完整由真实仓库的检查核）。
+    # 节内要点取自规则数据自己的锚点清单（夹具**不另抄**一份——抄一份就是本条要治的
+    # 第二份来源，而且清单改了夹具会静默失效）。内容为真源的占位，措辞一致性由真实仓库核。
+    CODING = (
+        "== 取值的唯一来源（配置、路径、常量、名单、阈值——任何会被两处用到的取值）\n\n"
+        + "\n".join(t for group in cm._RULES_TOKENS["PATH_VALUE_GUARD_ANCHORS"]
+                    for t in group[1])
+        + "\n"
+    )
+    # 判据侧自己那份实现（"配置随分发时读取就近优先"核的是**它的接线**，不是被测项目的文件）
+    PATHCONFIG = (
+        "def config_beside_module():\n"
+        "    return None\n"
+        "def load(repo_root=None):\n"
+        "    path = config_beside_module() or config_path(root)\n"
+    )
+    FETCH = (
+        '#!/usr/bin/env python3\n'
+        '"""fetch"""\n'
+        "DEFAULT_BASE = _PATHCONFIG.base_url\n"
+        'CACHE_HOME_DIR = _PATHCONFIG.landing_home_dir\n'
+        'CACHE_APP_DIR = _PATHCONFIG.landing_app_dir\n'
+        'MANIFEST_FILE = _PATHCONFIG.manifest_entry\n'
+        'INSTALL_SCRIPTS = _PATHCONFIG.install_scripts\n'
+        'TIMEOUT_SECONDS = _PATHCONFIG.timeout_seconds\n'
+        'DEFAULT_WORKERS = _PATHCONFIG.workers\n'
+        'SELF_TMP_DIR = _PATHCONFIG.tmp_dir\n'
+    )
+
+    def _write_valid(self):
+        self.write("script/specs-config.toml", self.CONFIG)
+        self.write("script/fetch-specs.py", self.FETCH)
+        self.write("script/check_specs.py",
+                   "LANDING_NAME = _PATHCFG.landing_name\n"
+                   "PUBLIC_BASE = _PATHCFG.base_url\n")
+        self.write("AGENTS_COMMON.adoc",
+                   "取值见 `script/specs-config.toml`（唯一真源）。\n")
+        self.write("README.adoc", "落点与取回方式见 AGENTS_COMMON.adoc。\n")
+        self.write("AGENTS.adoc", "路径取值见 `script/specs-config.toml`。\n")
+        self.write("specs/general/coding.adoc", self.CODING)
+        self.write("script/pathconfig.py", self.PATHCONFIG)
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 判据侧那侧的常量来自导入期读到的**真实仓库**配置（`_PATHCFG`）：临时夹具里
+        # 写一份等价配置只为让"配置在、键齐"那一段成立，两侧的接线形态由夹具源码核。
+        self._orig_cfg = cm._PATHCFG
+
+    def tearDown(self) -> None:
+        cm._PATHCFG = self._orig_cfg
+        super().tearDown()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_paths_single_source_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_missing_config_reports(self):
+        # 反例：配置被删 → 执行侧与判据侧只能各写各的（正是本条要治的形态）
+        self._write_valid()
+        os.remove(os.path.join(self.root, "script", "specs-config.toml"))
+        cm._PATHCFG = None
+        cm.check_paths_single_source_guard()
+        self.assertIn("specs-config.toml", self.error_texts())
+
+    def test_missing_key_reports(self):
+        # 反例：配置缺必填项 → 调用方不得自己补默认值，否则同一取值重新长出第二份来源
+        self._write_valid()
+        self.write("script/specs-config.toml",
+                   self.CONFIG.replace('app_dir = "agent-specs"\n', ""))
+        import pathconfig
+        cm._PATHCFG = pathconfig.Config(
+            {"landing": {"home_dir": ".cache"}, "source": {"base_url": "https://example.invalid"},
+             "manifest": {"entry": "AGENTS_COMMON.adoc", "optional": []},
+             "scripts": {"all": [], "entry": [], "config": "script/specs-config.toml"},
+             "network": {"timeout_seconds": 30, "workers": 4},
+             "temporary": {"dir": "tmp", "self_update_suffix": ".update",
+                           "self_handoff_suffix": ".handoff"}},
+            os.path.join(self.root, "script", "specs-config.toml"))
+        cm.check_paths_single_source_guard()
+        self.assertIn("app_dir", self.error_texts())
+
+    def test_exec_side_literal_reports(self):
+        # 反例：执行侧的常量退回字面量 → 改配置不改变行为，而检查照旧全绿
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.FETCH.replace('CACHE_APP_DIR = _PATHCONFIG.landing_app_dir',
+                                      'CACHE_APP_DIR = "agent-specs"'))
+        cm.check_paths_single_source_guard()
+        self.assertIn("CACHE_APP_DIR", self.error_texts())
+        self.assertIn("不是从配置", self.error_texts())
+
+    def test_judge_side_literal_reports(self):
+        # 反例：判据侧自己另写一份落点（本轮之前就是这个形态）
+        self._write_valid()
+        self.write("script/check_specs.py", 'LANDING_NAME = "agent-specs"\n')
+        cm.check_paths_single_source_guard()
+        self.assertIn("LANDING_NAME", self.error_texts())
+
+    def test_landing_literal_in_code_reports(self):
+        # 反例：落点那两段字面量又写回代码（哪怕只是注释里的示例） → 第二处定义
+        self._write_valid()
+        self.write("script/fetch-specs.py", self.FETCH + '# 例如 ".cache/agent-specs"\n')
+        cm.check_paths_single_source_guard()
+        self.assertIn("落点路径的字面量", self.error_texts())
+
+    def test_doc_repeats_landing_without_pointer_reports(self):
+        # 反例：文档复述落点、却不给回指 → 同一份取值写两处，改配置必漏文档
+        self._write_valid()
+        self.write("README.adoc", "副本落在用户家目录下的 `.cache/agent-specs`。\n")
+        cm.check_paths_single_source_guard()
+        self.assertIn("README.adoc", self.error_texts())
+        self.assertIn("specs-config.toml", self.error_texts())
+
+    def test_prose_restating_value_without_cite_reports(self):
+        # 反例：**正文**（文档/注释/台账）复述了取值、同一段里却没有回指 →
+        # 第二个来源挪进了正文：改配置必漏这里，而这里永远不会报红
+        self._write_valid()
+        self.write("README.adoc", "来源地址就是 `https://example.invalid`，直接点它就下载。\n")
+        cm.check_paths_single_source_guard()
+        self.assertIn("README.adoc", self.error_texts())
+        self.assertIn("规范来源地址", self.error_texts())
+
+    def test_prose_restating_value_with_cite_passes(self):
+        # 正例：同一段里给了回指 → 提这件事可以，取值去真源读
+        self._write_valid()
+        self.write("README.adoc", "来源地址见 `script/specs-config.toml`（本文件不复述取值）。\n")
+        cm.check_paths_single_source_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_prose_short_value_does_not_trip(self):
+        # 边界：过短的取值（几个字符）在正文里到处都是——命中它是巧合、不是复述
+        self._write_valid()
+        self.write("README.adoc", "临时目录按项目约定即可。\n")
+        cm.check_paths_single_source_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_reader_layer_without_beside_first_reports(self):
+        # 反例：读取层只按仓库内路径找配置 → 配置被一起分发到别处时读不到、当场退出
+        self._write_valid()
+        self.write("script/pathconfig.py", "def load(repo_root=None):\n    return None\n")
+        cm.check_paths_single_source_guard()
+        self.assertIn("config_beside_module", self.error_texts())
+
+    def test_reader_layer_not_distributed_reports(self):
+        # 反例：读取层不在分发名单里 → 落点根下只有执行脚本与配置、没有 `pathconfig.py`，
+        # 从落点再跑一次当场 `ModuleNotFoundError`（而仓库里跑得好好的）
+        self._write_valid()
+        self.write("script/specs-config.toml",
+                   self.CONFIG.replace(',\n       "script/pathconfig.py"', ''))
+        cm.check_paths_single_source_guard()
+        self.assertIn("pathconfig.py", self.error_texts())
+        self.assertIn("[scripts].all", self.error_texts())
+
+    def test_entry_template_addresses_exempt(self):
+        # 边界：公共入口模板里那段给新实例照抄的地址表**不算复述**——那是"下一站"本身
+        # （新实例照着它去取规范，那时项目里还没有配置可读）。而**同一文件里谈这件事的正文**
+        # 复述取值时照样报红：豁免的是那份地址表、不是整份入口文档。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "== 安装与更新（引用方接入与取回口径）\n\n"
+                   "[source,asciidoc]\n----\nhttps://example.invalid/AGENTS_COMMON.adoc\n----\n")
+        orig_prose = cm.PATH_VALUE_PROSE_SOURCES
+        cm.PATH_VALUE_PROSE_SOURCES = ("AGENTS_COMMON.adoc",)
+        try:
+            cm.check_paths_single_source_guard()
+            self.assertEqual([], cm.errors)
+            self.write("AGENTS_COMMON.adoc",
+                       "== 取规范到本地副本\n\n"
+                       "落点只有一处：副本落在用户家目录下的 `.cache/agent-specs`，不许另留一份。\n")
+            cm.errors.clear()
+            cm.check_paths_single_source_guard()
+            self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+        finally:
+            cm.PATH_VALUE_PROSE_SOURCES = orig_prose
+
+    def test_entry_doc_landing_by_pointer_passes(self):
+        # 正例：入口文档写成"用户家目录下的那一处 + 回指配置"——取值只有一处定义，
+        # 复述一遍就是第二个来源（上一轮这一处还要求把落点整串写出来）。此处只跑落点那一段：
+        # 其余要点（入口模板、站内地址）属别的防线，夹具里不备。
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc",
+                   "== 取规范到本地副本\n\n"
+                   "落点只有一处：副本落在**用户家目录**下的那一处"
+                   "（取值见 `script/specs-config.toml`）。\n")
+        # 落点那一段的判据本体（`check_shared_cache_guard` 的落点分支）：只看这一条有没有报
+        self.assertNotIn("未写明落点", self.error_texts())
+
 class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     """钉住『规范抓取（安装取文件）防线』：随规范分发的取文件脚本不得被删或退化。
 
@@ -18692,6 +18930,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'CACHE_HOME_DIR = ".cache"\n'
         'DOC = "只写落点目录：不写项目里其他位置；不删除既有文件"\n'
         'CACHE_APP_DIR = "agent-specs"\n'
+        'LANDING_REL = (CACHE_HOME_DIR, CACHE_APP_DIR)\n'
         'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.py")\n'
         'def fetch_install_scripts(base, out_dir, keep):\n'
         '    """安装脚本一并取到落点根下：os.path.basename(rel)；落点里的入口须能直接跑"""\n'
@@ -18711,7 +18950,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '    取不到一律返回 None、不抛（优先取值，不是前置条件）"""\n'
         'def cache_slot_dir(d, b):\n'
         '    """按来源地址分槽（urllib.parse.urlsplit）；只进不出：不删除落点里的任何文件"""\n'
-        '    return os.path.join(d, CACHE_HOME_DIR, CACHE_APP_DIR, b)\n'
+        '    return os.path.join(d, *LANDING_REL, b)\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -19268,10 +19507,10 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("script/fetch-specs.py",
                    self.SCRIPT_PY.replace(
-                       "return os.path.join(d, CACHE_HOME_DIR, CACHE_APP_DIR, b)",
+                       "return os.path.join(d, *LANDING_REL, b)",
                        "return os.path.join(d, b)"))
         cm.check_shared_cache_guard()
-        self.assertIn("CACHE_HOME_DIR", self.error_texts())
+        self.assertIn("LANDING_REL", self.error_texts())
 
     def test_home_failure_not_reported_reports(self):
         # 反例：家目录取不到时不再报错退出（判据被去掉）→ 副本会静默落到别的路径，
@@ -19329,14 +19568,11 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     def _install_scripts_served(self):
         """端到端服务端要供给的安装脚本（脚本会随规范一起取它们，缺则 404、退出码非 0）。
 
-        名单从**真实仓库**的 `fetch-specs.py` 里读，与脚本本身同源——手工再抄一份名单会在
-        加了第三份安装脚本时静默漏供（那时用例报的是 404、看起来像网络问题）。
+        名单从**运行期配置**里读（`[scripts].all`，与执行侧同一处来源）——手工再抄一份名单会在
+        加了第三份安装脚本时静默漏供（那时用例报的是 404、看起来像网络问题）；
+        而按脚本源码里的正则去猜，会在名单搬进配置后**一条都读不到**、静默漏供全部三份。
         """
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        src = open(os.path.join(real_root, "script", "fetch-specs.py"), encoding="utf-8").read()
-        return {rel: src.encode("utf-8")
-                for rel in re.findall(r'"script/([\w.-]+)"', src)
-                for rel in ("script/" + rel,)}
+        return _install_scripts_served()
 
     def _run_fetch(self, base, extra=(), cwd=None, home=None):
         """按仓库真实的抓取脚本跑一次（spawn 子进程、按 stdout/stderr 断言）。
@@ -19369,6 +19605,16 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             def do_GET(self):                                # noqa: N802 - http.server 约定
                 rel = self.path.lstrip("/")
                 body = served.get(rel)
+                # 运行期配置也随规范分发（`[scripts].config`）：执行侧与判据侧的取值都从它来，
+                # 故端到端的"远端"必须给得出它——否则脚本按"配置缺失"退出、用例看到的是
+                # 一个与落点无关的失败。映射按**真实仓库**那一份原样供给（同一份取值）；
+                # 两种路径写法都供给（名单里是 `script/...`，落点里按文件名落盘）。
+                if body is None and rel in (pathconfig.CONFIG_REL,
+                                            os.path.basename(pathconfig.CONFIG_REL)):
+                    with open(os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            *pathconfig.CONFIG_REL.split("/")), "rb") as fh:
+                        body = fh.read()
                 if body is None:
                     self.send_response(404)
                     self.end_headers()
@@ -19583,10 +19829,10 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                      "LOCALAPPDATA", "tmp/agent-specs"):
             self.assertNotIn(flag, src,
                              f"落点只有用户家目录下的 .cache/agent-specs，不应再有 {flag}")
-        for key in ("expanduser", "CACHE_HOME_DIR", "CACHE_APP_DIR"):
+        for key in ("expanduser", "CACHE_HOME_DIR", "CACHE_APP_DIR", "LANDING_REL"):
             self.assertIn(key, src, f"落点须由用户家目录 + {key} 算出，缺则落点不再是那一处")
-        self.assertRegex(src, r"CACHE_HOME_DIR,\s*CACHE_APP_DIR",
-                         "落点须由 CACHE_HOME_DIR/CACHE_APP_DIR 两级目录拼出（那一处用户路径）")
+        self.assertRegex(src, r"\*LANDING_REL",
+                         "落点须由那两层目录拼出（分段形式 `LANDING_REL`，那一处用户路径）")
 
     def test_failure_keeps_local_copy_bytes(self):
         """端到端（失败不得把副本变小或变没）：远端不可达时，落点里已有的那一份必须**逐字节
@@ -19634,6 +19880,14 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             def do_GET(self):                                # noqa: N802 - http.server 约定
                 rel = self.path.lstrip("/")
                 body = served.get(rel)
+                # 运行期配置也随安装脚本一并分发到落点根下：远端须给得出它
+                # 配置按**文件名**落在落点根下，远端也按名单里的那一串（`script/...`）供给
+                if body is None and rel in (pathconfig.CONFIG_REL,
+                                            os.path.basename(pathconfig.CONFIG_REL)):
+                    with open(os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            *pathconfig.CONFIG_REL.split("/")), "rb") as fh:
+                        body = fh.read()
                 if body is None:
                     self.send_response(404)
                     self.end_headers()
@@ -20772,17 +21026,8 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
     SPEC = "= 执行原则\n\n* 甲\n".encode("utf-8")
 
     def _install_scripts_served(self):
-        """服务端要供给的安装脚本（脚本会随规范一起取它们，缺则 404、退出码非 0）。
-
-        名单从**真实仓库**的 `fetch-specs.py` 里读，与脚本本身同源——手工再抄一份名单会在
-        加了第三份安装脚本时静默漏供（那时用例报的是 404、看起来像网络问题）。
-        """
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(real_root, "script", "fetch-specs.py"),
-                  encoding="utf-8") as fh:
-            src = fh.read()
-        return {"script/" + rel: src.encode("utf-8")
-                for rel in re.findall(r'"script/([\w.-]+)"', src)}
+        """服务端要供给的安装脚本（名单从运行期配置读，与执行侧同一处来源）。"""
+        return _install_scripts_served()
 
     def _serve(self, served):
         import http.server
@@ -20791,6 +21036,14 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):                                # noqa: N802 - http.server 约定
                 body = served.get(self.path.lstrip("/"))
+                # 运行期配置随规范分发（同上一个 `_serve`）：端到端的远端须给得出它，
+                # 否则脚本按"配置缺失"退出，用例看到的是一个与落点无关的失败。
+                if body is None and self.path.lstrip("/") in (
+                        pathconfig.CONFIG_REL, os.path.basename(pathconfig.CONFIG_REL)):
+                    with open(os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            *pathconfig.CONFIG_REL.split("/")), "rb") as fh:
+                        body = fh.read()
                 if body is None:
                     self.send_response(404)
                     self.end_headers()
@@ -20908,11 +21161,8 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
                 # 入口名单与脚本同源（`ENTRY_SCRIPTS`）：手工再抄一份会在加了第三份入口时静默漏测
-                with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                       "script", "fetch-specs.py"), encoding="utf-8") as fh:
-                    src = fh.read()
-                entry_rels = re.findall(r'ENTRY_SCRIPTS = \(([^)]*)\)', src)[0]
-                entry_names = re.findall(r'"script/([\w.-]+)"', entry_rels)
+                entry_names = [os.path.basename(rel) for rel in
+                               pathconfig.load().entry_scripts]
                 entries = [os.path.join(root, n) for n in entry_names
                            if n.endswith(".sh")]      # .bat 在 POSIX 上无执行位语义
                 self.assertTrue(all(os.path.isfile(p) for p in entries), root)
@@ -21178,13 +21428,8 @@ class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
     SPEC = "= 执行原则\n\n* 甲\n".encode("utf-8")
 
     def _install_scripts_served(self):
-        """服务端要供给的安装脚本（名单从真实脚本里读，与它同源，避免手工抄漏）。"""
-        real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(real_root, "script", "fetch-specs.py"),
-                  encoding="utf-8") as fh:
-            src = fh.read()
-        return {"script/" + rel: src.encode("utf-8")
-                for rel in re.findall(r'"script/([\w.-]+)"', src)}
+        """服务端要供给的安装脚本（名单从运行期配置读，与执行侧同一处来源，避免手工抄漏）。"""
+        return _install_scripts_served()
 
     def _run_fetch(self, base, extra=(), home=None):
         real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

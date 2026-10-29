@@ -120,7 +120,7 @@ DEFAULTS = {
 # `ref`/`overlap`/`frag`/`line` 供 `dispatcher_no_verbatim` 报告"与哪个文件重合了多少字、
 # 重合的片段是什么、在第几行"——写错的占位符会原样留在报错正文里，故同样在加载期拦住。
 # `a`/`b`/`line_a`/`line_b` 供 `duplicate_scan` 报告"哪两处、各自在第几行"。
-PLACEHOLDERS = ("file", "missing", "desc", "hit", "ref", "overlap", "frag", "line",
+PLACEHOLDERS = ("file", "missing", "desc", "hit", "cite", "ref", "overlap", "frag", "line",
                 "a", "b", "line_a", "line_b")
 
 
@@ -203,7 +203,10 @@ def _groups_of(rules, step):
     清单名取不到（未登记、写错）时**报错而非静默退化**：那会让整组锚点空转，而"核过且通过"
     与"没核"看起来一样。
     """
-    named = step.get("token_list")
+    # `token_list` 与 `groups_source` 同义：两者都指「锚点组来自 `_tokens.toml` 里的同名清单」。
+    # 分两个名字是因为后者读起来是"另一份数据里的清单"、前者读起来是"一组词"——同义词只许
+    # 有一处实现（本函数），别处不得各判一遍（见 `specs/general/coding.adoc`「同一件事只有一个来源」）。
+    named = step.get("token_list") or step.get("groups_source")
     if not named:
         return step["groups"]
     data = rules.ctx.tokens(named)
@@ -1209,6 +1212,72 @@ _LIST_ITEM = re.compile(r"^\*{1,2}\s|^[.\-]\s")
 _BLOCK_ATTR = re.compile(r"^\[[^\]]+\]$")
 
 
+def _step_prose_mentions(rules, step):
+    """**同一取值在正文里被复述**：`sources` 下每份文档里，`values` 中任一取值**在正文中
+    出现**即报红；只有**同一段落里同样出现 `cite_tokens` 之一**（那是对真源的一句回指）时
+    才放行。
+
+    为什么需要它（本仓库实证的失效形态）：`script/specs-config.toml` 立为"唯一真源"后，
+    **代码侧**接上了（常量从配置算），**文档与规则数据侧**却照旧各抄一份——`specs-config.toml`
+    自己的头部注释写着"配置文件自己叫什么"、"安装脚本名单"、"超时与并发"的取值，
+    `pathconfig.py` 的 docstring 把落点写了一遍，维护方台账 `guards.adoc` 的那一行又把落点
+    与其余取值复述了一遍。它们**都是正文**，而当时唯一的抓手只核"落点这一串在**代码文件**里
+    出没出现"——于是改配置时这几处必然静默漂移，且检查全绿。
+
+    判据是"**引用形态**"而不是"这些字不许出现"：谈这件事的地方天然要提它，规则要求的是
+    **提真源的名字**、不复述取值。故 `cite_tokens` 是这条判据的开关——只提及、不引真源的
+    那一处才是第二份来源。
+
+    给 `section` 时只核该节（`_step_target` 同口径：整份文件里别处的同形字样会兜住缺项）。
+    """
+    text, scope_desc = _step_target(rules, step)
+    if text is None:
+        return
+    del scope_desc
+    values = step["values"]
+    cites = step["cite_tokens"]
+    hits = [v for v in values if v and v in text]
+    if not hits:
+        return
+    paragraphs = _prose_paragraphs(text)
+    for hit in hits:
+        for para in paragraphs:
+            if hit not in para:
+                continue
+            if any(c in para for c in cites):
+                continue
+            rules.ctx.err(
+                step["message"].replace("{file}", step["file"])
+                .replace("{hit}", hit).replace("{cite}", " / ".join(cites)),
+                step["file"])
+            break
+
+
+def _prose_paragraphs(text):
+    """把文本切成段落（空行、标题行、代码块定界处断开）——判据的粒度是"同一段落里有没有回指"。
+
+    不按整份文件判：一处给了回指、另一处复述时，按整份核会把复述那一处兜住（本仓库实测：
+    文档里既有"取值见配置"的回指、又有一行把落点写全，按整份判即全绿）。
+    """
+    out, buf, in_block = [], [], False
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped == "----":
+            in_block = not in_block
+            out.append("\n".join(buf))
+            buf = []
+            continue
+        if in_block:
+            continue
+        if not stripped or re.match(r"^=+\s", stripped):
+            out.append("\n".join(buf))
+            buf = []
+            continue
+        buf.append(line)
+    out.append("\n".join(buf))
+    return [p for p in out if p.strip()]
+
+
 def _step_list_structure(rules, step):
     """核**列表结构没被写坏**：平面列表范围内缩进了即报红。
 
@@ -1284,6 +1353,7 @@ KINDS = {
     "pointer_no_verbatim": _step_pointer_no_verbatim,
     "table_row_pipe": _step_table_row_pipe,
     "list_structure": _step_list_structure,
+    "prose_mentions_generated": _step_prose_mentions,
 }
 
 
