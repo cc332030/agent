@@ -63,6 +63,15 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - 落点**不按平台取目录**：不管什么系统、什么环境都是用户家目录下的这一个路径（用户口径），
     家目录取不到时报错退出、**不静默换地方**——换落点等于让「副本在哪」变成环境相关的事实，
     入口文档写下的那一个路径就与实际的落点对不上了（公共入口「取规范到本地副本」只写这一个落点）；
+  - **家目录每轮现取、取到就按它算、不写死也不缓存**（用户口径：「个人目录需要实时去读，
+    不要默认路径，取到后也不要写死，每次都去拿最新的目录」）：家目录在 Windows 上**不是**
+    一块写死的路径——"个人目录为了不丢数据会被整体移到别的盘/别的路径"（如"我的文档"被
+    重定向到 `D:\我的文档`），而 `%USERPROFILE%` 这类**环境变量是登录时按注册表读出来设上的**，
+    进程内改了注册表它也不会跟着变。故**每一轮**都按 `_user_home_dir` 现取一遍：
+    先问壳（Windows 上 `SHGetKnownFolderPath`＝注册表里**当刻**的 KnownFolder 取值，随改随取），
+    取不到再退回环境变量/`expanduser("~")`；**不落任何缓存**（缓存即"下次还用旧目录"，正好
+    是本条要防的形态），也**不在代码里写任何一条家目录字面值**——落点每次都是由"这一轮现取到的
+    家目录"算出来的；
   - 落点下按来源地址分目录（见 `cache_slot_dir`）——换过 `--base` 取到的不同来源副本互不覆盖；
     且**只进不出**：本脚本不删除落点里的任何文件（含换源留下的旧副本），要清理由人来做
     （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）。
@@ -166,6 +175,7 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
 
 import argparse
 import concurrent.futures
+import ctypes
 import http.client
 import os
 import re
@@ -176,8 +186,17 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import uuid
 
 DEFAULT_BASE = "https://agent.c332030.com"
+
+
+class _GUID(ctypes.Structure):
+    """Win32 `GUID`（与 `uuid.UUID` 同构的 16 字节，见 `_guid_of`）。"""
+    _fields_ = (("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16),
+                ("Data3", ctypes.c_uint16), ("Data4", ctypes.c_uint8 * 8))
+
+
 # 落点父目录：用户家目录下的这一层（落点只有这一个，不另按平台取目录）
 CACHE_HOME_DIR = ".cache"
 # 落点目录名：落点父目录下的这一层（`CACHE_HOME_DIR/CACHE_APP_DIR` 即那条用户路径）
@@ -995,8 +1014,98 @@ def install_scripts_dir():
     return os.path.join(shared_cache_dir(), CACHE_HOME_DIR, CACHE_APP_DIR)
 
 
+def _user_home_dir():
+    """**当刻的**用户个人目录——每轮现取、不写死、不缓存（用户口径见脚本头部「落点」）。
+
+    为什么不能只用 `os.path.expanduser("~")`：它读的是 `USERPROFILE` 一类**环境变量**，而
+    环境变量由**登录时**按注册表设上、进程内不会跟随——"个人目录被移到别处"（用户实际做法：
+    把"我的文档"这类目录整体重定向到另一块盘，免重装丢数据）之后，同一个会话里读到的仍是
+    旧的一份。故取值次序是：
+
+      1. **问壳要**（仅 Windows）：`SHGetKnownFolderPath(FOLDERID_Profile)`——KnownFolder 的
+         路径存在注册表里、由壳每次**现算**，改过即取到新值。用 `ctypes` 直接调，不为一个路径
+         引入依赖；分岔判据是 `ctypes.windll` 在不在（`os.name` 跟着**跑脚本的解释器**走，
+         与"这台机器是不是 Windows"不是一件事）；
+      2. 取不到（非 Windows、壳那条路失败）→ 环境变量/`expanduser("~")` 那一套；
+      3. 退路给出的值也只在**确实存在且不是根目录**时才算数——拿着一个"看着像家目录"的值去
+         建落点，正是本条要防的"落到别处还不自知"；
+      4. **壳答了、但答出的路径已不存在**（旧家目录刚被挪走）→ 按取不到论、**不退环境变量**：
+         退回 `expanduser("~")` 恰好拿到"登录时设上的那条旧路径"，落点会退回被迁走的那一处。
+
+    取不到时返回空串或原样的 `~`：**校验不在这里**，由 `shared_cache_dir` 统一判并报错
+    ——"取不到"是一种失败，不是另选一处。
+    """
+    shell = _shell_known_folder("Profile")
+    if shell is _SHELL_MISSING:
+        return ""                         # 壳的答案已随迁移失效：不给退路，让调用方报错
+    return shell or os.path.expanduser("~")
+
+
+# FOLDERID_Profile：Windows 壳里"用户个人目录"这一个 KnownFolder 的 GUID
+# （`{5E6C858F-0E22-4760-9AFE-EA3317B67173}`）。GUID 是系统侧的既定标识，不是可配取值。
+KNOWN_FOLDER_PROFILE = "5E6C858F-0E22-4760-9AFE-EA3317B67173"
+
+# 『壳答出了一个路径、但那个路径当下已经不存在』——与『壳说不出话』(None) 是两件事：
+# 前者说明个人目录已经迁走、旧路径没了，此时退回环境变量只会拿回登录时的那条旧值。
+_SHELL_MISSING = object()
+
+
+def _shell_known_folder(name):
+    """Windows 壳登记的 KnownFolder `name` 的**当刻**路径。
+
+    三种返回：路径（已存在）／`None`（壳说不出话：非 Windows、壳不可用、HRESULT 非 0）／
+    `_SHELL_MISSING`（壳答出了路径，但那路径当下已不存在——旧家目录被挪走了）。
+
+    `SHGetKnownFolderPath` 取的是**注册表里此刻的值**（个人目录被重定向后即时可见），
+    这正是不用环境变量的理由（见 `_user_home_dir`）。
+
+    **"取不到"一律返回 `None`、不抛**：这条是**优先**取值、不是前置条件——壳不可用（精简镜像、
+    服务账户、非 Windows）时交给退路，报错只在**退路也取不到**时由调用方给；在这里抛错会把
+    一次可自愈的情形报成整批失败。返回前还要求它是**一个已存在的目录**（同 `shared_cache_dir`
+    的判据）；答了却不存在的情形**不能**当成"没取到"交给退路（见 `_user_home_dir`）。
+    """
+    try:
+        windll = ctypes.windll            # 非 Windows 上没有这个属性：这一句即分岔
+    except AttributeError:
+        return None
+    if name != "Profile":
+        return None                       # 只登记了这一处（见 `KNOWN_FOLDER_PROFILE`）
+    # 出参是 `PWSTR*`：用 `c_void_p` 接地址、再 `cast` 成宽字符串。
+    # 不用 `POINTER(c_wchar_p)`：那个写法把"指针的值"当成对象交给解释器管，壳分配的那块内存
+    # 既不在 Python 的堆上、也没有类型信息，读出来是一串垃圾地址（本仓库实测：读到
+    # `character U+1433bfa0 is not in range`）——`c_void_p` 只存地址，语义与 Win32 的
+    # `PWSTR*` 完全一致。
+    out = ctypes.c_void_p()
+    try:
+        hresult = windll.shell32.SHGetKnownFolderPath(
+            ctypes.byref(_guid_of(KNOWN_FOLDER_PROFILE)), 0, None, ctypes.byref(out))
+        if hresult != 0:
+            return None
+        path = ctypes.cast(out, ctypes.c_wchar_p).value
+    except (OSError, ValueError, AttributeError, ctypes.ArgumentError):
+        # `ctypes.ArgumentError` 不是 `ValueError`：参数类型对不上时它直接漏出去，
+        # 壳那条路就成了一次会把整批打断的失败。
+        return None
+    finally:
+        # 壳分给我们的这块内存由我们释放（`SHGetKnownFolderPath` 的约定）；释放失败不作数
+        if out:
+            try:
+                windll.ole32.CoTaskMemFree(out)
+            except (OSError, AttributeError):
+                pass
+    if not path:
+        return None
+    return path if os.path.isdir(path) else _SHELL_MISSING
+
+
+def _guid_of(text):
+    """把 `{...}` 形态的 GUID 文本摊成 Win32 的 `GUID` 结构（16 字节、四段定长）。"""
+    raw = uuid.UUID(text.replace("{", "").replace("}", "")).bytes_le
+    return _GUID.from_buffer_copy(raw)
+
+
 def shared_cache_dir():
-    """落点所在的那一层目录：**用户的家目录**。
+    """落点所在的那一层目录：**用户的家目录**（每一轮现取，见 `_user_home_dir`）。
 
     **落点只有一处**（用户口径：不管什么系统、什么环境，都是用户家目录下
     `CACHE_HOME_DIR/CACHE_APP_DIR` 那一个路径），故这里不按平台另取一套缓存目录：
@@ -1009,8 +1118,12 @@ def shared_cache_dir():
     会让副本静默落到根目录下的落点（正是上面要防的"静默换落点"）。故除空串与未展开的
     原样 `~` 外，还须拒掉根目录本身，且要求展开后的路径**确实是一个已存在的目录**
     ——三条任一不成立即按取不到家目录报错，不换地方。
+
+    **取值只来自本节这一处、且每次调用都现取**（`_user_home_dir`）：落点因此永远是"这一轮
+    个人目录所在的那一处"，个人目录被移走之后下一轮即跟着走——不在模块级算一次就存着用
+    （那正是"写死"的另一副面孔：同一次运行里个人目录变了，落点却还停在上一次算出来的地方）。
     """
-    home = os.path.expanduser("~")
+    home = _user_home_dir()
     if not home or home == "~" or os.path.abspath(home) == os.path.abspath(os.sep) \
             or not os.path.isdir(home):
         raise ValueError(

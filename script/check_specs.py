@@ -4018,6 +4018,13 @@ def check_shared_cache_guard():
                   "CACHE_HOME_DIR, CACHE_APP_DIR")),
                 ("家目录取不到时须报错退出、不得静默换地方",
                  ("not os.path.isdir", "raise ValueError")),
+                ("Windows 的个人目录须**当刻现取**（KnownFolder 在注册表里随改随取），"
+                 "不得只用登录时设上的环境变量",
+                 ("_user_home_dir", "SHGetKnownFolderPath", "FOLDERID_Profile")),
+                ("个人目录取到即用、**不写死也不缓存**（每轮由现取到的家目录算落点）",
+                 ("每一轮现取", "不写死", "_user_home_dir()")),
+                ("壳那条路取不到时有退路（不得因此把整批报成失败）",
+                 ("_shell_known_folder", "不抛")),
                 ("落点须按来源地址分槽（不同来源的副本互不覆盖）",
                  ("cache_slot_dir", "urlsplit")),
                 ("脚本不得删除落点里的既有文件（清理属破坏性操作）",
