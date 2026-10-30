@@ -11010,6 +11010,11 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
         "给不出默认时须显式声明必填失败面，**禁止既无默认又不声明**。"
         "判定标准：二者必居其一。\n"
         "* 能自动装配就不要求接入方手写（L2）：如 SPI 自动装配（`ServiceLoader`）。\n"
+        "* 自建也须按通用件来写（L1）：自建组件的对外形态由通用形态决定、"
+        "差异开成**受控的变体**，**新增一个使用点不改组件本身**。\n"
+        "* 共用一旦看得出来，本轮就合并，不等用户提（L1）：看得出（本次改动可见"
+        "多处同源实现）即在本轮主动合并、同步更新全部引用，**不得放任不管**、"
+        "**不得等用户提醒才动**。\n"
         "* 存量边界：适用面为**新写的对外能力**与**改到的既有抽象**"
         "（随动迁移，见 `specs/core/execution.adoc`）。\n"
         "* 多实现用限定符、不逐层传参（L2）：用限定符/命名 Bean 区分，"
@@ -11105,6 +11110,23 @@ class TestCheckAbstractionAdoptionGuard(CheckSpecsTestCase):
                    self.CODING.replace("随动迁移，见 `specs/core/execution.adoc`", ""))
         cm.check_abstraction_adoption_guard()
         self.assertIn("存量边界", self.error_texts())
+
+    def test_self_built_generic_clause_removed_reports(self):
+        # 反例：L1（c）被删 → "现成方案有缺口就自建"被读成"为这一处写死"
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("受控的变体", "")
+                              .replace("新增一个使用点不改组件本身", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("新增一个使用点不改组件本身", self.error_texts())
+
+    def test_merge_when_visible_clause_removed_reports(self):
+        # 反例：L1（d）被删 → "看得出是一件事"时会被放任不管、等用户提醒才合并
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不得放任不管", "").replace("等用户提醒才动", ""))
+        cm.check_abstraction_adoption_guard()
+        self.assertIn("等用户提醒才动", self.error_texts())
 
     def test_spring_backlink_removed_reports(self):
         # 反例：Spring「配置」不再引用该节 → Spring 项目按栈文件学习会漏掉接入成本判据
