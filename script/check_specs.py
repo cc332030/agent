@@ -4750,7 +4750,13 @@ def check_fetch_self_update_guard():
         `return None`，兜底那两处根本没试过）；
       * 换真身前**先补回真身的写位**：落点收尾把安装脚本自己也收紧成只读，直接 `copyfile`
         会被只读位拒掉——Windows 上即每轮 `[Errno 13]` 的死循环（本轮失败留标记、下一轮
-        `hand_off_self` 换的还是同一个只读文件，本仓库实测）。
+        `hand_off_self` 换的还是同一个只读文件，本仓库实测）；
+      * **清单以外的那一份也要每轮核**（`FOLLOWUP_FILES` ＋ `refresh_lagging_followups`）：
+        自更新只在**脚本自己变了**时才动手，而索引页（站点目录）与脚本是两件独立的事——
+        新增/改名/删除一份文件时它与正文一起变、脚本却可能一个字都不变，于是索引页停在
+        上一次脚本变动的那一版（人按站点找文件看到的是一份过期目录，且**没有任何输出**显示
+        它落后了）。用户口径是「避免漏规范」——目录也是规范的一部分，故它按规范副本同一条
+        口径**每轮**核对（按内容判、不同才落盘、取不到只警告）。
     **核对面只有脚本自己**：判据、取值与失败处置都在 `script/fetch-specs.py` 自己那一份里
     （头部注释 + `update_self`／`hand_off_self`／`_real_script`／`os.execv`），脚本即真源；
     公共入口**不写**这一条（用户口径：「fetch-specs.py 自己更新就行，不需要写出来」）——
@@ -4789,6 +4795,19 @@ def check_fetch_self_update_guard():
              "落盘须**逐处试**（候选由 `_self_update_candidates` 依次产出、第一处写失败时"
              "继续试下一处）——写位是估的、与真实可写性不总一致，只试第一处时兜底那几处"
              "（落点根下、`tmp/`）等于没试，本轮自更新**静默落空**"),
+            (("FOLLOWUP_FILES = (", "def refresh_lagging_followups(",
+              "    refresh_lagging_followups(base)\n\n"),
+             "**清单以外的那一份（索引页）须每轮另核一遍**：`FOLLOWUP_FILES` ＋ 消费它的执行体"
+             "＋ `main` 里真叫了它，三缺一都等于没做——自更新只在**脚本自己变了**时才动手，"
+             "脚本没变的那一轮一个字节都不写，索引页就停在上一次脚本变动的那一版"
+             "（本会话实测的缺口：人按站点找文件看到的是一份过期目录，且没有任何输出显示它"
+             "落后了）。**只核常量与定义时，把调用那一行删掉照样全绿**——「每轮核一遍」这句"
+             "话就回到了只写在注释里的形态。用户口径是「避免漏规范」：目录也是规范的一部分。"),
+            (("已取到、但落盘失败", "落点里这一份仍是旧的"),
+             "附随文件**落盘那一步**失败时须与「取不到」分开说：两边共用一个 `try` 时，写位"
+             "不足、只读挂载抛出的 `OSError` 会被取不到那组 `except` 接走，报出去的是"
+             "『取不到——本地那一份原样保留、它可能已落后』——那一句不成立（远端取到了，"
+             "落后与否是另一回事），真正的成因『写不进去』一个字都没说"),
             (("先补写位再换", "_WRITABLE_FILE_MODE"),
              "换真身前须**先补回真身的写位**：落点收尾把安装脚本自己也收紧成只读，直接 "
              "`copyfile` 会被只读位拒掉（Windows 上即 `[Errno 13]`，且**每轮复发**——本轮"
@@ -4850,7 +4869,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 178  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2403  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
+GUARD_TEST_BASELINE = 2407  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 

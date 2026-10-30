@@ -26044,6 +26044,44 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
 
+    def test_followup_refresh_dropped_reports(self):
+        # 反例⑩（本会话实测的缺口）：清单以外的附随文件（索引页）不再每轮核对——自更新只在
+        # **脚本自己变了**时才动手，脚本没变的那一轮一个字节都不写，索引页于是停在上一次脚本
+        # 变动的那一版：人按站点找文件看到的是一份过期目录，且没有任何输出显示它落后了
+        self._write_valid()
+        # 变异打在**赋值语句**上（不是 `FOLLOWUP_FILES = (` 这个前缀）：注释里也出现了这个名字，
+        # 只替换前缀时那几个字照样在、断言也就照样通过——判据指错了对象
+        self._mutate(self.SCRIPT, 'FOLLOWUP_FILES = ("index.html",)',
+                     'FOLLOWUP_FILES_UNUSED = ("index.html",)')
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_refresh_body_dropped_reports(self):
+        # 反例⑪（同一缺口的另一半）：常量在、消费它的执行体被改名/删掉——常量留着也没人用，
+        # 「每轮核一遍」这句话回到只写在注释里的形态
+        self._write_valid()
+        self._mutate(self.SCRIPT, "def refresh_lagging_followups(base):",
+                     "def something_else(base):")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_refresh_call_dropped_reports(self):
+        # 反例⑫（口径实测）：常量在、执行体也在，但 `main` 里**没人叫它**——这正是「每轮核一遍」
+        # 最隐蔽的失效形态：判据与执行体都还在，注释也照旧写着这句话，一轮也没真跑过
+        self._write_valid()
+        self._mutate(self.SCRIPT, "    refresh_lagging_followups(base)\n", "")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_removal_misannounced_reports(self):
+        # 反例⑬（本轮 review）：落盘那一步自己抛的 `OSError`（只读挂载、权限）被"取不到"那组
+        # `except` 接走——报出去的是"取不到：本地那一份原样保留、它可能已落后"，而真正的成因
+        # （写不进去）一个字都没说。判据是那两句**归在落盘那一步**。
+        self._write_valid()
+        self._mutate(self.SCRIPT, "已取到、但落盘失败", "取不到")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
     def test_writable_bit_restore_removed_reports(self):
         # 反例⑨（本仓库实测的死循环）：换真身前不补写位——落点收尾把安装脚本自己也收紧成
         # 只读，直接 copyfile 被只读位拒掉（Windows 上即每轮 [Errno 13]），本轮留标记、
