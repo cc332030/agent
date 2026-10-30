@@ -19113,24 +19113,29 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY)
         self.write("script/fetch-specs.sh", self.SCRIPT_SH)
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
+            # 与仓库里那份同构：一行一候选（`call :probe %%~R`），试跑在 `:probe` 那一段里、
+            # 以 `--probe` 的退出码 0 为唯一判据——判据要核的正是这个形态，夹具落后于脚本时
+            # 反例就核在"已经不存在的写法"上（本仓库实测：夹具里写的还是旧写法，新脚本一改即报红）。
             fh.write(b'@echo off\r\n'
                      b'set "FETCH_SPECS_RUNTIME="\r\n'
-                     b'for %%R in (py python3 python) do (\r\n'
-                     b'  if not defined FETCH_SPECS_RUNTIME (\r\n'
-                     b'    where %%R >nul 2>nul && (\r\n'
-                     b'      %%~R "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
-                     b'      if not errorlevel 1 (\r\n'
-                     b'        set "FETCH_SPECS_RUNTIME=%%~R"\r\n'
-                     b'      ) else (\r\n'
-                     b'        rem not a working python: try the next candidate\r\n'
-                     b'      )\r\n'
-                     b'    )\r\n'
-                     b'  )\r\n'
-                     b')\r\n'
-                     b'if not defined FETCH_SPECS_RUNTIME (\r\n'
+                     b'set "FETCH_SPECS_FOUND="\r\n'
+                     b'for %%R in (py python3 python) do if not defined FETCH_SPECS_FOUND'
+                     b' call :probe %%~R\r\n'
+                     b'if not defined FETCH_SPECS_FOUND (\r\n'
                      b'  echo Error: no working python interpreter found 1>&2\r\n'
                      b'  exit /b 127\r\n'
                      b')\r\n'
+                     b'set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"\r\n'
+                     b'goto run\r\n'
+                     b'\r\n'
+                     b':probe\r\n'
+                     b'rem %%~1 is the candidate: probe that one, and only that one\r\n'
+                     b'call "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                     b'if errorlevel 1 exit /b 0\r\n'
+                     b'set "FETCH_SPECS_FOUND=%~1"\r\n'
+                     b'exit /b 0\r\n'
+                     b'\r\n'
+                     b':run\r\n'
                      b'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
                      b'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
                      b'exit /b %FETCH_SPECS_STATUS%\r\n')
@@ -19350,27 +19355,126 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.bat",
                    '@echo off\r\n'
                    'set "FETCH_SPECS_RUNTIME="\r\n'
+                   'set "FETCH_SPECS_FOUND="\r\n'
                    'for %%R in (py python3 python) do (\r\n'
-                   '  if not defined FETCH_SPECS_RUNTIME (\r\n'
-                   '    where %%R >nul 2>nul && (\r\n'
-                   '      %%~R "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
-                   '      if errorlevel 99 (\r\n'
-                   '        rem not a working python: try the next candidate\r\n'
-                   '      ) else (\r\n'
-                   '        set "FETCH_SPECS_RUNTIME=%%~R"\r\n'
-                   '      )\r\n'
-                   '    )\r\n'
-                   '  )\r\n'
+                   '  if not defined FETCH_SPECS_RUNTIME call :probe %%~R\r\n'
                    ')\r\n'
+                   'set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"\r\n'
                    'if not defined FETCH_SPECS_RUNTIME (\r\n'
                    '  echo Error: no working python interpreter found 1>&2\r\n'
                    '  exit /b 127\r\n'
                    ')\r\n'
+                   'goto run\r\n'
+                   '\r\n'
+                   ':probe\r\n'
+                   'call "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                   'if errorlevel 99 (\r\n'
+                   '  rem not a working python: try the next candidate\r\n'
+                   ') else (\r\n'
+                   '  set "FETCH_SPECS_FOUND=%~1"\r\n'
+                   ')\r\n'
+                   'exit /b 0\r\n'
+                   '\r\n'
+                   ':run\r\n'
                    'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
                    'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
                    'exit /b %FETCH_SPECS_STATUS%\r\n')
         cm.check_spec_fetch_guard()
         self.assertIn("换下一个候选", self.error_texts())
+
+    def test_bat_probe_not_called_reports(self):
+        # 反例：试跑不 `call` 而是直接起候选——`.cmd`/`.bat` 不加 `call` 就跑不回来，子过程
+        # 剩下的行一句都不执行（`set` 与 `exit /b` 从不落地），退出码还是候选留下的那个。
+        # 本 PR 实测：`py`/`python3`/`python` 三个候选全被判成「没通过」，一台装了 python 的
+        # 机器报 `no working python interpreter found`。故判据须核这条试跑行带 `call`。
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'set "FETCH_SPECS_RUNTIME="\r\n'
+                   'set "FETCH_SPECS_FOUND="\r\n'
+                   'for %%R in (py python3 python) do if not defined FETCH_SPECS_FOUND'
+                   ' call :probe %%~R\r\n'
+                   'if not defined FETCH_SPECS_FOUND (\r\n'
+                   '  echo Error: no working python interpreter found 1>&2\r\n'
+                   '  exit /b 127\r\n'
+                   ')\r\n'
+                   'set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"\r\n'
+                   'goto run\r\n'
+                   '\r\n'
+                   ':probe\r\n'
+                   'where "%~1" >nul 2>nul && "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                   'if errorlevel 1 exit /b 0\r\n'
+                   'set "FETCH_SPECS_FOUND=%~1"\r\n'
+                   'exit /b 0\r\n'
+                   '\r\n'
+                   ':run\r\n'
+                   'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                   'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                   'exit /b %FETCH_SPECS_STATUS%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("换下一个候选", self.error_texts())
+
+    def test_bat_candidate_order_reversed_reports(self):
+        # 反例：`.bat` 的候选名单写反（`python` 排到 `py` 前面）——后面的候选被前面那个
+        # 不存在的永久遮住，等于没有兜底。
+        # **本 PR 实测的失效形态**：名单三级同处一行，次序判据只比行号时三级永远相等，
+        # 写反/漏候选/整句删掉全都报绿（防线空转）。故位置须是「行号 + 行内列号」。
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'set "FETCH_SPECS_RUNTIME="\r\n'
+                   'set "FETCH_SPECS_FOUND="\r\n'
+                   'for %%R in (python python3 py) do if not defined FETCH_SPECS_FOUND'
+                   ' call :probe %%~R\r\n'
+                   'if not defined FETCH_SPECS_FOUND (\r\n'
+                   '  echo Error: no working python interpreter found 1>&2\r\n'
+                   '  exit /b 127\r\n'
+                   ')\r\n'
+                   'set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"\r\n'
+                   'goto run\r\n'
+                   '\r\n'
+                   ':probe\r\n'
+                   'call "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                   'if errorlevel 1 exit /b 0\r\n'
+                   'set "FETCH_SPECS_FOUND=%~1"\r\n'
+                   'exit /b 0\r\n'
+                   '\r\n'
+                   ':run\r\n'
+                   'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                   'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                   'exit /b %FETCH_SPECS_STATUS%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("探测次序", self.error_texts())
+
+    def test_bat_candidate_dropped_reports(self):
+        # 反例：`.bat` 的候选名单漏掉一级（少 `python`）——漏掉的那个候选在这台机器上
+        # 永远试不到。同处一行，故与上一条一样：位置须是「行号 + 行内列号」才判得出。
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'set "FETCH_SPECS_RUNTIME="\r\n'
+                   'set "FETCH_SPECS_FOUND="\r\n'
+                   'for %%R in (py python3) do if not defined FETCH_SPECS_FOUND'
+                   ' call :probe %%~R\r\n'
+                   'if not defined FETCH_SPECS_FOUND (\r\n'
+                   '  echo Error: no working python interpreter found 1>&2\r\n'
+                   '  exit /b 127\r\n'
+                   ')\r\n'
+                   'set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"\r\n'
+                   'goto run\r\n'
+                   '\r\n'
+                   ':probe\r\n'
+                   'call "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                   'if errorlevel 1 exit /b 0\r\n'
+                   'set "FETCH_SPECS_FOUND=%~1"\r\n'
+                   'exit /b 0\r\n'
+                   '\r\n'
+                   ':run\r\n'
+                   'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                   'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                   'exit /b %FETCH_SPECS_STATUS%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("探测次序", self.error_texts())
 
     def test_sh_probe_result_ignored_reports(self):
         # 反例：`.sh` 跑了 `--probe` 却不看结果（既不换候选、也不说明）→ 试跑等于没做：
