@@ -19064,6 +19064,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         '取回与更新口径（本节是"怎么取、怎么更新"的真源，公共入口只回指本节）：\n'
         '  - 一次取全：一次运行把入口与其 specs/ 全部取回，不必手拼逐条下载命令；\n'
         '  - 清单从入口自身解析：按加载调度器登记自动解析，新增一份规范不必改脚本、也不会漏取；\n'
+        '  - 清单以外的附随文件（索引页）每轮也取：FOLLOWUP_FILES 与 refresh_lagging_followups，\n'
+        '    由已经拉新的这一份脚本算、排在清单之后；\n'
         '  - 默认以远程为准：取回的字节与本地不同才落盘、远端改过就刷新，重复执行即是更新；\n'
         '  - --keep：不动本地那份；--base：换规范来源；\n'
         '  - 取回失败保留本地已有的那一份，不把副本删掉换成没有；\n'
@@ -19076,15 +19078,20 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     SCRIPT_SH = (
         '#!/usr/bin/env bash\n'
         'set -u\n'
-        'if command -v python3 >/dev/null 2>&1; then\n'
-        '  runtime="python3"\n'
-        'elif command -v python >/dev/null 2>&1; then\n'
-        '  runtime="python"\n'
-        'else\n'
-        '  echo "错误: 未找到解释器 python3/python，无法运行 fetch-specs.py" >&2\n'
+        'script_dir="$(cd -- "$(dirname -- "$0")" && pwd)"\n'
+        'runtime=""\n'
+        'command -v python3 >/dev/null 2>&1 && runtime="python3"\n'
+        'if [ -z "$runtime" ]; then\n'
+        '  command -v python >/dev/null 2>&1 && runtime="python"\n'
+        'fi\n'
+        'if [ -z "$runtime" ]; then\n'
+        '  echo "错误: 未找到可用的解释器 python3/python" >&2\n'
         '  exit 127\n'
         'fi\n'
-        '"$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+        '# 试跑一次、按退出码判（--probe，走到 main 早处即收工）：在 PATH 上不等于跑得起来\n'
+        '"$runtime" "$script_dir/fetch-specs.py" --probe >/dev/null 2>&1 '
+        '|| printf \'说明: %s 试跑未通过\\n\' "$runtime" >&2\n'
+        '"$runtime" "$script_dir/fetch-specs.py" "$@"\n'
         'status=$?\n'
         'if [ -t 0 ]; then\n'
         '  printf \'\\n按回车键关闭窗口…\'\n'
@@ -19107,13 +19114,21 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.sh", self.SCRIPT_SH)
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
             fh.write(b'@echo off\r\n'
-                     b'where py >nul 2>nul && set "FETCH_SPECS_RUNTIME=py -3"\r\n'
-                     b'if not defined FETCH_SPECS_RUNTIME where python3 >nul 2>nul && '
-                     b'set "FETCH_SPECS_RUNTIME=python3"\r\n'
-                     b'if not defined FETCH_SPECS_RUNTIME where python >nul 2>nul && '
-                     b'set "FETCH_SPECS_RUNTIME=python"\r\n'
+                     b'set "FETCH_SPECS_RUNTIME="\r\n'
+                     b'for %%R in (py python3 python) do (\r\n'
+                     b'  if not defined FETCH_SPECS_RUNTIME (\r\n'
+                     b'    where %%R >nul 2>nul && (\r\n'
+                     b'      %%~R "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                     b'      if not errorlevel 1 (\r\n'
+                     b'        set "FETCH_SPECS_RUNTIME=%%~R"\r\n'
+                     b'      ) else (\r\n'
+                     b'        rem not a working python: try the next candidate\r\n'
+                     b'      )\r\n'
+                     b'    )\r\n'
+                     b'  )\r\n'
+                     b')\r\n'
                      b'if not defined FETCH_SPECS_RUNTIME (\r\n'
-                     b'  echo Error: no python interpreter found 1>&2\r\n'
+                     b'  echo Error: no working python interpreter found 1>&2\r\n'
                      b'  exit /b 127\r\n'
                      b')\r\n'
                      b'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
@@ -19283,24 +19298,36 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("script/fetch-specs.sh",
                    '#!/usr/bin/env bash\n'
-                   'if command -v python >/dev/null 2>&1; then runtime="python";\n'
-                   'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
-                   'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
-                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+                   'runtime=""\n'
+                   'command -v python >/dev/null 2>&1 && runtime="python"\n'
+                   'if [ -z "$runtime" ]; then\n'
+                   '  command -v python3 >/dev/null 2>&1 && runtime="python3"\n'
+                   'fi\n'
+                   '[[ -n "$runtime" ]] || { echo "错误: 未找到可用的解释器" >&2; exit 127; }\n'
+                   '"$runtime" "$(dirname "$0")/fetch-specs.py" --probe\n'
+                   '"$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+                   'status=$?\n'
+                   'exit "$status"\n')
         cm.check_spec_fetch_guard()
         self.assertIn("探测次序", self.error_texts())
 
     def test_order_check_not_fooled_by_substring_overlap(self):
         # 反例：次序写反 + 判别键互相包含（`command -v python` 命中 `command -v python3` 的子串）
-        # → 旧实现 find 两次返回同一位置、把写反的次序判成正确（本仓库实测漏报），
-        # 故防线须用**互不包含**的判别串（带判空后缀）。
+        # → 按"全文里哪个先出现"判次序时两次命中同一位置、把写反的次序判成正确（本仓库实测漏报）。
+        # 故次序须取**枚举清单那一行**（一份名单按次序试），而不是按候选名字在全文里找位置。
         self._write_valid()
         self.write("script/fetch-specs.sh",
                    '#!/usr/bin/env bash\n'
-                   'if command -v python >/dev/null 2>&1; then runtime="python";\n'
-                   'elif command -v python3 >/dev/null 2>&1; then runtime="python3"; fi\n'
-                   'echo "错误: 未找到解释器 python3/python" >&2; exit 127\n'
-                   'exec "$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n')
+                   'runtime=""\n'
+                   'command -v python >/dev/null 2>&1 && runtime="python"\n'
+                   'if [ -z "$runtime" ]; then\n'
+                   '  command -v python3 >/dev/null 2>&1 && runtime="python3"\n'
+                   'fi\n'
+                   '[[ -n "$runtime" ]] || { echo "错误: 未找到可用的解释器" >&2; exit 127; }\n'
+                   '"$runtime" "$(dirname "$0")/fetch-specs.py" --probe\n'
+                   '"$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+                   'status=$?\n'
+                   'exit "$status"\n')
         cm.check_spec_fetch_guard()
         self.assertIn("探测次序", self.error_texts())
 
@@ -19311,9 +19338,61 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("script/fetch-specs.sh",
                    '#!/usr/bin/env bash\nset -u\n'
-                   'exec python3 "$(dirname "$0")/fetch-specs.py" "$@"\n')
+                   'python3 "$(dirname "$0")/fetch-specs.py" "$@"\n')
         cm.check_spec_fetch_guard()
-        self.assertIn("command -v python3", self.error_texts())
+        self.assertIn("command -v", self.error_texts())
+
+    def test_probe_judged_by_not_127_reports(self):
+        # 反例：`.bat` 把判据写成"只要不是 127 就算跑得起来"——WinGet/Store 的 py 启动器在
+        # 没有 python 3 时以 49 退出（什么都没跑），于是空壳被当成可用解释器：用户看到的是
+        # 那句 `'py -3' is not recognized…`，而不是"这台机器没有可用 python"（本 PR 的起因）。
+        self._write_valid()
+        self.write("script/fetch-specs.bat",
+                   '@echo off\r\n'
+                   'set "FETCH_SPECS_RUNTIME="\r\n'
+                   'for %%R in (py python3 python) do (\r\n'
+                   '  if not defined FETCH_SPECS_RUNTIME (\r\n'
+                   '    where %%R >nul 2>nul && (\r\n'
+                   '      %%~R "%~dp0fetch-specs.py" --probe >nul 2>nul\r\n'
+                   '      if errorlevel 99 (\r\n'
+                   '        rem not a working python: try the next candidate\r\n'
+                   '      ) else (\r\n'
+                   '        set "FETCH_SPECS_RUNTIME=%%~R"\r\n'
+                   '      )\r\n'
+                   '    )\r\n'
+                   '  )\r\n'
+                   ')\r\n'
+                   'if not defined FETCH_SPECS_RUNTIME (\r\n'
+                   '  echo Error: no working python interpreter found 1>&2\r\n'
+                   '  exit /b 127\r\n'
+                   ')\r\n'
+                   'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                   'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                   'exit /b %FETCH_SPECS_STATUS%\r\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("换下一个候选", self.error_texts())
+
+    def test_sh_probe_result_ignored_reports(self):
+        # 反例：`.sh` 跑了 `--probe` 却不看结果（既不换候选、也不说明）→ 试跑等于没做：
+        # 探到的东西跑不起来时，读者仍只会看到解释器那句"找不到命令"。
+        self._write_valid()
+        self.write("script/fetch-specs.sh",
+                   '#!/usr/bin/env bash\n'
+                   'set -u\n'
+                   'runtime=""\n'
+                   'command -v python3 >/dev/null 2>&1 && runtime="python3"\n'
+                   'if [ -z "$runtime" ]; then\n'
+                   '  command -v python >/dev/null 2>&1 && runtime="python"\n'
+                   'fi\n'
+                   'if [ -z "$runtime" ]; then\n'
+                   '  echo "错误: 未找到可用的解释器 python3/python" >&2\n'
+                   '  exit 127\n'
+                   'fi\n'
+                   '"$runtime" "$(dirname "$0")/fetch-specs.py" "$@"\n'
+                   'status=$?\n'
+                   'exit "$status"\n')
+        cm.check_spec_fetch_guard()
+        self.assertIn("--probe", self.error_texts())
 
     def test_install_without_fallback_note_reports(self):
         # 反例：入口不提兜底 → 引用方以为必须先有 python3（或干脆自己先装一个）
@@ -20081,6 +20160,153 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", script)
         cm.check_spec_fetch_guard()
         self.assertIn("以远程为准", self.error_texts())
+
+    def test_index_fetched_with_updated_script_last(self):
+        """端到端（更新顺序）：**索引由"已经换新的这一份脚本"算、且排在清单之后**。
+
+        用户口径：「既然现在有规范的索引了，那更新顺序应该是 拉最新 py，执行 py，拉最新 toml
+        索引，拉取规范」。「谁在算索引」是这条的判据所在——用旧脚本算出来的索引列的还是旧的
+        文件集（新增/改名的文件静默不在里面），人按站点找文件就以为本仓库没有那份规范。
+        做法：让远端脚本在**算索引时**打一行带版本号的标记，跑两轮——
+        ① 远端脚本是 v1：落点里的索引是 v1 算的；② 只改远端脚本为 v2（索引字节也随内容变）：
+        这一轮里 `update_self` 先换上 v2、重启，随后索引必须**由 v2** 算出（而不是跑完再补）。
+        """
+        import http.server
+        import socketserver
+        import threading
+
+        def strip_index_stamp(src: bytes) -> bytes:
+            # 标记行按**整行**剥（`splitlines(keepends=True)`）：注入须**幂等**——真实仓库里那一份
+            # 可能已经被上一轮的自更新换成了带标记的版本（`_run_fetch` 跑的正是仓库里那一份）。
+            return b"".join(line for line in src.splitlines(keepends=True)
+                            if b"CALC-INDEX-BY-" not in line)
+
+        def script_of(version: bytes) -> bytes:
+            # 只多加一行打印，其余照用仓库里那份（`--probe` 等口径不变）。剥标记得**在拼接前**
+            # 按行做：仓库里那份自己也带一行按整行剥的同类源码，按字节整体替换会把**这行代码
+            # 本身**也当成标记剥掉，夹具当场 `SyntaxError`（本仓库实测）。
+            with open(os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "script", "fetch-specs.py"), "rb") as fh:
+                src = strip_index_stamp(fh.read())
+            stamp = ('        print(f"CALC-INDEX-BY-%s", file=sys.stderr)  # noqa: E501\n'
+                     % version.decode()).encode()
+            # 标记插在**循环体第一行之前**：`for` 之后必须有缩进块，插在 `for` 行与它下面那几行
+            # 注释之间时，注释还停在原缩进上、脚本当场 SyntaxError（本仓库实测）。
+            marker = (b'    out_dir = install_scripts_dir()\n'
+                      b'    for rel in FOLLOWUP_FILES:\n')
+            head = b'        dest = target_path(out_dir, rel)\n'
+            if marker + head in src:
+                return src.replace(marker + head, marker + stamp + head)
+            raise AssertionError("标记位不在预期处：夹具须与真实脚本同形")
+
+        entry = b"= test\n\nspecs/core/execution.adoc\n"
+        served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": b"e1\n",
+                  "index.html": b"<html>v1</html>\n"}
+        served.update(self._install_scripts_served())
+        # 远端那份脚本按**来源侧路径**供给（自更新取的是清单里那一串）：覆盖安装脚本那一组里的
+        # 同一条，否则远端还是仓库原件、v1 标记无从出现
+        served["script/fetch-specs.py"] = script_of(b"v1")
+        home = tempfile.mkdtemp(prefix="fetch-home-order-")
+        self.addCleanup(shutil.rmtree, home, True)
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                rel = self.path.lstrip("/")
+                body = served.get(rel)
+                if body is None and rel in (pathconfig.CONFIG_REL,
+                                            os.path.basename(pathconfig.CONFIG_REL)):
+                    with open(os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            *pathconfig.CONFIG_REL.split("/")), "rb") as fh:
+                        body = fh.read()
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("CALC-INDEX-BY-v1", se, "索引须由本轮这一份脚本算")
+
+            # 远端脚本换成 v2、索引内容也跟着变（新增/改名一份文件时就是这个形态）
+            served["script/fetch-specs.py"] = script_of(b"v2")
+            served["index.html"] = b"<html>v2</html>\n"
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("CALC-INDEX-BY-v2", se,
+                          "索引须由**已经换新的**那一份脚本算（用旧脚本算＝索引列的还是旧文件集）")
+            landing = os.path.join(home, ".cache", "agent-specs", "index.html")
+            with open(landing, "rb") as fh:
+                self.assertEqual(b"<html>v2</html>\n", fh.read())
+
+        httpd.server_close()
+
+    def test_index_not_fetched_by_default_list(self):
+        """`--list` 只列清单、不取文件：索引不落盘（否则"看一眼清单"会顺手改落点）。"""
+        import http.server
+        import socketserver
+        import threading
+
+        entry = b"= test\n\nspecs/core/execution.adoc\n"
+        served = {"AGENTS_COMMON.adoc": entry, "specs/core/execution.adoc": b"e1\n",
+                  "index.html": b"<html>v1</html>\n"}
+        served.update(self._install_scripts_served())
+        home = tempfile.mkdtemp(prefix="fetch-home-list-")
+        self.addCleanup(shutil.rmtree, home, True)
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                body = served.get(self.path.lstrip("/"))
+                if body is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{httpd.server_address[1]}"
+            rc, so, se = self._run_fetch(base, ("--list",), home=home)
+            self.assertEqual(0, rc, se + so)
+            self.assertIn("specs/core/execution.adoc", so)
+            self.assertFalse(
+                os.path.exists(os.path.join(home, ".cache", "agent-specs", "index.html")),
+                "--list 是只列清单：索引同样不许落盘")
+
+    def test_probe_needs_no_network(self):
+        """端到端（`--probe` 的判据）：探针**不联网、不写盘**——来源不可达也须 exit 0。
+
+        探针是入口拿来判「这个解释器跑不跑得起来」的，判据只能是「脚本在这个解释器底下跑起来
+        了」。若它走到取清单那一步，装机时**网络不通**（最常见的形态）就会让每个候选都试跑
+        失败，用户看到的是「没有可用的 python」——一句与真实成因无关的话。同理它也不许写盘：
+        探一个候选就在落点里落一次东西，是探测不该有的副作用。
+        """
+        home = tempfile.mkdtemp(prefix="fetch-home-probe-")
+        self.addCleanup(shutil.rmtree, home, True)
+        rc, so, se = self._run_fetch("http://127.0.0.1:1", ("--probe",), home=home)
+        self.assertEqual(0, rc, se + so)
+        self.assertFalse(os.path.exists(os.path.join(home, ".cache")),
+                         "--probe 只判「跑得起来」：不取清单、不写盘")
 
     def test_failure_wiping_local_copy_reports(self):
         # 反例：取回失败时把本地副本删掉/清空 → 把「没更新」变成「没有」（比不更新更坏）

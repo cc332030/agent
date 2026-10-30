@@ -3744,22 +3744,48 @@ INTERPRETER_FALLBACK_LINE_SPECS = (
     ("script/fetch-specs.sh", "Linux/macOS 入口", "#",
      (("须**按次序探测解释器**（先 python3、再 python）——不得把 python3 直接写死成前提"
        "（本仓库实证：机器上只有 python、没有 python3 时，装不上规范）",
-       (("command -v python3", ">/dev/null"), ("command -v python ", ">/dev/null"))),
+       # `.sh` 的键**不得带同一条行上的 `then`**：`if command -v …; then` 把"探测"与"跑得起来"
+       # 混成同一条，判不出是哪一个候选；取值形态是**一行一个候选名**（位置即次序）。
+       (("command -v python3 ", ">/dev/null"), ("command -v python ", ">/dev/null"))),
+      ("须**先用 `--probe` 试跑一次、且以它的退出码判定**再认它（走到 `main` 早处即收工："
+       "不联网取清单、不写盘、不取文件）——「在 PATH 上」不等于「跑得起来」：同名但不是 "
+       "python 的东西、只装了壳没装解释器的发行版都会让 `command -v` 命中，真跑起来才失败"
+       "（Windows 入口上这形态已经实测到）；只跑一次、不看退出码时试跑既不换候选也不报错，"
+       "等于没试",
+       (("fetch-specs.py", "--probe"),)),
       ("须**用探测到的那个解释器**调用同目录的逻辑代码并原样转交参数（且**不得用 `exec`**"
        "把壳换掉——换掉之后取退出码、按需停住这两件事就没有机会执行了）",
        (("\"$runtime\"", "fetch-specs.py", "\"$@\""),)),
       ("两者都没有时须**报错并退出非 0**（不静默继续）",
-       (("未找到解释器",), ("exit 127",)))),
-     (("command -v python3", ">/dev/null"), ("command -v python ", ">/dev/null"))),
+       (("未找到",), ("exit 127",)))),
+     # 降级次序的判别键取**带判空后缀的探测写法**（`command -v python3` 与 `command -v python `）：
+     # 两个串**互不包含**，位置各取自哪一行就是真实次序。取裸候选名、或取枚举清单那一行时，
+     # 写反的清单里两个名字仍在同一行、位置全部相同，"先探谁"根本判不出来（本仓库实测漏报）。
+     (("command -v python3 ", ">/dev/null"), ("command -v python ", ">/dev/null"))),
     ("script/fetch-specs.bat", "Windows 入口", "rem",
-     (("须**按次序探测解释器**（py -3 → python3 → python）——不得把 python3 直接写死成前提；"
+     # **"在 PATH 上"不等于"跑得起来"**（用户实测：报的是 `'py -3' is not recognized…`）：
+     # `where` 命中的可能是个只剩提示的垫片、或 `py` 启动器的默认 python 3 压根不在。故候选
+     # 须**试跑一次**（`--probe`）才算数——只探到"有这个名字"就往下跑，等于把解释器的报错
+     # 当成自己入口的报错抛给用户（用户看到的是"找不到命令"，没有任何一句说"这台机器没有
+     # 可用的 python"）。探测写成**逐候选枚举**（判据取那一条的形态）：一行一候选的 `where py`
+     # 写法里，"有没有探到""跑不跑得起来"分不开。
+     (("须**按次序探测解释器**（py 启动器 → python3 → python）并**逐个试跑**（`--probe` 跑一次"
+       "逻辑代码、**以退出码 0 为判据**）才认它——`where` 命中不等于解释器可用；只跑不看"
+       "退出码时那些「跑过了、其实什么都没跑」的候选（WinGet/Store 的 py 启动器在没有 python 3 "
+       "时以 49 退出）会被当成可用解释器；不得把 python3 直接写死成前提，"
        "Windows 上最常见的是 py 启动器，只探 python3 等于把大半个 Windows 装机量挡在门外",
-       (("where py ",), ("where python3 ",), ("where python ",))),
+       (("%%~R", "%~dp0fetch-specs.py", "--probe"),)),
+      ("试跑跑不起来时须**换下一个候选**（不是「跑过就算」）：判据是退出码 0，"
+       "故代码里须有 `errorlevel` 判据、且以 0 为界——写成「只要不是 127 就算跑得起来」时，"
+       "WinGet/Store 的 py 启动器（没有 python 3 时以 49 退出、什么都没跑）会被当成可用解释器",
+       (("if not errorlevel 1",),)),
       ("须**用探测到的那个解释器**调用同目录的逻辑代码并原样透传参数",
        (("cmd /c", "%FETCH_SPECS_RUNTIME%", "%~dp0fetch-specs.py", "%*"),)),
       ("都没有时须**报错并退出非 0**（不静默继续）",
        (("exit /b 127",),))),
-     (("where py ",), ("where python3 ",), ("where python ",))),
+     # 降级次序的判别键取**逐候选枚举**那一行（`for %%R in (py python3 python)`）：取值形态正是
+     # "一份名单按次序试"，顺序写反时后面的候选被前面那个不存在的永久遮住。
+     (("for %%R in (py python3 python)",),)),
 )
 
 
@@ -3829,6 +3855,14 @@ INSTALL_NO_PYTHON_POINTS = (
     (("python2",), "须写清「一个都没有」的边界：**只装 python2 的发行版不算**（CentOS/RHEL 8 及更早、"
                    "老 macOS 上 `python` 就是 python2），上一条的次序会取到它、脚本照样跑——"
                    "缺这句时这些机器会被误判成「必须先去装 python3」"),
+    # **索引也在真源这一侧**：它是"怎么取"的一半——没有它，站点上那份目录列的还是上一次的
+    # 文件（人按站点找文件看到过期目录，就以为本仓库没有那份规范）。用户口径「既然现在有规范
+    # 的索引了」，故真源须写明**它由谁、在第几步取**：由**已经拉新的这一份脚本**算，排在清单
+    # 之后——两件都写清，"索引与清单同步"才是可核对的。
+    (("FOLLOWUP_FILES", "refresh_lagging_followups"),
+     "须写明**清单以外的附随文件（索引页）每轮也取**（常量 + 消费它的执行体）——自更新只在"
+     "**脚本自己变了**时才动手，脚本没变的那一轮它一个字节都不写，索引就停在上一次脚本变动的"
+     "那一版：人按站点找文件看到的是一份过期目录，且没有任何输出显示出它落后了"),
     (("一次取全",), "须写明一次取全（入口与其 `specs/` 一起取回，不用手拼逐条下载命令）——"
                    "缺则『怎么取』只剩入口模板里一行地址"),
     (("清单从入口自身解析",), "须写明清单从入口自身解析（按加载调度器登记自动解析），"
@@ -4869,7 +4903,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 GUARD_WIRING_BASELINE = 178  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2407  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
+GUARD_TEST_BASELINE = 2412  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +45：`check_spec_fetch_guard` 的解释器兜底与真源要点随两入口改写换形（`.sh` 一行一候选、`.bat` 逐候选试跑 `--probe`），新开 3 条端到端（索引由**已经换新的这一份**脚本算、`--list` 不落索引、`--probe` 不联网不写盘）；本轮 review 再 +2：`.bat` 把判据写成「不是 127 就算跑得起来」即报、`.sh` 跑了 `--probe` 不看结果即报——`check_specs_test` 由 2252 条变成本轮的取值；上一轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
