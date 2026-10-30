@@ -38,6 +38,13 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     规范副本**同一条**（取回的字节与本地逐字节比较），只是对象换成了本脚本自己；
   - **一次取全**：一次运行把入口与其 `specs/` 全部取回，调用方不必手拼逐条下载命令
     （清单从入口自身解析，见上「文件清单」）；
+  - **清单以外的那一份（索引页）也每轮核一遍**：`FOLLOWUP_FILES` 里的附随文件**不在**清单里
+    （不是规范副本、也不给引用方读），而它列着本仓库有哪些文件——于是它与"脚本自己那一份"
+    是**两件独立的事**：自更新只在**脚本变了**时才动手，脚本没变的那一轮一个字节都不写，
+    索引页就会停在上一次脚本变动的那一版（人按站点找文件看到的是一份过期目录，且**没有任何
+    输出**显示出它落后了）。故它按**规范副本同一条口径**办：每轮都取、按内容判、不同才落盘，
+    落点与安装脚本同一处（落点根下）；**取不到不算失败**（本仓库以外的来源多半没有这个文件），
+    网络失败只**如实警告**"本地那一份可能已落后"——不得静默。
   - **默认以远程为准**：每份文件按"取回的字节与本地不同才落盘"核对，远端改过就刷新，
     故**重复执行即是更新**；`--keep` 才回到"本地已有即不动"；
   - **取回失败保留本地已有的那一份**：报错并如实报失败，**不得**把本地副本删掉换成没有；
@@ -103,6 +110,8 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - **默认以远程为准**：每份清单内文件都按"取回的字节与本地不同才落盘"核对，远端改过就刷新
     （安装脚本会更新，重复执行安装时须能拿到最新的一份）；取回失败时**保留本地已有的那一份**
     并如实报失败，**不得**把本地副本删掉换成没有；
+  - **附随文件（索引页）同样每轮核对**（见「取回与更新口径」）：它不在清单里，故不随清单走，
+    落点与安装脚本同一处、按内容判、取不到只警告；
   - `--keep` 反过来：本地已有且非空即不动（只补缺失项），要最新内容就别加它；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
@@ -319,6 +328,10 @@ INSTALL_SCRIPTS = _PATHCONFIG.install_scripts
 # （见 `_ensure_executable`）。逻辑代码**不在内**——它不是给人直接敲的命令，
 # 落点里唯一的入口是入口脚本（见 specs/general/script.adoc「入口脚本须能直接执行」）。
 ENTRY_SCRIPTS = _PATHCONFIG.entry_scripts
+# 站点索引页：它**不在取回清单里**（不是规范副本、也不给引用方读），但它列着本仓库有哪些
+# 文件——不跟着更新时，人按站点找文件会得到一份过期的目录（见 `refresh_lagging_followups`）。
+# 取不到不算失败（本仓库以外的来源多半没有它）：落盘只在**远端确有、且与本地不同**时发生。
+FOLLOWUP_FILES = ("index.html",)
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
 TIMEOUT_SECONDS = _PATHCONFIG.timeout_seconds
 DEFAULT_WORKERS = _PATHCONFIG.workers
@@ -416,7 +429,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def fetch_text(base, path):
+def fetch_text(base, path, missing_ok=False):
     """取一份远端文本（UTF-8 解码）。**失败一律抛 OSError**（本函数是这条契约的守门人）。
 
     **判据不只看状态码**：站点对**任何未命中的路径**都回落成首页 HTML 并返回 200，
@@ -449,7 +462,13 @@ def fetch_text(base, path):
     except UnicodeDecodeError as e:
         raise OSError(f"不是 UTF-8 文本: {e}") from e
     if text.lstrip().lower().startswith("<!doctype html") or "<html" in text[:200].lower():
-        raise OSError("取回的是站点 HTML 页面（该路径在规范站点上不存在，站点回落到首页）")
+        # `missing_ok`：**站点首页本身就是这一份的内容**时（如索引页）认下它。
+        # 判据仍是"这一份是不是站点首页"——首页是**唯一**既能当"未命中回落"、又能是
+        # "真实内容"的形态，故由调用方点名要不要；点名的场合只该是附随文件
+        # （`FOLLOWUP_FILES`），规范副本一律按取不到处理（本仓库实证：请求不存在的
+        # `LICENSE` 返回 200 + 首页 HTML 18 KB，写进落点后看起来像一份取到的文件）。
+        if not missing_ok:
+            raise OSError("取回的是站点 HTML 页面（该路径在规范站点上不存在，站点回落到首页）")
     return text
 
 
@@ -536,6 +555,107 @@ def update_self(base, out_dir, cwd):
 
     只在**非 `--keep`、非 `--list`** 时调用（两者的语义分别是"不动本地那份"与"只看清单、不下载"，
     换上刚取到的新脚本与之相抵；真要最新脚本时不加它——与规范副本同一条口径）。
+    **但它只管"脚本自己这一份"**：清单以外的附随文件（索引页）与脚本是两件事，由
+    `refresh_lagging_followups` **每轮**另行核对——脚本没变的那一轮这里直接返回，那时
+    "索引页落后了没有"没有任何人去问（本会话实测的缺口）。
+    """
+    return _refresh_self(base, out_dir, cwd)
+
+
+def refresh_lagging_followups(base):
+    """把**跟不上清单的附随文件**取回来（`FOLLOWUP_FILES`，即站点索引页）——**每轮都做**。
+
+    为什么这件不能交给自更新的那条路（本会话实测的缺口，用户点名「避免漏规范」）：
+    `update_self` 只在**脚本自身变了**时才动手（"远端那份与本轮真身逐字节不同"），脚本没变
+    的那一轮它**一个字节都不写**。而索引页（`index.html`：站点的目录页）与脚本是**两件事**
+    ——新增、删除、重命名一份文件时，索引页与规范正文一起变了，脚本却可能一个字都不变。
+    于是"每轮都取最新"只覆盖了规范副本与脚本，**索引页停在上一次脚本变动的那一版**：
+    人按站点找文件，看到的是一份过期目录（看着齐全、其实少了几份），且**没有任何输出**
+    显示出它没跟着更新。故这一件事按"与规范副本同一条口径"办：**每轮都取、按内容判、
+    不同才落盘**（同一套落盘动作：先取到内存、再原子替换、写后收紧成只读）。
+
+    落点与安装脚本同一处（落点根下、跨来源共用一份，见 `install_scripts_dir`），不按来源
+    分槽：它是"脚本自己那一份"，换来源时跟着换即可（索引页不是规范副本）。
+
+    取不到**不算失败**（`missing_ok=True` 放行"站点首页"这一形态；网络失败只警告）：
+    本仓库以外的来源多半根本没有这个文件，把"没有这一份"报成整批失败会让一次成功的取文件
+    看起来像失败（同 `OPTIONAL_FILES` 的口径）。**但"本地那一份可能已落后"须如实说出来**
+    ——静默跳过时，读者无从知道手里那份索引是旧的。
+    """
+    out_dir = install_scripts_dir()
+    for rel in FOLLOWUP_FILES:
+        dest = target_path(out_dir, rel)
+        before = local_bytes(dest) if os.path.isfile(dest) else None
+        # 取不到**不算失败**，但网络类异常须在这里收住：`HTTPException` 不是 `OSError`
+        # 的子类，放它出去会掀掉整批、连收尾那次"落点收紧成只读"都跑不到（见 `fetch_text`）。
+        # 成功那一侧只包**网络与解码**这一段：`try` 罩住整段时，落盘那一步自己抛的
+        # `OSError`（权限、只读挂载）会被同一组 `except` 接走，落到"取不到——原样保留、
+        # 它可能已落后"那两句上——报了一句不成立的话，真正的成因（写不进去）一个字都不说。
+        try:
+            data = fetch_text(base, rel, missing_ok=True).encode("utf-8")
+        except (OSError, http.client.HTTPException) as e:
+            if before is None:
+                print(f"说明: 附随文件 {rel} 取不到（{e}）——本站点没有这一份，跳过",
+                      file=sys.stderr)
+            else:
+                print(f"警告: 附随文件 {rel} 取不到（{e}）——本地那一份**原样保留**，"
+                      "它可能已经落后于远端", file=sys.stderr)
+            continue
+        if before == data:
+            continue
+        # 落盘这一段的失败另有成因（写位、只读挂载、原子替换），故单列一条处置：
+        # 它的结论是"取到了、但落不下去"，不是"取不到"。
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            _ensure_writable(out_dir, dest)
+            tmp = f"{dest}.part"
+            with open(tmp, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp, dest)
+        except OSError as e:
+            print(f"警告: 附随文件 {rel} 已取到、但落盘失败（{e}）——远端与本地不同，"
+                  "落点里这一份仍是旧的", file=sys.stderr)
+            continue
+        # 中转件**无论成败都清掉**：`.part` 不在落点应有的形态里（同 `download_one`），
+        # 留一份下来既不是"取到的文件"，也不在索引里，只会在落点里越积越多。
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        _make_read_only(dest, is_dir=False)
+        print(f"更新: 附随文件 {rel} 已按远端刷新（{len(data)} B）——"
+              "索引页与清单同步，按站点找文件不会看到过期目录", file=sys.stderr)
+
+
+def _refresh_self(base, out_dir, cwd):
+    """把**最新版的脚本自身**取回并落地——`update_self` 的执行体（本函数只管"脚本自己这一份"）。
+
+    口径同规范副本：取回远端那份、与本地逐字节比较、**不同才落盘**；落点由
+    `_self_update_candidates` 按**写位**产出（真身旁 → 落点根下 → `tmp/`），
+    落盘后交 `_take_over_self` 换上并当轮重启。**清单以外的附随文件不在这里**
+    （见 `refresh_lagging_followups`：它与脚本是两件独立的事，不挂在"脚本变没变"上）。
+
+    以下取值与边界是本脚本自更新的全部约定（`update_self` 的文档头讲"为什么要做"，
+    这里讲"怎么做、换不动怎么办"）：
+
+    读不到真身（非属主 / 只读挂载 / 权限）时**换不动**：新版本照旧落地（落点根下那份**就是**
+    "下次运行会读到的真身"），并**如实警告**"这一轮仍按旧口径取"（见下，不得静默）。
+
+    **落盘路径按写位取**（判据不是平台名，见 `_self_update_candidates`）：
+      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.<pid>.update`）——直接跑
+        `python3 fetch-specs.py`、或经壳调起时都在这一处，换起来不必跨目录；
+      * 只有**落点根下**可写（`<落点根>/fetch-specs.py` 是本脚本自己写的那份）→ 落在落点根下
+        的**真身同名文件**——它本身就是"下次运行会读到的真身"，故拷过去即已成事；
+      * 两处都不可写（只读挂载、非属主）→ 还有工作目录 `tmp/` 兜底；连它也不可写时
+        **不落盘、如实警告并继续**：更新自身取不到就别取，本轮照旧把规范副本取到手
+        （不得把一个可以自愈的情形报成整批失败）。
+    写位在真正落盘时才探测（`_first_writable_dir`）——**只读的 `/usr/local/bin`** 这种
+    "看着能写、实际不能"的目录不会留下一串报错。
+
+    **读得到却换不动时**（只读目录、非属主）才写下待换标记（`_leave_handoff_note`），
+    由**下一轮运行**消费——那时"下一轮"是唯一可行的路，且警告里如实说明。此时**也不覆盖
+    真身**（写不进去）；落点根下那份（"下次的真身"）已换成功。
     """
     local = os.path.abspath(__file__)
     try:
@@ -1358,6 +1478,11 @@ def main(argv=None):
     # 清单在 `INSTALL_SCRIPTS`，与本脚本同处 `script/`；`--no-scripts` 时整组跳过。
     if not args.no_scripts:
         results.extend(fetch_install_scripts(base, install_scripts_dir(), args.keep, total))
+    # 附随文件（索引页）**每轮都核一遍**：它不在清单里，`update_self` 又只在脚本自己变了时才
+    # 动手——不单列这一步时，"每轮取最新"只覆盖到规范副本与脚本，索引页会停在上一次脚本
+    # 变动的那一版（看着齐全、其实少了几份，见 `refresh_lagging_followups`）。
+    # 它不进 `results`：取不到不算失败，落盘与否由自己那条路如实报告（同一件事不记两处）。
+    refresh_lagging_followups(base)
 
     # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本的来源槽
     # + 安装脚本）**一次收紧**——只收紧一部分时另一半仍是可写的，"落点是只读的"这句话

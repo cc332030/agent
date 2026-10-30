@@ -269,8 +269,10 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
         self.write("AGENTS_COMMON.adoc",
                    "= 入口\n\n== 分类与懒加载（加载调度器）\n"
                    "=== 必加载层（每次工作都只加载）：\n"
+                   "* 规范核心 → link:specs/core/CORE.adoc[]\n"
                    "* 执行原则 → link:specs/core/execution.adoc[]\n"
                    "== 技术栈扩展约定\n" + filler)
+        self.write("specs/core/CORE.adoc", "= 规范核心\n" + filler)
         self.write("specs/core/execution.adoc", "= 执行原则\n" + filler)
         self.write("specs-project-maintainer/priority.adoc", "= 优先级\n" + filler)
 
@@ -294,10 +296,23 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
         self.assertIn("条目数超限", self.error_texts())
 
     def test_missing_resident_file_reports(self):
-        # 反例：必加载层文件缺失
+        # 反例：必加载层文件缺失（清单来自 RESIDENT_FILES 一处：新增一份常驻文件时，
+        # 缺失即报，不会因为"没写进某个字面量"而漏核）
         self.write("AGENTS_COMMON.adoc", "= 入口")
         cm.check_budget_guard()
-        self.assertIn("缺少必加载层文件", self.error_texts())
+        texts = self.error_texts()
+        self.assertIn("缺少必加载层文件 specs/core/CORE.adoc", texts)
+        self.assertIn("缺少必加载层文件 specs/core/execution.adoc", texts)
+
+    def test_resident_files_single_source(self):
+        # 反例（防第二份清单）：预算与软阈值两处都须从 RESIDENT_FILES 取——
+        # 各写一份字面量时，新增一份常驻文件只进其中一处（另一处把它当普通文件提醒"该拆了"）
+        impl = open(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "check_specs.py"),
+            encoding="utf-8").read()
+        self.assertIn('RESIDENT_FILES = ("AGENTS_COMMON.adoc",', impl)
+        self.assertIn("for rel in RESIDENT_FILES:", impl)
+        self.assertIn("for rel in RESIDENT_FILES}", impl)
 
     def test_project_entry_over_budget_reports(self):
         # 反例：项目自身入口 AGENTS.adoc 同为常驻物，超限须报
@@ -322,6 +337,91 @@ class TestCheckBudgetGuard(CheckSpecsTestCase):
         self.write("specs-project-maintainer/priority.adoc", "= 优先级")
         cm.check_budget_guard()
         self.assertIn("分类与懒加载", self.error_texts())
+
+
+class TestCheckCoreDigestGuard(CheckSpecsTestCase):
+    """钉住「核心清单」（常驻层第一层的浓缩底线，`specs/core/CORE.adoc`）。
+
+    本条要治的两个静默失效形态，都不是"文本被删"能看出来的：
+      ① **清单被摘空**——只剩标题时，读者以为已加载过底线，实际什么都没读到；
+      ② **给了底线、没给落点**——知道要守住什么，却不知道原文在哪，要展开时无处可去，
+         "按名加载"这一层整个断掉。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_items = cm.CORE_MIN_ITEMS
+
+    def tearDown(self) -> None:
+        cm.CORE_MIN_ITEMS = self._orig_items
+        super().tearDown()
+
+    def _core(self, body=None, landing=None):
+        body = body if body is not None else (
+            "\n".join("* 用到 `git mv`；重命名与内容修改分**两个提交**；**用户要求第一优先级**；"
+                       "**不可逆**操作先确认；**不得编造**事实；改动不得**越出**工作空间（第 %d 条）" % i
+                       for i in range(self._orig_items)))
+        landing = landing if landing is not None else "".join(
+            "* %s → `%s`\n" % (name, tokens[0])
+            for name, tokens, _why in cm.CORE_LANDING_ANCHORS)
+        self.write("specs/core/CORE.adoc",
+                   "= 核心\n\n== 底线（L1）\n\n" + body + "\n\n== 落点\n\n" + landing)
+        # 夹具按锚点清单推导（不抄第二份）：锚点增删时夹具随之，不因漏改而误报
+        for _name, tokens, _why in cm.CORE_LANDING_ANCHORS:
+            for rel in tokens:
+                self.write(rel, "= x\n\n== 底线\n\n* t\n")
+
+    def test_valid_core_passes(self):
+        self._core()
+        cm.check_core_digest_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_core_reports(self):
+        # 反例：核心清单文件缺失（常驻层第一层不存在）
+        cm.check_core_digest_guard()
+        self.assertIn("缺少 specs/core/CORE.adoc", self.error_texts())
+
+    def test_empty_list_reports(self):
+        # 反例（关键）：底线节被摘空——只剩标题
+        self._core(body="")
+        cm.check_core_digest_guard()
+        self.assertIn("只剩 0 条", self.error_texts())
+
+    def test_shrunk_list_reports(self):
+        # 反例（关键）：底线被削到只剩几条（读者以为"底线就这些"）
+        self._core(body="\n".join("* 用到 `git mv`（第 %d 条）" % i for i in range(3)))
+        cm.check_core_digest_guard()
+        self.assertIn("下限", self.error_texts())
+
+    def test_missing_priority_item_reports(self):
+        # 反例：最高关注项那条底线被摘掉（其余条目还在时同样须报）
+        self._core(body="\n".join("* 底线若干（第 %d 条）" % i
+                                   for i in range(self._orig_items + 2)))
+        cm.check_core_digest_guard()
+        self.assertIn("缺失底线要点", self.error_texts())
+
+    def test_missing_landing_reports(self):
+        # 反例（关键）：给了底线、没给落点——按名加载这一层断掉
+        self._core(landing="* 执行原则 → `specs/core/execution.adoc`\n")
+        cm.check_core_digest_guard()
+        self.assertIn("落点", self.error_texts())
+
+    def test_each_landing_line_is_anchored(self):
+        # 反例（本轮 review 实测）：核心清单正文点到、而「落点」节没列的那份文件——
+        # 读者按名走不到，且该行整条被删时本道不发声（锚点清单只覆盖 4 条时漏了展开层与自检）
+        for name, tokens, _why in cm.CORE_LANDING_ANCHORS:
+            token = tokens[0]
+            with self.subTest(landing=name):
+                self._core(landing="".join(
+                    "* %s → `%s`\n" % (n, t[0])
+                    for n, t, _w in cm.CORE_LANDING_ANCHORS if n != name))
+                cm.check_core_digest_guard()
+                self.assertIn(f"「落点」节缺少要点：{name}（应含 `{token}`）", self.error_texts())
+                cm.errors.clear()
+
+    def test_threshold_is_a_floor_not_a_target(self):
+        # 守住"下限"的语义：过小的下限会让本道失去意义（3 条也能全绿）
+        self.assertGreaterEqual(cm.CORE_MIN_ITEMS, 8)
 
 
 class TestCheckFileSizeHint(CheckSpecsTestCase):
@@ -25941,6 +26041,44 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
         self._write_valid()
         self._mutate(self.SCRIPT, "for target, why in _self_update_candidates(out_dir, cwd):",
                      "for target, why in [_self_update_candidates(out_dir, cwd).__next__()]:")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_refresh_dropped_reports(self):
+        # 反例⑩（本会话实测的缺口）：清单以外的附随文件（索引页）不再每轮核对——自更新只在
+        # **脚本自己变了**时才动手，脚本没变的那一轮一个字节都不写，索引页于是停在上一次脚本
+        # 变动的那一版：人按站点找文件看到的是一份过期目录，且没有任何输出显示它落后了
+        self._write_valid()
+        # 变异打在**赋值语句**上（不是 `FOLLOWUP_FILES = (` 这个前缀）：注释里也出现了这个名字，
+        # 只替换前缀时那几个字照样在、断言也就照样通过——判据指错了对象
+        self._mutate(self.SCRIPT, 'FOLLOWUP_FILES = ("index.html",)',
+                     'FOLLOWUP_FILES_UNUSED = ("index.html",)')
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_refresh_body_dropped_reports(self):
+        # 反例⑪（同一缺口的另一半）：常量在、消费它的执行体被改名/删掉——常量留着也没人用，
+        # 「每轮核一遍」这句话回到只写在注释里的形态
+        self._write_valid()
+        self._mutate(self.SCRIPT, "def refresh_lagging_followups(base):",
+                     "def something_else(base):")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_refresh_call_dropped_reports(self):
+        # 反例⑫（口径实测）：常量在、执行体也在，但 `main` 里**没人叫它**——这正是「每轮核一遍」
+        # 最隐蔽的失效形态：判据与执行体都还在，注释也照旧写着这句话，一轮也没真跑过
+        self._write_valid()
+        self._mutate(self.SCRIPT, "    refresh_lagging_followups(base)\n", "")
+        self._run()
+        self.assertIn(self.SCRIPT, self.error_texts())
+
+    def test_followup_removal_misannounced_reports(self):
+        # 反例⑬（本轮 review）：落盘那一步自己抛的 `OSError`（只读挂载、权限）被"取不到"那组
+        # `except` 接走——报出去的是"取不到：本地那一份原样保留、它可能已落后"，而真正的成因
+        # （写不进去）一个字都没说。判据是那两句**归在落盘那一步**。
+        self._write_valid()
+        self._mutate(self.SCRIPT, "已取到、但落盘失败", "取不到")
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
 

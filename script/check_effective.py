@@ -645,7 +645,7 @@ MECHANISMS = [
     ("公共内容覆盖面须有清单且与实际一致（安装入口/公共片段/随规范分发的工具同样会被引用方取到）", "PUBLIC.adoc", "script/check_specs.py",
      "check_public_content_coverage", "check_public_content_coverage 钉住入口清单存在且被项目规范入口登记、两个公开入口都在清单里、清单点名的文件真实存在；『某文件到底算不算公共内容』属判定"),
     ("安装取文件须有随规范分发的抓手：清单从入口自身解析、一次取全（不手拼逐条下载命令）", "AGENTS_COMMON.adoc", "script/check_specs.py",
-     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步"),
+     "check_spec_fetch_guard", "check_spec_fetch_guard 钉住随规范分发的抓取脚本与其同名平台入口（`.sh`/`.bat`）存在、清单从入口的调度器登记解析（退回手工清单即回到「新增规范就漏一份」）、增量语义、落点边界校验、「不是站点首页」的判据（站点对未命中路径回落 200 + HTML，只判状态码会把 HTML 存成规范）、退出码语义、薄壳三件事与 `.bat` 纯 ASCII+CRLF，以及 AGENTS_COMMON/README 两处登记同步；**清单以外的附随文件**（站点索引页，`FOLLOWUP_FILES` ＋ `refresh_lagging_followups`）由 `check_fetch_self_update_guard` 钉住「每轮另核一遍」——它不在清单里、自更新又只在脚本自身变了时才动手，两处各管一半、不得互相顶替"),
     ("取规范须显示下载进度与明细、下载完成不关窗口（进度逐份即吐、入口按需停住）",
      "script/fetch-specs.py", "script/check_specs.py",
      "check_fetch_progress_guard",
