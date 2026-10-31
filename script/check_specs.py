@@ -488,9 +488,18 @@
      新开实例按文档找不到副本，而全部检查照旧全绿。由 `check_paths_single_source_guard` 钉住；
      「这些取值定得对不对」属语义判断，交人/子 agent 复核。
 
+ 121. 站点正文区的站内链接防线（**用户提出**）：判据是**点下去落在哪个 hash**——取值抽在
+     `script/site-link-check.js`（与 `index.html` 同一份实现），由本脚本真的执行、逐用例比对。
+     失效形态（本 PR 实测）：`resolveTarget()` 对带 scheme 的目标一律返回 null，故"先解析、
+     解析不出来再按站点绝对地址重试"永远走不到第二步；站点绝对地址重试时又叠加了当前文档
+     目录，子目录文档里派生出不存在的路径；`toSitePath()` 忘了先剥 scheme。三处都被写成了
+     注释里的承诺，而唯一的核对手段是 PR 描述里的一次手工实测。由 `check_site_link_guard`
+     钉住；「某个链接该不该拦」属语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
+import json
 import os
 import posixpath
 import re
@@ -4923,8 +4932,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 179  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_source_file_scale_guard`；上一轮 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2439  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +10：新增 `TestCheckSourceFileScaleGuard`（正例 + 整节被删 + 级别降级 + 超线须给定论被抽 + 提醒线取值被抽 + 复用成因被抽 + 不拆形态被抽 + 按职责切被抽 + 存量边界被抽 + 规则步骤真被接线）；上一轮 2429 见 guards.adoc「记账沿革」
+GUARD_WIRING_BASELINE = 181  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_site_link_guard`——站点正文区的站内链接落点；上一轮 `check_source_file_scale_guard`；上一轮 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2441  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +2：`TestCheckPromptsIndexGuard` 补‘整条 `link:` 被行内代码包住’反例（`check_site_link_guard` 的取值由 `SITE_LINK_CASES` 逐条核，不另设用例类）；上一轮 +10：新增 `TestCheckSourceFileScaleGuard`（正例 + 整节被删 + 级别降级 + 超线须给定论被抽 + 提醒线取值被抽 + 复用成因被抽 + 不拆形态被抽 + 按职责切被抽 + 存量边界被抽 + 规则步骤真被接线）；上一轮 2429 见 guards.adoc「记账沿革」
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -12938,7 +12947,104 @@ def check_prompts_index_guard():
                 f"既没写出该边界的要点、也没写出它所属的公共片段名"
                 f"（应有其一：{'/'.join(tags)}）；删掉条目会让复制提示词的人彻底看不到这条边界",
                 rel)
+    # 登记项须是**站内可点链接**：写成裸路径 `` `prompts/x.adoc` `` 时，站点正文区里
+    # 它只是一段文字（Asciidoctor 不把行内代码转成链接），读者找不到进提示词的入口
+    # ——这正是用户报的"点不进去"。故按**渲染后的形态**判，不按字符串里有没有 `link:` 判：
+    # 整条被行内代码包住的 `link:` 渲染出来仍是一段文字。
+    for rel_prompt in _iter_prompt_files():
+        bare = os.path.relpath(rel_prompt, REPO_ROOT).replace(os.sep, "/")
+        if not _has_site_link(text, bare):
+            err(f"{rel} 未把 {bare} 写成站内链接（裸路径 `` `{bare}` `` 在站点正文区里"
+                f"点不进去，索引页就没有进入该提示词的入口；链接目标是提示词时一律写成 "
+                f"``link:{bare}[…]``、不要整条包进行内代码）", rel)
     phase_done()
+
+
+def _has_site_link(text, target):
+    """`text` 里有没有指向 `target`（仓库根相对路径）的**站内可点链接**。
+
+    两类命中都不算：`` `link:prompts/x.adoc[…]` ``（整条被行内代码包住，渲染成文字）、
+    `https://<站点>/prompts/x.adoc`（裸地址，渲染成 `class="bare"`、点开是原始文件）。
+    前者用"`link:` 之前那个开区间内反引号个数为奇数"判——行内代码包住的是整段而不是链接。
+    """
+    pos = 0
+    while True:
+        start = text.find(f"link:{target}[", pos)
+        if start < 0:
+            return False
+        pos = start + 1
+        opened_at = text.rfind("\n", 0, start)
+        if text[opened_at + 1:start].count("`") % 2 == 0:
+            return True
+
+
+# 站点正文区的链接映射用例：`(链接目标, 当前文档, 期望落到的 hash)`。
+# 期望值手工算出并逐条注明为什么——它是这条口径的**判据本身**，不是实现的自述。
+SITE_LINK_CASES = (
+    (("prompts/review.adoc", "README.adoc", "#./prompts/review.adoc"),
+     "文档里的相对链接照旧按文档所在目录解析并收回本页（原有行为不得被本次改动带坏）"),
+    (("prompts/review.adoc", "prompts/spec-refine.adoc", "#./prompts/prompts/review.adoc"),
+     "相对链接的基准是当前文档所在目录，站点绝对地址不能把它改成站点根——"
+     "两者混用时另一方向会派生出不存在的路径"),
+    (("https://agent.c332030.com/prompts/review.adoc", "README.adoc", "#./prompts/review.adoc"),
+     "站点自身的绝对地址在站内点击时收回本页渲染：`resolveTarget` 对带 scheme 的目标一律"
+     "返回 null，不先认出站点绝对地址就永远拦不到（本次改动前正是如此）"),
+    (("https://agent.c332030.com/prompts/review.adoc", "specs/general/git.adoc",
+      "#./prompts/review.adoc"),
+     "绝对地址里的路径本身就是站点根相对，不得再叠加当前文档目录（否则子目录文档里会解析成"
+     "`specs/general/prompts/review.adoc`）"),
+    (("https://agent.c332030.com/prompts/review.adoc#sec", "README.adoc",
+      "#./prompts/review.adoc#sec"), "绝对地址上的节锚点随文档带过去"),
+    (("https://github.com/x/y", "README.adoc", None), "真正的外链保持浏览器默认行为"),
+    (("#anchor", "README.adoc", None), "页内锚点保持浏览器默认行为"),
+)
+
+
+def check_site_link_guard():
+    """『站点正文区的站内链接』防线：点下去落在哪个 hash，得真的跑一遍才算数。
+
+    要治的失效（本仓库实测）：`index.html` 的 `bindDocLinks()` 里有两处**只靠肉眼看不出来**
+    的错误——① `resolveTarget()` 对带 scheme 的目标一律返回 null，故"先解析、解析不出来再
+    按站点绝对地址重试"的顺序永远走不到第二步，本次要修的那条链接根本没被拦住；② 站点绝对
+    地址重试时又叠加了当前文档目录，在子目录文档里派生出不存在的路径。两处都写成了注释里
+    的承诺（"收回本页渲染"），代码与承诺却不一致——因为**当时唯一的核对手段是 PR 描述里的
+    一次手工实测**，下一个人改这段代码时没有任何东西会当场报红。
+
+    故本道把取值抽到 `script/site-link-check.js`（与 `index.html` 同一份实现），在这里真的
+    执行它、逐用例比对落到哪个 hash：判据是"点下去落在哪"，不是"源码里有没有那段函数"。
+    「某个链接该不该拦」仍属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("站点正文区的站内链接防线检查")
+    rel_js = "script/site-link-check.js"
+    if not os.path.isfile(os.path.join(REPO_ROOT, *rel_js.split("/"))):
+        err(f"缺少 {rel_js}——站点正文区的链接映射没有可核对的取值，"
+            "`index.html` 的拦截逻辑只能靠肉眼读", rel_js)
+        phase_done()
+        return
+    node = shutil.which("node")
+    if node is None:
+        err(f"本机探测不到 `node`——{rel_js} 只有在 node 下才跑得起来，"
+            "而它承载的是『链接点下去落在哪个 hash』这一确定项"
+            "（不得跳过：跳过等于把这条判据退回手工实测）", rel_js)
+        phase_done()
+        return
+    for (href, doc, expected), desc in SITE_LINK_CASES:
+        try:
+            r = subprocess.run([node, os.path.join(REPO_ROOT, *rel_js.split("/")), doc],
+                               input=href + "\n", capture_output=True, text=True,
+                               timeout=30, encoding="utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
+            err(f"{rel_js} 超时（30s）：{href} @ {doc}", rel_js)
+            continue
+        if r.returncode != 0 or not r.stdout.strip():
+            err(f"{rel_js} 执行失败（{href} @ {doc}）：{r.stderr.strip()}", rel_js)
+            continue
+        got = json.loads(r.stdout.strip().splitlines()[0]).get("hash")
+        if got != expected:
+            err(f"站内链接的落点与期望不符：{href}（当前文档 {doc}）落到 {got!r}、"
+                f"期望 {expected!r}——{desc}", rel_js)
+    phase_done()
+
 
 def check_prompt_delivery_surface_guard():
     """『提示词取值路径与装配状态防线』：取值口径不得退回与实测不符的印象式说法。
@@ -13915,6 +14021,7 @@ CHECKS = (
     check_task_completion_guard,
     check_self_serve_guard,
     check_degradation_scan_guard,
+    check_site_link_guard,
 )
 
 

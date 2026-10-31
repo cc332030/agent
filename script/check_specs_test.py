@@ -14852,6 +14852,30 @@ class TestCheckPromptsIndexGuard(CheckSpecsTestCase):
         cm.check_prompts_index_guard()
         self.assertIn("PROMPTS.adoc", self.error_texts())
 
+    def test_bare_prompt_path_reports(self):
+        # 反例⑤（用户报的"索引页点不进提示词"）：登记表首列写成裸路径 →
+        # 站点正文区里它只是一段文字，索引页没有进入该提示词的入口
+        self.write("PROMPTS.adoc", self.INDEX + "\n| `prompts/review.adoc` | 检查修复问题\n")
+        self.write("prompts/review.adoc", "= 公共任务提示词：项目问题检查修复\n")
+        cm.check_prompts_index_guard()
+        self.assertIn("站内链接", self.error_texts())
+
+    def test_linked_prompt_path_passes(self):
+        # 正例：写成站内链接 → 不报错（裸路径与链接的差别只此一处）
+        self.write("PROMPTS.adoc", self.INDEX + "\n| link:prompts/review.adoc[`prompts/review.adoc`] | 检查修复问题\n")
+        self.write("prompts/review.adoc", "= 公共任务提示词：项目问题检查修复\n")
+        cm.check_prompts_index_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_link_wrapped_in_backticks_reports(self):
+        # 反例⑥：整条 `link:…[]` 被行内代码包住 → 渲染出来仍是一段文字（不是链接）。
+        # 按"字符串里有没有 `link:`"判会把这一形态误放行，故判据取渲染后的形态。
+        self.write("PROMPTS.adoc", self.INDEX
+                   + "\n| `link:prompts/review.adoc[prompts/review.adoc]` | 检查修复问题\n")
+        self.write("prompts/review.adoc", "= 公共任务提示词：项目问题检查修复\n")
+        cm.check_prompts_index_guard()
+        self.assertIn("站内链接", self.error_texts())
+
 
 class TestCheckLombokConstructorGuard(CheckSpecsTestCase):
     """钉住『无参/必参/全参构造优先用 lombok、不手写』（用户提出的规范调整）。
@@ -25241,10 +25265,11 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
         # 整行替掉：只改文件名时那条主侧重列仍在（锚点里含它，正好用来钉"缺主侧重列"）
         self._mutate(
             self.ENTRY,
-            "| `prompts/spec-refine.adoc` | **按现行判据把公共规范全文过一遍、"
+            "| link:prompts/spec-refine.adoc[`prompts/spec-refine.adoc`] |"
+            " **按现行判据把公共规范全文过一遍、"
             "把冗余与无效内容收敛掉** | 主侧重片段 `primary` + 优先级片段 `priority-rules`"
             "（L1/L2/L3） |",
-            "| `prompts/xxx.adoc` | 干点优化 |")
+            "| link:prompts/xxx.adoc[`prompts/xxx.adoc`] | 干点优化 |")
         self._run()
         self.assertIn("PROMPTS.adoc", self.error_texts())
 
