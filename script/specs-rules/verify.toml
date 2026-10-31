@@ -502,3 +502,110 @@ tokens = [
 ]
 kind = "file_tokens"
 message = "公开面 README 未登记「测试用例只允许在本机跑」{missing}——公开面只看得见『怎么跑测试』、看不见『用例不许依赖别的机器』，这条判据对读者不存在"
+
+# 『跑测试按改动面取最小集』与『基线只取改动面那一片』防线（**用户提出**）。用户口径：
+# `一上来就跑所有的测试用例太慢了`——用例要能按文件/模块/服务细分、只跑需要验的那部分；
+# 先干活、干完再看动了哪些内容，对**改动前的那个状态**取基线（那一片本来有问题就先处理
+# 基线），改完跑同一批比对。判据本体在 `specs/general/verify.adoc`「验证的适用边界」的
+# 「测试跑多少」；基线侧落 `specs/general/planning.adoc`「动手前先定基线」；测试侧只在
+# `specs/general/testing.adoc`「执行与验证」留「能按落点选取执行」的归属句。锚点清单只写
+# 一处（`_tokens.toml` 的 `TEST_SCOPE_TOKENS`），本处按名引用。
+#
+# 取节方式说明：`specs/general/verify.adoc` 的这两个条目落在「验证的适用边界」节里、
+# 且该节同时是本条与「最轻路径」等相邻条目的落点，故按**该节正文**逐组核锚点。
+[[guards.check_test_scope_guard]]
+file = "specs/general/verify.adoc"
+section = "验证的适用边界"
+token_list = "TEST_SCOPE_TOKENS"
+kind = "section_groups"
+
+# 与上面成对：只核正文时，把锚点清单自身削掉几项（规范正文一字不少）防线仍全绿，
+# "核过且通过"与"没核"无从区分——删锚点须与调基线一并发生。
+# **`min` 数的是锚点项、不是组数**：只数组数时，删掉一组（连同它那几条锚点）条数照样不变，
+# 防线静默少核一组而仍然报绿（本轮实测：`min` 写成 7 时，删掉"收窄范围不降低判据"整组
+# 没有任何反应）。故取**全部锚点项数**，删任何一项都要动基线。
+[[guards.check_test_scope_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 32
+token_list = "TEST_SCOPE_TOKENS"
+
+# 测试侧与基线侧的锚点清单同样成对核条数（删锚点须与调 baseline 一并发生）。
+[[guards.check_test_scope_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 6
+token_list = "BASELINE_SCOPE_TOKENS"
+
+[[guards.check_test_scope_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 5
+token_list = "TEST_SELECTION_TOKENS"
+
+# 基线侧：取值不重列（判据本体在通用层 verify），只核「基线按改动面取、改完按实际清单补取、
+# 基线有问题先处理基线」这三个动作点在规划文件里仍有落点。
+[[guards.check_test_scope_guard]]
+file = "specs/general/planning.adoc"
+section = "动手前先定基线"
+token_list = "BASELINE_SCOPE_TOKENS"
+kind = "section_groups"
+message = "{file} 的「动手前先定基线」节缺失要点 {missing}——缺则跑测试的范围只管改完那一次、动手前照旧整库跑一遍；实际改动超出候选范围时也没有人补基线（用户口径：先干活、干完按实际改动补取改动前的基线）"
+
+# 测试侧：只回指、不重列判据（重列即第二真源）。
+[[guards.check_test_scope_guard]]
+file = "specs/general/testing.adoc"
+section = "执行与验证"
+token_list = "TEST_SELECTION_TOKENS"
+kind = "section_groups"
+message = "{file} 缺失「用例能按落点分别选取执行」的归属句 {missing}——缺则「只跑需要验的那部分」在用例这一层没有落点：想跑一条也只能整模块跑"
+
+# 调度器须能被触发（否则决定"这次跑哪些测试"时这一条永远不会被加载）。
+[[guards.check_test_scope_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "这次要跑哪些测试、能不能只跑需要验的那一部分",
+    "一上来就要跑全部测试",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「跑测试按改动面取最小集」的识别特征 {missing}——缺则决定跑哪些用例时这一条永远不被加载，照旧一上来就整库跑"
+
+# 提示词侧同口径（提示词会被未知项目复制执行，漏了这层则复制出去的那份没有该边界）。
+# 核对对象收在 `verify` 片段内：该片段在整份公共片段里只占一段，按整份文件核时同一批
+# 措辞出现在别的片段里就能兜住。
+[[guards.check_test_scope_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::baseline-and-compat[]"
+tokens = [
+    "跑测试按改动面取最小集，不按\"有什么测试\"全跑（L1）",
+    "这次改动可能弄坏的东西，落在哪些测试里",
+    "最细到单条用例",
+    "跑了哪一档、筛了哪些落点",
+    "基线只取改动面那一片、改完按实际清单补齐（L1）",
+    "先把基线问题处理掉",
+]
+kind = "text_block_groups"
+message = "提示词公共片段缺失「跑测试按改动面取最小集」的要点 {missing}——缺条文则执行侧一上来就整库全跑；缺判据问句则「跑哪几条」无从判断；缺细分档位则只能全跑或不跑；缺范围留证则「全绿」说不出跑了什么；缺基线侧两档则干完活也不会回头补改动前的基线"
+
+# 公开面同步（读者不从目录说明知道有这条，就仍按「跑测试＝全跑」行事）
+[[guards.check_test_scope_guard]]
+file = "README.adoc"
+tokens = [
+    "跑测试按改动面取最小集，不按\"有什么测试\"全跑",
+    "圈定范围内的用例一条不能少",
+    "specs/general/verify.adoc",
+    "specs/general/planning.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「跑测试按改动面取最小集」{missing}——公开面只看得见「要跑测试」、看不见「只跑要验的那部分」，这条判据对读者不存在"
+
+# 维护方落点：本仓库自己怎么按落点取最小集（改哪个脚本只跑它自己那份用例）。
+[[guards.check_test_scope_guard]]
+file = "specs-project-maintainer/verify.adoc"
+tokens = [
+    "跑测试按改动面取最小集（维护方落点）",
+    "只跑**它自己那份 `*_test.py`**",
+    "收尾那一次的「改完规范的机械手段」仍是全量扫描",
+]
+kind = "file_tokens"
+message = "{file} 未登记「跑测试按改动面取最小集」的维护方落点 {missing}——缺则维护本仓库时照旧一上来 `discover` 一遍全量，而收尾那次要求的全量扫描也没有与「过程中只跑相关」分清"

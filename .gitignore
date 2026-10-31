@@ -12,3 +12,7 @@ tmp/
 
 # 取规范脚本自更新留下的交接文件（运行 fetch-specs 时生成，见该脚本头部）
 *.handoff
+
+# 取规范脚本自更新时写下的待换中转件（用例会留下它，见 `script/check_specs_test.py`
+# 里自更新那组用例：远端脚本一换新就得走一次"落临时件 → 当轮换上"）
+script/.*.update

@@ -1357,6 +1357,73 @@ class TestDuplicateScanGramPrefilter(unittest.TestCase):
         self.assertEqual(len(self._run({"a.adoc": a, "b.adoc": b}, min_overlap=24)), 1)
 
 
+class TestDuplicateScanShortUnit(unittest.TestCase):
+    """短实体不得被粗筛静默跳过：**重复的判定面是句子，不是"整条能否命中"**。
+
+    阈值 24 只管"多长才算显著重复"，不管"多长才值得核"。早期实现只按整条实体聚候选对，
+    短实体（比阈值长不了几个字的那一类）因此整片落在候选面之外——本仓库实测复现：两句
+    26 字的判据逐字相同、`check_specs.py` 照样全绿，那一段的过绿是"没核"而非"核过且通过"。
+    """
+
+    def _run(self, files, **extra):
+        step = {"kind": "duplicate_scan", "file": None, "sources": sorted(files),
+                "min_overlap": extra.pop("min_overlap", 24),
+                "message": "{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字：{frag}"}
+        step.update(extra)
+        ctx = FakeCtx(files)
+        _rules({"g": [step]}, ctx).run("g")
+        return ctx.errors
+
+    def test_short_entity_reports(self):
+        # 26 字：短于"整条命中才够阈值"的组合，但就是同一句话逐字写了两处
+        body = "* **范围（L1）**：只跑改动面能波及的那几条用例，不跑全量。\n"
+        errs = self._run({"a.adoc": body, "b.adoc": body})
+        self.assertEqual(len(errs), 1)
+
+    def test_whole_unit_versus_one_sentence_reports(self):
+        # 一侧整条就这一句、另一侧把它夹在更长的实体里（前有引语、后有另写的文字）：
+        # 粗筛在"整条"层面对不上，逐句那一遍必须补上（否则短行与长行混写的重复核不出来）
+        short = "这几条用例只跑改动面能波及的那一片，绝不跑全量兜底"
+        a = "* 甲：" + short + "\n"
+        b = ("* 乙：另有一段与上面完全不同的话，措辞也另写、整体远长过阈值。又说一遍 "
+             + short + "。\n")
+        errs = self._run({"a.adoc": a, "b.adoc": b})
+        self.assertEqual(len(errs), 1)
+
+    def test_common_phrase_inside_sentence_not_reported(self):
+        # 句内一小段相同（惯用搭配、同一个文件名）不是重复：判据是"重合够阈值"
+        a = "* 甲：判据见 `specs/general/review.adoc` 的精炼性一节，看的是同一描述。\n"
+        b = "* 乙：落点在 `specs/general/review.adoc`，另外这段与本条无关、措辞另写。\n"
+        self.assertEqual(self._run({"a.adoc": a, "b.adoc": b}), [])
+
+    # 「一段判据被拆成两句」的实例：一侧写全，另一处在**句中不同位置**各插一个逗号。
+    # 两处都不成整句，但两侧相邻两句的拼接里躺着要报的那一段。
+    HALF_A = "只跑改动面能波及的那几条用例绝不跑全量兜底"
+    HALF_B = "也不拿印象当落点清单这一句要写清楚别含糊"
+    LEAD = "先另写一段完全无关的说明措辞另起讲别的事情而且还要更长一些，然后"
+
+    def test_sentence_cut_by_punctuation_reports(self):
+        # **逐句那一遍的判据不是"整句命中"**：一条判据在一处写全、另一处被逗号劈成
+        # 两半。整条那层只看得到半边（切点在中间，两侧存活段都短于阈值），逐句那层若
+        # 要求"一句整句出现在另一句里"，横跨切点的那一段永远核不出来。
+        # 实证：把判据抄进另一个文件、顺手加个逗号断开，`check_specs.py` 全绿。
+        whole = self.HALF_A + self.HALF_B
+        a = "* 丁：" + whole + "。\n"
+        b = "* 丙：" + self.LEAD + self.HALF_A + "，" + self.HALF_B + "，接着说下去。\n"
+        errs = self._run({"a.adoc": a, "b.adoc": b}, min_overlap=40)
+        self.assertEqual(len(errs), 1)
+
+    def test_folded_versus_unfolded_paragraph_reports(self):
+        # 同一段判据一处写在一行、另一处**换行拆成两行**：整条那层两侧的公共子串跨得过
+        # 换行、逐句那层两侧都成整句——这是"折叠 vs 展开"的原始形态，必须报。
+        p1 = "只跑改动面能波及的那几条用例绝不跑全量兜底也不拿印象当"
+        p2 = "落点清单这一句要写清楚，别让范围收窄成不验"
+        a = "* 甲：" + p1 + p2 + "。\n"
+        b = "* 乙：" + self.LEAD + p1 + "\n" + p2 + "。\n"
+        errs = self._run({"a.adoc": a, "b.adoc": b}, min_overlap=40)
+        self.assertEqual(len(errs), 1)
+
+
 class TestSentencesCache(unittest.TestCase):
     """按句回退的切分：归一化与实体侧同源、短句与重复句不参与。
 
