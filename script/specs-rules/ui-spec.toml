@@ -1,0 +1,739 @@
+# 『界面与交互（跨端形状、尺度、颜色与交互）』防线规则数据。
+#
+# 判据本体在 `specs/general/ui.adoc`——**公共内容**（对任何产出界面的项目成立，不限语言与端）。
+# 四份**模板文件**与它同层、只给取值：`specs/general/ui-tokens.adoc`（令牌取值：色阶、字号
+# 尺度、间距、控件高度、分端下限）、`specs/general/ui-targets.adoc`（各端框架与参照应用的
+# 选择口径）、`specs/general/ui-styles.adoc`（风格族清单与必写项）、`specs/general/ui-voice.adoc`
+# （动作名与文案词表）。
+#
+# **新增 .adoc 须同源登记三处**：本道只核「模板是否回指判据本体」，不核「模板是否被扫描面
+# 收录」——扫描面（`check_specs.py` 的 `POINTER_SCAN_FILES` 与 `duplicate.toml` 的 `files`）
+# 漏登记时本道全绿、那两份文件却永不参与回指与重复检查（本仓库实证：`ui-styles.adoc` 与
+# `ui-voice.adoc` 首版即漏登记，由 `test_scan_files_cover_all_adoc` 报出）。
+#
+# 本条防的失效：**外观与交互没有可执行的测试**——同一产品各端各写一套，颜色按色相命名、
+# 层级靠透明度、字号逐页微调、触摸端拿桌面端的控件高度直接套、关键入口只在悬停时出现；
+# 这些跑什么都不报错，只有人看得出来，等看出来时已经散在几十个文件里。
+#
+# **与既有三道界面的分工**（不得被判成重复而合并）：
+#   * `check_ui_style_guard`（`specs/general/coding.adoc`「界面与样式」）管**取哪套现成方案、
+#     同一形态放哪一处、`!important` 的次序**——本条管**取什么颜色/字号/间距/高度**；
+#   * `check_ui_performance_guard` 管**数据长起来会不会卡**——本条管**看得清不清、点得动点不动**；
+#   * `check_same_thing_one_source_guard` 管**两处算不算同一件事**——本条在视觉层的形态是
+#     「同一令牌只有一个取值、同一组件只有一个外观来源」。
+
+# ① 判据本体：通用层 `specs/general/ui.adoc`，**逐节核**（每节一组锚点清单）。
+# 逐节而不是一次核全文：锚点清单按节分开，某节的要点被整段抽走时该节自己报红，
+# 报错正文直接给出"哪一节缺了什么"。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "本文件的字典（本文件使用的名称，定义写在本文开头）"
+token_list = "UI_SPEC_TERMS_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "三件事与既有判据的分工（先读，防两套判据并存）"
+token_list = "UI_SPEC_SCOPE_ANCHORS"
+
+# 与上面各节成对：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面各步
+# 一次都不报错。删清单须与调 `min` 一并发生（`min` 按全部清单的合计条数取）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_TERMS_ANCHORS"
+min = 9
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_SCOPE_ANCHORS"
+min = 5
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "总纲与颜色（什么该一致、什么才允许不同；选什么色、怎么配、对比度要多少）"
+token_list = "UI_SPEC_COLOR_ANCHORS"
+min = 15
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "排版与尺度（字号、行高、间距、控件高度）"
+token_list = "UI_SPEC_SCALE_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "分端：形状该不一样，标准不该不一样"
+token_list = "UI_SPEC_END_ANCHORS"
+
+# 通用件的判据（借用现成方案时借什么、留什么）：**逐节核**——这一节整段被抽走时，
+# 剩下的判据仍会「一条令牌只有一个取值」，但"外观真源在别人的包里"这一形态无人报红。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "通用件与参照（借用现成方案时，什么可以借、什么必须留成本项目自己的）"
+token_list = "UI_SPEC_REFERENCE_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_REFERENCE_ANCHORS"
+min = 4
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "交互（按输入设备定，不按端定）"
+token_list = "UI_SPEC_INPUT_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "组件的通用形态（自建件按这类东西本该长成什么样）"
+token_list = "UI_SPEC_COMPONENT_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "承载与呈现（同一个操作开成什么、一条数据怎么看、一列多宽）"
+token_list = "UI_SPEC_PATTERN_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_PATTERN_ANCHORS"
+min = 16
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "承载与呈现（同一个操作开成什么、一条数据怎么看、一列多宽）"
+token_list = "UI_SPEC_PATTERN_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_PATTERN_ANCHORS"
+min = 16
+
+# 界面状态的保留与恢复（后补判据）：**逐节核**——这一节整段被抽走时，剩下的判据仍会
+# 「容器一次一种」「列宽有上下限」，但「动作类状态被自动重放」「失效引用打开即报错」
+# 这两种最伤人的形态无人报红（它们只在**两次会话之间**发生，任何一次操作内的判据都管不到）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "界面状态的保留与恢复（关掉再打开，该回到哪）"
+token_list = "UI_SPEC_STATE_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_STATE_ANCHORS"
+min = 7
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "新增或改界面时的核对清单（按序判，命中即改）"
+token_list = "UI_SPEC_CHECK_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_COLOR_ANCHORS"
+min = 13
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_SCALE_ANCHORS"
+min = 8
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_END_ANCHORS"
+min = 5
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_INPUT_ANCHORS"
+min = 9
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_COMPONENT_ANCHORS"
+min = 5
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_CHECK_ANCHORS"
+min = 5
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_EVIDENCE_ANCHORS"
+min = 5
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "依据（标准名/编号）"
+token_list = "UI_SPEC_EVIDENCE_ANCHORS"
+
+# ② 两份模板：取值清单与选择表仍在，且**回指判据本体**（不另立判据、不是第二真源）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-tokens.adoc"
+kind = "section_groups"
+section = "怎么用（三步）"
+groups = [
+    [
+        "判据本体回指通用层（不另立判据）",
+        [
+            "**判据本体在 `specs/general/ui.adoc`**",
+        ],
+        "缺则令牌模板变成第二处真源：取值与判据在两份文件里各自漂移，先报红的那道未必是权威",
+    ],
+    [
+        "落一处与按端只覆盖三类",
+        [
+            "**落一处**",
+            "**按端只覆盖三类**",
+            "密度、版式、导航",
+            "**落成几个文件（按取值范围分，不按端数分）**",
+            "同一个令牌名**只在一处定义**",
+        ],
+        "缺则模板只有数值没有用法：抄进去之后各端各自覆盖，端差异随即散开；也缺「一个端 = 一份全量令牌」这个失效面的拦截",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-tokens.adoc"
+kind = "section_groups"
+section = "二、对比度：两档取值与自检"
+groups = [
+    [
+        "对比度两档取值（正文增强值、大号文本与图形最小值）",
+        [
+            "**7:1**",
+            "**4.5:1**",
+            "**3:1**",
+        ],
+        "缺则本条只剩口号：对比度取哪一档没有落点，颜色谁看着顺眼就用谁",
+    ],
+    [
+        "没有「看起来还行」这一档",
+        [
+            "设计上看起来还行",
+        ],
+        "缺则表里的数值退化成建议，跌破对比度可以用「体感」放过",
+    ],
+]
+
+# 把现成方案接进来时借什么、留什么（与上一节成对：上一节管「参照哪个产品」，
+# 这一节管「参照到什么程度、落地成什么」——缺则「优先取现成方案」被读成「整页用外部体系」）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-targets.adoc"
+kind = "section_groups"
+section = "一之二、把现成方案接进来时，什么可以借、什么必须自己写"
+groups = [
+    [
+        "只借取值与清单、不借体系与名字",
+        [
+            "**借这三样**",
+            "**不借这三样**",
+            "外部主题/组件库升级后观感变了",
+        ],
+        "缺则「优先取现成方案」被读成「整页用外部体系」：外观真源留在别人的包里，同族候选该选哪个无人写下来",
+    ],
+]
+
+# 承载与呈现模板：四件用户逐项追问的事——容器形态、表单排布与分组、结构化值详情、表格列宽。
+# 缺回指即变成第二真源；缺四节标题则该模板退化成一张没有落点的散表。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "一、容器选择：这个操作该开成什么"
+groups = [
+    [
+        "判据本体回指通用层（不另立判据）",
+        [
+            "**判据本体在 `specs/general/ui.adoc`**",
+            "`specs/general/ui.adoc`「每个端一套骨架」",
+        ],
+        "缺则容器模板成为第二处真源：容器判据与主判据在两份文件里各自漂移",
+    ],
+    [
+        "容器按序取、层数上限两层、跨端只落在版式与导航",
+        [
+            "**按序判、取最先成立的一条**",
+            "容器嵌套超过两层",
+            "同一功能在各端都要有",
+        ],
+        "缺则容器选择退回「照着别家产品抄」：同类动作一层一种容器，第三层起用户迷路",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "二、表单：排布与分组"
+groups = [
+    [
+        "排布按任务分段、列数段内统一、窄窗口按内容降列",
+        [
+            "**按任务分段，不按数据模型分段**",
+            "**一段之内再定列数**",
+            "**窄窗口自动降列**",
+        ],
+        "缺则表单排布回到「平铺还是上下还是浮动」各页各答：列数与分段散在页面里，改一处漏一处",
+    ],
+    [
+        "分组按是否需要对照决定隔不隔离",
+        [
+            "**分组：隔离还是打通**",
+            "分组之间**要对照**",
+            "分组之间**不需要对照**",
+            "**向导（分步）**",
+        ],
+        "缺则分组只剩一种做法：要么处处隔离（跨组比较要来回点）、要么一律同页（长到没人滚到底）",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "三、结构化值的详情：原始内容与格式化怎么并存"
+groups = [
+    [
+        "原文与结构视图并存、判据落在字节是否被改写",
+        [
+            "**原文视图**回答",
+            "**结构视图**回答",
+            "格式化视图可编辑并**回写**",
+        ],
+        "缺则本条退回「按格式适应就行」：保存一次就把缩进、键序、转义改一遍",
+    ],
+    [
+        "改内容按粘贴与手工分流，美化是显式可撤销编辑",
+        [
+            "**整份粘贴覆盖**",
+            "**在格式化视图里逐处改**",
+            "**格式化／美化按钮**",
+            "**校验（解析）**",
+        ],
+        "缺则「粘贴覆盖很合理、直接改原文很容易搞坏格式」这一取舍没有落点：两条路各写一半，第三条悄悄重排内容",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "四、高密度表格：列宽、上限与自适应"
+groups = [
+    [
+        "上下限双约束、初始按内容估",
+        [
+            "**下限**由",
+            "**上限**由",
+            "**初始宽度按内容估**",
+        ],
+        "缺则列宽要么写死、要么无上限：长值一律截断，或一条长文本把整行撑到横向滚三屏",
+    ],
+    [
+        "自适应为默认、用户覆盖优先、按对象记住",
+        [
+            "**自适应还是写死（结论：默认自适应、用户可覆盖、按对象记住）**",
+            "**用户覆盖优先**",
+            "**按内容适配**",
+        ],
+        "缺则用户拖过的宽度重开即丢，双击列边与初始估算混成一档",
+    ],
+]
+
+# ③ 分端方案表：选择口径与参照规则仍在（框架名会换代，口径不会）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-targets.adoc"
+kind = "section_groups"
+section = "二、各端首选与备选（一次取值，不是唯一答案）"
+groups = [
+    [
+        "选型的判据取能力、不取名字",
+        [
+            "取值理由（照这条判，不照名字判）",
+        ],
+        "缺则表里的库名变成权威：换个框架就没人知道该不该换",
+    ],
+    [
+        "混合应用（网页转客户端）须核外壳能力",
+        [
+            "网页套壳",
+            "原生菜单与快捷键",
+        ],
+        "缺则「网页转客户端」这一类只剩一句结论：外壳该做的事没有清单，套一层浏览器的壳也算完成",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-targets.adoc"
+kind = "section_groups"
+section = "三、可参照的产品与照法（分两档）"
+groups = [
+    [
+        "参照分两档（结构可照 / 只可看外形）",
+        [
+            "**A 档——可参照（结构与流程照着做，外观按本项目令牌走）**",
+            "**B 档——只可照外形、不可照体系**",
+        ],
+        "缺则参照变成照抄：单一场景产品的导航结构被当成通用骨架，或把别家的品牌色与外观一起搬进来",
+    ],
+    [
+        "照结构不照外观",
+        [
+            "照 A 档的外观",
+        ],
+        "缺则本条只剩「可以参照」，没有「照到什么程度」",
+    ],
+
+]
+
+# ④ 加载门：调度器须在「任何代码活动」与前端栈两处登记本文件的识别特征——缺则写界面的人
+# 永不加载本文件，判据存在而走不到它。这一跳按**那一行条目**核（`line_tokens`）：只看整份
+# 文件里有没有出现过路径名，会被别处的引用兜住。
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "`specs/general/ui.adoc`",
+    "`specs/general/ui-tokens.adoc`",
+    "`specs/general/ui-targets.adoc`",
+]
+message = "调度器「任何代码活动」条目未登记界面与交互规范（或其两份模板）——写界面、定样式、定交互时读不到判据，规则实际失效；三个文件须在该条目里有登记（判据本体、令牌模板、分端方案模板）"
+
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**Web 前端打包产物**"]
+tokens = ["判据与取值模板见通用层"]
+message = "调度器「Web 前端打包产物」条目未登记界面形状与交互的识别特征（一跳回指通用层即可，不在此复述判据）——写前端页面时读得到打包规则、读不到界面判据"
+
+# ⑤ 风格与调性 / 界面上的文字（后补两组判据）：**逐节核**——这一层整段被抽走时，
+# 剩下的判据仍会「一套令牌一个取值」，但"风格只存在于文档、文案硬写在模板里"这两种
+# 最常见、也最没人管的形态无人报红。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "风格与调性（同一套令牌之外，这一件东西整体给什么感觉）"
+token_list = "UI_SPEC_STYLE_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_STYLE_ANCHORS"
+min = 9
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "界面上的文字（文案是界面材料，不是附属品）"
+token_list = "UI_SPEC_VOICE_TEXT_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_VOICE_TEXT_ANCHORS"
+min = 7
+
+# ⑥ 两份新模板：候选清单与词表仍在，且**回指判据本体**（不另立判据、不是第二真源）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-styles.adoc"
+kind = "section_groups"
+section = "一、这八项必写（每一族都要，缺一项等于没定风格）"
+groups = [
+    [
+        "八项必写项（缺一项即风格未定）",
+        [
+            "**色阶与饱和度取向**",
+            "**层次的表达**",
+            "**装饰密度**",
+        ],
+        "缺则模板只剩风格名：换一个族时不知道该改哪八处取值，风格又退回成一句定语",
+    ],
+    [
+        "清单不是允许列表（按场景取、不按品类取）",
+        [
+            "**清单不是允许列表**",
+            "**同样要写全必写项、同样要给出适合与不适合**",
+        ],
+        "缺则清单被读成封闭集合：清单外的一族没人敢用，清单内的一族又被无脑套用",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-styles.adoc"
+kind = "section_groups"
+section = "三、通用陷阱清单（没有理由就不要取）"
+groups = [
+    [
+        "通用陷阱是默认值、不是禁令",
+        [
+            "**默认值不是禁令**——要用就得说明它是被场景要求的那一项",
+        ],
+        "缺则清单被读成禁令：被场景要求的那一项也不敢用；反过来，无理由照抄默认形态时又没有判据可引",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-voice.adoc"
+kind = "section_groups"
+section = "二、错误与校验"
+groups = [
+    [
+        "错误三句话结构（发生了什么 / 为什么 / 怎么办）",
+        [
+            "**三句话结构**",
+            "发生了什么",
+            "怎么办",
+        ],
+        "缺则错误文案退化成「操作失败」：用户知道出错了，但不知道能做什么",
+    ],
+]
+
+# 校验时机（用户追问「表单的校验时机」后补）：判据本体在 `specs/general/ui.adoc`
+# 「表单：标签常驻、错误就地」，四次时机与形状落在本模板。缺则校验只剩「一填就报错」
+# 或「提交后一句话」两态，且摘要与字段处各写一句、校验失败把已填内容清掉都无人看出来。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-voice.adoc"
+kind = "section_groups"
+section = "二、错误与校验"
+token_list = "UI_SPEC_VOICE_FORM_ANCHORS"
+groups = [
+    [
+        "校验时机四档与形状（逐键不说结论、失焦说改法、提交摘要与字段同源、失败不清空）",
+        [
+            "校验什么时候说（时机与形状，四种都定下来）",
+            "错误摘要 + 逐字段定位并存",
+            "**同一处错误不因为换了个时机而换说法**",
+            "**校验失败的字段内容不得被重置**",
+        ],
+        "缺则校验时机随人发挥：输入中就骂人、提交后只给一句「有错误」，摘要与字段两处各写一句，失败一次已填内容全丢",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-voice.adoc"
+kind = "section_groups"
+section = "五、长度与语言（不靠截断）"
+groups = [
+    [
+        "按最长语言留位、不靠截断",
+        [
+            "按**最长语言**留位",
+            "**不得**靠 `text-overflow: ellipsis` 掩盖信息",
+        ],
+        "缺则文案长度只按中文或英文核：换一种语言就截断，而截断本身就是信息丢失",
+    ],
+]
+
+# ⑦ 栈层载体：风格与文案的落点必须有位置（否则通用层那两组判据在前端无处落）。
+[[guards.check_ui_spec_guard]]
+file = "specs/stack/web.adoc"
+kind = "section_groups"
+section = "风格与文案（载体）"
+groups = [
+    [
+        "判据本体回指通用层（不另立判据）",
+        [
+            "`specs/general/ui.adoc`「风格与调性」",
+            "`specs/general/ui.adoc`「界面上的文字」",
+            "不另立一套",
+        ],
+        "缺则栈层成为风格与文案的第二处真源：判据在两处各自漂移，先报红的那道未必是权威",
+    ],
+    [
+        "风格取值与装饰的落点",
+        [
+            "**风格取值的落点（载体）**",
+            "**装饰手法的落点（载体）**",
+            "换风格要改的文件不止那一处",
+        ],
+        "缺则「风格必须落成令牌」在前端没有落点：风格散在页面级样式里，换一次风格要改几十处",
+    ],
+    [
+        "文案资源、语气与最长语言的落点",
+        [
+            "**文案资源的落点（载体）**",
+            "**语气的落点（载体）**",
+            "**最长语言留位的落点（载体）**",
+        ],
+        "缺则「文案唯一落点」与「语气一处定义」无处可落：字面串继续硬写在模板里，两端各写一套语气",
+    ],
+]
+
+# ⑧ 加载门：风格与文案的识别特征须在「任何代码活动」条里（缺则写文案与定风格时永不加载）。
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "**定风格或写界面文字**",
+    "`specs/general/ui-styles.adoc`",
+    "`specs/general/ui-voice.adoc`",
+]
+message = "调度器「任何代码活动」条目未登记风格与界面文案的识别特征（或其两份模板）——写按钮名、写报错、定风格时读不到判据，规则实际失效"
+
+# ⑧之二 加载门：选容器与排表的识别特征须在「任何代码活动」条里（缺则选容器、排表的人
+# 永不加载容器与呈现模板，判据存在而走不到它）。
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "**选容器或排表**",
+    "`specs/general/ui-patterns.adoc`",
+]
+message = "调度器「任何代码活动」条目未登记「选容器或排表」的识别特征（或其模板）——点详情开弹窗还是侧栏、表单怎么排、列宽上限多少时读不到判据，规则实际失效"
+
+# ⑨ 反馈与提示（后补判据本体 + 模板）：**逐节核**——这一层整段被抽走时，界面判据仍会
+# 「五类成套」「文案唯一落点」，但"错误码与文案不同表、批量失败弹 N 次、关掉推送等于
+# 事件没发生"这三种最常见、也最没人管的形态无人报红。
+#
+# **与既有两道界面的分工**（不得被判成重复而合并）：
+#   * `specs/general/coding.adoc`「HTTP 接口语义」管**接口返回什么结构、用哪个状态码**——
+#     本文件管**这条反馈该不该出现、走哪个通道、要不要留痕、会不会打扰人**；
+#   * `specs/general/ui.adoc`「界面上的文字」管**文案怎么写**——本文件管**五类反馈成套、
+#     错误码与文案同表、通道与打扰预算**（同一件事的「怎么写」与「该不该出现」分两处判）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "本文件的字典（本文件使用的名称，定义写在本文开头）"
+token_list = "FEEDBACK_TERMS_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "anchor_count"
+token_list = "FEEDBACK_TERMS_ANCHOR_LIST"
+min = 10
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "与其他判据的分工（先读，防两套判据并存）"
+token_list = "FEEDBACK_SCOPE_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "总纲：五类反馈成套、四层分工、一处登记（先定这三件）"
+token_list = "FEEDBACK_KIND_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "错误与失败：三句话 + 可机读契约 + 可行动性"
+token_list = "FEEDBACK_ERROR_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "成功、警示、提示、进度：最常被漏掉的四种"
+token_list = "FEEDBACK_SUCCESS_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "通道与打扰预算（同一件事只在一个地方打扰人）"
+token_list = "FEEDBACK_CHANNEL_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "通知、消息与订阅（跨会话、跨端的那一类）"
+token_list = "FEEDBACK_NOTIFY_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "跨端：内容一致、形态按端、打扰按输入设备"
+token_list = "FEEDBACK_CROSS_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/feedback.adoc"
+kind = "section_groups"
+section = "记录与可追溯（提示不是日志，但两者必须对得上）"
+token_list = "FEEDBACK_TRACE_ANCHORS"
+
+# 模板文件：三张表仍在，且**回指判据本体**（不另立判据、不是第二处真源）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-feedback.adoc"
+kind = "section_groups"
+section = "一、错误码表（人可见的错误都在这一张里）"
+groups = [
+    [
+        "错误码表的列位与填法（码、状态、层、标题、下一步、可重试、文案键）",
+        [
+            "**机器码**",
+            "**归属层**",
+            "**可重试**",
+            "**文案键**",
+            "**它属于契约**",
+        ],
+        "缺则模板只剩一条示例：错误码表回来又变成散在代码里的临时 message，谁也不知道哪条是契约",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-feedback.adoc"
+kind = "section_groups"
+section = "二、通道选择表（按三问取，取最先命中的一行）"
+groups = [
+    [
+        "通道按就地/留痕/打断三问取",
+        [
+            "**就地**",
+            "**通知中心 / 任务台账**",
+            "**对话框 / 系统通知**",
+        ],
+        "缺则通道选择退回手感：同一件事三个通道各弹一次，或该留痕的只闪一下",
+    ],
+    [
+        "打扰预算的取值（本项目定）",
+        [
+            "**一次一屏至多 1 条**",
+            "**悬停或聚焦即暂停**",
+            "**必可关**",
+        ],
+        "缺则打扰预算只有口号：时长、合并、可关这三项没有取值可用",
+    ],
+]
+
+# 加载门：调度器「任何代码活动」条里须有反馈面的识别特征（缺则写报错与提示的人
+# 永不加载本文件）。按**那一行**核——只看全文有没有出现过路径名会被别处的引用兜住。
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "**定提示与反馈面**",
+    "`specs/general/feedback.adoc`",
+    "`specs/general/ui-feedback.adoc`",
+]
+message = "调度器「任何代码活动」条目未登记提示与反馈面（或其模板）——写报错、写提示、设计通知与回执时读不到判据，五类反馈又只剩「成功闪一下、失败一句话」"
+
+# ⑩ `ui.adoc` 的分工与回指：提示的「该不该出现、走哪个通道」不在界面文件里判。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "file_tokens"
+tokens = [
+    "`specs/general/feedback.adoc`",
+    "**本节只管文案怎么写**",
+]
+message = "界面与交互规范缺「提示该不该出现、走哪个通道」的分工与回指——两处各写一套时，先报红的那道未必是权威"
