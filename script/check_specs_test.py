@@ -27269,6 +27269,47 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
         self._run_guard()
         self.assertIn("只剩", self.error_texts())
 
+    def test_external_artifact_removed_reports(self):
+        # 反例⑬：通用层「产物外置时仍是一个可交付件」整条被抽 -> 外置的产物可以散着交
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("* **产物外置时仍是一个可交付件（L1）**")
+        end = text.index("\n* **存量边界（L1）**", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("产物外置", self.error_texts())
+
+    def test_web_external_artifact_landing_removed_reports(self):
+        # 反例⑭：栈层「外置那一份以单个归档件交付」被抽 -> 前端这一半只剩通用层方向
+        self._run_guard_with(self.WEB, "**外置那一份以单个归档件交付**",
+                             "**外置那一份可以按目录交付**")
+        self.assertIn("单个归档件", self.error_texts())
+
+    def test_external_artifact_runtime_extract_removed_reports(self):
+        # 反例：通用层「运行期不解压、按条目取用」那半句被抽 -> 交付成一个包、启动时又摊成目录
+        self._run_guard_with(self.CODING,
+                             "**归档件在运行期直接用，不在使用时摊开**",
+                             "**归档件在运行期展开成目录**")
+        self.assertIn("归档件在运行期直接用", self.error_texts())
+
+    def test_web_external_artifact_no_extract_removed_reports(self):
+        # 反例：栈层「归档件不解压成目录」那一条被抽 -> 前端这一半只剩"打成单个包"，
+        # 运行期摊开读又成了合规
+        self._write_all_valid()
+        text = self.base[self.WEB]
+        start = text.index("* **归档件不解压成目录、按条目取用（L1）**")
+        end = text.index("\n* **归档形态按", start)
+        self.write(self.WEB, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("解压", self.error_texts())
+
+    def test_web_external_artifact_backref_removed_reports(self):
+        # 反例⑮：栈层那一节不再回指通用层同一条 -> 判据在两处各自漂移
+        self._run_guard_with(self.WEB,
+                             "「分发产物的体积与按需加载」的「产物外置时仍是一个可交付件」条",
+                             "「分发产物的体积与按需加载」整节")
+        self.assertIn("产物外置", self.error_texts())
+
 
 class TestCheckUiStyleGuard(CheckSpecsTestCase):
     """钉住『界面与样式』防线（**用户提出**）。
