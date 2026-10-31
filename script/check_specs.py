@@ -4919,8 +4919,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 178  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2412  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +45：`check_spec_fetch_guard` 的解释器兜底与真源要点随两入口改写换形（`.sh` 一行一候选、`.bat` 逐候选试跑 `--probe`），新开 3 条端到端（索引由**已经换新的这一份**脚本算、`--list` 不落索引、`--probe` 不联网不写盘）；本轮 review 再 +2：`.bat` 把判据写成「不是 127 就算跑得起来」即报、`.sh` 跑了 `--probe` 不看结果即报——`check_specs_test` 由 2252 条变成本轮的取值；上一轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 179  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2429  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +12：`check_handoff_durability_guard` 新开 `TestCheckHandoffDurabilityGuard`（正例 + 判据问句/派发对象钉定/被否方案/核实方式/边界/整节被删六条反例），review 后又新开 `TestCheckTmpIndexAndCleanupGuard` 5 条（`tmp/` 根索引与按可重建性清理原无任何用例，本轮改的是那两条、却不带用例——抽掉照样全绿）；上一轮 +45：`check_spec_fetch_guard` 的解释器兜底与真源要点随两入口改写换形（`.sh` 一行一候选、`.bat` 逐候选试跑 `--probe`），新开 3 条端到端（索引由**已经换新的这一份**脚本算、`--list` 不落索引、`--probe` 不联网不写盘）；本轮 review 再 +2：`.bat` 把判据写成「不是 127 就算跑得起来」即报、`.sh` 跑了 `--probe` 不看结果即报——`check_specs_test` 由 2252 条变成本轮的取值；上一轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -7255,6 +7255,25 @@ def check_tmp_layout_guard():
     """
     phase("tmp/ 的布局与命名防线检查（按用途分层、规划与进度分家）")
     run_rule_guard("check_tmp_layout_guard")
+    phase_done()
+
+
+def check_handoff_durability_guard():
+    """『交接：什么必须扛过中断』防线：`tmp/` 是易失载体，接得上靠的是持久落点。
+
+    用户提出：工作中断后，上一次写在 `tmp/` 下的文档、文件等**可能直接失效**，因为
+    **不知道上次写了哪些**；多 agent 接替时在这上面浪费时间与成本。
+
+    与相邻几条的分工：`check_tmp_layout_guard` 管**索引怎么写**（`tmp/` 根一行一条、
+    判据是不用打开任何文件就知道该不该接着做）；本条管**索引自己也易失之后靠什么接上**——
+    派发对象的钉定、被否掉的方案、已核实事实连同核实方式，须按归属进持久落点。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`
+    （`check_handoff_durability_guard`）；"这次任务把索引行写对了没""某份结论算不算不可重建"
+    属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("『交接：什么必须扛过中断』防线检查（结论进持久落点，不靠 tmp/ 留）")
+    run_rule_guard("check_handoff_durability_guard")
     phase_done()
 
 
@@ -13866,6 +13885,7 @@ CHECKS = (
     check_guess_confirm_guard,
     check_cache_guard,
     check_tmp_layout_guard,
+    check_handoff_durability_guard,
     check_task_completion_guard,
     check_self_serve_guard,
     check_degradation_scan_guard,
