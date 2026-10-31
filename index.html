@@ -191,8 +191,9 @@
         return stack.join('/');
       }
 
-      // 把文档里的链接目标解析成仓库根相对路径（保留 `#fragment` 与 `?query`）
-      function resolveTarget(target) {
+      // 把文档里的链接目标解析成仓库根相对路径（保留 `#fragment` 与 `?query`）。
+      // `base` 默认取当前文档所在目录；站点绝对地址的路径本身就是站点根相对，传空串。
+      function resolveTarget(target, base) {
         var t = (target || '').trim();
         if (!t) return null;
         if (/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(t)) return null;   // 外部 scheme（http:/https:/mailto:…）
@@ -203,9 +204,23 @@
         if (qi >= 0) { query = t.slice(qi); t = t.slice(0, qi); }
         var hi = t.indexOf('#');
         if (hi >= 0) { hash = t.slice(hi); t = t.slice(0, hi); }
-        var path = normalize(docDir + t);
+        var path = normalize((base === undefined ? docDir : base) + t);
         if (path === null) return null;
         return { path: path, hash: hash + query };
+      }
+
+      // 站点自身的绝对地址（`https://agent.c332030.com/prompts/review.adoc`）是**原始文件地址**：
+      // 打开它得到的是仓库字节，不是渲染视图。故在站内点击时收回本页按文档渲染，
+      // 与文档里 `link:prompts/review.adoc[]` 这类相对链接的行为一致。
+      function toSitePath(target) {
+        var t = (target || '').trim();
+        var host = (window.location.host || '').toLowerCase();
+        if (!host) return null;
+        var m = /^[a-zA-Z][a-zA-Z0-9+.\-]*:(.*)$/.exec(t);   // 先去掉 scheme：`https:` 与 `//` 两种写法都认
+        if (m) t = m[1];
+        var base = '//' + host.split(':')[0] + '/';   // 比到端口为止：文档里的地址不带端口
+        if (t.slice(0, base.length).toLowerCase() !== base) return null;   // 只认本机址的绝对地址
+        return t.slice(base.length);
       }
 
       // 仓库根相对路径 → 站内可用的相对 URL（本页在站点根）
@@ -356,8 +371,15 @@
         Array.prototype.forEach.call(output.querySelectorAll('a[href]'), function (a) {
           var href = a.getAttribute('href');
           if (a.target === '_blank' || href === null || href === '') return;
-          var resolved = resolveTarget(href);
-          if (!resolved) return;                       // 外链 / 页内锚点 / 越界：保持浏览器默认行为
+          // 站内绝对地址（站点原始文件地址）在解析前就要认出来：`resolveTarget` 对带 scheme 的
+          // 目标一律按外链返回 null、走不到下面那一步。收回本页时**基准是站点根**，不叠加
+          // 当前文档目录——绝对地址里的 `/x` 本身就是站点根相对（否则在子目录文档里会变成
+          // `specs/general/x`，派生出不存在的路径）。
+          var sitePath = toSitePath(href);
+          var resolved = sitePath !== null
+            ? resolveTarget('/' + sitePath, '')
+            : resolveTarget(href);
+          if (!resolved) return;                       // 真正的外链 / 页内锚点：保持浏览器默认行为
           if (!isDocPath(resolved.path)) return;       // 非 .adoc：按原始文件打开
           a.addEventListener('click', function (event) {
             if (event.defaultPrevented || event.button !== 0 ||
