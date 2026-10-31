@@ -65,6 +65,7 @@
 """
 
 import functools
+import hashlib
 import os
 import re
 import tomllib
@@ -861,6 +862,16 @@ def _norm_dup(s):
     return re.sub(r"\s+", "", re.sub(r"`[^`]*`", "", s))
 
 
+def _strip_punct(text):
+    """去掉**断句标点**（逗号/顿号/分号/冒号）：判据是"同一段文字被判据复制后随手断句"，
+    标点位置不同不构成"两条不同的规则"——把标点也算进去，逐字相同的判据只要一处被
+    加了逗号就核不出来。
+
+    只去句读、不去句号：句号是"句子边界"，跨句的重复由逐句那一遍按句核。
+    """
+    return re.sub(r"[，、；：,;:]", "", text)
+
+
 def _dup_units(rel, text):
     """把一份文档切成"实体"：**bullet 一级项**（含其换行承接的续行）各一个，其余每行一个。
 
@@ -999,9 +1010,29 @@ def _sam_lcs(a, b):
     return _lcs_against(_build_sam(b), a)
 
 
+def _pairs_of(buckets):
+    """把"桶 → 成员下标"聚成**去重、有序**的候选对（`i < j`，按 `(i, j)` 升序）。
+
+    单独成函数：整条层与逐句层各聚一次，去重与排序的口径须一致——桶是字典、成员是列表，
+    直接迭代会让报错次序随哈希漂移（同一份文档两次跑出两种次序）。
+    """
+    pairs = set()
+    for group in buckets.values():
+        if len(group) < 2:
+            continue
+        for x in range(len(group)):
+            for y in range(x + 1, len(group)):
+                a, b = group[x], group[y]
+                if a != b:
+                    pairs.add((a, b) if a < b else (b, a))
+    return sorted(pairs)
+
+
 def _step_duplicate_scan(rules, step):
     """**同一件事不得两处逐字重复**：对 `sources`（文件或目录）下每份文档切成语义实体，
-    先按 n-gram 粗筛出候选对，再做全对最长公共子串检测——超过阈值即报红。
+    超阈值的重合即报红。判定面分两层：**整条实体**（比阈值还长的那一类才可能整条命中）
+    与**句子**（`。` 切分，短行与长短混对全靠这一层）；两层各自按 n-gram 桶聚候选对，
+    真正"算不算重复"一律由最长公共子串判，桶只负责"这一对值不值得算"。
 
     为什么需要它：`specs/general/review.adoc`「精炼性」把"重复面"列为必查项，但此前
     **只有语义复核、没有机械抓手**——"同一件事只在一处给真源"于是靠自觉。实证形态：
@@ -1014,8 +1045,11 @@ def _step_duplicate_scan(rules, step):
     规则参数：
       * `sources`：参与检测的文件或**目录**（目录递归取 `.adoc`）；
       * `min_overlap`：最长公共子串阈值（低于它可能是惯用语巧合、不报；默认 24）；
-      * `min_sentence`：按句核对时单句的最短长度（默认同 `min_overlap`）；
-      * `min_text`：实体短于该长度即不参与（默认同 `min_overlap`）；
+      * `min_sentence`：按句核对时单句的最短长度（默认同 `min_overlap`）——短于它的句子
+        不参与逐句那一遍；
+      * `min_text`：实体短于该长度即不参与（默认同 `min_overlap`）；逐句那一遍的阈值取
+        两者**更小**的那个——`min_text` 是"整条太短不值得核"，不该顺带把"短到只有一句"
+        的那类实体连整体一起挡在门外（阈值 40 时它们正是要核的那一类）；
       * `exclude`：不参与检测的路径子串（如历史留痕的大文件）；
       * `ignore`：含该子串的实体不参与（如"依据（标准名/编号）"这类本就该逐字一致的引用行）；
       * `ignore_units`：**例外清单**——含该子串的实体不参与，**每条理由须写在规则数据里**
@@ -1045,11 +1079,13 @@ def _step_duplicate_scan(rules, step):
 
     # 实体表：每项 (文件, 行号, 原文, 归一化)。`ignore` 命中的实体**不参与核对**——
     # 判据是"这些实体本就该逐字一致/本就是带出处的记载"，不是"给它们开个后门"。
+    # **`min_text` 只管整条那一层**：整条短于它时"跨换行整条命中"无从谈起，但其中一句
+    # 仍可能够到阈值——故这类实体照样收进来（报错由逐句那一遍判）。
     units = []
     for rel in files:
         body = ctx.read(rel) or ""
         for lineno, raw, normalized in _dup_units(rel, body):
-            if len(normalized) < min_text:
+            if len(normalized) < min(min_sentence, min_text):
                 continue
             if any(ig in raw for ig in ignores):
                 continue
@@ -1058,84 +1094,118 @@ def _step_duplicate_scan(rules, step):
         ctx.log("  ^ 逐字重复扫描：可核对实体不足，本次未形成有效扫描面")
         return
 
-    # 粗筛：按 n-gram 桶聚出候选对。全对 DP 在真实规模下是分钟级，粗筛把它压到亚秒级。
-    # **取 n-gram 时必须逐位滑动、不能按固定步长跳跃**：公共子串在两串里的起点未必同余，
-    # 按 `gram` 步长取样时整段公共子串可能一个样本都取不到（本轮实证：两个 bullet 有 55 字
-    # 公共子串，取步长 8 时桶交集为空、防线**静默放行**）。逐位取样仍是 O(总长)，
-    # 数量级不变，但**不漏**——公共子串长于 n-gram 时，其每个 n-gram 都落在同一对实体的桶里。
-    gram = min(8, max(2, threshold // 3))
-    buckets = {}
-    for idx, (_rel, _ln, _raw, normalized) in enumerate(units):
-        for j in range(0, max(1, len(normalized) - gram + 1)):
-            buckets.setdefault(normalized[j:j + gram], []).append(idx)
-    candidate = set()
-    for group in buckets.values():
-        if len(group) < 2:
-            continue
-        for i in range(len(group)):
-            for j in range(i + 1, len(group)):
-                candidate.add((group[i], group[j]))
-
+    # **桶只负责"这一对值不值得算"**：n-gram 按判定阈值的长度取——只有共享一个阈值长的
+    # 片段，才可能够到阈值。取短了（早期按 8 字）长实体之间几乎必然共享某个片段，桶就白
+    # 聚一遍（实测候选对 ≈ 全对数）；比阈值还短的实体整条不可能命中，直接不进桶。
+    gram = max(2, threshold)
     hit = 0
-    seen = set()
+    reported = set()
     # 自动机按实体缓存：同一实体要跟上百个实体各比一次，建表比走表贵得多，
     # 每次重建成这一道防线的主要开销
     built_units = {}
-    built_sent = {}
-    for i, j in sorted(candidate):
-        rel_a, ln_a, raw_a, na = units[i]
-        rel_b, ln_b, raw_b, nb = units[j]
-        # **同一实体不算重复**（粗筛会把一个实体的多个 n-gram 桶聚成自配对）。
-        if rel_a == rel_b and ln_a == ln_b:
-            continue
-        key = (min(i, j), max(i, j))
-        if key in seen:
-            continue
-        seen.add(key)
-        # 自动机建在**更长的一侧**：走表才是 `a` 那一趟，让建表承担更长的串
+
+    def _whole(i, j):
+        """整条实体比一遍（自动机建在更长的一侧：走表那趟才是长串）。"""
+        na = units[i][3]
+        nb = units[j][3]
         if len(na) >= len(nb):
             if i not in built_units:
                 built_units[i] = _build_sam(na)
-            size, frag = _lcs_against(built_units[i], nb, early_stop=threshold)
-        else:
-            if j not in built_units:
-                built_units[j] = _build_sam(nb)
-            size, frag = _lcs_against(built_units[j], na, early_stop=threshold)
-        if size < threshold:
-            # 折叠 vs 展开：同一事实在一处换了行、在别处铺成多行时，整条公共子串会被换行
-            # 打断——改按**句子**（'。' 切分）逐句核，补上这一形态。
-            done = False
-            for sa in _sentences(raw_a, max(min_sentence, min_text)):
-                for sb in _sentences(raw_b, min_sentence):
-                    # 两侧都按句缓存：同一句会跟对面的每一句各比一次
-                    key_a = (i, sa)
-                    if key_a not in built_sent:
-                        built_sent[key_a] = _build_sam(sa)
-                    key_b = (j, sb)
-                    if key_b not in built_sent:
-                        built_sent[key_b] = _build_sam(sb)
-                    # 建表那趟最贵，让更长的串去承担；走表拿另一句
-                    if len(sa) >= len(sb):
-                        ssize, sfrag = _lcs_against(built_sent[key_a], sb,
-                                                    early_stop=threshold)
-                    else:
-                        ssize, sfrag = _lcs_against(built_sent[key_b], sa,
-                                                    early_stop=threshold)
-                    if ssize >= threshold:
-                        size, frag = ssize, sfrag
-                        done = True
-                        break
-                if done:
-                    break
-        if size >= threshold:
-            hit += 1
-            ctx.err(_msg(step, "dup_message").replace("{a}", rel_a).replace("{b}", rel_b)
-                    .replace("{line_a}", str(ln_a)).replace("{line_b}", str(ln_b))
-                    .replace("{overlap}", str(size)).replace("{frag}", frag), rel_a, ln_a)
-    if not hit:
-        ctx.log(f"  ^ 逐字重复扫描：{len(units)} 个实体、{len(candidate)} 对候选，"
-                "无超阈值重合")
+            return _lcs_against(built_units[i], nb, early_stop=threshold)
+        if j not in built_units:
+            built_units[j] = _build_sam(nb)
+        return _lcs_against(built_units[j], na, early_stop=threshold)
 
+    def _report(i, j, size, frag):
+        rel_a, ln_a = units[i][0], units[i][1]
+        rel_b, ln_b = units[j][0], units[j][1]
+        ctx.err(_msg(step, "dup_message").replace("{a}", rel_a).replace("{b}", rel_b)
+                .replace("{line_a}", str(ln_a)).replace("{line_b}", str(ln_b))
+                .replace("{overlap}", str(size)).replace("{frag}", frag), rel_a, ln_a)
+
+    whole_buckets = {}
+    for idx, (_rel, _ln, _raw, normalized) in enumerate(units):
+        if len(normalized) < gram:
+            continue
+        for g in {normalized[pos:pos + gram] for pos in range(len(normalized) - gram + 1)}:
+            whole_buckets.setdefault(g, []).append(idx)
+    whole_hits = []
+    for i, j in _pairs_of(whole_buckets):
+        # **同一实体不算重复**（一个实体内部的多个 n-gram 会聚成自配对）。
+        if units[i][0] == units[j][0] and units[i][1] == units[j][1]:
+            continue
+        size, frag = _whole(i, j)
+        if size >= threshold:
+            whole_hits.append((i, j, size, frag))
+            reported.add((i, j))
+    for i, j, size, frag in whole_hits:
+        hit += 1
+        _report(i, j, size, frag)
+
+    # 粗筛只聚"长到能整条命中"的那一层，**短行与长短混对**要靠下面这一遍补：
+    # 判据与整条层**同一条**（最长公共子串 ≥ 阈值即报），只是核对面从"整条实体"换成
+    # "句子"——整条命中的前提是两侧的公共子串跨得过换行，短行与被标点切开的句子都凑不出
+    # 来。故不能要求"一句整句出现在另一句里"：那只是"两侧都够长、且没被标点切开"的特例
+    # （实证：一条 34 字的判据在一处写全、另一处在字中间被逗号劈开，整条层最长只有 20、
+    # 逐句层又要求整句命中，于是逐字重复被静默放行）。
+    #
+    # 桶的 n-gram 取阈值的一半：本层要接住的正是"阈值以下、但侧边被切开"的形态，
+    # 取阈值长度时两侧凑不出共同的 n-gram（切点落在任何 n-gram 内部）；取一半，两侧至少
+    # 各剩半个阈值长才可能被同一批候选对看见。
+    sent_girs = max(2, threshold // 2)
+    sent_buckets = {}
+    sent_order = {}
+    for idx, (_rel, _ln, raw, _normalized) in enumerate(units):
+        for sa in _sentences(raw, min(min_sentence, min_text)):
+            sent_order[(idx, sa)] = len(sent_order)
+            for pos in range(len(sa) - sent_girs + 1):
+                sent_buckets.setdefault(sa[pos:pos + sent_girs], set()).add((idx, sa))
+    sent_pairs = set()
+    for group in sent_buckets.values():
+        if len(group) < 2:
+            continue
+        # 候选对按**首次出现次序**回收：桶是字典、集合是无序的，直接迭代会让报错次序
+        # 随哈希漂移（同一份文档两次跑出两种次序）。
+        members = sorted(group, key=lambda m: sent_order[m])
+        for x in range(len(members)):
+            for y in range(x + 1, len(members)):
+                sent_pairs.add((members[x], members[y]))
+    sent_hits = []
+    built_sent = {}
+    for (i, sa), (j, sb) in sorted(sent_pairs,
+                                   key=lambda p: (sent_order[p[0]], sent_order[p[1]])):
+        key = (i, j) if i < j else (j, i)
+        if i == j:
+            # 同一实体内部的两句也要比（折叠与展开常落在同一条 bullet 的相邻句里），
+            # 但同**一句**不比。
+            if sa == sb:
+                continue
+        elif key in reported:
+            continue
+        # 判据载体是**本句去断句标点后的样子**：同一段被判据复制后随手断句时，两侧的
+        # 句子一对就错位（切口位置不同），而把断句标点去掉之后，一对句子仍要**同为那一句**——
+        # 一刀切成两半的形态本层本就不该报（它由整条层按"跨过切口的那一整段"核），
+        # 本层只管"同一句被标点切过"这一形态：切口在哪侧、切了几次，去标点后都对得上。
+        ta = _strip_punct(sa)
+        tb = _strip_punct(sb)
+        if len(ta) >= len(tb):
+            if (i, sa) not in built_sent:
+                built_sent[(i, sa)] = _build_sam(ta)
+            size, frag = _lcs_against(built_sent[(i, sa)], tb, early_stop=threshold)
+        else:
+            if (j, sb) not in built_sent:
+                built_sent[(j, sb)] = _build_sam(tb)
+            size, frag = _lcs_against(built_sent[(j, sb)], ta, early_stop=threshold)
+        if size >= threshold and key not in reported:
+            reported.add(key)
+            sent_hits.append((key[0], key[1], size, frag))
+    for i, j, size, frag in sent_hits:
+        hit += 1
+        _report(i, j, size, frag)
+
+    if not hit:
+        ctx.log(f"  ^ 逐字重复扫描：{len(units)} 个实体、"
+                f"{len(whole_hits) + len(sent_hits)} 处重合")
 
 
 def _step_table_row_pipe(rules, step):
@@ -1435,12 +1505,33 @@ def _load_toml(path: str):
     确定项，装依赖才跑得起来等于"缺工具就静默跳过"（见 `specs/general/ci-cd.adoc`）。
     TOML 自身的语法就是一层确定项：重复表头（同名防线/同名名单）直接被解析器拒绝，
     不必等加载期才发现"两处各写一半"。
+
+    读与解析都走缓存（键是文件字节的摘要、**不是路径**）：同一份规则从不同目录读出来
+    （单测把规则原样落到各自的临时仓库根）只解析一次，改动任何一个字节即换键。
     """
+    key = _digest(read_bytes(path))
+    if key not in _TOML_CACHE:
+        raw = read_bytes(path)
+        try:
+            _TOML_CACHE[key] = tomllib.loads(raw.decode("utf-8"))
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+            raise RulesError(f"规则文件 {path} 不是合法 TOML：{exc}")
+    # 交出的是**浅拷贝**：`guards` / `tokens` 两张表各是新字典，表内的取值（锚点清单、
+    # 报错文案）共用同一份、按只读使用。合并期只往这两张表里加键，不会改已有取值。
+    return {k: dict(v) if isinstance(v, dict) else v for k, v in _TOML_CACHE[key].items()}
+
+
+def read_bytes(path: str) -> bytes:
+    """读一份规则文件的原始字节（缓存键的**唯一来源**：读与解析用同一份内容）。"""
     try:
         with open(path, "rb") as fh:
-            return tomllib.load(fh)
-    except tomllib.TOMLDecodeError as exc:
-        raise RulesError(f"规则文件 {path} 不是合法 TOML：{exc}")
+            return fh.read()
+    except OSError as exc:
+        raise RulesError(f"规则文件 {path} 读不出来：{exc}")
+
+
+def _digest(raw: bytes) -> bytes:
+    return hashlib.sha256(raw).digest()
 
 
 def _check_placeholders(name: str, guard: str, steps) -> None:
@@ -1471,6 +1562,18 @@ def _check_placeholders(name: str, guard: str, steps) -> None:
 # "记录禁令的放行标记"）是纯数据表，规则引擎不认它的结构。故允许它包在 `tokens` 里
 # 过纯度判据，再由本名单显式提到顶层。
 DATA_TABLE_KEYS = ("merge_state_guard", "change_number_scope_guard")
+
+
+# 解析与合并结果都按**内容摘要**缓存（不按路径）：`tomllib` 是纯 Python，一批规则整体
+# 解析 + 合并合计几十毫秒，而调用方每次都要"取同一批文件"——现场跑一次只要一次，
+# **单测**却要跑上百次（每道防线的用例各自把规则原样落到临时目录、各自重建引擎实例；
+# 路径每次都不同、内容一字不差）。键取字节摘要：任何一处改动都会换键，不存在"读到旧
+# 规则"；路径不入键，才使"同一份规则从不同目录读"共用一次解析。
+# 缓存里存**可变**结构，交出去的是浅拷贝（见 `_load_toml` / `load_rule_files`）——
+# 引擎会就地把 `_guard` 写进步骤表，深拷一份冻结结构比省下的解析还贵。
+_TOML_CACHE = {}
+# 合并结果同样按内容缓存（见 `load_rule_files`）：键是这批文件摘要的排序元组。
+_MERGED_CACHE = {}
 
 
 def _merge_file(name: str, data, merged: dict) -> None:
@@ -1539,8 +1642,25 @@ def load_rule_files(spec) -> dict:
     合并不是"后一份覆盖前一份"：重复防线名/名单名一律抛 `RulesError`——两条规则同名时，
     读者会以为新的一条生效，而实际生效的可能是另一份文件里的那一条。
     """
+    paths = load_rule_specs(spec)
+    # 合并结果按**这批文件的内容**缓存：合并（逐个文件并进同一张表、逐条核占位符）比解析
+    # 还贵一点，且它与内容一一对应。键取各文件摘要的排序结果——同一批内容只合一次。
+    key = tuple(sorted(_digest(read_bytes(path)) for path in paths))
+    if key not in _MERGED_CACHE:
+        _MERGED_CACHE[key] = _merge_all(paths)
+    # 浅拷贝（`guards` / `tokens` 两张新字典）：引擎运行期要给步骤注入 `_guard`（就地写），
+    # 步骤表因此**每道防线各一份**——一份规则被多道防线取用时，改这份不会串到那份。
+    merged = _MERGED_CACHE[key]
+    out = {k: dict(v) if isinstance(v, dict) else v for k, v in merged.items()}
+    out["guards"] = {name: [dict(step) if isinstance(step, dict) else step for step in steps]
+                     for name, steps in merged["guards"].items()}
+    return out
+
+
+def _merge_all(paths) -> dict:
+    """把一批规则文件并成 `{"guards":…, "tokens":…}`；冲突即抛 `RulesError`。"""
     merged = {"guards": {}, "tokens": {}, **{k: None for k in DATA_TABLE_KEYS}}
-    for path in load_rule_specs(spec):
+    for path in paths:
         if not os.path.isfile(path):
             raise RulesError(f"缺少规则文件 {path}——规则数据与脚本隔离后，"
                              "规则文件是规则措辞的唯一来源，缺失即整批规则静默失效")

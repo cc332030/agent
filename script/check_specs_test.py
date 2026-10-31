@@ -5703,6 +5703,183 @@ class TestCheckLightestPathGuard(CheckSpecsTestCase):
         super().tearDown()
 
 
+class TestCheckTestScopeGuard(CheckSpecsTestCase):
+    """钉住『跑测试按改动面取最小集』（用户口径：一上来就跑所有的测试用例太慢了——用例要能按
+    文件/模块/服务细分、只跑需要验的那部分；先干活、干完看动了哪些内容，对**改动前的那个
+    状态**取基线，改完跑同一批比对）。
+
+    失效形态：条文齐了但**范围**这一面没人管——动一个工具函数先把整库用例跑一遍当热身，
+    跑完再说"改了哪些"；多跑的那几千条不产出任何新判据、只把交付时间翻几倍。反向的失效同样
+    要拦：只跑一条、剩下的靠印象说没事。故按三处锚点核（`specs/general/verify.adoc`
+    「验证的适用边界」的范围取值、`specs/general/planning.adoc`「动手前先定基线」的补取、
+    `specs/general/testing.adoc`「执行与验证」的可选取前提），并钉加载门、提示词片段、
+    公开面 README 与维护方落点。规则数据在 `script/specs-rules/verify.toml`。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    PLANNING = "specs/general/planning.adoc"
+    TESTING = "specs/general/testing.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+    MAINTAINER = "specs-project-maintainer/verify.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.VERIFY, self.PLANNING, self.TESTING,
+                    self.COMMON, self.PROMPT, self.README, self.MAINTAINER):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_test_scope_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：条文整条被抽（回到"一上来就整库全跑"）
+        self._mutate(self.VERIFY, "* **测试跑多少：按改动面算最小集", "* **测试范围另议")
+        cm.check_test_scope_guard()
+        self.assertIn("范围由改动面决定", self.error_texts())
+
+    def test_tiers_dropped_reports(self):
+        # 反例②：细分档位被抽（"只跑需要的部分"落不成命令，只能全跑或不跑）
+        self._mutate(self.VERIFY, "最细到**测试用例**", "按情况决定")
+        cm.check_test_scope_guard()
+        self.assertIn("细分维度", self.error_texts())
+
+    def test_expand_criteria_dropped_reports(self):
+        # 反例③：扩大范围的三种情形被抽（范围收窄变成一律收窄：改了公共基类也只跑几条）
+        self._mutate(self.VERIFY, "下列三种情形才扩大范围", "范围可自行放宽")
+        cm.check_test_scope_guard()
+        self.assertIn("扩大范围与全量的判据", self.error_texts())
+
+    def test_report_scope_dropped_reports(self):
+        # 反例④：交付须说清范围被抽（"测试全绿"分不清跑了三条还是全量）
+        self._mutate(self.VERIFY, "交付里须说清范围（L1）", "交付里说明一下")
+        cm.check_test_scope_guard()
+        self.assertIn("交付须说清范围", self.error_texts())
+
+    def test_baseline_backfill_dropped_reports(self):
+        # 反例⑤：基线侧的补取被抽（改完不回头补改动前的基线）
+        self._mutate(self.PLANNING, "按实际清单回看、并用改动前的版本补取基线（L1）",
+                     "改完自己看一眼")
+        cm.check_test_scope_guard()
+        self.assertIn("specs/general/planning.adoc", self.error_texts())
+
+    def test_baseline_first_dropped_reports(self):
+        # 反例⑥：基线本来有问题时先处理基线这一档被抽
+        self._mutate(self.PLANNING, "先处理基线问题", "按需处理")
+        cm.check_test_scope_guard()
+        self.assertIn("specs/general/planning.adoc", self.error_texts())
+
+    def test_undeclared_full_node_dropped_reports(self):
+        # 反例⑬：'项目自己声明的全量节点照旧执行'这一档被抽（本条被读成"以后不用全量了"，
+        # 与项目自身的发布前回归、收尾主体校验、CI 既定阶段正面冲突）
+        self._mutate(self.VERIFY, "项目自己声明的全量节点照旧执行（L1）", "全量按需")
+        cm.check_test_scope_guard()
+        self.assertIn("项目声明的全量节点", self.error_texts())
+
+    def test_skipped_items_must_be_listed_dropped_reports(self):
+        # 反例⑭：'逐项列出没跑的手段与落点'被抽（覆盖面这一义务整个消失）
+        self._mutate(self.VERIFY, "逐项列出本次没跑的手段与落点", "说明一下")
+        cm.check_test_scope_guard()
+        self.assertIn("交付须说清范围", self.error_texts())
+
+    def test_testing_carrier_dropped_reports(self):
+        # 反例⑦：测试侧"可选取执行"这一载体被抽（想跑一条也只能整模块跑）
+        self._mutate(self.TESTING, "最细到单条用例", "按需")
+        cm.check_test_scope_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑧：调度器识别特征被抽（决定跑哪些用例时想不到加载该条）
+        self._mutate(self.COMMON, "这次要跑哪些测试、能不能只跑需要验的那一部分", "测试相关")
+        cm.check_test_scope_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        # 反例⑨：提示词公共片段被抽（复制到未知项目后就少了这层边界）
+        self._mutate(self.PROMPT, "跑了哪一档、筛了哪些落点", "说明测试情况")
+        cm.check_test_scope_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑩：公开面 README 未登记（读者只看得见"要跑测试"）
+        self._mutate(self.README, "跑测试按改动面取最小集，不按\"有什么测试\"全跑", "跑测试")
+        cm.check_test_scope_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_maintainer_landing_dropped_reports(self):
+        # 反例⑪：维护方落点被抽（维护本仓库时照旧一上来 `discover` 一遍全量）
+        self._mutate(self.MAINTAINER, "跑测试按改动面取最小集（维护方落点）", "跑测试")
+        cm.check_test_scope_guard()
+        self.assertIn("specs-project-maintainer/verify.adoc", self.error_texts())
+
+    def _shrink_token_list(self, name: str, drop: int = 1) -> None:
+        """把**锚点清单自身**削掉 `drop` 项（规范正文一字不少、正文核全绿）。
+
+        这是唯一一种"防线零证据"的形态：现场什么都不缺，报绿与「核过且通过」看起来一样。
+        改的是 `_tokens.toml` 里那**唯一一处**清单（`anchor_count` 核的就是它的项数）。
+        """
+        self._write_valid()
+        with open(os.path.join(self.root, "script/specs-rules/_tokens.toml"),
+                  encoding="utf-8") as fh:
+            tokens = fh.read()
+        marker = f"{name} = ["
+        self.assertIn(marker, tokens)
+        head = tokens.index(marker) + len(marker)
+        # 清单的**第一组以 `    [` 起头**（清单内的组都比清单本身多缩进一层）。
+        first = tokens.index("\n    [\n", head)
+        last = tokens.rindex("\n    ],\n", head) + len("\n    ],")
+        tokens = tokens[:first] + tokens[last:]
+        self.write("script/specs-rules/_tokens.toml", tokens)
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        # `ctx.tokens()` 读的是导入期就位的那份（`_RULES_TOKENS`），故须一并换掉——
+        # 只改文件而不换这份常量时，`anchor_count` 读到的是**内存里那份完好的清单**。
+        self._orig_rules_tokens = cm._RULES_TOKENS
+        cm._RULES_TOKENS = cm.rules_engine.load_rule_files(cm._rules_spec())["tokens"]
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑫：跑测试范围那一侧的锚点清单被削一组（正文一字不少）
+        self._shrink_token_list("TEST_SCOPE_TOKENS")
+        cm.check_test_scope_guard()
+        self.assertIn("TEST_SCOPE_TOKENS", self.error_texts())
+
+    def test_baseline_token_list_shrunk_reports(self):
+        # 反例⑮：基线侧清单只有一组（删它就是删掉整条判据）——`anchor_count` 须接住
+        self._shrink_token_list("BASELINE_SCOPE_TOKENS")
+        cm.check_test_scope_guard()
+        self.assertIn("BASELINE_SCOPE_TOKENS", self.error_texts())
+
+    def test_selection_token_list_shrunk_reports(self):
+        # 反例⑯：测试侧"能按落点选取执行"那组清单被删
+        self._shrink_token_list("TEST_SELECTION_TOKENS")
+        cm.check_test_scope_guard()
+        self.assertIn("TEST_SELECTION_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
+        if hasattr(self, "_orig_rules_tokens"):
+            cm._RULES_TOKENS = self._orig_rules_tokens
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
 class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
     """钉住『看显示效果时不接管桌面』（用户口径：需要看实际显示效果时尽量少截图、不要整屏，
     **只截那一个进程/窗口**——哪怕它不在最上层也能取到；调试工具（Chrome DevTools）能代替的
@@ -20694,6 +20871,43 @@ class TestCheckGuardOrderGuard(CheckSpecsTestCase):
         os.remove(os.path.join(self.root, "specs-project-maintainer", "guards.adoc"))
         cm.check_guard_order_guard()
         self.assertIn("guards.adoc", self.error_texts())
+
+
+class TestCheckGuardManifestNumberingTable(CheckSpecsTestCase):
+    """钉住『检查项编号表』与脚本头部清单的编号对账。
+
+    失效形态（本仓库实测）：头部新增一条、其后编号整体下移，而 `guards.adoc` 的
+    「检查项编号」表里**那一段编号根本没补**（表从 #92 直接跳到 #178）——头部清单与
+    清单表两处静默漂移，按表核清单的读者看不到那几十项。基线数字类判据（接线数、用例数）
+    全都拦不住它：表少几十行，两个数字一个都不变。
+    """
+
+    HEAD = " 1. 甲\n 2. 乙\n 3. 丙\n\nimport os\n"
+    TABLE = ("== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n"
+             "| 1 | `check_alpha` | 用途 |\n\n"
+             "== 检查项编号（索引与清单表之外的检查项）\n\n"
+             "| 编号 | 检查项或所属防线\n\n")
+    SRC = (HEAD + "def check_alpha():\n    pass\n\n\n"
+           "CHECKS = (\n    check_alpha,\n)\n"
+           "GUARD_WIRING_BASELINE = 1\nGUARD_TEST_BASELINE = 0\n"
+           "GUARD_EMPTY_TEST_NAMES = set()\n")
+
+    def _run(self, rows):
+        self.write("script/check_specs.py", self.SRC)
+        self.write("specs-project-maintainer/guards.adoc", self.TABLE + rows)
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+        cm.check_guard_manifest()
+
+    def test_numbering_table_complete_passes(self):
+        # 正例：表里三项齐备
+        self._run("| 1 | 甲\n| 2 | 乙\n| 3 | 丙\n")
+        self.assertNotIn("检查项编号", self.error_texts())
+
+    def test_numbering_table_missing_entry_reports(self):
+        # 反例：表里缺第 2 项（头部有、表里没有）→ 按表核清单的人看不到它
+        self._run("| 1 | 甲\n| 3 | 丙\n")
+        self.assertIn("检查项编号", self.error_texts())
+        self.assertIn("[2]", self.error_texts())
 
 
 class TestLedgerSourceEntries(CheckSpecsTestCase):
