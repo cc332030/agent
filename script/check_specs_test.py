@@ -200,7 +200,11 @@ class CheckSpecsTestCase(unittest.TestCase):
                            "script/specs-rules/declarative.toml",
                            "script/specs-rules/ci-cd.toml",
                            # 本道（取规范进度与停住窗口）的判据措辞外置在该文件里
-                           "script/specs-rules/progress.toml")
+                           "script/specs-rules/progress.toml",
+                           # 本道（界面的形状、尺度、颜色与交互）的判据措辞外置在该文件里
+                           "script/specs-rules/ui-spec.toml",
+                           # 本道（规范优先级与最高关注项）的判据措辞外置在该文件里
+                           "script/specs-rules/priority.toml")
 
     def write_rules_fixture(self) -> None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
@@ -21404,9 +21408,12 @@ class TestCheckStaleWordingGuard(CheckSpecsTestCase):
         import rules_engine
         specs = rules_engine.load_rule_files(cm._rules_spec())
         steps = specs["guards"]["check_stale_wording_guard"]
-        self.assertEqual(1, len(steps))
-        self.assertEqual("file_forbidden", steps[0]["kind"])
-        self.assertTrue(steps[0]["forbidden"])
+        # 同一道防线的规则步骤可能不止一条（通用层的一份与 `_tokens.toml` 里的一族），
+        # 故按 `kind` 取本步、不按条数取——按条数断言时，别处新增一步即报红，
+        # 而报的是"这条测试不行"，不是真因。
+        forbidden_steps = [x for x in steps if x.get("kind") == "file_forbidden"]
+        self.assertEqual(1, len(forbidden_steps))
+        self.assertTrue(forbidden_steps[0]["forbidden"])
 
 
 class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
@@ -27611,8 +27618,11 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         # 反例⑧：栈层不再回指真源 -> 判据在两处各自漂移
         # 替换的是「判据措辞不复述、也不另立一套」那一句——与同文件「界面（载体）」同一说法，
         # 不得两处各写一套（本条首版写成「不另立判据」，与该文件已有的写法各一套）。
-        self._run_guard_with(self.WEB, "判据本体的措辞不复述、也不另立一套",
-                             "本文件同样规定这些判据")
+        # 取的是「界面的规模与性能（载体）」那节首句末尾那一句（同文件其余载体节也这么说，
+        # 故连节名与本句一起替换，否则另一处仍命中——本轮新增载体节后实测）
+        self._run_guard_with(self.WEB,
+                             "== 界面的规模与性能（载体）\n\n**判据本体在 `specs/general/coding.adoc`「界面的规模与性能」**——本文件只给**前端载体**，判据本体的措辞不复述、也不另立一套",
+                             "== 界面的规模与性能（载体）\n\n**判据见下方各条**")
         self.assertIn("也不另立一套", self.error_texts())
 
     def test_web_carrier_boundary_removed_reports(self):
@@ -28796,6 +28806,326 @@ class TestCheckStaleWordingGuard(CheckSpecsTestCase):
         self.assertEqual(1, len(steps))
         self.assertEqual("file_forbidden", steps[0]["kind"])
         self.assertTrue(steps[0]["forbidden"])
+
+
+class TestCheckUiSpecGuard(CheckSpecsTestCase):
+    """钉住『界面的形状、尺度、颜色与交互』防线（**用户提出**）。
+
+    用户口径：「一套界面设计、样式的规范，往小了说哪个端优先用哪个框架、参考哪个应用，
+    往大了说桌面应用、web 等到界面应该如何设计，大小高度、颜色选择、颜色对比」，并要
+    「一套跨端同时可以跨多个端的 UI 设计方法」与「几套交互方案（windows 下鼠标为主如何交互，
+    安卓下触摸屏又该怎么搞）」。
+
+    **夹具形态**：判据本体、两份模板、调度器与 README 一律取**真文件的逐字副本**，规则数据
+    整份落进夹具根；每个用例只做一处定点改动（手抄节选会与现场漂移）。
+    """
+
+    FILES = ("specs/general/ui.adoc", "specs/general/ui-tokens.adoc",
+             "specs/general/ui-targets.adoc", "specs/general/ui-styles.adoc",
+             "specs/general/ui-voice.adoc", "specs/general/ui-patterns.adoc",
+             "specs/general/feedback.adoc",
+             "specs/general/ui-feedback.adoc", "specs/stack/web.adoc",
+             "AGENTS_COMMON.adoc", "README.adoc")
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_ui_spec_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_data_missing_reports(self):
+        # 反例①：规则数据整体缺失 → 整批空转须报红（"核不到"与"核过且通过"要分得清）
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, "script", "specs-rules", "ui-spec.toml"))
+        self._run_guard()
+        self.assertIn("ui-spec.toml", self.error_texts())
+
+    def test_template_missing_reports(self):
+        # 反例②：取值模板缺失（判据在、取值无处可取）
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, *"specs/general/ui-tokens.adoc".split("/")))
+        self._run_guard()
+        self.assertIn("ui-tokens.adoc", self.error_texts())
+
+    def test_no_token_rule_removed_reports(self):
+        # 反例③：核心判据「先定令牌、再拼页面」被抽走
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**先定令牌、再拼页面（L1）**", "先定令牌、再拼页面")
+        self.assertTrue(cm.errors, "核心判据被抽走须报红")
+
+    def test_opacity_layering_rule_removed_reports(self):
+        # 反例④：『层级用色阶、不用透明度』被抽走——那一条一旦没了，
+        # 用透明度压层级就无从判定（外部规范只给机制、未把它列为禁忌）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**层级用色阶、不用透明度（L1）**", "层级用色阶")
+        self.assertTrue(cm.errors, "层级用色阶那条被抽走须报红")
+
+    def test_end_diff_three_kinds_removed_reports(self):
+        # 反例⑤：『端差异只许落在三类』被抽走——跨端一致性就没有判据了
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**端差异只许落在三类（L1）**", "端差异只许落在密度与版式")
+        self.assertTrue(cm.errors, "端差异三类被抽走须报红")
+
+    def test_touch_gesture_rule_removed_reports(self):
+        # 反例⑥：输入设备那一条被抽走（交互会退回按平台判）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**触摸类：手势只做加速、不做唯一入口（L1）**",
+                             "触摸类：手势只做加速")
+        self.assertTrue(cm.errors, "触摸类手势那条被抽走须报红")
+
+    def test_state_set_removed_reports(self):
+        # 反例⑦：组件七态成套被抽走
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**状态要全、且成套（L1）**", "状态要全")
+        self.assertTrue(cm.errors, "七态成套那条被抽走须报红")
+
+    def test_contrast_two_tiers_removed_reports(self):
+        # 反例⑧：对比度两档取值那条被抽走（只剩"要够清楚"这种口号）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**对比度取两档、并按文本大小分（L1）**", "对比度要够")
+        self.assertTrue(cm.errors, "对比度两档那条被抽走须报红")
+
+    def test_checklist_removed_reports(self):
+        # 反例⑨：核对清单被整节抽走
+        self._run_guard_with("specs/general/ui.adoc",
+                             "== 新增或改界面时的核对清单（按序判，命中即改）",
+                             "== 改界面时看看")
+        self.assertTrue(cm.errors, "核对清单被抽走须报红")
+
+    def test_evidence_tradeoff_removed_reports(self):
+        # 反例⑩：依据行的取舍归属被抹（判据退化成"某人说过"）
+        # 取**依据行**上那一处（本文件里"是本集合的判据化取舍"出现两处：
+        # 「通用件与参照」节的依据行也有——替换首处已不再落在 `UI_SPEC_EVIDENCE_ANCHORS`
+        # 所核的那一行上，故这里锚到依据行独有的措辞）
+        self._run_guard_with("specs/general/ui.adoc", "是本集合的判据化取舍**——通行设计规范", "是通行做法**——通行设计规范")
+        self.assertTrue(cm.errors, "依据行的取舍归属被抹须报红")
+
+    def test_tokens_template_no_pointer_reports(self):
+        # 反例⑪：取值模板不再回指判据本体——它就成了第二处真源
+        self._run_guard_with("specs/general/ui-tokens.adoc",
+                             "（**判据本体在 `specs/general/ui.adoc`**", "（取值如下")
+        self.assertTrue(cm.errors, "取值模板不回指判据本体须报红")
+
+    def test_tokens_contrast_values_removed_reports(self):
+        # 反例⑫：模板里的对比度两档取值被抽走（判据在、取值没了）
+        self._run_guard_with("specs/general/ui-tokens.adoc", "**7:1**", "足够高")
+        self.assertTrue(cm.errors, "对比度取值被抽走须报红")
+
+    def test_targets_web_shell_removed_reports(self):
+        # 反例⑬：混合应用的外壳能力被抽走（"网页套壳"不再有判据）
+        self._run_guard_with("specs/general/ui-targets.adoc", "网页套壳", "网页外壳")
+        self.assertTrue(cm.errors, "外壳能力清单被抽走须报红")
+
+    def test_targets_reference_tiers_removed_reports(self):
+        # 反例⑭：参照产品不再分两档（照抄别家变成合规）
+        self._run_guard_with("specs/general/ui-targets.adoc",
+                             "**B 档——只可照外形、不可照体系**", "B 档——可参照")
+        self.assertTrue(cm.errors, "参照两档被抹须报红")
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例⑮：加载门被抽走（写界面的人永不加载判据本体）
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "`specs/general/ui-tokens.adoc`、`specs/general/ui-targets.adoc`（模板）",
+                             "（模板）")
+        self.assertTrue(cm.errors, "加载门被抽走须报红")
+
+    def test_patterns_dispatcher_entry_removed_reports(self):
+        # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "**选容器或排表** → `specs/general/ui-patterns.adoc`；",
+                             "")
+        self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
+
+    def test_patterns_template_no_pointer_reports(self):
+        # 反例（后补）：容器模板不再回指判据本体——它就成了第二处真源
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**判据本体在 `specs/general/ui.adoc`**；本节只给决策路径与取值口径",
+                             "本文件即判据本体")
+        self.assertTrue(cm.errors, "容器模板不回指判据本体须报红")
+
+    def test_patterns_container_rule_removed_reports(self):
+        # 反例（后补）：容器判据被抽走——「点详情开弹窗还是新页面还是侧栏」回到各凭临场
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**容器按「进入与返回的成本」判，不按内容多少判（L1）**",
+                             "容器按内容多少判")
+        self.assertTrue(cm.errors, "容器判据被抽走须报红")
+
+    def test_style_section_removed_reports(self):
+        # 反例⑰（后补）：风格这一层整段被抽走——剩下的判据仍会「一套令牌一个取值」，
+        # 但"风格只以形容词存在于设计稿里、换风格要逐页改样式"无人报红
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**风格不是一个定语，是一组取值**", "风格是一句形容词")
+        self.assertTrue(cm.errors, "风格层的核心口径被抽走须报红")
+
+    def test_style_written_into_tokens_removed_reports(self):
+        # 反例⑱（后补）：八项必写项落成令牌这条判据被降级/抽走（风格又退回成一句定语）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**风格必须落成令牌、并且可判（L1）**", "风格应尽量落成令牌")
+        self.assertTrue(cm.errors, "必写项落成令牌这条被抽走须报红")
+
+    def test_voice_action_name_removed_reports(self):
+        # 反例⑲（后补）：动作名的判据被抽走（按钮一律叫「确定」变成合规）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**控件写它会做什么，出错写问题与出路（L1）**", "文案要清楚")
+        self.assertTrue(cm.errors, "动作名与错误的判据被抽走须报红")
+
+    def test_voice_unique_landing_removed_reports(self):
+        # 反例⑳（后补）：文案唯一落点被抽走（同一句话在各模板里各写一份变成合规）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**文案有唯一落点、可被检索与复用（L1）**", "文案尽量复用")
+        self.assertTrue(cm.errors, "文案唯一落点的判据被抽走须报红")
+
+    def test_styles_template_allowlist_removed_reports(self):
+        # 反例㉑（后补）：模板里"清单不是允许列表"被抹（清单被读成封闭集合）
+        self._run_guard_with("specs/general/ui-styles.adoc",
+                             "**清单不是允许列表**", "清单即允许列表")
+        self.assertTrue(cm.errors, "清单不是允许列表这一句被抹须报红")
+
+    def test_web_style_carrier_backref_removed_reports(self):
+        # 反例㉓（后补）：栈层载体不再回指通用层（风格与文案在栈层成了第二处真源）
+        self._run_guard_with("specs/stack/web.adoc",
+                             "`specs/general/ui.adoc`「风格与调性」、界面文字",
+                             "本节、界面文字")
+        self.assertTrue(cm.errors, "栈层不回指判据本体须报红")
+
+    def test_voice_template_error_structure_removed_reports(self):
+        # 反例㉒（后补）：模板里的错误三句话结构被抹（"操作失败"又成为可接受的写法）
+        self._run_guard_with("specs/general/ui-voice.adoc", "**三句话结构**", "三句话")
+        self.assertTrue(cm.errors, "错误三句话结构被抹须报红")
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑯：锚点清单自身被削——现场文档一字不少、按文档核的那些步骤全绿，只有
+        # `anchor_count` 能发声。**核的是规则数据这一侧本身**：清单条数低于下限即报红。
+        # 取清单不经 `RulesContext`（它读的是进程启动时加载的那份 `_RULES_TOKENS`，
+        # 夹具改的那份看不到），故直接把两份规则数据加载出来逐清单比对。
+        import rules_engine
+        specs = rules_engine.load_rule_files(os.path.join(HERE, "specs-rules"))
+        steps = [x for x in specs["guards"]["check_ui_spec_guard"]
+                 if x.get("kind") == "anchor_count"]
+        self.assertTrue(steps, "本道没有 `anchor_count` 步骤——锚点被削时无人发声")
+        for step in steps:
+            name = step["token_list"]
+            have = sum(len(g[1]) for g in specs["tokens"][name])
+            self.assertGreaterEqual(have, step["min"],
+                                    f"锚点清单 {name} 只剩 {have} 项（下限 {step['min']}）")
+
+
+    def test_feedback_kinds_removed_reports(self):
+        # 反例㉔（后补）：五类反馈成套这条判据被降级（只做成功一种又成为合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**五类反馈成套给、不得只做成功一种（L1）**", "提示要分类")
+        self.assertTrue(cm.errors, "五类反馈成套被抽走须报红")
+
+    def test_feedback_layer_semantics_removed_reports(self):
+        # 反例㉕：按层产生且语义不得跨层走样被抽走（409 显示成网络错误变成合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**反馈按层产生、按层呈现，语义不得跨层走样（L1）**", "各层各自提示")
+        self.assertTrue(cm.errors, "语义不得跨层走样被抽走须报红")
+
+    def test_feedback_error_code_table_removed_reports(self):
+        # 反例㉖：错误码与文案同表这条被抽走（前端靠匹配 message 判类型又成为合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**一处登记：错误码与提示文案同一张表（L1）**", "错误码统一登记")
+        self.assertTrue(cm.errors, "错误码与文案同表被抽走须报红")
+
+    def test_feedback_receipt_removed_reports(self):
+        # 反例㉗：成功回执（离开页面后仍可查）被抽走（批量结果只靠一闪而过的轻提示变成合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**成功回执写\"做成了什么\"，并在离开页面后仍可查（L1）**", "成功要提示")
+        self.assertTrue(cm.errors, "成功回执被抽走须报红")
+
+    def test_feedback_interrupt_budget_removed_reports(self):
+        # 反例㉘：打扰预算被抽走（批量失败弹 N 次变成合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**一次一屏至多一条打断型提示，同类按对象合并（L1）**", "打断要克制")
+        self.assertTrue(cm.errors, "打扰预算被抽走须报红")
+
+    def test_feedback_notice_ledger_removed_reports(self):
+        # 反例㉙：台账先于投递被抽走（关掉推送等于事件没发生变成合规）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**通知中心是台账、通知是投递（L1）**", "通知要送达")
+        self.assertTrue(cm.errors, "台账与投递分家被抽走须报红")
+
+    def test_feedback_trace_removed_reports(self):
+        # 反例㉚：提示与服务端记录的追踪标识对齐被抽走（用户报的那句提示无从检索）
+        self._run_guard_with("specs/general/feedback.adoc",
+                             "**人看到的提示与服务端记录须能对上（L1）**", "提示可追溯")
+        self.assertTrue(cm.errors, "追踪标识对齐被抽走须报红")
+
+    def test_feedback_template_error_table_removed_reports(self):
+        # 反例㉛：模板里的错误码表七列被抹（错误码表回来只剩一条示例）
+        self._run_guard_with("specs/general/ui-feedback.adoc",
+                             "**文案键**", "文案")
+        self.assertTrue(cm.errors, "错误码表的列位被抹须报红")
+
+    def test_feedback_template_channel_table_removed_reports(self):
+        # 反例㉜：模板里的通道选择表被抹（通道选择退回手感）
+        self._run_guard_with("specs/general/ui-feedback.adoc",
+                             "**通知中心 / 任务台账**", "通知中心")
+        self.assertTrue(cm.errors, "通道选择表被抹须报红")
+
+    def test_feedback_dispatcher_gate_removed_reports(self):
+        # 反例㉝：调度器不再登记反馈面的识别特征（写报错与提示的人永不加载判据）
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "**定提示与反馈面**", "**提示**")
+        self.assertTrue(cm.errors, "调度器缺反馈面加载门须报红")
+
+    def test_feedback_ui_backref_removed_reports(self):
+        # 反例㉞：界面文件不再回指反馈面（两处各写一套时无从判定哪处是权威）
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**本节只管文案怎么写**", "本节管文案")
+        self.assertTrue(cm.errors, "界面文件缺回指须报红")
+
+    def test_state_restore_tiers_removed_reports(self):
+        # 反例㉟（录入既有分析结果）：『回到上次按后果分两档』被抽走——动作类状态被自动重放
+        # （重开即执行上次的 SQL）重新成为合规，那是只在两次会话之间发生、任何一次操作内
+        # 的判据都管不到的形态。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**「回到上次」按后果分两档（L1）**", "回到上次要稳")
+        self.assertTrue(cm.errors, "状态恢复分两档那条被抽走须报红")
+
+    def test_state_section_removed_reports(self):
+        # 反例㊱：整节「界面状态的保留与恢复」被抽走（判据、核对项、依据一起消失）
+        text = self.base["specs/general/ui.adoc"]
+        start = text.index("== 界面状态的保留与恢复")
+        end = text.index("== 新增或改界面时的核对清单")
+        self._run_guard_with("specs/general/ui.adoc", text[start:end], "")
+        self.assertTrue(cm.errors, "状态恢复整节被抽走须报红")
+
+    def test_validation_timing_removed_reports(self):
+        # 反例㊲（录入既有分析结果）：模板里的校验时机被抹——「一填就报错」与「提交后一句话」
+        # 两种形态重新成为唯一做法，摘要与字段处各写一句也无人看得出来。
+        self._run_guard_with("specs/general/ui-voice.adoc",
+                             "校验什么时候说（时机与形状，四种都定下来）", "校验")
+        self.assertTrue(cm.errors, "校验时机被抽走须报红")
 
 
 class TestCheckTaskCompletionGuard(CheckSpecsTestCase):

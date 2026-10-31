@@ -704,6 +704,10 @@ RESIDENT_FILES = ("AGENTS_COMMON.adoc",
 # 某个文件该不该拆」这一识别特征（用户口径：禁止大源码文件）使必加载层落到 64634 字节、
 # 超原天花板 134 字节；登记只给检测特征与落点（判据正文全在 `specs/general/coding.adoc`），
 # 余量约 1.3%，下一次仍应先归位、再考虑抬数。
+# 本轮（并入 `main` 的界面/反馈判据）**不抬**、反而归位：两侧的常驻层登记叠加后实测
+# 65756 字节、超 65500。按「先归位、再新增」把「任何代码活动」条目里重复的识别特征合并、
+# 界面与反馈两处登记压成短形态（落点与判定要点一个不少，`check_ui_spec_guard` 与
+# `UiStyleGuard` 那一组锚点全绿），落到 65191 字节、余量约 0.5%。**上限仍留在 65500**。
 RESIDENT_BUDGET = 65500
 # 核心清单「底线」节的**条数下限**：宁少不滥是取向，但少于这个数就说明清单被削过
 # （「底线」是浓缩后的全套底线，不是"挑几条最重要的"）。与 `SOFT_FILE_SIZE_HINT`
@@ -2021,6 +2025,7 @@ POINTER_SCAN_FILES = (
     "specs/general/encoding.adoc",
     "specs/general/entry-doc.adoc",
     "specs/general/execution-detail.adoc",
+    "specs/general/feedback.adoc",
     "specs/general/git.adoc",
     "specs/general/planning.adoc",
     "specs/general/review.adoc",
@@ -2032,6 +2037,13 @@ POINTER_SCAN_FILES = (
     "specs/general/sql.adoc",
     "specs/general/terminology.adoc",
     "specs/general/testing.adoc",
+    "specs/general/ui-feedback.adoc",
+    "specs/general/ui-patterns.adoc",
+    "specs/general/ui-styles.adoc",
+    "specs/general/ui-targets.adoc",
+    "specs/general/ui-tokens.adoc",
+    "specs/general/ui-voice.adoc",
+    "specs/general/ui.adoc",
     "specs/general/verify.adoc",
     "specs/general/version-control.adoc",
     "specs/platform/cnb.adoc",
@@ -2692,6 +2704,53 @@ def check_ui_performance_guard():
         phase_done()
         return
     run_rule_guard("check_ui_performance_guard")
+    phase_done()
+
+
+def check_ui_spec_guard():
+    """『界面与交互（跨端形状、尺度、颜色与交互）』防线（**用户提出**）。
+
+    用户口径：「需要一套界面设计、样式的规范，往小了说哪个端优先用哪个框架、参考哪个应用，
+    往大了说桌面应用、web 等到界面应该如何设计，大小高度、颜色选择、颜色对比」；「是不是可以
+    再整理一套跨端同时可以跨多个端的 UI 设计方法（比如同时兼容 PC 浏览器端、PC 客户端端、
+    手机端、平板端等等）」；「再设计几套交互方案，比如 windows 下鼠标为主要如何交互，安卓下
+    触摸屏又该怎么搞」；「每个端的设计风格也不一样，需要涉及到，还一些可以参考的软件」。
+
+    本条与既有三道界面防线**不重叠、不合并**：
+      * `check_ui_style_guard`（`specs/general/coding.adoc`「界面与样式」）管**取哪套现成方案、
+        同一形态放哪一处、`!important` 的次序**——本条管**取什么颜色、字号、间距、控件高度**；
+      * `check_ui_performance_guard` 管**数据长起来会不会卡**——本条管**看得清不清、点得动点不动**；
+      * `check_same_thing_one_source_guard` 管**两处算不算同一件事**——本条在视觉层的形态是
+        「同一令牌只有一个取值、同一组件只有一个外观来源」。
+
+    钉四处：
+      * 真源：通用层 `specs/general/ui.adoc` 的全部要点 + 依据行（规则数据
+        `script/specs-rules/ui-spec.toml` + `_tokens.toml` 的 `UI_SPEC_*_ANCHORS`）；
+      * **五份模板**：`specs/general/ui-tokens.adoc`（令牌取值）、`specs/general/ui-targets.adoc`
+        （各端框架与参照应用）、`specs/general/ui-styles.adoc`（风格族）、
+        `specs/general/ui-voice.adoc`（文案词表）、`specs/general/ui-patterns.adoc`
+        （容器形态、表单排布与分组、结构化值详情、表格列宽的决策路径）——都是**模板文件、不是规范文件**，须回指
+        判据本体、不另立判据（缺回指即变成第二真源）；
+      * **加载门**：调度器须在「任何代码活动」与前端栈两处登记本文件的识别特征——缺则
+        写界面/定样式/定交互的人永不加载该文件，判据存在而走不到它；
+      * README 目录说明同步。
+
+    只钉「要点是否仍在」——「这一处的对比度实际是多少」「这个端的密度取哪一档」「某个组件
+    算不算已有一个外观来源」属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("界面与交互（跨端形状、尺度、颜色与交互）防线检查")
+    rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if not os.path.isfile(os.path.join(rules_dir, "ui-spec.toml")):
+        err("缺少 script/specs-rules/ui-spec.toml——『界面与交互』的锚点（判据措辞）失去"
+            "唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    for rel in ("specs/general/ui.adoc", "specs/general/ui-tokens.adoc",
+                "specs/general/ui-targets.adoc", "specs/general/ui-styles.adoc",
+                "specs/general/ui-voice.adoc", "specs/general/ui-patterns.adoc"):
+        if not os.path.isfile(os.path.join(REPO_ROOT, *rel.split("/"))):
+            err(f"缺少 {rel}——界面判据或它的取值模板不在，另一份即无处可取", rel)
+    run_rule_guard("check_ui_spec_guard")
     phase_done()
 
 
@@ -4948,8 +5007,10 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 182  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_test_scope_guard`——跑测试按改动面取最小集；上一轮 `check_site_link_guard`——站点正文区的站内链接落点；上一轮 `check_source_file_scale_guard`；上一轮 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2502  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 2478 → 2502（+24）：新增 `TestCheckTestScopeGuard` 17 条、`TestDuplicateScanShortUnit` 5 条、`TestCheckGuardManifestNumberingTable` 2 条；上一轮 +2：`TestCheckPromptsIndexGuard` 补‘整条 `link:` 被行内代码包住’反例（`check_site_link_guard` 的取值由 `SITE_LINK_CASES` 逐条核，不另设用例类）；上一轮 +10：新增 `TestCheckSourceFileScaleGuard`（正例 + 整节被删 + 级别降级 + 超线须给定论被抽 + 提醒线取值被抽 + 复用成因被抽 + 不拆形态被抽 + 按职责切被抽 + 存量边界被抽 + 规则步骤真被接线）；上一轮 2429 见 guards.adoc「记账沿革」
+
+GUARD_WIRING_BASELINE = 182  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_ui_spec_guard`——界面的形状、尺度、颜色与交互（跨端一套令牌、端差异只三处、交互按输入设备判）；上一轮 `check_site_link_guard`——站点正文区的站内链接落点；上一轮 `check_source_file_scale_guard`；上一轮 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2507  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮为**并入 `main` 后的实测值**——两侧各加了用例（本分支 `TestCheckUiSpecGuard` 一族 + `main` 侧 `TestCheckTestScopeGuard` / `TestDuplicateScanShortUnit` / `TestCheckGuardManifestNumberingTable`），合并后按现场 `unittest.TestLoader` 一次取齐，不再逐侧相加；上一轮（本分支侧）+3：`TestCheckUiSpecGuard` 补界面状态保留与恢复与校验时机三条反例，并修好被同名覆盖的重复清单与串节的依据行；此前 +4（基线记 2345、当轮用例数实为 2480）：`TestCheckUiSpecGuard` 补风格与文案两层的反例，同轮还抹掉三个同名重复定义的用例与 `FILES` 扩到八份；再前 +2：`TestCheckPromptsIndexGuard` 补‘整条 `link:` 被行内代码包住’反例；再前 +10：新增 `TestCheckSourceFileScaleGuard`；2429 见 guards.adoc「记账沿革」
+
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -14088,6 +14149,7 @@ CHECKS = (
     check_ui_style_guard,
     check_same_thing_one_source_guard,
     check_ui_performance_guard,
+    check_ui_spec_guard,
     check_pr_scope_guard,
     check_changelog_timing_prompt_guard,
     check_guess_confirm_guard,
