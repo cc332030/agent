@@ -7095,11 +7095,19 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "* **先查现状（L1）**：**不得凭印象或标题推断**，并列出**核实方式**。\n"
                    "* **先调研最佳方案（L1）**：列出**备选方案与取舍依据**，不得只给\"能交差\"的写法。\n"
                    "* **需求先找参照物（L1）**：\"调整内容\"一类需求（**新增与调整同属一类**）先找现成可参照的"
-                   "既有标准与更优设计——① **业界标准/权威约定**；② **既有通行设计范式**；"
-                   "③ **本项目既有条目与先例**（见 `specs/general/coding.adoc`「既有实现与先例优先」）；"
-                   "**查不到**也要能说出查证方式、如实标\"未确证\"；**查到更优的设计就用更优的**。\n"
+                   "既有标准与更优设计——按下述**七条检索路**（**常设检索面**）逐条查："
+                   "① **业界标准/权威约定**；② **业界规范与权威风格指南**；"
+                   "③ **高星开源仓库的既有实现**；④ **对比竞品/同类产品怎么做**；"
+                   "⑤ **反例与失效形态**；⑥ **领域专家的公开实践与工程博客**；"
+                   "⑦ **本项目既有条目与先例**（见 `specs/general/coding.adoc`「既有实现与先例优先」）；"
+                   "**查不到**也要能说出查证方式、如实标\"未确证\"；**查到更优的设计就用更优的**（**调研方法本身也要有固定形态**）。\n"
+                   "** **取舍次序与冲突**：**标准/规范给出的是**下限与必须**、优先；**多数做法不等于必须**；"
+                   "**反例只用来**改方案、不用来立规则**；**专家实践给的是理由与代价、不单独成规**；标准缺位时**先例一致优于个人偏好**；"
+                   "同一条素材**必须先核它成立的前提**，**不得只抄结论**。\n"
                    "** **判定标准（任一命中即不合规）**：**说不出参照物与检索动作** / "
-                   "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收**；"
+                   "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收** / "
+                   "**有现成实现或同类产品可查却一条都没查** / **只抄素材的结论、不核它的前提与代价** / "
+                   "**拿流量与转述当权威**；"
                    "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
                    "** **依据**：ISO 10007。\n\n"
                    "=== 要改的那一处是否已实际读过（改动面按处读）\n\n"
@@ -7362,7 +7370,9 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         pl = os.path.join(self.root, "specs", "general", "planning.adoc")
         text = open(pl, encoding="utf-8").read().replace(
             "** **判定标准（任一命中即不合规）**：**说不出参照物与检索动作** / "
-            "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收**；"
+            "**有标准可循却自造一套说法** / **有更优设计却仍按原口述照收** / "
+            "**有现成实现或同类产品可查却一条都没查** / **只抄素材的结论、不核它的前提与代价** / "
+            "**拿流量与转述当权威**；"
             "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
             "** **依据**：ISO 10007。\n",
             "")
@@ -7380,6 +7390,42 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         open(f, "w", encoding="utf-8").write(text)
         cm.check_dev_flow_guard()
         self.assertIn("review.adoc", self.error_texts())
+
+    def test_reference_seeking_missing_high_star_and_competitor_paths_reports(self):
+        # 反例：检索面只剩"标准 + 本项目先例"两路（高星实现与竞品那两路被删）——
+        # 有现成实现却一条都不查仍是合规路径，"调研"重新回到手上现成的那两条
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read().replace(
+            "③ **高星开源仓库的既有实现**；④ **对比竞品/同类产品怎么做**；"
+            "⑤ **反例与失效形态**；⑥ **领域专家的公开实践与工程博客**；", "").replace(
+            "**七条检索路**", "**三条检索路**")
+        open(pl, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("高星开源仓库的既有实现", self.error_texts())
+
+    def test_reference_seeking_missing_expert_practice_path_reports(self):
+        # 反例：专家实践这一路被整条抽走（"权威性难判、易凑数"正是它被跳过的理由）——
+        # 代码只看得见最后怎么写、看不见为什么这么写，这一层就再也读不到了
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read().replace(
+            "⑥ **领域专家的公开实践与工程博客**；", "").replace(
+            "**七条检索路**", "**六条检索路**")
+        open(pl, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("领域专家的公开实践与工程博客", self.error_texts())
+
+    def test_reference_seeking_without_precedence_rule_reports(self):
+        # 反例：七条检索路齐全、但"它们不是等权"的次序条被抽走——
+        # "查到了几条"成了挡箭牌（竞品怎么写就怎么写、反例被顺手改成规则）
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read()
+        head, rest = text.split("* **取舍次序与冲突**", 1)
+        open(pl, "w", encoding="utf-8").write(head + "** " + rest.split("\n** ", 1)[1])
+        cm.check_dev_flow_guard()
+        self.assertIn("取舍次序与冲突", self.error_texts())
 
     def test_old_cases_may_be_rewritten_clause_removed_reports(self):
         # 反例：「既有用例不得为迁就重构而改判」被删（改老用例变绿重成默认做法）
