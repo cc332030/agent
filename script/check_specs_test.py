@@ -28886,5 +28886,165 @@ class TestCheckDegradationScanGuard(CheckSpecsTestCase):
         self.assertIn("降级式表述与本节同罪", self._run())
 
 
+class TestCheckHandoffDurabilityGuard(CheckSpecsTestCase):
+    """钉住『交接：什么必须扛过中断』（用户提出）。
+
+    用户口径：**工作中断后，上一次写在 `tmp/` 下的文档、文件等可能直接失效，因为不知道
+    上次写了哪些**；`tmp/` 下是不是该做严格的分类汇总、要有任务索引与文件索引？不然**在多
+    agent 接替工作时浪费时间与成本**。
+
+    与 `check_tmp_layout_guard`（`tmp/` 根一份 `INDEX.md`、判据是不用打开任何文件）分工：
+    索引解决"不知道写了哪些"，本条解决"索引自己也易失"——`tmp/` 被清或被重开时，上一轮钉的
+    Issue/PR 与 commit sha、被否掉的方案、已核实事实连同核实方式统统无从取回，下一位只能重做。
+
+    判据本体在通用层 `specs/general/entry-doc.adoc`「交接：什么必须扛过中断」；规则数据在
+    `script/specs-rules/execution.toml`。
+    """
+
+    ENTRY_DOC = "specs/general/entry-doc.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        self.write_real_file(self.ENTRY_DOC)
+        self.write_rules_fixture()
+
+    def _mutate(self, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.ENTRY_DOC), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(self.ENTRY_DOC, text.replace(removed, replacement, 1))
+
+    def tearDown(self) -> None:
+        # 规则引擎是模块级缓存、夹具每个用例都换 `REPO_ROOT`：不作废时后续用例会读到
+        # 本类夹具（已删）的规则目录，报"规则配置里没有防线 X"（与 `Playground` 类同因）。
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+    def _run(self):
+        cm.check_handoff_durability_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_handoff_durability_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_criterion_question_dropped_reports(self):
+        # 反例①：判据问句被抽——"结论 vs 过程"无从分，过程流水被往持久落点搬
+        self._mutate("重做一遍**会不会得到不同结论")
+        self.assertIn("重做一遍", self._run())
+
+    def test_pin_info_dropped_reports(self):
+        # 反例②：派发对象钉定被抽——下一轮不知道当时钉的哪个 sha，结论全失去复核基准
+        self._mutate("哪个 Issue/PR、哪个 commit sha、哪个分支")
+        self.assertIn("哪个 commit sha", self._run())
+
+    def test_rejected_options_dropped_reports(self):
+        # 反例③：被否方案与否决理由被抽——下一位会照着重试一遍已被否掉的路
+        self._mutate("被否掉的方案与否决理由")
+        self.assertIn("被否掉的方案", self._run())
+
+    def test_verified_fact_carries_method_dropped_reports(self):
+        # 反例④：「连同核实方式」被抽——只留结论一个值，下一位判不出还成不成立、只能重查
+        self._mutate("只写结论时下一位无法判断它还成不成立")
+        self.assertIn("只写结论时下一位无法判断", self._run())
+
+    def test_scope_boundary_dropped_reports(self):
+        # 反例⑤：边界被抽——本条会与 tmp/ 的职责混淆，进度百分比、逐条日志搬进入口文档
+        self._mutate("不把过程流水")
+        self.assertIn("不把过程流水", self._run())
+
+    def test_section_removed_reports(self):
+        # 反例⑥：整节被删——判据失去落点（不得当成"没有这条规则就是通过"）
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.ENTRY_DOC), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        start = text.index("== 交接：什么必须扛过中断")
+        end = text.index("依据（标准名/编号）", start)
+        self.write(self.ENTRY_DOC, text[:start] + text[end:])
+        self.assertIn("交接：什么必须扛过中断", self._run())
+
+
+class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
+    """钉住 `tmp/` 那一侧：**根一份索引**与**按可重建性清理**（用户提出）。
+
+    分工的另一半——`TestCheckHandoffDurabilityGuard` 钉"索引自己也易失之后靠什么接上"，
+    本类钉"索引怎么写、`tmp/` 怎么清"。两条分别落在 `check_tmp_layout_guard` 与
+    `check_handoff_durability_guard` 两个函数上，故**各自成类**：`unittest` 按类收集，
+    同名方法写进同一个类即静默覆盖（本仓库祖先提交踩过——被盖的那批用例永不执行）。
+    """
+
+    EXECUTION_DOC = "specs/core/execution.adoc"
+    COMMON_PROMPT = "prompts/_common.txt"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+    def _rules_dir(self) -> str:
+        """**本脚本自己那一份**规则目录（不按 `REPO_ROOT` 现算）——夹具换根后那边没有规则数据。"""
+        return cm._rules_spec()
+
+    def _write_valid(self) -> None:
+        self.write_real_file(self.EXECUTION_DOC)
+        self.write_real_file(self.COMMON_PROMPT)
+        src = os.path.join(self._rules_dir(), "execution.toml")
+        with open(src, encoding="utf-8") as fh:
+            self.write("script/specs-rules/execution.toml", fh.read())
+
+    def _mutate(self, text: str, removed: str, replacement: str = "") -> None:
+        self.assertIn(removed, text)
+        self.write(self.EXECUTION_DOC, text.replace(removed, replacement, 1))
+
+    def _run(self, mutate) -> str:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.EXECUTION_DOC), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        mutate(text)
+        cm.check_tmp_layout_guard()
+        return self.error_texts()
+
+    def test_valid_passes(self):
+        self.assertEqual("", self._run(lambda text: None))
+
+    def test_index_line_dropped_reports(self):
+        # 反例①：根那份索引被抽——接替者仍要逐个目录翻 `PLAN.md` 才知道上次干了什么
+        self.assertIn("INDEX.md", self._run(
+            lambda text: self._mutate(text, "**`tmp/` 根只有一份索引 `INDEX.md`**")))
+
+    def test_index_criterion_dropped_reports(self):
+        # 反例②：索引的判据被抽——索引退化成目录清单（列得出有什么、判不出要不要接着做）
+        self.assertIn("判据是不用打开任何文件", self._run(
+            lambda text: self._mutate(text, "**判据是不用打开任何文件**")))
+
+    def test_cleanup_by_rebuildability_dropped_reports(self):
+        # 反例③：清理口径被抽——退回"默认不清理"，按时间清时连不可重建的结论一并扫掉
+        self.assertIn("可重建性", self._run(
+            lambda text: self._mutate(text, '**清理按"可重建性"判、不按时间判（L1）**')))
+
+    def test_cleanup_criterion_dropped_reports(self):
+        # 反例④：清理的判据句被抽——"删了还能不能原样得到"没了，只剩一句"用毕即删"
+        self.assertIn("删了还能不能原样得到", self._run(
+            lambda text: self._mutate(text, "判据是\"删了还能不能原样得到\"")))
+
+
+
 if __name__ == "__main__":
     unittest.main()
