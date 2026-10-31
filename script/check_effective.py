@@ -280,6 +280,14 @@ MECHANISMS = [
      "check_file_size_hint 钉住『超线须有提示』且『**不得**进 errors/退出码』两件事（提醒与硬上限的分界）、"
      "范围边界（常驻层与图书馆不吃本阈值）；"
      "『某个超线的文件到底该归位、该拆、还是确实不拆』属体量/层级的语义判断"),
+    ("源码文件不得长成\"什么都往里写\"：一个文件只做一件事、公共部分放别人取得到的位置、超体量提醒线须给出定论、按职责判拆不拆",
+     "specs/general/coding.adoc「源码文件的规模」", "script/check_specs.py",
+     "check_source_file_scale_guard",
+     "check_source_file_scale_guard 钉住「源码文件的规模」节的判据本体十二组要点（一个文件只做一件事与判定标准三条／公共部分放别人取得到的位置／"
+     "约 500 行与约 30 KB 的先到者为准提醒线／**超线必须给出定论、不得沉默放过**／须拆三条／不拆的正当形态三条／"
+     "按职责切而不按体量切且每份自足／拆完的收口／判定标准五条／存量边界与不得借『文件太大』大改／依据行与取舍归属），"
+     "并钉住规则步骤真被接线；**本条只钉要点文本仍在**——"
+     "『这个文件到底该不该拆、拆到哪一步』属体量/职责的语义判断"),
     ("提示词主侧重（方向前提）与优先级不得被删/降级", "PROMPTS.adoc", "script/check_specs.py",
      "check_prompts_primary", "check_prompts_primary 钉住 PROMPTS.adoc 主侧重登记、各提示词 primary 声明与 priority-rules 的 L1/L2/L3"),
     ("对外能力的可替换点须有唯一装配点、须有可用默认（接入成本是设计指标）", "specs/general/coding.adoc", "script/check_specs.py",

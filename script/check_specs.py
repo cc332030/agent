@@ -689,7 +689,11 @@ RESIDENT_FILES = ("AGENTS_COMMON.adoc",
 # 新增、细则迁出 `specs/general/execution-detail.adoc`），浓缩件本身是每次会话都要读的一份
 # 新文件，合计实测 64066 字节（review 补齐 `CORE.adoc` 的落点条目后的用量）；余量约 0.7%，
 # 下一次仍应先归位、再考虑抬数。
-RESIDENT_BUDGET = 64500
+# 本轮由 64500 上调为 65500：调度器「任何代码活动」条补「要新增或改动一个源码文件、或判定
+# 某个文件该不该拆」这一识别特征（用户口径：禁止大源码文件）使必加载层落到 64634 字节、
+# 超原天花板 134 字节；登记只给检测特征与落点（判据正文全在 `specs/general/coding.adoc`），
+# 余量约 1.3%，下一次仍应先归位、再考虑抬数。
+RESIDENT_BUDGET = 65500
 # 核心清单「底线」节的**条数下限**：宁少不滥是取向，但少于这个数就说明清单被削过
 # （「底线」是浓缩后的全套底线，不是"挑几条最重要的"）。与 `SOFT_FILE_SIZE_HINT`
 # 同理：它是"拦无声删除"的下限、不是目标。
@@ -4919,8 +4923,8 @@ def check_install_repeat_update_guard():
 # 两个现值以常量本身为唯一真源（本注释不复述取值），**逐轮沿革见
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
-GUARD_WIRING_BASELINE = 179  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
-GUARD_TEST_BASELINE = 2429  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +12：`check_handoff_durability_guard` 新开 `TestCheckHandoffDurabilityGuard`（正例 + 判据问句/派发对象钉定/被否方案/核实方式/边界/整节被删六条反例），review 后又新开 `TestCheckTmpIndexAndCleanupGuard` 5 条（`tmp/` 根索引与按可重建性清理原无任何用例，本轮改的是那两条、却不带用例——抽掉照样全绿）；上一轮 +45：`check_spec_fetch_guard` 的解释器兜底与真源要点随两入口改写换形（`.sh` 一行一候选、`.bat` 逐候选试跑 `--probe`），新开 3 条端到端（索引由**已经换新的这一份**脚本算、`--list` 不落索引、`--probe` 不联网不写盘）；本轮 review 再 +2：`.bat` 把判据写成「不是 127 就算跑得起来」即报、`.sh` 跑了 `--probe` 不看结果即报——`check_specs_test` 由 2252 条变成本轮的取值；上一轮 +4：`check_fetch_self_update_guard` 补四道反例（附随文件常量被改名、消费它的执行体被改名、`main` 里的调用行被删、落盘失败被报成取不到）；上一轮 +9：本道正反例 8 条 + `RESIDENT_FILES` 单一来源 1 条；上一轮 +1：模板地址表豁免与入口文档回指各一条（原「地址表豁免」一条按新口径拆成两条）；上一轮 +9：本道正反例 5 条 + 引擎原语 `prose_mentions` 4 条，见 guards.adoc「记账沿革」）
+GUARD_WIRING_BASELINE = 179  # 同源实取：`CHECKS` 序列唯一名（本轮新增 `check_source_file_scale_guard`；上一轮 `check_handoff_durability_guard`（交接的持久性：结论进持久落点，不靠 tmp/ 留）；上一轮 `check_core_digest_guard`；上一轮 `check_paths_single_source_guard`，上一轮 `check_test_data_desensitize_guard`，上一轮 `check_fetch_progress_guard`，上一轮 `check_windows_window_guard`，上一轮 `check_degradation_scan_guard`/`check_self_serve_guard`；并入后含 `check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`；`check_clean_tmp_guard` 已随清理脚本一并删除，见 guards.adoc「已删除的防线」）
+GUARD_TEST_BASELINE = 2439  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取；本轮 +10：新增 `TestCheckSourceFileScaleGuard`（正例 + 整节被删 + 级别降级 + 超线须给定论被抽 + 提醒线取值被抽 + 复用成因被抽 + 不拆形态被抽 + 按职责切被抽 + 存量边界被抽 + 规则步骤真被接线）；上一轮 2429 见 guards.adoc「记账沿革」
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -11733,6 +11737,27 @@ def check_deprecated_api_guard():
     phase_done()
 
 
+def check_source_file_scale_guard():
+    """『源码文件的规模』防线（用户口径：禁止大源码文件、能拆就拆、能抽公共的就抽）。
+
+    要治的失效是**"什么都往一个文件里写"**：文件一变大，最先坏掉的不是可读性而是**可复用性**
+    ——可被复用的部分被埋在一处私有实现里，别处要用只能再写一份（同一件事长出第二份来源）。
+    故本条钉**判据本体**，不钉轴名：只核"有没有「源码文件的规模」这一节"属防线空转——
+    把"一个文件只做一件事""超线须给出定论""不拆的正当形态""按职责切不按体量切"任一句抽走时照样全绿。
+    三处要点尤其易被"软阈值"这个说法抵消：① **超线只提醒、但必须给出定论**（不拆也要写理由）；
+    ② **拆不拆由职责边界判、不由行数判**；③ **公共部分须放在别人取得到的位置**。
+    「这个文件到底该不该拆、拆到哪一步」属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("源码文件的规模防线检查")
+    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(CODING_FILE):
+        err(f"缺少文件 {rel_coding}——「源码文件的规模」的判据无处承载"
+            "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
+    else:
+        run_rule_guard("check_source_file_scale_guard")
+    phase_done()
+
+
 def check_compat_preference_guard():
     """『取兼容性更好的那一个』防线（用户提出：同一能力两个及以上等价入口并存时取兼容性更好的一个，**适用所有语言、不限编程**）。
 
@@ -13807,6 +13832,7 @@ CHECKS = (
     check_persistence_access_guard,
     check_deprecated_api_guard,
     check_compat_preference_guard,
+    check_source_file_scale_guard,
     check_conversion_guard,
     check_entity_dto_guard,
     check_lombok_constructor_guard,
