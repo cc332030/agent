@@ -5009,7 +5009,7 @@ def check_install_repeat_update_guard():
 # 动作本身让"删了什么"在 diff 里可见**。
 
 GUARD_WIRING_BASELINE = 183  # 同源实取：`CHECKS` 序列唯一名（183 条，无重复项）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
-GUARD_TEST_BASELINE = 2510  # 同源实取：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取）。本轮为**并入 `main` 后的实测值**——两侧各加了用例（本分支 `TestCheckDevFlowGuard` 补「专家实践那一路被整条抽走」反例；`main` 侧 `TestCheckTestScopeGuard` / `TestCheckUiSpecGuard` 一族 / `TestDuplicateScanShortUnit` / `TestCheckGuardManifestNumberingTable`），合并后按现场 `unittest.TestLoader` 一次取齐、不逐侧相加；逐轮沿革见 `specs-project-maintainer/guards.adoc`「记账沿革」
+GUARD_TEST_BASELINE = 2515  # 同源实取（本轮：原有 2510 + `TestCheckBundleSizeGuard` 新增 5 条反例——通用层「产物外置时仍是一个可交付件」条被抽 / 通用层「运行期不解压、按条目取用」半句被抽 / 栈层「单个归档件」落点被抽 / 栈层「归档件不解压成目录」条被抽 / 栈层回指被改宽）：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取）。本轮为**并入 `main` 后的实测值**——两侧各加了用例（本分支 `TestCheckDevFlowGuard` 补「专家实践那一路被整条抽走」反例；`main` 侧 `TestCheckTestScopeGuard` / `TestCheckUiSpecGuard` 一族 / `TestDuplicateScanShortUnit` / `TestCheckGuardManifestNumberingTable`），合并后按现场 `unittest.TestLoader` 一次取齐、不逐侧相加；逐轮沿革见 `specs-project-maintainer/guards.adoc`「记账沿革」
 
 GUARD_EMPTY_TEST_NAMES = set()
 
