@@ -29045,6 +29045,141 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
             lambda text: self._mutate(text, "判据是\"删了还能不能原样得到\"")))
 
 
+class TestCheckSourceFileScaleGuard(CheckSpecsTestCase):
+    """钉住『源码文件的规模』防线（**用户提出**：禁止大源码文件、能拆就拆、能抽公共的就抽）。
+
+    用户口径：**应控制每个源码文件的大小**——没有任何东西必须全都写到一个文件，
+    没有什么不能拆；源码文件太大意味着很多内容写到一起，写到一起就意味着**其他地方
+    无法引用公共的部分**，所以太大本身就是错误。
+
+    最易被冲掉的四件事（故本组用例逐一覆盖）：
+      * **整条被删** —— 回到"什么都往一个文件里写也没人管"；
+      * **级别被降级成建议** —— 大文件可以直接放过；
+      * **超线只提醒、不给"必须给出定论"** —— 软阈值被读成"不必管"（本条最独特的取舍）；
+      * **拆分判据被换成行数** —— 按体量硬切，切出不自足的碎片。
+    """
+
+    SECTION = "== 源码文件的规模（单个文件不得长成\"什么都往里写\"）"
+
+    CODING = (
+        "= 通用编码规范\n\n"
+        + SECTION + "\n"
+        "* **一个文件只做一件事（L1）**：单个文件只承载一件能被一句话说清的事。"
+        "同一文件里出现**两组以上互不相干的职责**即为写到一起。"
+        "判定标准（任一命中即违规）：① 文件里出现本可独立成篇的第二件事；"
+        "② 一件事要靠文件内的分段注释才读得清。\n"
+        "* **公共部分放别人取得到的位置（L1）**：会第二次用到的能力，其来源须落在"
+        "**可被取用的文件**里（公共模块、工具文件、组件文件），使用点只组装与取用。\n"
+        "* **单文件体量的提醒线（L2，超线即须给出判据化定论）**：单个源码文件超过"
+        "**约 500 行**或**约 30 KB**（两者以**先到者为准**）即视为需要评估拆分——"
+        "**只提醒、不报错、不阻断**，但**超线必须给出定论，不得沉默放过**。\n"
+        "* **拆不拆怎么判（L1，按职责判定，不按行数判定）**：行数只是提醒信号，"
+        "**须拆（任一命中即拆）**：① 两组以上互不相干的职责；② 有可被别的文件取用的公共部分。"
+        "**不拆的正当形态**：① 判据形态与加载时机都相同、无人会单独取用；"
+        "② 内容是同一份数据的完整定义。**不得**以看起来更整齐为由拆或留。\n"
+        "* **拆要按职责切、不按体量切（L1）**：拆分须沿职责与取用边界切，切出的每份都**自足**。\n"
+        "* **拆完的收口（L1）**：拆分后原位置只留取用与装配、**不留在文件内又改一遍的副本**。\n"
+        "* **判定标准（任一命中即违规）**：① 单个文件承载两组以上互不相干的职责；"
+        "② 超过提醒线而未给出定论；③ 拆分按体量切。\n"
+        "* **存量边界（L1）**：本条只管新增文件与本次改到的文件，**不发动全库拆分**"
+        "（随动迁移，见 `specs/core/execution.adoc`）。\n"
+        "* 依据（标准名/编号）：ISO/IEC 25010、ISO/IEC/IEEE 29148、Clean Code。"
+        "**「提醒线只作信号、拆分动作由职责边界判定、超线须给出判据化定论」是本集合的判据化取舍**。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write("specs/general/coding.adoc", self.CODING)
+
+    def test_valid_source_file_scale_guard_passes(self):
+        self._write_valid()
+        cm.check_source_file_scale_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 → 回到"什么都往一个文件里写也没人管"
+        self._write_valid()
+        self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 代码质量\n* 略。\n")
+        cm.check_source_file_scale_guard()
+        self.assertIn("源码文件的规模", self.error_texts())
+
+    def test_level_downgraded_reports(self):
+        # 反例：级别被降级成建议 → 大文件可以直接放过
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**一个文件只做一件事（L1）**", "**一个文件只做一件事（L3，建议）**"))
+        cm.check_source_file_scale_guard()
+        self.assertIn("一个文件只做一件事", self.error_texts())
+
+    def test_silent_pass_removed_reports(self):
+        """反例：超线"必须给出定论、不得沉默放过"被抽 → 软阈值退回"不必管"。
+
+        这是本条最独特的取舍：行数阈值到处都有，缺的是"超线之后必须有个说法"。
+        """
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("但**超线必须给出定论，不得沉默放过**", ""))
+        cm.check_source_file_scale_guard()
+        self.assertIn("不得沉默放过", self.error_texts())
+
+    def test_byte_line_hint_removed_reports(self):
+        # 反例：提醒线的取值被抽（只剩"太大要拆"）→「太大」无从判定
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**约 500 行**或**约 30 KB**（两者以**先到者为准**）",
+                                       "达到一定规模时"))
+        cm.check_source_file_scale_guard()
+        texts = self.error_texts()
+        self.assertIn("约 500 行", texts)
+        self.assertIn("30 KB", texts)
+
+    def test_reuse_motive_removed_reports(self):
+        # 反例：公共部分"放别人取得到的位置"被抽 → 只剩"拆文件"，用户指出的成因丢了
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**公共部分放别人取得到的位置（L1）**", "**行数控制（L2）**"))
+        cm.check_source_file_scale_guard()
+        self.assertIn("公共部分放别人取得到的位置", self.error_texts())
+
+    def test_not_split_forms_removed_reports(self):
+        # 反例：不拆的正当形态被抽 → 拆分失控，按行数硬切出空壳
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**不拆的正当形态**：", "**另注**："))
+        cm.check_source_file_scale_guard()
+        self.assertIn("不拆的正当形态", self.error_texts())
+
+    def test_split_by_duty_removed_reports(self):
+        # 反例：按职责切、不按体量切被抽 → 切出不自身足的碎片
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**拆要按职责切、不按体量切（L1）**", "**拆分方式（L2）**"))
+        cm.check_source_file_scale_guard()
+        self.assertIn("拆要按职责切、不按体量切", self.error_texts())
+
+    def test_existing_boundary_removed_reports(self):
+        # 反例：存量边界被删 → 被读成"必须立即全量拆库"，或反过来借"文件太大"大改无关代码
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("**不发动全库拆分**", "一律重排全部文件"))
+        cm.check_source_file_scale_guard()
+        self.assertIn("不发动全库拆分", self.error_texts())
+
+    def test_guard_actually_wired(self):
+        """规则步骤须真被接线：函数体里抽掉 `run_rule_guard` 那一行后规则一条都不跑而全线报绿。"""
+        src = open(cm.__file__.replace(".pyc", ".py"), encoding="utf-8").read()
+        body = src.split("def check_source_file_scale_guard():", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('run_rule_guard("check_source_file_scale_guard")', body)
+
+
 
 if __name__ == "__main__":
     unittest.main()
