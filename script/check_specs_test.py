@@ -9296,10 +9296,9 @@ class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.write("library/adoption.adoc", self.ADOPTION)
-        # 规则数据把整批"会自称回指"的文件都列进核对面，缺一份即报"落点无处承载"——
-        # 夹具须与规则数据的 `files` **同形**，否则用例会因"文件缺失"而非"判据命中"报红
-        # （这也是本防线的一条自查：新增落点时必须同步夹具，落点漂移不会被静默放过）。
-        for rel in cm.POINTER_SCAN_FILES:
+        # 核对面是**现算的清单**（维护范围内全部 `.adoc`），缺一份即报"落点无处承载"——
+        # 夹具须把清单里的文件都造出来，否则用例会因"文件缺失"而非"判据命中"报红。
+        for rel in cm._pointer_scan_files():
             if rel == "library/adoption.adoc":
                 continue
             self.write(rel, "= 占位\n\n本文件只给实测记录与索引。\n")
@@ -9323,40 +9322,40 @@ class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
         cm.check_pointer_no_verbatim_guard()
         self.assertEqual(cm.errors, [])
 
-    def test_scan_files_match_rule_data(self):
-        # 常驻常量与规则数据**逐项同源**：新增落点时两处必须一起改，
-        # 否则用例会因"文件缺失"报红（本防线的一条自查）
+    def test_scan_files_from_manifest(self):
+        # 清单**只有一处**：规则数据按名引用（`files_from_manifest`），职责是"核对面覆盖
+        # 全部 .adoc"——把文件名再抄一份进规则数据即第二个来源（`corpus_ownership` 核它）。
         import tomllib
         with open(os.path.join(HERE, "specs-rules", "duplicate.toml"), "rb") as fh:
             data = tomllib.load(fh)
         steps = data["guards"]["check_pointer_no_verbatim_guard"]
-        files = []
-        for st in steps:
-            files.extend(st.get("files", []))
-        self.assertEqual(sorted(set(files)), sorted(set(cm.POINTER_SCAN_FILES)),
-                         "核对面须与规则数据逐项一致（改一处必须改另一处）")
+        inline = [f for st in steps for f in st.get("files", [])]
+        names = [st.get("files_from_manifest") for st in steps if st.get("files_from_manifest")]
+        self.assertEqual([], inline, "核对面不得在规则数据里再列一份——清单只允许一处")
+        self.assertEqual(["POINTER_SCAN_FILES"], names,
+                         "规则数据须按名引用脚本侧的覆盖面清单")
+        self.assertIn("POINTER_SCAN_FILES", cm.GUARD_MANIFEST_FILES,
+                      "被引用的清单须在 `GUARD_MANIFEST_FILES` 里声明")
 
     def test_scan_files_cover_all_adoc(self):
         # 反面：核对面只列"已知会自称回指的那些文件"时，未列入的文件永远不被扫描——
-        # 防线静默少扫一层而读者以为已覆盖。故核对面须覆盖仓库里全部 .adoc
+        # 防线静默少扫一层而读者以为已覆盖。故清单须**从收集规则现算**、覆盖全部 .adoc
         # （历史留痕 `CHANGELOG.adoc` 除外——它的职责就是逐字保留历史产物）。
-        import subprocess
-        repo = os.path.dirname(HERE)
-        # **去重**：路径既暂存又未暂存（解冲突后 `git add` 前）时 `ls-files` 会给出两行，
-        # 而核对面是"文件清单"、不按暂存状态计（本仓库实测：冲突中跑单测即假报红）。
-        tracked = sorted(set(subprocess.run(
-            ["git", "ls-files", "*.adoc"], cwd=repo,
-            capture_output=True, text=True).stdout.split()))
-        expected = sorted(f for f in tracked if f != "CHANGELOG.adoc")
-        self.assertEqual(list(cm.POINTER_SCAN_FILES), expected,
+        expected = sorted(f for f in cm.collect_adoc_files()
+                          if f not in cm.HISTORICAL_FILES)
+        self.assertEqual(expected, list(cm._pointer_scan_files()),
                          "自称回指的核对面须覆盖全部 .adoc——只列已知文件会让未列入者"
                          "永远处于盲区，且漏掉时防线静默少扫一层")
 
     def test_code_and_prompt_files_are_scanned(self):
         # **正面**：上一轮实证的两处盲区（通用层 `coding.adoc`、提示词正文）必须在核对面内——
         # 它们是"回指句 + 顺手抄取值"最可能出现的两层（都把取值推给别处、又忍不住复述一遍）。
-        for rel in ("specs/general/coding.adoc", "prompts/review.adoc"):
-            self.assertIn(rel, cm.POINTER_SCAN_FILES)
+        # 断言按**夹具里的清单**（本用例写在文件里、故清单里就有它），不去取现场仓库。
+        for rel in ("library/coding.adoc", "library/review.adoc"):
+            self.write(rel, "= 占位\n\n本文件只给实测记录与索引。\n")
+        files = cm._pointer_scan_files()
+        for rel in ("library/coding.adoc", "library/review.adoc"):
+            self.assertIn(rel, files)
 
     def test_standard_name_exempt(self):
         # 标准名/材料名本就该逐字一致（`specs/general/source.adoc`「外部引用」）——
@@ -21073,17 +21072,48 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # 本类用到的夹具根在这里再钉一次：`unittest` 按模块名加载时本模块里的 `cm` 与
+        # `sys.modules['check_specs']` 可能**不是同一个实例**，别处的用例会把模块全局留在
+        # 真实仓库上——那时防线读到的是真文件、造出来的删除一律报绿。
+        cm.REPO_ROOT = self.root
         self._orig_baseline = cm.GUARD_WIRING_BASELINE
         self._orig_floor = cm._RULES_TOKENS.get(cm.GUARD_TEST_FLOOR_TOKEN)
+        # 覆盖面清单的取值函数换成夹具版：清单内容是夹具文件的事，与现场仓库无关
+        # （覆盖面的判据照旧由下面的用例逐条核）。
+        self._orig_manifest = dict(cm.GUARD_MANIFEST_FILES)
+        # 未显式设定的用例：清单**现算**（等价于现场的 `_pointer_scan_files()`，含历史留痕
+        # 之外的全部 .adoc）——判据核的是"清单与收集结果逐项相等"，清单从哪来不影响它。
+        type(self).manifest_files = None
+        cm.GUARD_MANIFEST_FILES = {"POINTER_SCAN_FILES": ("_fixture_manifest", self.rules_rel)}
+        def _manifest():
+            files = type(self).manifest_files
+            if files is None:
+                files = [f for f in cm.collect_adoc_files() if f not in cm.HISTORICAL_FILES]
+            return list(files)
+
+        setattr(cm, "_fixture_manifest", _manifest)
         os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
 
     def tearDown(self) -> None:
         cm.GUARD_WIRING_BASELINE = self._orig_baseline
+        cm.GUARD_MANIFEST_FILES = self._orig_manifest
+        setattr(cm, "_fixture_manifest", None)
         if self._orig_floor is None:
             cm._RULES_TOKENS.pop(cm.GUARD_TEST_FLOOR_TOKEN, None)
         else:
             cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = self._orig_floor
         super().tearDown()
+
+    # 覆盖面清单的**取值**在夹具里现给（等价于现场的 `_pointer_scan_files()`）：
+    # 判据核的是"清单与收集结果逐项相等"，清单从哪来不影响这条判据。
+    rules_rel = "script/specs-rules/guards.toml"
+    # 清单的**登记处**（现场即 `guards.adoc` 第 19 行那一句）：它也是被收集的 `.adoc`，
+    # 故"清单与收集结果逐项相等"那条要求清单里含它——夹具按同一形态给。
+    GUARDS_ADOC_REL = "specs-project-maintainer/guards.adoc"
+    manifest_files = ()
+
+    def _set_manifest(self, files):
+        type(self).manifest_files = list(files)
 
     # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
     # 判据本身没有被放宽——接线数、用例数、台账点名三件事一条不少，只是喂给它的脚本
@@ -21140,12 +21170,227 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 两道防线各一行——这正是"并行改动各改自己那一行"的形态本身。
         cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
                                                       "check_beta_guard": 1}
+        # 覆盖面清单的**登记处**同样要给得起：登记处那一行是"这道防线在核什么"的唯一可读处，
+        # 缺它时本道会另报"落点无处承载"（那两条与本类要核的几件事无关，只把夹具补齐）。
+        self.write("specs-project-maintainer/guards.adoc", self._GUARDS_ADOC)
 
     def test_valid_passes(self):
         # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
         self._write_valid()
         cm.check_guard_manifest()
         self.assertEqual([], cm.errors)
+
+    # ---- 覆盖面清单：只有一处、且覆盖全部 .adoc（`corpus_ownership`）----
+    #
+    # 失效形态（本仓库实测过多次）：清单在脚本常量与规则数据里**各一份**，新增一个 `.adoc`
+    # 只进得去一处，另一处**静默漏扫**——防线全绿、读者以为已覆盖。
+
+    def _write_manifest_rules(self, files_body, single_body="", guards="check_guard_manifest",
+                              single_file="script/specs-rules/guards.toml", head=""):
+        """落两份规则数据：本道自己的步骤、以及**另一份文件里**的"被查对象"。
+
+        `single_body` 里的步骤挂在哪道防线名下不影响判据（判据问的是"这份规则数据里有没有
+        把清单再列一遍"）——**它故意不带 `[[guards.X]]` 头**、挂在上一道防线名下（`guards.toml`
+        里最后那张表），并按来源文件认出它所属的那一份：表头漏写一行正是"按合并结果看不到、
+        按来源才看得见"的那一格，用例按最难的那一格给夹具。
+
+        **TOML 的键归上一张表**：`single_body` 追加在同一份文件里，故那张表必须真有上一张
+        表——`guards_files` 与它同文件同防线即可，不必新开一份文件。
+        """
+        self.write("script/specs-rules/guards.toml",
+                   f"[[guards.{guards}]]\n" + files_body
+                   + (head + single_body if single_file.endswith("guards.toml") else ""))
+        if single_body and not single_file.endswith("guards.toml"):
+            self.write(single_file, single_body)
+
+    # 两步：① 清单与收集结果逐项相等；② 同一份清单不得在别处再列一遍。
+    # 两步都写在这里，与现场的 `guards.toml` 同形（只换清单取值与规则数据落点）。
+    _COVER_RULE = (
+        'kind = "corpus_ownership"\n'
+        'corpus = "adoc"\n'
+        'exclude = ["CHANGELOG.adoc"]\n'
+        '[guards.check_guard_manifest.manifest]\n'
+        'POINTER_SCAN_FILES = ["_fixture_manifest", "specs-project-maintainer/guards.adoc"]\n'
+        'message = "清单 {name} 不一致：多 {stale}、少 {missing}"\n'
+        '\n'
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "manifest_single_owner"\n'
+        'guards_files = ["script/specs-rules/guards.toml"]\n'
+        'message = "清单 {name} 在 {where} 被再列了一遍"\n'
+        '\n'
+        # ③ 写法口径那两步（应然两组 + 不得写成提醒）：夹具里也得在，否则"改回提醒"
+        # 与"抽掉应然那几句"两类反例都无从命中（缺这两步时它们静默全绿）。
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "file_groups"\n'
+        'file = "specs-project-maintainer/guards.adoc"\n'
+        'message = "缺写法口径：{missing}"\n'
+        'groups = [\n'
+        '    ["清单只允许一处", ["**覆盖面清单只允许一处**", "`GUARD_MANIFEST_FILES`",\n'
+        '                      "取值由收集规则现算"], "缺则读者默认它仍是一串手写字面量"],\n'
+        '    ["不得写成提醒", ["**清单有两个载体**", "单靠现算就够"],\n'
+        '                  "缺则解法被写成一句提醒——那正是失效的来源"],\n'
+        ']\n'
+        '\n'
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "file_forbidden"\n'
+        'file = "specs-project-maintainer/guards.adoc"\n'
+        'forbidden = ["两处都要改", "记得改两处"]\n'
+        'message = "把清单解法写回了「{hit}」式的提醒"\n')
+
+    def test_manifest_covers_all_adoc_passes(self):
+        # 正例：清单从收集规则现算 → 与"全部 .adoc（历史留痕除外）"逐项相等
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self.write("CHANGELOG.adoc", "= 变更\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc"])
+        cm.check_guard_manifest()
+        self.assertNotIn("覆盖面清单", self.error_texts())
+
+    def test_manifest_missing_entry_reports(self):
+        # 反例：清单没覆盖到某份 `.adoc`（＝新增文件没进核对面）——那份文件永远不被扫
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self.write("specs/general/two.adoc", "= 乙\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc"])
+        cm.check_guard_manifest()
+        self.assertIn("two.adoc", self.error_texts())
+
+    def test_manifest_stale_entry_reports(self):
+        # 反例：清单里列着一份不存在的文件（改名后忘了同步）——指向的落点已不在
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc",
+                            "specs/general/gone.adoc"])
+        cm.check_guard_manifest()
+        self.assertIn("gone.adoc", self.error_texts())
+
+    def test_manifest_listed_again_elsewhere_reports(self):
+        # 反例：同一份清单在 `guards_files` **点名的那份**规则数据里又列了一遍（`files` 就地
+        # 列着）——两处各维护一份，新增文件只进得去一处，另一处静默漏扫。
+        # 那句 `files` 故意不带 `[[guards.X]]` 头：表头漏写一行时步骤会挂到上一道防线名下，
+        # 按合并结果看它本来就在，只有按来源文件读才认得回来。
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE,
+            'kind = "exists"\n'
+            'files = ["specs/general/one.adoc", "POINTER_SCAN_FILES"]\n'
+            'message = "缺 {file}"\n',
+            # 另起一张表头：同一张表里再写一遍 `message` 直接被 TOML 拒（"Cannot overwrite a value"）
+            head="[[guards.check_pointer_no_verbatim_guard]]\n")
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertIn("再列了一遍", self.error_texts())
+
+    def test_manifest_listed_again_in_unnamed_file_not_checked(self):
+        # 边界：**没被 `guards_files` 点名**的规则数据不在这条判据的核对范围内——判据核的是
+        # "被点名的那一份里不得再列一遍"，不是"全仓库任何地方都不得再列"。
+        # 两份规则数据都不进 `[[guards.X]]` 头（工序上它们是"漏写表头"的那一格），
+        # 故只在各自文件里按来源认回。
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE.replace('"script/specs-rules/guards.toml"',
+                                     '"script/specs-rules/fixture-unnamed.toml"'))
+        self.write("script/specs-rules/fixture-unnamed.toml",
+                   'kind = "exists"\n'
+                   'files = ["POINTER_SCAN_FILES"]\n'
+                   'message = "缺 {file}"\n')
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertNotIn("再列了一遍", self.error_texts())
+
+    # 覆盖面清单的**措辞形态**也是本条的一部分：解法是"清单只有一个载体 + 单靠现算就够"，
+    # 不是"提醒人两处都要改"——后者正是失效的来源（靠人记得，就一定会漏），而写成提醒后
+    # 读者会以为仍有两处要维护、下一轮照样只改一处。
+    # 登记处那一行同样要核：清单纯数据无处可读，"这道防线在核什么"只能由它的登记行承载，
+    # 指向一份不读它的规则数据时，读者顺着指过去什么也看不到。
+
+    def _guards_adoc(self, name="POINTER_SCAN_FILES"):
+        """防线清单夹具：**清单名由本类现给**——夹具里清单叫什么由 `GUARD_MANIFEST_FILES`
+        决定，写死一个名字会让"登记处指对了没"这条判据去核一份与夹具无关的清单。
+
+        正文按现场的形态写（应然两组 + 不得写成提醒），两处反例用例各自替换其中一句。
+        """
+        return ("= 机械防线清单\n\n"
+                "| 序号 | 防线 | 钉住什么\n\n"
+                "| 19 | `check_guard_manifest` | 防线清单与删除记账。**覆盖面清单只允许一处**"
+                "（`script/check_specs.py` 的 `GUARD_MANIFEST_FILES`，" f"`{name}` 取值由收集规则现算）："
+                "这条判据要治的形态是**清单有两个载体**、单靠现算就够，"
+                "另一步专门核「没有第二个载体」。\n")
+
+    @property
+    def _GUARDS_ADOC(self):
+        return self._guards_adoc()
+
+    def _enable_covers(self, guards_adoc_enabled=True):
+        """打开覆盖面那两步（`_COVER_RULE`）与它所需的夹具账。
+
+        清单取值按夹具里**真实存在的 `.adoc`** 现给：`guards.adoc` 是本组用例要改的那一份，
+        漏它在清单里时 `corpus_ownership` 会先报"清单少一项"、把本组真正要核的那句盖过去。
+        """
+        self._write_valid()
+        if guards_adoc_enabled:
+            self.write("specs-project-maintainer/guards.adoc", self._GUARDS_ADOC)
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._cover_manifest()
+
+    def _cover_manifest(self):
+        """清单取值按**此刻夹具里存在的全部 `.adoc`** 现给。
+
+        本组用例还会重写 `guards.adoc`（要改的正是它）：清单与收集结果都是那一刻的事实，
+        故每次改写之后都要再给一次——否则 `corpus_ownership` 会先报"清单少一项"、
+        把本组要核的那句盖过去。
+        """
+        self._set_manifest([f for f in cm.collect_adoc_files()
+                            if f not in cm.HISTORICAL_FILES])
+
+    def test_ownership_note_uses_single_carrier_wording(self):
+        # 反例：成因改回"提醒人两处都要改"——解法被写成了动作清单，下一轮照样只改一处
+        self._enable_covers()
+        self.write("specs-project-maintainer/guards.adoc",
+                   self._GUARDS_ADOC.replace(
+                       "这条判据要治的形态是**清单有两个载体**、单靠现算就够",
+                       "这条判据要治的形态是记得两处都要改"))
+        self._cover_manifest()
+        cm.check_guard_manifest()
+        self.assertIn("两处都要改", self.error_texts())
+
+    def test_ownership_note_keeps_single_carrier_claim(self):
+        # 反例：登记行把"清单只允许一处"整句抽掉——读者默认仍有两处要维护
+        self._enable_covers()
+        self.write("specs-project-maintainer/guards.adoc",
+                   self._GUARDS_ADOC.replace("**覆盖面清单只允许一处**", "覆盖面清单见脚本"))
+        self._cover_manifest()
+        cm.check_guard_manifest()
+        self.assertIn("覆盖面清单只允许一处", self.error_texts())
+
+    def test_manifest_pointer_must_resolve(self):
+        # 反例：登记处指向一份不存在的文件——报错时给出的落点读不到任何东西
+        self._enable_covers()
+        self._write_manifest_rules(
+            self._COVER_RULE.replace('"specs-project-maintainer/guards.adoc"',
+                                     '"specs-project-maintainer/gone.adoc"'))
+        self._cover_manifest()
+        cm.check_guard_manifest()
+        self.assertIn("gone.adoc", self.error_texts())
+
+    def test_manifest_single_owner_passes_on_named_reference(self):
+        # 正例：规则数据按名引用（`files_from_manifest`）即不是"又列一份"
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE +
+            '[[guards.check_pointer_no_verbatim_guard]]\n'
+            'kind = "pointer_no_verbatim"\n'
+            'files_from_manifest = "POINTER_SCAN_FILES"\n')
+        self._set_manifest(["specs/general/one.adoc"])
+        cm.check_guard_manifest()
+        self.assertNotIn("再列了一遍", self.error_texts())
 
     def test_wiring_duplicate_registration_reports(self):
         # 反例⑤（本轮实测失效）：同一道防线在 `CHECKS` 序列里**登记两次**——

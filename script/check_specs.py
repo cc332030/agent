@@ -510,6 +510,7 @@ import re
 import shutil
 import sys
 import subprocess
+import tomllib
 
 # 兼容 Windows GBK 等非 UTF-8 终端，统一按 UTF-8 输出
 try:
@@ -577,6 +578,33 @@ class RulesContext:
         规则数据若自列一份维护根，改一处必漏另一处，两处会各自漂移。
         """
         return collect_adoc_files()
+
+    def manifest(self, name, getter=None):
+        """取覆盖面清单的现值；清单未声明、或登记的取值函数取不到时返回 `None`。
+
+        清单**只有一处**：本文件 `GUARD_MANIFEST_FILES` 的值指向一个**现算函数**，规则数据
+        只按名引用——两处各写一份时，新增一个文件就只进了其中一处（另一处静默漏扫）。
+        `getter` 给了就按它取（规则数据的两段式声明里写着函数名），否则用登记表里那一个；
+        取不到时返回 `None` 而**不是空清单**——空清单会被一步之差的判断读成"覆盖面对得上"。
+        """
+        entry = GUARD_MANIFEST_FILES.get(name)
+        fn_name = getter or (entry[0] if entry else None)
+        fn = globals().get(fn_name) if fn_name else None
+        return fn() if callable(fn) else None
+
+    def manifests(self):
+        """本脚本声明的全部覆盖面清单名（`GUARD_MANIFEST_FILES` 的键）。
+
+        "清单在别处又被列了一遍"这一步要用它：清单名只在这里一处声明。
+        """
+        return list(GUARD_MANIFEST_FILES)
+
+    def corpus(self, kind):
+        """取某个**收集规则**算出来的全部文件（目前只有 `.adoc` 这一种）。
+
+        与 `collect_adoc_files` 同一实现：规则数据不另列一份"维护根"，改一处必漏另一处。
+        """
+        return collect_adoc_files() if kind == "adoc" else None
 
     def prompt_files(self):
         return [os.path.relpath(f, REPO_ROOT).replace(os.sep, "/")
@@ -2038,97 +2066,29 @@ def check_duplicate_scan_guard():
     phase_done()
 
 
-# 『自称回指的行不得复述取值』的核对面（与 `script/specs-rules/duplicate.toml` 的
-# `check_pointer_no_verbatim_guard.files` **逐项同源**）：用例按这一常量建夹具，故
-# "新增一个落点却忘了同步用例"不会静默过去（用例会因"文件缺失"报红，逼出同步动作）。
-# **取维护范围内的全部 .adoc**（历史留痕 `CHANGELOG.adoc` 除外，与 `duplicate_scan`
-# 的覆盖面同源）：只列"当前已知会自称回指的文件"时，未列入的文件**永远不被扫描**——
-# 防线静默少扫一层，读者却以为已经覆盖（本轮实测：原清单 21 个文件，
-# `specs/general/coding.adoc` 这类从未被扫过）。
-POINTER_SCAN_FILES = (
-    "AGENTS.adoc",
-    "AGENTS_COMMON.adoc",
-    "PROMPTS.adoc",
-    "PUBLIC.adoc",
-    "README.adoc",
-    "library/README.adoc",
-    "library/adoption.adoc",
-    "library/corrections.adoc",
-    "library/mirrors.adoc",
-    "library/performance.adoc",
-    "library/quality.adoc",
-    "library/sources.adoc",
-    "library/throughput.adoc",
-    "library/usage.adoc",
-    "prompts/refactor.adoc",
-    "prompts/review.adoc",
-    "prompts/spec-refine.adoc",
-    "specs-project-maintainer/context.adoc",
-    "specs-project-maintainer/guards.adoc",
-    "specs-project-maintainer/ledger/README.adoc",
-    "specs-project-maintainer/ledger/generic-single-value-rows.adoc",
-    "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
-    "specs-project-maintainer/ledger/review-compact-form-sizing.adoc",
-    "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
-    "specs-project-maintainer/priority.adoc",
-    "specs-project-maintainer/skills/spec-change-verify.adoc",
-    "specs-project-maintainer/skills/spec-collection-refactor.adoc",
-    "specs-project-maintainer/spec-lifecycle.adoc",
-    "specs-project-maintainer/verify.adoc",
-    "specs/core/CORE.adoc",
-    "specs/core/execution.adoc",
-    "specs/general/changelog.adoc",
-    "specs/general/ci-cd.adoc",
-    "specs/general/coding.adoc",
-    "specs/general/collab.adoc",
-    "specs/general/context.adoc",
-    "specs/general/dependency.adoc",
-    "specs/general/desensitize.adoc",
-    "specs/general/doc-design.adoc",
-    "specs/general/doc-lifecycle.adoc",
-    "specs/general/doc-module.adoc",
-    "specs/general/doc-tool.adoc",
-    "specs/general/doc.adoc",
-    "specs/general/encoding.adoc",
-    "specs/general/entry-doc.adoc",
-    "specs/general/execution-detail.adoc",
-    "specs/general/feedback.adoc",
-    "specs/general/git.adoc",
-    "specs/general/planning.adoc",
-    "specs/general/review.adoc",
-    "specs/general/scope.adoc",
-    "specs/general/script.adoc",
-    "specs/general/security.adoc",
-    "specs/general/self-check.adoc",
-    "specs/general/source.adoc",
-    "specs/general/sql.adoc",
-    "specs/general/terminology.adoc",
-    "specs/general/testing.adoc",
-    "specs/general/ui-feedback.adoc",
-    "specs/general/ui-patterns.adoc",
-    "specs/general/ui-styles.adoc",
-    "specs/general/ui-targets.adoc",
-    "specs/general/ui-tokens.adoc",
-    "specs/general/ui-voice.adoc",
-    "specs/general/ui.adoc",
-    "specs/general/verify.adoc",
-    "specs/general/version-control.adoc",
-    "specs/platform/cnb.adoc",
-    "specs/stack/bash.adoc",
-    "specs/stack/batch.adoc",
-    "specs/stack/build-tool-migration.adoc",
-    "specs/stack/gradle.adoc",
-    "specs/stack/java-object.adoc",
-    "specs/stack/java-syntax.adoc",
-    "specs/stack/java-testing.adoc",
-    "specs/stack/java.adoc",
-    "specs/stack/maven.adoc",
-    "specs/stack/powershell.adoc",
-    "specs/stack/python.adoc",
-    "specs/stack/spring.adoc",
-    "specs/stack/web.adoc",
-    "specs/stack/windows.adoc",
-)
+# 覆盖面清单（**"哪些文件算维护范围"这类清单只放这一处**）：值＝`(取清单的函数名, 登记该清单的那一行)`。
+#
+# 为什么放进这里：这类清单原先散在脚本常量与规则数据里**各一份**，新增一份 `.adoc` 时只有
+# 记得改的那一处被改、另一处**静默漏扫**——防线照样全绿，读者以为已覆盖（本仓库实证过多次）。
+# 现在清单本身只在这里一处，**覆盖全部 `.adoc`** 这件事由规则数据的 `corpus_ownership` 步骤核
+# （`script/specs-rules/guards.toml`）：它把本清单与收集规则算出来的结果逐项比对，**新文件
+# 不登记即报红**——同一条判据不再各写一份。
+# 键名沿用 `POINTER_SCAN_FILES`：报错文案、台账与历史记录都按这个名字指它（改名只会让
+# 旧记录无处对上），而它现在指向的函数一律**现算**、不再是一串手写字面量。
+# 第二段是**登记处**（防线清单里"这件事由哪一道防线核"的那一行）——清单纯数据无处可读，
+# 读者要能顺着它读到"这道防线在核什么"，而不是去推断。
+GUARD_MANIFEST_FILES = {
+    "POINTER_SCAN_FILES": ("_pointer_scan_files", "specs-project-maintainer/guards.adoc"),
+}
+
+
+def _pointer_scan_files():
+    """『自称回指的行不得复述取值』的核对面：**维护范围内的全部 `.adoc`**（历史留痕除外）。
+
+    收集规则与语法编译段同源（`collect_adoc_files`），故"新增一个文件忘了登记"不可能发生——
+    它自动就在清单里；反过来"清单独有一份、现场缺文件"由 `corpus_ownership` 报红。
+    """
+    return [f for f in collect_adoc_files() if f not in HISTORICAL_FILES]
 
 
 def check_pointer_no_verbatim_guard():
@@ -5544,6 +5504,12 @@ def check_guard_manifest():
     **台账点名的防线名**（必须真实存在且真的会被调用）。数字变了就得改基线——
     改基线这个动作本身让"删了什么"在 diff 里可见。
     """
+    # 本道含"跨规则数据核同一批数据"的步骤：缓存按**内容摘要**做键，而同一批内容可能来自
+    # 另一个已删除的夹具根（临时目录下的同一组文件内容一致，摘要也就一致）——那一份的路径
+    # 已经不存在，读回来是空。故每次跑之前作废合并缓存，按当前根重读。
+    rules_engine._MERGED_CACHE.clear()
+    global RULES
+    RULES = None
     phase("防线清单与删除记账检查")
     src = _read_script_src("script/check_specs.py")
     if src is None:
@@ -5551,6 +5517,11 @@ def check_guard_manifest():
             "script/check_specs.py")
         phase_done()
         return
+
+    # 覆盖面清单的**唯一落点**：清单与实际收集结果逐项核（见规则数据 `guards.toml`），
+    # 同一份清单在别处再列一遍即报红——两处各维护一份时，新增文件只进得去一处、
+    # 另一处静默漏扫，而防线全绿。
+    run_rule_guard("check_guard_manifest")
 
     wiring = _guard_wiring_count(src)
     if wiring < GUARD_WIRING_BASELINE:
@@ -10227,7 +10198,7 @@ MAVEN_PARALLEL_PROMPT_ANCHORS = _RULES_TOKENS["MAVEN_PARALLEL_PROMPT_ANCHORS"]
 MAVEN_PARALLEL_ANCHOR_FLOOR = 30
 # 『Maven 迁出的一跳引用』防线的核对项：**每一对**（源＝Maven，目标＝某构建工具）都要有。
 # 清单是纯数据、必须随动维护：新增一个源/目标构建工具时同步补一项，否则新的那一对
-# 无人核（同 `POINTER_SCAN_FILES` 的教训——只列"当前已知的那几个"时，未列入者永远是盲区）。
+# 无人核（同「覆盖面清单从收集规则现算」的教训——只列"当前已知的那几个"时，未列入者永远是盲区）。
 _MAVEN_MIGRATION_CROSSREF_ANCHORS = _RULES_TOKENS["MAVEN_MIGRATION_CROSSREF_ANCHORS"]
 MAVEN_PARALLEL_PROMPT_ANCHOR_FLOOR = 11
 # 『Maven 跳过测试』防线：三层意图各一个开关（`skipTests` / `skipITs` / `maven.test.skip`）。

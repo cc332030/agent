@@ -114,99 +114,14 @@ message = "逐字重复：{a}:{line_a} 与 {b}:{line_b} 重合 {overlap} 字—�
 # 判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」。
 [[guards.check_pointer_no_verbatim_guard]]
 kind = "pointer_no_verbatim"
-# 参与核对的落点＝**维护范围内的全部 .adoc**（与 `duplicate_scan` 的覆盖面同源：
-# 入口 + `specs/` + 提示词 + 维护方自查层 + 图书馆；历史留痕 `CHANGELOG.adoc` 除外）。
+# 参与核对的落点＝**维护范围内的全部 .adoc**（历史留痕 `CHANGELOG.adoc` 除外）。
 #
-# **为什么把落点写全、而不是只列"当前已知会自称回指的那些文件"**：判据是"自称回指的行
-# 不得复述取值"，**任何一个文件都可能下一个改动里写出这样一行**。按已知清单列的代价是
-# 那一层永远处于盲区——加一个文件进清单要改两处（脚本常量 + 本文件），而漏掉时防线**静默**
-# 少扫一层：本轮实证，原清单只列 21 个文件，`specs/general/coding.adoc`、
-# `specs/general/testing.adoc`、`prompts/*.adoc` 等**从来就没被扫过**。
-# 全量扫描的代价只是一次正则扫描（毫秒级），故取全量。
-files = [
-    "AGENTS.adoc",
-    "AGENTS_COMMON.adoc",
-    "PROMPTS.adoc",
-    "PUBLIC.adoc",
-    "README.adoc",
-    "library/README.adoc",
-    "library/adoption.adoc",
-    "library/corrections.adoc",
-    "library/mirrors.adoc",
-    "library/performance.adoc",
-    "library/quality.adoc",
-    "library/sources.adoc",
-    "library/throughput.adoc",
-    "library/usage.adoc",
-    "prompts/refactor.adoc",
-    "prompts/review.adoc",
-    "prompts/spec-refine.adoc",
-    "specs-project-maintainer/context.adoc",
-    "specs-project-maintainer/guards.adoc",
-    "specs-project-maintainer/ledger/README.adoc",
-    "specs-project-maintainer/ledger/generic-single-value-rows.adoc",
-    "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
-    "specs-project-maintainer/ledger/review-compact-form-sizing.adoc",
-    "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
-    "specs-project-maintainer/priority.adoc",
-    "specs-project-maintainer/skills/spec-change-verify.adoc",
-    "specs-project-maintainer/skills/spec-collection-refactor.adoc",
-    "specs-project-maintainer/spec-lifecycle.adoc",
-    "specs-project-maintainer/verify.adoc",
-    "specs/core/CORE.adoc",
-    "specs/core/execution.adoc",
-    "specs/general/changelog.adoc",
-    "specs/general/ci-cd.adoc",
-    "specs/general/coding.adoc",
-    "specs/general/collab.adoc",
-    "specs/general/context.adoc",
-    "specs/general/dependency.adoc",
-    "specs/general/desensitize.adoc",
-    "specs/general/doc-design.adoc",
-    "specs/general/doc-lifecycle.adoc",
-    "specs/general/doc-module.adoc",
-    "specs/general/doc-tool.adoc",
-    "specs/general/doc.adoc",
-    "specs/general/encoding.adoc",
-    "specs/general/entry-doc.adoc",
-    "specs/general/execution-detail.adoc",
-    "specs/general/feedback.adoc",
-    "specs/general/git.adoc",
-    "specs/general/planning.adoc",
-    "specs/general/review.adoc",
-    "specs/general/scope.adoc",
-    "specs/general/script.adoc",
-    "specs/general/security.adoc",
-    "specs/general/self-check.adoc",
-    "specs/general/source.adoc",
-    "specs/general/sql.adoc",
-    "specs/general/terminology.adoc",
-    "specs/general/testing.adoc",
-    "specs/general/ui-feedback.adoc",
-    "specs/general/ui-patterns.adoc",
-    "specs/general/ui-styles.adoc",
-    "specs/general/ui-targets.adoc",
-    "specs/general/ui-tokens.adoc",
-    "specs/general/ui-voice.adoc",
-    "specs/general/ui.adoc",
-    "specs/general/verify.adoc",
-    "specs/general/version-control.adoc",
-    "specs/platform/cnb.adoc",
-    "specs/stack/bash.adoc",
-    "specs/stack/batch.adoc",
-    "specs/stack/build-tool-migration.adoc",
-    "specs/stack/gradle.adoc",
-    "specs/stack/java-object.adoc",
-    "specs/stack/java-syntax.adoc",
-    "specs/stack/java-testing.adoc",
-    "specs/stack/java.adoc",
-    "specs/stack/maven.adoc",
-    "specs/stack/powershell.adoc",
-    "specs/stack/python.adoc",
-    "specs/stack/spring.adoc",
-    "specs/stack/web.adoc",
-    "specs/stack/windows.adoc",
-]
+# **落点不在这里列**：判据是"自称回指的行不得复述取值"，**任何一个文件都可能下一个改动里
+# 写出这样一行**，故它按**收集规则现算**；清单只有一处（`script/check_specs.py` 的
+# `GUARD_MANIFEST_FILES`），这里**按名引用**——两份清单并存时，新增一个 `.adoc` 只进得去
+# 一处、另一处**静默漏扫**（原实现正是这样：清单 21 个文件，`specs/general/coding.adoc`、
+# `prompts/*.adoc` 等**从来就没被扫过**，而防线全绿）。
+files_from_manifest = "POINTER_SCAN_FILES"
 # 阈值取 20：本轮实证的漏网形态是 21 字（`library/mirrors.adoc` 里"每级先实测可用、不跳级、
 # 不覆盖既有配置"），低于 20 的多为"文件基名/节名"这类本就该出现的词。
 #

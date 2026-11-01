@@ -112,6 +112,19 @@ DEFAULTS = {
     "dup_message": "{a}:{line_a} 与 {b}:{line_b} 逐字重合 {overlap} 字：`{frag}`",
     "dup_missing_files_message": "逐字重复扫描的落点不足（{file}）——少于两个可核对文档时该防线空转",
     "missing_files_message": "{file} 一份都取不到——落点整个缺失时该判据空转（不得当成'没有内容就是通过'）",
+    "missing_manifest_message": "取不到覆盖面清单 `{name}`（声明于 {where}）——清单缺失时这一步无从核对，"
+                                "不得当成通过",
+    "missing_corpus_message": "取不到收集规则 `{kind}` 的结果——覆盖面的对照面缺失时这一步无从核对，"
+                              "不得当成通过",
+    "corpus_mismatch_message": "覆盖面清单 `{name}`（声明于 {where}）与实际收集结果不一致："
+                               "多出 {stale}、缺少 {missing}——清单少一项即那份文件永远不被扫，"
+                               "多一项即指向不存在的文件",
+    "manifest_where_unread_message": "覆盖面清单 `{name}` 的登记处 {where} 并不提这份清单——"
+                                     "清单纯数据无处可读，读者只能靠登记行知道这道防线在核什么；"
+                                     "指过去的落点里连清单名都没有时，那一跳等于空指",
+    "manifest_duplicate_message": "清单 `{name}` 在 {where} 被再列了一遍——覆盖面清单只允许一处，"
+                                  "这里只该按名引用（两处各列一份时，新增文件只进得去一处、"
+                                  "另一处静默漏扫）",
 }
 
 
@@ -123,7 +136,7 @@ DEFAULTS = {
 # 重合的片段是什么、在第几行"——写错的占位符会原样留在报错正文里，故同样在加载期拦住。
 # `a`/`b`/`line_a`/`line_b` 供 `duplicate_scan` 报告"哪两处、各自在第几行"。
 PLACEHOLDERS = ("file", "missing", "desc", "hit", "cite", "ref", "overlap", "frag", "line",
-                "a", "b", "line_a", "line_b")
+                "a", "b", "line_a", "line_b", "name", "where", "stale", "kind")
 
 
 def _fill(msg, **kw):
@@ -765,6 +778,78 @@ def _step_dispatcher_no_verbatim(rules, step):
                         rel, lineno)
 
 
+def _step_corpus_ownership(rules, step):
+    """**覆盖面清单须与实际收集结果逐项相等**：清单替得了"按当前已知文件逐个列"，
+    但替不了"新文件自动进核对面"——故这一式核的是**清单内容对不对**（多一项 = 列了不存在
+    的文件，少一项 = 新文件永远不被扫）。收集规则只有一处实现，故"哪些文件算维护范围"
+    不在规则数据里另列一遍；"别处有没有再列一份"是 `manifest_single_owner` 的事。
+
+    为什么不做成 `kind="exists"` 的变体：那个 kind 只核"这几份文件在不在"，拿它当
+    "清单覆盖全部文件"的核对正是本步骤要治的那种形似——文件在不在与清单全不全，是两件事。
+
+    规则参数：`manifest`（清单名 → `[取清单的函数名, 登记该清单的规则数据]` 两段式声明，
+    表本身只存在于脚本侧一处）；`corpus`＝收集规则的种类（`"adoc"`）；`exclude`＝按定义
+    不参与的历史留痕文件。
+    """
+    ctx = rules.ctx
+    # 清单声明表里**只认两段式的值**（`[函数名, 登记处]`）：同一张表上还挂着 `message` 一类
+    # 文案键，按 `dict` 直接遍历会把它们当成清单名。
+    declared = {k: v for k, v in (step.get("manifest") or {}).items() if isinstance(v, list)}
+    for name, where in declared.items():
+        # 两段式＝`[脚本侧取值函数, 登记处]`：函数名**必须真的用上**，否则改了声明不生效
+        # （清单照旧解析，读者以为换了一层取值）。登记处只作报错落点与"指过去读得到"核对。
+        getter, where = (where[0], where[-1]) if where else (None, None)
+        entries = ctx.manifest(name, getter)
+        if entries is None:
+            rules.ctx.err(_msg(step, "missing_manifest_message").replace("{name}", name)
+                          .replace("{where}", where), where)
+            continue
+        # **登记处须真读得到**：清单纯数据无处可读，"这道防线在核什么"只由登记行承载；
+        # 指向一份不读它的文件时，读者顺着指过去什么也看不到（那份文件里连它的名字都没有）。
+        if where and (ctx.read(where) or "").find(name) < 0:
+            rules.ctx.err(_msg(step, "manifest_where_unread_message")
+                          .replace("{name}", name).replace("{where}", where), where)
+            continue
+        corpus = ctx.corpus(step.get("corpus", "adoc"))
+        if corpus is None:
+            rules.ctx.err(_msg(step, "missing_corpus_message")
+                          .replace("{kind}", step.get("corpus", "adoc")), where)
+            continue
+        excludes = set(step.get("exclude", []))
+        expected = sorted(set(corpus) - excludes)
+        listed = sorted(set(entries))
+        if listed == expected:
+            continue
+        stale = [f for f in listed if f not in expected]
+        missing = [f for f in expected if f not in listed]
+        rules.ctx.err(_msg(step, "corpus_mismatch_message").replace("{name}", name)
+                      .replace("{where}", where)
+                      .replace("{stale}", str(stale)).replace("{missing}", str(missing)),
+                      where)
+
+
+def _step_manifest_single_owner(rules, step):
+    """**覆盖面清单只允许一处**：`guards_files` 里不得有步骤把同一份清单再列一遍。
+
+    判据是"这份清单在别处也列着一份"（两处各维护一份时，新增文件只进得去一处、另一处
+    静默漏扫），不是"清单内容对不对"——后者由 `corpus_ownership` 核。
+    """
+    ctx = rules.ctx
+    names = set(ctx.manifests() or ())
+    for rel in step.get("guards_files", []):
+        # 核对对象是 `rel` **这一份规则数据自己的步骤**：它再列一遍同名清单，清单就有了第二个
+        # 载体、两份必然各自漂移。按**合并结果**遍历会让 `guards_files` 失去意义（任何一处再列
+        # 都报，点名的那份并不比别处更该核），也漏掉"表头写漏一行、步骤因此挂到上一道防线
+        # 名下"那一格——按合并结果看它本来就在，那一格要按文件读才看得见。
+        for other in rules.file_steps(rel):
+            for name in names:
+                if other.get("files_from_manifest") == name:
+                    continue
+                if name in (other.get("files") or []):
+                    ctx.err(_msg(step, "manifest_duplicate_message")
+                            .replace("{name}", name).replace("{where}", rel), rel)
+
+
 def _step_pointer_no_verbatim(rules, step):
     """**自称"回指"的行不得同时复述被指文件的取值**：对给定的行（默认：含回指标记的行），
     取出该行引用的规范文件的正文，做最长公共子串检测——超过阈值即报红。
@@ -789,6 +874,12 @@ def _step_pointer_no_verbatim(rules, step):
     """
     ctx = rules.ctx
     threshold = int(step.get("min_overlap", 20))
+    # 落点：`files`（就地列）或 `files_from_manifest`（按名取覆盖面清单，清单只有一处）。
+    # 后者是**唯一落点**的形态——两处各列一份时，新增一个文件只进得去一处、另一处静默漏扫。
+    files = step.get("files") or []
+    from_manifest = step.get("files_from_manifest")
+    if from_manifest:
+        files = list(files) + list(ctx.manifest(from_manifest) or [])
     markers = step.get("markers") or [
         "唯一落点", "不复述", "不重复", "不在此重述", "本处不重述", "不在此重复",
         "只给实测记录", "只给索引", "只留索引", "不再复述", "不列其条目",
@@ -816,7 +907,7 @@ def _step_pointer_no_verbatim(rules, step):
             sam_cache[path] = _build_sam(_spec_norm(path))
         return sam_cache[path]
 
-    for rel in step["files"]:
+    for rel in files:
         text = ctx.read(rel)
         if text is None:
             ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
@@ -1422,6 +1513,8 @@ KINDS = {
     "dispatcher_no_verbatim": _step_dispatcher_no_verbatim,
     "duplicate_scan": _step_duplicate_scan,
     "pointer_no_verbatim": _step_pointer_no_verbatim,
+    "corpus_ownership": _step_corpus_ownership,
+    "manifest_single_owner": _step_manifest_single_owner,
     "table_row_pipe": _step_table_row_pipe,
     "list_structure": _step_list_structure,
     "prose_mentions_generated": _step_prose_mentions,
@@ -1458,6 +1551,21 @@ class Rules:
 
     def guard_names(self):
         return sorted(self._guards)
+
+    def all_steps(self):
+        """全部防线的步骤（按防线名分组）——给"跨文件核同一批数据"的判据用。"""
+        return self._guards
+
+    def file_steps(self, rel: str) -> list:
+        """某个规则文件里的**全部步骤**（不按防线分组）。
+
+        给"这份规则数据自己有没有再列一遍"这类按文件核的判据用：合并结果不记来源时，
+        表头漏写一行会让那份文件的步骤挂到上一道防线名下，按来源（合并期写入的 `_file`）
+        读才认得回来。
+        """
+        return [step for steps in self._guards.values() if isinstance(steps, list)
+                for step in steps
+                if isinstance(step, dict) and step.get("_file") == rel]
 
     def steps(self, guard: str) -> list:
         if guard not in self._guards:
@@ -1594,7 +1702,13 @@ def _merge_file(name: str, data, merged: dict) -> None:
     """
     if not isinstance(data, dict):
         raise RulesError(f"规则文件 {name} 不是对象（顶层须为 `guards` / `tokens` 两张表）")
+    # 每个步骤带上**它来自哪份规则文件**：跨文件的判据（如"这份清单有没有在别处又列一遍"）
+    # 要按来源核，而合并结果本身不记来源。
     for key, value in data.get("guards", {}).items():
+        if isinstance(value, list):
+            for step in value:
+                if isinstance(step, dict):
+                    step.setdefault("_file", f"script/{RULES_DIR_NAME}/{name}")
         if key in merged["guards"]:
             raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了防线 `{key}`——"
                              "同一防线的规则只能有一处落点（第二处会让你改了其中一份、"
