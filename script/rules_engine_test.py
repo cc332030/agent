@@ -171,6 +171,34 @@ class TestRulesLoad(unittest.TestCase):
         self.assertTrue(re_.default_rules_spec("/x").endswith(re_.RULES_DIR_NAME))
 
 
+class TestGuardFallback(unittest.TestCase):
+    """『规则数据缺失不得静默空转』与夹具回落的分界（见 `check_specs.run_rule_guard`）。
+
+    为什么钉这一条：夹具常常只备本类要用的那几份规则文件，而规则集是**进程级**单例——
+    全量跑测试文件时，"夹具没备这一道"与"这道防线配置缺失"返回值上分不开，各道防线的
+    反例用例被别类的夹具带成假红（本仓库实测：102 个用例报"规则配置里没有防线"）。
+    回落只放宽"夹具那几份不全"，不放宽"配置缺失"：少了哪一道照样报错。
+    """
+
+    GUARD = "check_alpha_guard"
+
+    def _rules(self, guards):
+        return re_.Rules({"guards": guards}, FakeCtx())
+
+    def test_guard_absent_raises(self):
+        # 这一半不变：规则集里没有这道 → 报错（回落不得把它变成"跳过"）
+        with self.assertRaises(re_.RulesError):
+            self._rules({"check_beta_guard": []}).run(self.GUARD)
+
+    def test_guard_present_runs_its_own_steps(self):
+        # 另一半：这道在规则集里时，跑的是**它自己**的步骤——回落取到的必须仍是这一道
+        ctx = FakeCtx({"a.adoc": "正文"})
+        rules = re_.Rules({"guards": {self.GUARD: [
+            {"kind": "exists", "files": ["a.adoc"]}]}}, ctx)
+        rules.run(self.GUARD)
+        self.assertEqual(ctx.errors, [])
+
+
 class TestFileGroups(unittest.TestCase):
     def _rules_with(self, groups, ctx, **kw):
         step = {"kind": "file_groups", "file": "a.adoc", "groups": groups}

@@ -64,6 +64,7 @@
   锚点若被拆行或改写措辞，机械侧判不出"语义仍在"，那属语义复核的范围。
 """
 
+import copy
 import functools
 import hashlib
 import os
@@ -1671,13 +1672,11 @@ def load_rule_files(spec) -> dict:
     key = tuple(sorted(_digest(read_bytes(path)) for path in paths))
     if key not in _MERGED_CACHE:
         _MERGED_CACHE[key] = _merge_all(paths)
-    # 浅拷贝（`guards` / `tokens` 两张新字典）：引擎运行期要给步骤注入 `_guard`（就地写），
-    # 步骤表因此**每道防线各一份**——一份规则被多道防线取用时，改这份不会串到那份。
-    merged = _MERGED_CACHE[key]
-    out = {k: dict(v) if isinstance(v, dict) else v for k, v in merged.items()}
-    out["guards"] = {name: [dict(step) if isinstance(step, dict) else step for step in steps]
-                     for name, steps in merged["guards"].items()}
-    return out
+    # 每次返回**独立的一份**：引擎运行期要给步骤注入 `_guard`（就地写）、并可能就地把
+    # 分组切成两段（`groups` 是嵌套列表）。原先只浅拷贝到"步骤这一层"是不够的——`groups`
+    # 仍是缓存里那一份，于是两次加载共用同一批嵌套列表（本仓库实测：`groups[0][0]` 被
+    # 由"组名"改成了 bullet 前缀，一整批按 bullet 核的防线静默不报）。
+    return copy.deepcopy(_MERGED_CACHE[key])
 
 
 def _merge_all(paths) -> dict:

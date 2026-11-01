@@ -1434,15 +1434,16 @@ class TestYamlStringQuoteGuard(CheckSpecsTestCase):
         self.assertIn("以数字开头的字符串", self.error_texts())
 
     def test_rules_file_missing_reports(self):
-        # 反例5：规则数据文件缺失 -> 判据措辞的唯一来源丢失
-        # 夹具里备一个不含本防线的规则目录（否则落点回落到脚本自己那一份、读得到真规则）
+        # 反例5：规则数据整体缺失 -> 判据措辞的唯一来源丢失
+        # 夹具里备一个**空**的规则目录（落点随夹具走、不再回落到脚本自己那一份）：
+        # 此时"这道防线的配置缺失"才是真的缺失，必须在报错里点名
         self.write_real_file("specs/general/encoding.adoc")
-        self.write("script/specs-rules/other.toml",
-                   '[[guards.check_refs_exist]]\nfile = "x"\nkind = "file_groups"\n'
-                   'groups = [["g", ["t"], "w"]]\n')
+        self.write("script/specs-rules/other.toml", "")
         self._reset_rules()
         cm.check_yaml_string_quote_guard()
-        self.assertIn("check_yaml_string_quote_guard", self.error_texts())
+        # 报的是"规则数据整体缺失"（而不是"这条判据全绿"）——措辞的唯一来源丢了就得报红
+        self.assertIn("规则数据", self.error_texts())
+        self.assertIn("script/specs-rules", self.error_texts())
 
     def test_dropped_escape_quote_rule_reports(self):
         # 反例6：双引号优先/不混用的要点被抽
@@ -17756,6 +17757,48 @@ class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
         self._write_all(entry="= 项目规范\n* 别的\n")
         cm.check_after_change_review_guard()
         self.assertIn("AGENTS.adoc", self.error_texts())
+
+
+class TestRuleGuardsRegistryFallback(CheckSpecsTestCase):
+    """夹具只备了部分规则数据时的回落（见 `check_specs._guard_rules_for`）。
+
+    夹具里没有这一道、而**现场规则数据里有**时，判据按现场那一份跑（否则全量跑测试文件
+    时，各道防线的反例用例被别类的夹具带成假红：本仓库实测 102 个用例）；名字在现场名单里
+    也找不到时不回落，照旧报"配置里没有防线"（配置缺失不得静默跳过）。点名的反例（"规则
+    数据整体缺失"）由 `TestYamlStringQuoteGuard` 钉住——那里供的是**空**规则目录，
+    `RULES` 起不来，走的是另一条分支。
+    """
+
+    GUARD = ""   # 现场规则数据里的任意一道（setUp 取）
+
+    def setUp(self):
+        super().setUp()
+        self.GUARD = sorted(cm._site_guards())[0]
+
+    def test_fixture_without_guard_falls_back_to_site(self):
+        # 夹具里只有**另一道**（不是它自己的一整套）→ 本道按现场那一份跑
+        cm.RULES = cm.rules_engine.Rules(
+            {"guards": {"check_zzz_guard": []}}, cm.RulesContext())
+        rules = cm._guard_rules_for(self.GUARD)
+        self.assertIn(self.GUARD, rules.guard_names())
+        self.assertNotIn("check_zzz_guard", rules.guard_names())
+
+    def test_unknown_guard_is_not_papered_over(self):
+        # 现场也没有这道 → 不回落，照旧交给引擎报"配置里没有防线"
+        cm.RULES = cm.rules_engine.Rules(
+            {"guards": {"check_zzz_guard": []}}, cm.RulesContext())
+        rules = cm._guard_rules_for("check_no_such_guard_at_all")
+        self.assertNotIn("check_no_such_guard_at_all", rules.guard_names())
+
+    def test_fallback_steps_are_not_shared(self):
+        # 回落取到的步骤与夹具那一份**不共享**（引擎运行期会就地写 `_guard`）
+        cm.RULES = cm.rules_engine.Rules(
+            {"guards": {"check_zzz_guard": [{"kind": "exists", "files": []}]}},
+            cm.RulesContext())
+        first = cm._guard_rules_for(self.GUARD).steps(self.GUARD)
+        second = cm._guard_rules_for(self.GUARD).steps(self.GUARD)
+        self.assertIsNot(first[0], second[0])
+
 
 class TestCheckCleanSubagentReviewGuard(CheckSpecsTestCase):
     """钉住『review 时的干净子 agent 复核』防线（用户提出）。
