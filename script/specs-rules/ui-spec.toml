@@ -6,10 +6,10 @@
 # 选择口径）、`specs/general/ui-styles.adoc`（风格族清单与必写项）、`specs/general/ui-voice.adoc`
 # （动作名与文案词表）。
 #
-# **新增 .adoc 须同源登记三处**：本道只核「模板是否回指判据本体」，不核「模板是否被扫描面
-# 收录」——扫描面（`check_specs.py` 的 `POINTER_SCAN_FILES` 与 `duplicate.toml` 的 `files`）
-# 漏登记时本道全绿、那两份文件却永不参与回指与重复检查（本仓库实证：`ui-styles.adoc` 与
-# `ui-voice.adoc` 首版即漏登记，由 `test_scan_files_cover_all_adoc` 报出）。
+# **扫描面不用登记**：本道只核「模板是否回指判据本体」，「模板是否被扫描面收录」由覆盖面
+# 清单自己保证——`check_specs.py` 的 `GUARD_MANIFEST_FILES` 里的清单**从收集规则现算**
+# （维护范围内全部 `.adoc`），新文件自动在里面，没有"漏登记"这一种可能（本仓库实证过：
+# `ui-styles.adoc` 与 `ui-voice.adoc` 首版漏掉，正是当初按清单手工列落点的后果）。
 #
 # 本条防的失效：**外观与交互没有可执行的测试**——同一产品各端各写一套，颜色按色相命名、
 # 层级靠透明度、字号逐页微调、触摸端拿桌面端的控件高度直接套、关键入口只在悬停时出现；
