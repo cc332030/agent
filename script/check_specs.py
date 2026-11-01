@@ -453,17 +453,19 @@
      原先这里留了『维护这套规范集合自身的对外变更』这个例外，它正是执行者自认该记一条的口子，
      已撤。由 `check_changelog_timing_prompt_guard` 钉住；「这次到底有没有得到用户声明」属
      运行时事实，交人/子 agent 复核。
- 119. 已有 PR 时不得私开 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，不允许私开 pr
-     （有 pr 的情况下）」——**已有承载本次事项的合并请求时，改动一律做在该 PR 的源分支上**，
-     开新 PR 属**派发者**的动作、须用户显式允许；同一处改动也不得同时落在两个 PR 上。
-     失效形态（本仓库实证）：执行者在当前 PR 之外发现别的问题就自己另开 PR + 分支，同一批工作
-     被拆成两处、本 PR 上的事项停在半路。判据本体落在平台层 `specs/platform/cnb.adoc`
-     「分支与合并请求统一」的**同节条**（分支策略的同一条，另立一节即并存两套说法），
-     提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被复制到未知项目执行）。
-     边界两句一起写：本条**只限定承载位置**、不构成「不动手」的许可；**原 PR 已关闭**时另开
-     属**承继、不属私开**。规则数据在 `script/specs-rules/cnb.toml`。由 `check_pr_scope_guard`
-     钉住；「哪个 PR 才算承载本次事项」「用户有没有真的允许」属语义判断与运行时事实，
-     交人/子 agent 复核。
+ 119. 一个 issue 一个 PR、不私开分支与 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，
+     不允许私开 pr（有 pr 的情况下）」「一个issue对应一个pr」「不允许私自开立新分支和新pr」——
+     **一个 issue 只对应一个合并请求、一个任务只对应一个分支**：该 issue 下每一次执行（不论任务
+     类型、不论从 issue 侧还是 PR 侧被唤起）的改动都只落到那一个分支与那一个 PR。失效形态（本仓库
+     实证过两次）：执行者在当前 PR 之外发现别的问题就自己另开 PR + 分支，同一批工作被拆成两处、
+     本 PR 上的事项停在半路。本轮补上两处口子：**承载位置不随任务内容变化**（拦「这次任务不一样，
+     另开一处」）与**找不到承载它的合并请求时停下问**（拦「没有就先自己建一个」）。判据本体落在
+     平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的**同节条**（分支策略的同一条，另立
+     一节即并存两套说法），提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被复制
+     到未知项目执行）。边界两句一起写：本条**只限定承载位置**、不构成「不动手」的许可；**原 PR 已
+     关闭**时另开属**承继、不属私开**。规则数据在 `script/specs-rules/cnb.toml`。由
+     `check_pr_scope_guard` 钉住；「哪个 PR 才算承载该 issue」「用户有没有真的允许」属语义判断与
+     运行时事实，交人/子 agent 复核。
 
  120. 请求服务须有本机断言防线（**用户提出：不在口头上限制**）：`specs/general/testing.adoc`
      「环境与兼容」须有那一条——用例**凡发出真实请求**就须有一条**会失败的断言**把落点限在本机；
@@ -2677,11 +2679,13 @@ def check_ui_style_guard():
 
 
 def check_pr_scope_guard():
-    """『已有 PR 时不得私开 PR』防线（**用户点名**：「本 pr 处理，未经允许，不允许私开 pr」）。
+    """『一个 issue 一个 PR、不私开分支与 PR』防线（**用户点名**：「本 pr 处理，未经允许，不允许
+    私开 pr」）。
 
     失效形态（本仓库实证）：执行者在本 PR 之外发现别的问题时**自己另开一个 PR + 分支**，
     把同一批工作拆成两处——用户说的「本 pr 处理」被读成「另开一处处理」，于是本 PR 上的
-    事项停在半路、两处各自漂移。
+    事项停在半路、两处各自漂移。另两处口子：**承载位置随任务内容变**（「这次任务不一样」）
+    与**找不到承载它的 PR 时自己新建**（用户从没允许过，且把该 issue 的交付拆到多处）。
 
     钉两处：
       * 判据本体：平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的同节条（分支策略
@@ -2692,16 +2696,18 @@ def check_pr_scope_guard():
     只钉「要点是否仍在」——「哪个 PR 才算承载本次事项」「用户有没有真的允许」属语义判断与
     运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
-    phase("已有 PR 时不得私开 PR 防线检查")
+    phase("一个 issue 一个 PR、不私开分支与 PR 防线检查")
     rel = "specs/platform/cnb.adoc"
     path = os.path.join(REPO_ROOT, *rel.split("/"))
     if not os.path.isfile(path):
-        err(f"缺少文件 {rel}——『已有 PR 时不得私开 PR』的判据无处承载（平台层规范缺失）", rel)
+        err(f"缺少文件 {rel}——『一个 issue 一个 PR、不私开分支与 PR』的判据无处承载"
+            "（平台层规范缺失）", rel)
     else:
         run_rule_guard("check_pr_scope_guard")
     rel_common = os.path.relpath(COMMON_PROMPT_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(COMMON_PROMPT_FILE):
-        err(f"缺少提示词公共片段 {rel_common}——『已有 PR 时不得私开 PR』无处承载", rel_common)
+        err(f"缺少提示词公共片段 {rel_common}——『一个 issue 一个 PR、不私开分支与 PR』"
+            "无处承载", rel_common)
     else:
         run_rule_guard("check_pr_scope_guard")
     phase_done()

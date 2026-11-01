@@ -181,7 +181,7 @@ class CheckSpecsTestCase(unittest.TestCase):
                            "script/specs-rules/ui.toml",
                            # 本道（界面的规模与性能）的判据措辞外置在该文件里
                            "script/specs-rules/ui-perf.toml",
-                           # 本道（已有 PR 时不得私开 PR）的判据措辞外置在该文件里
+                           # 本道（一个 issue 一个 PR、不私开分支与 PR）的判据措辞外置在该文件里
                            "script/specs-rules/cnb.toml",
                            # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
                            "script/specs-rules/local-service.toml",
@@ -8395,7 +8395,7 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
            "* **越界清理**：本条只禁合并——推送分支、**解决冲突**、**同步目标分支**"
            "都**不是合并**。\n\n"
            "== 分支与合并请求统一\n"
-           "* 同一 issue 拆分出的多个任务，即使并行执行，也**只能修改同一个分支**。\n\n"
+           "* 同一 issue 拆分出的多个任务，即使并行执行，也共用这一个分支。\n\n"
            "== 冲突处理\n"
            "* 并行任务改动同一文件导致合并冲突时，须**自动解决冲突**（保留双方有效改动），"
            "不搁置、不要求用户人工介入。\n")
@@ -8500,9 +8500,9 @@ class TestCheckNpcMergeGuard(CheckSpecsTestCase):
         # 反例：既有「分支与合并请求统一」的判据被删（同文件规则不得被顶掉）
         self._write_valid()
         self.write("specs/platform/cnb.adoc",
-                   self.CNB.replace("只能修改同一个分支", "自行决定"))
+                   self.CNB.replace("共用这一个分支", "自行决定"))
         cm.check_npc_merge_guard()
-        self.assertIn("只能修改同一个分支", self.error_texts())
+        self.assertIn("共用这一个分支", self.error_texts())
 
     def test_registry_not_synced_reports(self):
         # 反例：公开提示词入口未同步 → 登记处与实际口径不一致，照登记处读会漏
@@ -28076,11 +28076,16 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
 
 
 class TestCheckPrScopeGuard(CheckSpecsTestCase):
-    """钉住『已有 PR 时不得私开 PR』防线（**用户点名**：「本 pr 处理，未经允许，不允许私开 pr」）。
+    """钉住『一个 issue 一个 PR、不私开分支与 PR』防线（**用户点名**：「本 pr 处理，未经允许，
+    不允许私开 pr」「一个issue对应一个pr」「不允许私自开立新分支和新pr」）。
 
     判据本体落在平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的**同节条**（分支策略
     的同一条，不另立一节），提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被
     未知项目复制执行）。
+
+    **两处口子是本轮补的**（只写『已有 PR 不得另开』时都漏得掉）：① **承载位置不随任务内容
+    变化**——「这次任务不一样，另开一处」；② **找不到承载它的 PR 时停下问**——「没有就先自己
+    建一个」（用户从没允许过，且会把该 issue 的交付拆成多处）。故两侧各钉一条反例。
 
     **夹具形态**：仓库里那两份**真文件的逐字副本** + 规则数据 `script/specs-rules/cnb.toml`
     按原样落进夹具；每个用例在内存副本上做一处定点改动后落进临时根再跑防线。手抄节选会与
@@ -28137,22 +28142,34 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     def test_rule_removed_reports(self):
         # 反例①：整条禁令被摘掉
         self._run_guard_with(
-            self.CNB, "* **已有合并请求时，不得另开合并请求（L1", "* **旧的一条（L1")
-        self.assertIn("不得另开合并请求", self.error_texts())
+            self.CNB, "* **一个 issue 对应一个合并请求、一个任务对应一个分支（L1", "* **旧的一条（L1")
+        self.assertIn("一个 issue 对应一个合并请求", self.error_texts())
 
     def test_user_words_removed_reports(self):
         # 反例②：用户原话被抹——禁令还在、界却被读成「只是建议」
-        self._run_guard_with(self.CNB, "未经允许，不允许私开 PR", "不要私开")
-        self.assertIn("未经允许", self.error_texts())
+        self._run_guard_with(self.CNB, "不允许私自开立新分支和新pr", "不要私开")
+        self.assertIn("不允许私自开立新分支和新pr", self.error_texts())
 
     def test_permission_source_removed_reports(self):
-        # 反例③：许可来源被抽（开新 PR 属派发者的动作、须用户显式允许）
-        self._run_guard_with(self.CNB, "**开新的合并请求属派发者的动作、不是执行者的动作**", "")
-        self.assertIn("派发者", self.error_texts())
+        # 反例③：许可来源被抽（开新分支/PR 属派发者的动作、须用户显式允许）
+        self._run_guard_with(
+            self.CNB, "要新开分支、新开合并请求，须用户**在本次任务里显式允许**",
+            "要不要新开分支看情况")
+        self.assertIn("显式允许", self.error_texts())
+
+    def test_carrier_not_follow_task_reports(self):
+        # 反例⑪：『承载位置不随任务内容变化』被抽——「这次任务不一样，另开一处」就没有拦阻
+        self._run_guard_with(self.CNB, "**承载位置不随任务内容变化**", "**尽量放一起**")
+        self.assertIn("承载位置不随任务内容变化", self.error_texts())
+
+    def test_missing_carrier_ask_removed_reports(self):
+        # 反例⑫：『找不到承载它的 PR 时停下问』被抽——「没有就先自己建一个」就没有拦阻
+        self._run_guard_with(self.CNB, "**不得自行新建分支或合并请求代替这次询问**", "")
+        self.assertIn("不得自行新建分支或合并请求代替这次询问", self.error_texts())
 
     def test_criteria_removed_reports(self):
         # 反例④：判定标准被抽成口号
-        self._run_guard_with(self.CNB, "**新建了另一个合并请求**", "**新建了另一个**")
+        self._run_guard_with(self.CNB, "**新建了另一个合并请求或新分支**", "**新建了另一个**")
         self.assertIn("判定标准", self.error_texts())
 
     def test_closed_pr_carryover_removed_reports(self):
@@ -28168,20 +28185,34 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
 
     def test_branch_rule_dropped_reports(self):
         # 反例⑥：同节既有规则被顶掉（本节整段替换过、规则凭空消失而全绿，本仓库实测过）
-        self._run_guard_with(self.CNB, "也**只能修改同一个分支**", "也应尽量统一")
-        self.assertIn("只能修改同一个分支", self.error_texts())
+        self._run_guard_with(self.CNB, "也共用这一个分支", "也应尽量统一")
+        self.assertIn("共用这一个分支", self.error_texts())
 
     def test_prompt_block_removed_reports(self):
-        # 反例⑦：提示词侧的交付边界被抽（复制到未知项目执行的那一份就没有这条）
-        self._run_guard_with(
-            self.COMMON, "**已有 PR 时不得私开 PR（L1，用户点名「未经允许，不允许私开 PR」）**",
-            "**旧的一条（L1，用户点名「旧」）**")
-        self.assertIn("不得私开 PR", self.error_texts())
+        # 反例⑦：提示词侧的交付边界被抽（复制到未知项目执行的那一份就没有这条）。
+        # 同一片段里还有一处**交叉引用**点名了这条标题，故须两处一起抽掉——只抽一处时
+        # 锚点被那处引用兜住、反例测不出来（本仓库实测过这一次）。
+        self._write_all_valid()
+        text = self.base[self.COMMON]
+        text = text.replace(
+            "**一个 issue 一个 PR、一个任务一个分支：不私自开立新分支和新 PR（L1",
+            "**一条已经作废的旧边界（L1", 1)
+        text = text.replace("「一个 issue 一个 PR、一个任务一个分支」一条", "「旧的一条」", 1)
+        self.assertNotIn("一个 issue 一个 PR、一个任务一个分支", text)
+        self.write(self.COMMON, text)
+        self._run_guard()
+        self.assertIn("一个 issue 一个 PR、一个任务一个分支", self.error_texts())
 
     def test_prompt_permission_source_removed_reports(self):
         # 反例⑧：提示词侧的许可来源被抽
-        self._run_guard_with(self.COMMON, "开新 PR 属**派发者**的动作", "开新 PR 要慎重")
+        self._run_guard_with(self.COMMON, "开新 PR/新分支属**派发者**的动作", "开新 PR 要慎重")
         self.assertIn("派发者", self.error_texts())
+
+    def test_prompt_missing_carrier_ask_removed_reports(self):
+        # 反例⑬：提示词侧的『找不到承载它的 PR 就停下问』被抽——复制出去的拷贝没有平台层可依，
+        # 这一句是那份拷贝唯一的口子
+        self._run_guard_with(self.COMMON, "**不得自行新建分支或 PR 代替这次询问**", "")
+        self.assertIn("不得自行新建分支或 PR 代替这次询问", self.error_texts())
 
     def test_prompt_carryover_removed_reports(self):
         # 反例⑨：提示词侧的承继边界被抽
