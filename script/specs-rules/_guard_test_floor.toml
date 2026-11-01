@@ -190,6 +190,7 @@ check_bundle_size_guard = 1
 check_ui_style_guard = 1
 check_same_thing_one_source_guard = 1
 check_ui_performance_guard = 1
+check_example_not_surface_guard = 1
 check_ui_spec_guard = 1
 check_pr_scope_guard = 1
 check_changelog_timing_prompt_guard = 1

@@ -28014,11 +28014,11 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         # 反例①：判据本体整节被摘掉（别处零散字样兜不住）
         self._write_all_valid()
         text = self.base[self.CODING]
-        start = text.index("=== 界面的规模与性能（任何语言、任何端）")
+        start = text.index("=== 界面的性能（任何语言、任何端）")
         end = text.index("\n=== 同一件事只有一个来源", start)
         self.write(self.CODING, text[:start] + text[end + 1:])
         self._run_guard()
-        self.assertIn("界面的规模与性能", self.error_texts())
+        self.assertIn("界面的性能", self.error_texts())
 
     def test_data_scale_judgement_removed_reports(self):
         # 反例②：「判据取形态、不取当前数据量」被抽 -> 「现在数据没那么多」重新成为正当理由
@@ -28034,8 +28034,8 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
 
     def test_n_plus_one_removed_reports(self):
         # 反例④：同一次展示不逐项各取一次被抽 -> N+1 取数无处可判
-        self._run_guard_with(self.CODING, "**同一次展示里不逐项各取一次（L1）**",
-                             "**同一次展示的取数不限（L3）**")
+        self._run_guard_with(self.CODING, "**形态二（规模）：同一次展示里不逐项各取一次（L1）**",
+                             "**形态二（规模）：同一次展示的取数不限（L3）**")
         self.assertIn("不逐项各取一次", self.error_texts())
 
     def test_full_aggregate_scope_removed_reports(self):
@@ -28081,8 +28081,8 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         # 取的是「界面的规模与性能（载体）」那节首句末尾那一句（同文件其余载体节也这么说，
         # 故连节名与本句一起替换，否则另一处仍命中——本轮新增载体节后实测）
         self._run_guard_with(self.WEB,
-                             "== 界面的规模与性能（载体）\n\n**判据本体在 `specs/general/coding.adoc`「界面的规模与性能」**——本文件只给**前端载体**，判据本体的措辞不复述、也不另立一套",
-                             "== 界面的规模与性能（载体）\n\n**判据见下方各条**")
+                             "== 界面的性能（载体）\n\n**判据本体在 `specs/general/coding.adoc`「界面的性能」**——本文件只给**前端载体**，判据本体的措辞不复述、也不另立一套",
+                             "== 界面的性能（载体）\n\n**判据见下方各条**")
         self.assertIn("也不另立一套", self.error_texts())
 
     def test_web_carrier_boundary_removed_reports(self):
@@ -28095,9 +28095,15 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         self._run_guard_with(self.COMMON, "会随数据长起来的界面", "界面样式约定")
         self.assertIn("会随数据长起来的界面", self.error_texts())
 
+    def test_dispatcher_resident_cost_gate_removed_reports(self):
+        # 反例⑩之二：加载门只留"数据长起来""跟手动"两处特征 -> 常驻成本那一档在
+        # 调度器上没有任何识别特征，写轮询/监听的人照样不会加载该节（判据在、走不到它）
+        self._run_guard_with(self.COMMON, "切走后仍在轮询或监听", "界面样式约定")
+        self.assertIn("切走后仍在轮询或监听", self.error_texts())
+
     def test_readme_not_synced_reports(self):
         # 反例⑪：README 目录说明未同步
-        self._run_guard_with(self.README, "**界面的规模与性能（任何语言、任何端",
+        self._run_guard_with(self.README, "**界面的性能（任何语言、任何端",
                              "**界面性能（网页）")
         self.assertIn("README", self.error_texts())
 
@@ -28124,6 +28130,187 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         self._run_guard()
         self.assertIn("UI_PERFORMANCE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
+
+
+class TestCheckUiPerformanceGuardDimensions(CheckSpecsTestCase):
+    """钉住『界面的性能』第二轮扩面：按**维度**覆盖，不按场景覆盖（**用户追问**）。
+
+    用户原话：『界面的性能方面有没有规范定义？比如一个一万行的表格，如果要拖动调整大小，
+    要如何保证性能？扩展一下，调研下，帮我补充』，随后问责『我说的重点是"界面的性能"，你扩展
+    了吗？界面的性能只有拖拽吗』。故本条钉的是**六档维度**都在（规模／交互与绘制／常驻成本／
+    起步／时效／降级）——只覆盖"规模"那一档时（第一轮的形态），拖动、轮询、首屏、反馈与降级
+    四处都无从判，而它们恰恰是"只按举例办"漏掉的那几处。
+
+    **夹具形态**：仓库里那份真文件的逐字副本（判据本体 `specs/general/coding.adoc`），每个用例
+    做一处定点改动后落进临时根再跑防线——手抄节选会与现场漂移，故不手抄。
+    """
+
+    CODING = "specs/general/coding.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        with open(os.path.join(repo_root, self.CODING), encoding="utf-8") as fh:
+            self.base = fh.read()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_ui_performance_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, old: str, new: str) -> None:
+        self.write(self.CODING, self.base)
+        self.write_rules_fixture()
+        self.assertIn(old, self.base, "夹具失效：正文里找不到要替换的片段")
+        self.write(self.CODING, self.base.replace(old, new, 1))
+        self._run_guard()
+
+    def test_continuous_interaction_removed_reports(self):
+        # 反例①：交互与绘制那一档被抽 -> 拖动/缩放/滚动又只能靠"看着卡不卡"判（就是用户举例的那一处）
+        self._run_guard_with("跟着一次操作动的那一步，把重活挪出这个动作",
+                             "拖动时注意性能")
+        self.assertIn("跟着一次操作动的那一步", self.error_texts())
+
+    def test_repaint_scope_removed_reports(self):
+        # 反例②：单块重绘被抽 -> 改一个单元格就整表重建这件事无处可判
+        self._run_guard_with("一次变化只重画该重画的那一块", "重绘范围按需")
+        self.assertIn("一次变化只重画该重画的那一块", self.error_texts())
+
+    def test_resident_cost_removed_reports(self):
+        # 反例③：常驻成本被抽 -> 切走的页面照旧高频轮询，问题不在打开那一刻
+        self._run_guard_with("不看不用的东西不花资源", "资源占用尽量低")
+        self.assertIn("不看不用的东西不花资源", self.error_texts())
+
+    def test_startup_removed_reports(self):
+        # 反例④：起步那一档被抽 -> 首屏又变成"画出来就算"，等最慢的那一处
+        self._run_guard_with("首屏与进入可用的时间以「可操作」为准", "首屏要快")
+        self.assertIn("首屏与进入可用的时间以「可操作」为准", self.error_texts())
+
+    def test_feedback_timeliness_removed_reports(self):
+        # 反例⑤：时效被抽 -> 点了没反应、旧响应覆盖新结果这两件都判不了
+        self._run_guard_with("操作进去要有即时的可视反馈，慢的那一步不得锁死界面",
+                             "操作要有反馈")
+        self.assertIn("操作进去要有即时的可视反馈", self.error_texts())
+
+    def test_degradation_removed_reports(self):
+        # 反例⑥：降级被抽 -> 一处失败整页不可用，也没人看得出是在跑还是卡了
+        self._run_guard_with("慢或失败要有出路，且要能看出慢在哪", "出错要提示")
+        self.assertIn("慢或失败要有出路", self.error_texts())
+
+    def test_dimension_not_scenario_removed_reports(self):
+        # 反例⑦：按维度列的理由与回指被抽 -> 这一节又被读成"清单里那几个场景"
+        self._run_guard_with("按**界面会慢的全部维度**分成六档", "列几处常见的慢")
+        self.assertIn("全部维度", self.error_texts())
+
+    def test_example_disclaimer_removed_reports(self):
+        # 反例⑧：把"举例只是举例"那句抽掉 -> 用户举的那个场景又成了范围的边界
+        self._run_guard_with("「一万行的表格拖动调整大小」只是这一类里的一个点，不以此为限",
+                             "打比方说就是一万行的表格拖动")
+        self.assertIn("一万行的表格拖动调整大小", self.error_texts())
+
+
+class TestCheckExampleNotSurfaceGuard(CheckSpecsTestCase):
+    """钉住『举例不是面』防线（**用户追问的方法论**）。
+
+    用户原话：『用户提出比如、举例等等的时候，不要只看这种情况下，需要扩展，搞清楚说话的重点，
+    不要只看举例』；『是不是可以一个方法论，来避免这种抓不住重点、只看举例的情况？这个方法论
+    只只用于界面吗？还是其他地方也可以加？』。
+
+    本条钉两处：① 判据本体 `specs/general/planning.adoc`「举例不是面」（取面、按维度列、
+    面要落到能被下次加载的载体上、反向不得扩面、边界）；② 读任务一侧的回指
+    （`specs/general/collab.adoc`「任务的读懂」）。**落在规划层、不限界面**——这是用户第二问的答案。
+
+    **夹具形态**：两份真文件的逐字副本，每个用例做一处定点改动后落进临时根再跑防线。
+    """
+
+    # 第三份是界面一侧的回指（`coding.adoc`）：本道的两个 kind 步骤里有一个落在它上面，
+    # 缺它就是"这一处文件根本不在"，与判据被抽同等报红。
+    FILES = ("specs/general/planning.adoc", "specs/general/collab.adoc",
+             "specs/general/coding.adoc")
+    PLANNING, COLLAB, CODING = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in self.FILES:
+            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_example_not_surface_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要替换的片段")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：判据本体整节被摘掉（别处的零散字样兜不住）
+        self._write_all_valid()
+        text = self.base[self.PLANNING]
+        start = text.index("== 举例不是面")
+        end = text.index("\n== 换一条路时的收尾与穷尽", start)
+        self.write(self.PLANNING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("举例不是面", self.error_texts())
+
+    def test_recognition_removed_reports(self):
+        # 反例②：识别判据被抽 -> 读不出"什么时候该扩展、什么时候不该"
+        self._run_guard_with(self.PLANNING, "例子与问句的对象不是同一个层级",
+                             "举例的时候注意一下")
+        self.assertIn("例子与问句的对象不是同一个层级", self.error_texts())
+
+    def test_dimension_not_scenario_removed_reports(self):
+        # 反例③：按维度列被抽 -> 清单又变成"他提到的那些场景"，天生漏掉没被提到的
+        self._run_guard_with(self.PLANNING, "按维度列，不按场景列（L1）",
+                             "把相关的地方都补上（L1）")
+        self.assertIn("按维度列", self.error_texts())
+
+    def test_carrier_removed_reports(self):
+        # 反例④：面的载体被抽 -> 扩展只写在当次回复里，下次照旧
+        self._run_guard_with(self.PLANNING, "加载门/入口清单里走不到它",
+                             "只要写在规范里就行")
+        self.assertIn("加载门/入口清单里走不到它", self.error_texts())
+
+    def test_reverse_boundary_removed_reports(self):
+        # 反例⑤：反向边界被抽 -> "要按面做"成了发动全库改造与顺手改无关模块的许可
+        self._run_guard_with(self.PLANNING, '不得把"面"当成"可以顺手重构"的许可',
+                             '可以顺手把相关的地方都重构掉')
+        self.assertIn("可以顺手重构", self.error_texts())
+
+    def test_basis_removed_reports(self):
+        # 反例⑥：依据行的取舍归属被抹掉 -> 读者以为"先取属再答"是某标准原文
+        self._run_guard_with(self.PLANNING, "是本集合的判据化取舍**——通行材料只给",
+                             "是通行做法**——通行材料只给")
+        self.assertIn("本集合的判据化取舍", self.error_texts())
+
+    def test_collab_backref_removed_reports(self):
+        # 反例⑦：读任务那侧的回指被抽 -> 方法论只留在规划层，派发进来的要求照旧只按举例办
+        self._run_guard_with(self.COLLAB, "`specs/general/planning.adoc`「举例不是面」",
+                             "做法见规划规范")
+        self.assertIn("举例不是面", self.error_texts())
 
 
 class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):

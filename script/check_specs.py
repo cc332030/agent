@@ -416,19 +416,31 @@
      `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
      `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
      方法」属语义判断与运行时事实，交人/子 agent 复核。
- 116. 界面的规模与性能防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`
-     「界面的规模与性能」——**能用 ≠ 好用**：界面在开发期数据不多时看不出问题，**只有数据量
-     大了才知道哪一处卡**（与后端接口同理）；覆盖 web 端、Java、Python 等端画的界面。三条形态：
-     列表与表格**按需取数**（不把整份集合一次取回、一次画出来）、**同一次展示不逐项各取一次**
-     （N+1 取数、渲染路径反复重算）、**重区块按需加载**；**判据取形态、不取当前数据量**。
-     「要不要为界面做性能结论」不另立判据——回指 `specs/general/testing.adoc`「性能测试」的
-     触发特征（界面**不默认加、也不默认不加**，按特征判）。另核前端载体
-     （`specs/stack/web.adoc`「界面的规模与性能（载体）」，只给载体、回指唯一真源）、
-     加载门两处（调度器「任何代码活动」与前端栈条）与 README 同步、锚点条数下限。规则数据在
-     `script/specs-rules/ui-perf.toml` + `_tokens.toml` 的 `UI_PERFORMANCE_ANCHORS`。由
-     `check_ui_performance_guard` 钉住；「这一处算不算一次取回整份集合」「要不要为它做性能
-     结论」属语义判断与运行时事实，交人/子 agent 复核。
- 117. 缓存（统一管理、先缓存后在线）防线（**用户提出**）：判据本体落通用层
+ 116. 界面的性能防线（**用户提出**，两轮）：判据本体落通用层 `specs/general/coding.adoc`
+     「界面的性能」——**能用 ≠ 好用**：界面在开发期数据不多时看不出问题，**只有跑到真实的
+     规模与机器上才知道哪一处慢**（与后端接口同理）；覆盖 web 端、Java、Python 等端画的界面。
+     **第二轮扩面**：用户拿「一万行的表格拖动调整大小」当**举例**问「界面的性能有没有规范」，
+     而本条当时只覆盖**规模**一档——故判据改成**按维度列而不按场景列**的六档：**规模**（列表
+     与表格按需取数、同一次展示不逐项各取一次、重区块按需加载、全量类操作的生效范围）、
+     **交互与绘制**（跟着一次操作动的那一步把重活挪出动作、一次变化只重画该重画的那一块）、
+     **常驻成本**（不看不用的东西不轮询不监听不订阅、退出即释放）、**起步**（首屏与进入以
+     「可操作」为准）、**时效**（即时可视反馈、长的可取消、旧响应不覆盖新结果）、**降级**（慢
+     或失败有出路、一处慢不拖垮其余）；**判据取形态、不取当前数据量与当前机器**。「要不要为
+     界面做性能结论」不另立判据——回指 `specs/general/testing.adoc`「性能测试」的触发特征
+     （界面**不默认加、也不默认不加**，按特征判）。另核前端载体（`specs/stack/web.adoc`
+     「界面的性能（载体）」，只给载体、回指唯一真源）、加载门两处（调度器「任何代码活动」与
+     前端栈条）与 README 同步、锚点条数下限。规则数据在 `script/specs-rules/ui-perf.toml` +
+     `_tokens.toml` 的 `UI_PERFORMANCE_ANCHORS`。由 `check_ui_performance_guard` 钉住；
+     同一用户问题引出的方法论另立一条（`check_example_not_surface_guard`，见下）。
+ 117. 举例不是面防线（**用户追问的方法论**）：判据本体落通用层 `specs/general/planning.adoc`
+     「举例不是面」——要求里带**举例**时（"比如""例如"、贴一段具体场景/代码/截图），例子只是
+     **这一类里的一个样本**，须先取出**这一问的对象是哪一类事**、按**维度**列出这一类的全部
+     形态（不按想到的场景列），再把"面"落到**下次能被加载到的载体**上（规范条目/检查/模板/
+     清单之一）；反向不得把面扩到不相干范围。`specs/general/collab.adoc`「任务的读懂」留一条
+     回指（读任务时就要判）。**不限界面**——它落在规划层，对任何一类要求成立。由
+     `check_example_not_surface_guard` 钉住；「这一问带不带面」「取出的面全不全」属语义判断，
+     交人/子 agent 复核。
+ 118. 缓存（统一管理、先缓存后在线）防线（**用户提出**）：判据本体落通用层
      `specs/general/coding.adoc`「缓存（统一管理、先缓存后在线）」——先分清**两处缓存**
      （后端接口缓存与界面缓存各自成立、不得互免，也不许拿一处免掉另一处）；**一份数据只有一处
      缓存入口**（一处读写入口、一把键取值规则，页面不得各存一份）；**后端接口返回哪一份是
@@ -443,7 +455,7 @@
      `script/specs-rules/cache.toml` + `_tokens.toml` 的 `CACHE_ANCHORS`（8 组 29 枚，下限 29）。
      由 `check_cache_guard` 钉住；「这一处算不算同一份数据的第二份缓存」「这次刷新算不算有
      变动」「某个接口算不算给了确定的一份」属语义判断与运行时事实，交人/子 agent 复核。
- 118. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
+ 119. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
      否则禁止修改 changelog』『changelog 修改只有一种情况，那就是人工主动声明，不管是什么原因』。
      判据本体（通用层「登记时机」）、公共片段专用口径、`check_changelog_timing_guard` 三处**都在**，
      条目照样被自行追加——平台按评论唤起时执行者读到的是**提示词的读入清单**，清单里没有这条。
@@ -453,7 +465,7 @@
      原先这里留了『维护这套规范集合自身的对外变更』这个例外，它正是执行者自认该记一条的口子，
      已撤。由 `check_changelog_timing_prompt_guard` 钉住；「这次到底有没有得到用户声明」属
      运行时事实，交人/子 agent 复核。
- 119. 一个 issue 一个 PR、不私开分支与 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，
+ 120. 一个 issue 一个 PR、不私开分支与 PR 防线（**用户点名**）：用户原话「本 pr 处理，未经允许，
      不允许私开 pr（有 pr 的情况下）」「一个issue对应一个pr」「不允许私自开立新分支和新pr」——
      **一个 issue 只对应一个合并请求、一个任务只对应一个分支**：该 issue 下每一次执行（不论任务
      类型、不论从 issue 侧还是 PR 侧被唤起）的改动都只落到那一个分支与那一个 PR。失效形态（本仓库
@@ -467,7 +479,7 @@
      `check_pr_scope_guard` 钉住；「哪个 PR 才算承载该 issue」「用户有没有真的允许」属语义判断与
      运行时事实，交人/子 agent 复核。
 
- 120. 请求服务须有本机断言防线（**用户提出：不在口头上限制**）：`specs/general/testing.adoc`
+ 121. 请求服务须有本机断言防线（**用户提出：不在口头上限制**）：`specs/general/testing.adoc`
      「环境与兼容」须有那一条——用例**凡发出真实请求**就须有一条**会失败的断言**把落点限在本机；
      判据问句「把目标地址换成内网 IP 或域名，会不会失败」；断言形态（**先解析成地址再判**回环、
      不比字面量、**命中即失败**、**不得静默跳过**）；判定标准三条（无断言／只比字面量／
@@ -482,7 +494,7 @@
      地址换成内网 IP 或域名时没有任何检查会发声。由 `check_local_service_assert_guard` 钉住；
      「这套用例里那条断言跑起来到底拦不拦得住」属运行时事实，以断言件自身的用例为准。
 
- 121. 路径与运行期取值的唯一真源（**用户提出**）：同一份取值只许有**一处定义**——落点那两层
+ 122. 路径与运行期取值的唯一真源（**用户提出**）：同一份取值只许有**一处定义**——落点那两层
      目录名、来源地址、入口与有则取的文件清单、安装脚本名单、网络超时与并发、临时产物与交接
      文件后缀，全部定义在 `script/specs-config.toml`；执行侧（`script/fetch-specs.py`）与判据侧
      本脚本的模块级常量一律**从它算出**，代码里不再写第二份字面量；文档不复述取值、只回指。
@@ -491,7 +503,7 @@
      新开实例按文档找不到副本，而全部检查照旧全绿。由 `check_paths_single_source_guard` 钉住；
      「这些取值定得对不对」属语义判断，交人/子 agent 复核。
 
- 122. 站点正文区的站内链接防线（**用户提出**）：判据是**点下去落在哪个 hash**——取值抽在
+ 123. 站点正文区的站内链接防线（**用户提出**）：判据是**点下去落在哪个 hash**——取值抽在
      `script/site-link-check.js`（与 `index.html` 同一份实现），由本脚本真的执行、逐用例比对。
      失效形态（本 PR 实测）：`resolveTarget()` 对带 scheme 的目标一律返回 null，故"先解析、
      解析不出来再按站点绝对地址重试"永远走不到第二步；站点绝对地址重试时又叠加了当前文档
@@ -2705,36 +2717,64 @@ def check_cache_guard():
 
 
 def check_ui_performance_guard():
-    """『界面的规模与性能』防线（**用户提出**）。
+    """『界面的性能』防线（**用户提出**，两轮）。
 
-    用户口径：『能用和好用是不一样的』——界面设计要考虑性能，而**开发期看不出来**：刚开始
-    数据不多时并不卡，与后端接口一样，**只有数据量大了，才知道哪一处卡**；覆盖 web 端、
-    Java、Python 等端画的界面。问的是『前端页面是否要默认加性能测试？还是根据实际情况、
-    场景加？』——故本道把两件事分开钉：**形态**在通用层（判据取形态、不取当前数据量），
-    **要不要做性能结论**回指测试规范的触发特征（界面不默认加、也不默认不加）。
+    第一轮用户口径：『能用和好用是不一样的』——界面设计要考虑性能，而**开发期看不出来**：
+    刚开始数据不多时并不卡，**只有数据量大了，才知道哪一处卡**；问『前端页面是否要默认加
+    性能测试？还是根据实际情况、场景加？』。
+
+    **第二轮（本道扩面）**：用户拿『一个一万行的表格，如果要拖动调整大小，要如何保证性能？』
+    当**举例**问『界面的性能方面有没有规范定义？』，而本条当时只覆盖**规模**一档，于是答成了
+    "拖拽怎么优化"。他真正要的是**面**（界面的性能），并追问方法论：『是不是可以一个方法论
+    来避免这种抓不住重点、只看举例的情况？这个方法论只用于界面吗？还是其他地方也可以加？』。
+    故本道钉**两件事**：① 判据本体按**维度**覆盖六档（规模／交互与绘制／常驻成本／起步／
+    时效／降级）；② 方法论落 `specs/general/planning.adoc`「举例不是面」，并在
+    `specs/general/collab.adoc`「任务的读懂」留一条回指。
 
     钉五处：
-      * 真源：通用层 `specs/general/coding.adoc`「界面的规模与性能」的三组要点 + 依据行
-        （规则数据 `script/specs-rules/ui-perf.toml` + `_tokens.toml`）；
+      * 真源：通用层 `specs/general/coding.adoc`「界面的性能」的要点 + 依据行；
+      * **方法论**：`specs/general/planning.adoc`「举例不是面」的要点 + 界面一侧的回指
+        ——缺则判据又被读成"清单里那几个场景"，下一处同类形态只能等用户再提一遍；
       * **测试触发特征**：`specs/general/testing.adoc`「性能测试」的「何时需要」须含界面
-        那一档——缺则界面性能要么一律加（噪声用例）、要么永远不加（数据长起来才发现卡）；
-      * **技术栈层 `specs/stack/web.adoc`「界面的规模与性能（载体）」**：只给前端载体并
-        回指唯一真源——缺则前端那一半只剩口号，或栈层变成第二处真源；
-      * **加载门两处**：调度器「任何代码活动」与前端栈条须登记界面规模的识别特征——缺则
-        写界面的人永不加载该节，判据存在而走不到它；
-      * README 目录说明同步。
+        那一档（含连续交互的帧内耗时）——缺则界面性能要么一律加、要么永远不加；
+      * **技术栈层 `specs/stack/web.adoc`「界面的性能（载体）」**：只给前端载体并回指唯一
+        真源（连续交互、单块重绘、常驻成本、起步、时效与取消各有落点）；
+      * **加载门两处** + README 目录说明同步。
 
-    只钉「要点是否仍在」——「这一处算不算一次取回整份集合」「要不要为它做性能结论」属语义
-    判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    只钉「要点是否仍在」——「这一处算不算一次取回整份集合」「这一档算不算慢」「某次答复
+    有没有把举例当成了面」属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
-    phase("界面的规模与性能防线检查")
+    phase("界面的性能防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
     if not os.path.isfile(os.path.join(rules_dir, "ui-perf.toml")):
-        err("缺少 script/specs-rules/ui-perf.toml——『界面的规模与性能』的锚点（判据措辞）"
+        err("缺少 script/specs-rules/ui-perf.toml——『界面的性能』的锚点（判据措辞）"
             "失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
     run_rule_guard("check_ui_performance_guard")
+    phase_done()
+
+
+def check_example_not_surface_guard():
+    """『举例不是面』防线（**用户追问的方法论**）。
+
+    用户口径（原话）：『调整规范：用户提出比如、举例等等的时候，不要只看这种情况下，需要扩展，
+    搞清楚说话的重点，不要只看举例』；『是不是可以一个方法论，来避免这种抓不住重点、只看举例
+    的情况？这个方法论只只用于界面吗？还是其他地方也可以加？』。
+
+    **失效形态**：要求里带一个实例（"一万行的表格拖动调整大小""比如这个字段"），执行者只把
+    那一个实例修好就宣布完成——同类形态的其余部位照旧，用户得一处一处再提一遍；而"漏下的那些"
+    与"做过的那些"在输出文本上分辨不出来。
+
+    钉两处：① 判据本体 `specs/general/planning.adoc`「举例不是面」（识别判据先判带不带面、
+    按维度列而不按场景列、面要落到能被下次加载的载体上、反向不得把面扩到不相干范围、
+    三条例外）；② `specs/general/collab.adoc`「任务的读懂」的回指（读任务时就要判）。
+    **不限界面**——它落在规划层、对任何一类要求成立（这是用户第二问的答案）。
+
+    只钉「要点是否仍在」——「这一问带不带面」「取出的面全不全」属语义判断，交人/子 agent 复核。
+    """
+    phase("举例不是面防线检查")
+    run_rule_guard("check_example_not_surface_guard")
     phase_done()
 
 
@@ -5039,7 +5079,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 
-GUARD_WIRING_BASELINE = 183  # 同源实取：`CHECKS` 序列唯一名（183 条，无重复项）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
+GUARD_WIRING_BASELINE = 184  # 同源实取：`CHECKS` 序列唯一名（184 条，无重复项）。本轮新增 `check_example_not_surface_guard`（用户追问的『举例不是面』方法论：旧值 183）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
 
 # 反例用例的记账**不在这里**：按防线分片落在规则数据
 # `script/specs-rules/_guard_test_floor.toml` 的 `[tokens.guard_test_floor]`（一道防线一行）。
@@ -14336,6 +14376,7 @@ CHECKS = (
     check_ui_style_guard,
     check_same_thing_one_source_guard,
     check_ui_performance_guard,
+    check_example_not_surface_guard,
     check_ui_spec_guard,
     check_pr_scope_guard,
     check_changelog_timing_prompt_guard,
