@@ -654,6 +654,54 @@ RULES = None
 _RULES_RUN_THIS_PHASE = set()
 
 
+# 现场规则数据（本脚本旁那一份）的名单：`frozenset` 或 `None`（未取过）。
+# 只用来判"这道防线现场到底有没有"——回落与"报配置缺失"的分界靠它，与夹具那份无关。
+_SITE_GUARDS = None
+
+
+def _site_guards():
+    """**现场**规则数据里的防线名单（`CHECK_SPECS` 被装到别的仓库时即为 `specs-rules/` 那一份）。
+
+    取的是**加载期**名单（`load_rule_files` 的 `guards` 键），不构造 `Rules`、不跑步骤：
+    每道防线都可能走到回落这里，而构造 + `deepcopy` 一整份规则集要 ~7ms，160 处调用会
+    白付一份成本。名单按现场规则**目录的绝对路径**缓一次；单测重定向 `REPO_ROOT` 时
+    解析出的路径就变了，故不会跨用例串。
+    """
+    global _SITE_GUARDS
+    spec = rules_engine.default_rules_spec(os.path.dirname(os.path.abspath(__file__)))
+    if _SITE_GUARDS is None or _SITE_GUARDS[0] != spec:
+        try:
+            guards = rules_engine.load_rule_files(spec).get("guards", {})
+        except rules_engine.RulesError:
+            # 现场规则数据自己都读不出来时无从判"现场有没有"，交给引擎按原样报缺失
+            return frozenset()
+        _SITE_GUARDS = (spec, frozenset(guards))
+    return _SITE_GUARDS[1]
+
+
+def _guard_rules_for(guard: str):
+    """本道防线该用的规则集：夹具备了就随夹具走，夹具没备这一道则回落到现场那一份。
+
+    **为什么要回落**：夹具常只备**本类**要用的那几份规则文件，而 `RULES` 是**进程级**
+    单例——全量跑一遍测试文件时，"夹具没备这一道"与"这道防线配置缺失"在返回值上分不开，
+    各道防线的反例用例被别类的夹具带成假红（本仓库实测：全量跑 `check_specs_test.py`
+    时 102 个用例报"规则配置里没有防线"、耗时还翻了倍）。
+
+    **回落是有限定的**：这道防线须在**现场规则数据**里（确有这么一道，只是夹具没备）；
+    名字不在现场名单里时照旧报"配置里没有防线"——"配置缺失即空转、不得静默跳过"。
+    """
+    if RULES is None or guard in RULES._guards:
+        return RULES
+    if guard not in _site_guards():
+        return RULES
+    # 回落到现场那一份：每次新构造、`load_rule_files` 返回独立的深拷贝，故夹具那一份
+    # 与它不共享步骤。
+    return rules_engine.Rules(
+        rules_engine.load_rule_files(
+            rules_engine.default_rules_spec(os.path.dirname(os.path.abspath(__file__)))),
+        RULES.ctx)
+
+
 def run_rule_guard(guard: str) -> None:
     """跑某道防线的规则（`guard` 为配置里的键，与防线函数同名）。
 
@@ -672,8 +720,9 @@ def run_rule_guard(guard: str) -> None:
             err(f"{exc}；规则数据外置后它是规则措辞的唯一来源——缺失即整批防线空转，"
                 "不得静默跳过", "script/specs-rules")
             return
+    rules = _guard_rules_for(guard)
     try:
-        RULES.run(guard)
+        rules.run(guard)
     except rules_engine.RulesError as exc:
         err(f"规则执行失败：{exc}", "script/specs-rules")
 
@@ -2017,6 +2066,7 @@ POINTER_SCAN_FILES = (
     "specs-project-maintainer/ledger/README.adoc",
     "specs-project-maintainer/ledger/generic-single-value-rows.adoc",
     "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
+    "specs-project-maintainer/ledger/review-compact-form-sizing.adoc",
     "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
     "specs-project-maintainer/priority.adoc",
     "specs-project-maintainer/skills/spec-change-verify.adoc",
