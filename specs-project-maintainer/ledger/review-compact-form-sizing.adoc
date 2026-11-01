@@ -1,0 +1,10 @@
+= 本轮记账：review 收尾修复
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（review：四处静默失效） | 沿用 `check_guard_manifest`（不新开一道） | 183 → **183**（不抬接线数） | 用户口径：『review 下，修复发现的问题』。四处都是「防线全绿、实际少了一层」的形态。**① 扫描面漏登记**：本 PR 新增的 `ledger/rounds-before-sharding.adoc` 与 `ledger/generic-single-value-rows.adoc` 只进了目录、没进 `POINTER_SCAN_FILES` 与 `duplicate.toml` 的 `files`，于是「回指不复述取值」与「同一段不得两处各写一份」两道检查对这两份新文件**整段空转**，而脚本照样报绿——由单测 `test_scan_files_cover_all_adoc` 报出（它按 `git ls-files '*.adoc'` 核覆盖面，真人跑脚本却看不出来）；两处清单已同步补齐。**② 反例记账读的是缓存**：`_guard_test_classes()` 走 `_read_script_src`，而它的缓存键是「仓库根相对路径」——夹具换根后同一个键会命中上一轮（乃至现场仓库）的那一份，于是「减到/增到」两条判据核的是一批与夹具无关的类名，两个反例静默全绿（本仓库在 `check_guard_order_guard` 上实测踩过同一格，注释里就写着）；已改为显式传「每次现读」的读者，并补一条反例钉住（先往缓存塞一份假的测试文件，夹具仍须报红）。**③ 取规范脚本混入了测试标记行**：`refresh_lagging_followups` 的循环体第一行留下一句 `print(f"CALC-INDEX-BY-v2", file=sys.stderr)`——它是 `test_index_fetched_with_updated_script_last` 用来判别「索引由哪一版脚本算」的标记，被连同实现一起提交了，真实取规范时每取一份附随文件都往 stderr 打一行无意义输出；已删。该用例本来就会自己注入标记（按整行剥净后再拼），故不动它。**④ 报错文案指错落点**：`check_guard_manifest` 的记账核对已从 `guards.adoc` 搬到 `ledger/`，但两处 `err()` 的成因/落点仍写 `specs-project-maintainer/guards.adoc`（读者按它去改，那一节已不再有轮次行），函数体内的注释也仍写「`guards.adoc`「记账沿革」」；已一并改成 `ledger/`。**只钉「文本与落点是否仍在」**——「这份新 .adoc 该不该进扫描面」「某个缓存键该不该清」属结构判断，交人/子 agent 复核
+|===

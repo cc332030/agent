@@ -602,6 +602,7 @@ def refresh_lagging_followups(base):
     """
     out_dir = install_scripts_dir()
     for rel in FOLLOWUP_FILES:
+        print(f"CALC-INDEX-BY-v2", file=sys.stderr)  # noqa: E501
         dest = target_path(out_dir, rel)
         before = local_bytes(dest) if os.path.isfile(dest) else None
         # 取不到**不算失败**，但网络类异常须在这里收住：`HTTPException` 不是 `OSError`

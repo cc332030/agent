@@ -1561,7 +1561,11 @@ def _check_placeholders(name: str, guard: str, steps) -> None:
 # ——例如『NPC 禁合并·动作侧』的措辞表（提交说明里哪些话术算"合并动作的痕迹"、哪些算
 # "记录禁令的放行标记"）是纯数据表，规则引擎不认它的结构。故允许它包在 `tokens` 里
 # 过纯度判据，再由本名单显式提到顶层。
-DATA_TABLE_KEYS = ("merge_state_guard", "change_number_scope_guard")
+DATA_TABLE_KEYS = ("merge_state_guard", "change_number_scope_guard",
+                  "guard_test_floor")
+# 其中**按防线名分片**的表：多处并行改动各改自己那一道的行，不再挤在同一行上
+# （全局单值表是"两个并行 PR 必然撞同一行"的结构性成因，见 `guards.adoc`「记账沿革」）。
+SHARDED_DATA_TABLE_KEYS = ("guard_test_floor",)
 
 
 # 解析与合并结果都按**内容摘要**缓存（不按路径）：`tomllib` 是纯 Python，一批规则整体
@@ -1582,6 +1586,10 @@ def _merge_file(name: str, data, merged: dict) -> None:
     `tokens` 段另允许承载**不给规则引擎用、只给脚本读的纯数据表**（如
     『NPC 禁合并·动作侧』的措辞表 `merge_state_guard`）：它们同样是"改措辞不动代码"
     的落点，包一层 `tokens` 只是为过"规则文件只承载 guards/tokens 两键"的纯度判据。
+
+    **分片表**（`guard_test_floor`）：一张表里按**防线名**分键，而不是整张表只有一个
+    数值——多处并行改动各改自己那一道防线的行，天生不同 hunk、不会撞在同一行上。
+    整张表的键与数值仍由加载期逐份去重（同一道防线只能有一处落点）。
     """
     if not isinstance(data, dict):
         raise RulesError(f"规则文件 {name} 不是对象（顶层须为 `guards` / `tokens` 两张表）")
@@ -1593,7 +1601,8 @@ def _merge_file(name: str, data, merged: dict) -> None:
         _check_placeholders(name, key, value)
         merged["guards"][key] = value
     for key, value in data.get("tokens", {}).items():
-        if key in merged["tokens"]:
+        # **分片表不走 tokens 这一层的整表去重**：它按分片键并入（见下），整表同名是常态
+        if key not in SHARDED_DATA_TABLE_KEYS and key in merged["tokens"]:
             raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了名单/锚点 `{key}`——"
                              "同一份名单只能有一处落点（两处会各写一半、彼此漂移）")
         merged["tokens"][key] = value
@@ -1602,10 +1611,24 @@ def _merge_file(name: str, data, merged: dict) -> None:
     # 用 `in` 判会一律命中"重复定义"（实测踩过）。
     for key, value in data.get("tokens", {}).items():
         if key in DATA_TABLE_KEYS:
-            if merged[key] is not None:
-                raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了数据表 `{key}`——"
-                                 "同一份数据表只能有一处落点")
-            merged[key] = value
+            if key not in SHARDED_DATA_TABLE_KEYS:
+                if merged[key] is not None:
+                    raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了数据表 "
+                                     f"`{key}`——同一份数据表只能有一处落点")
+                merged[key] = value
+                continue
+            # 分片表：按**分片键**（防线名）逐键并入，同一分片键出现在两份文件里即报错
+            if not isinstance(value, dict):
+                raise RulesError(f"规则文件 {name} 的分片表 `{key}` 不是对象——"
+                                 f"它按防线名分片（`[tokens.{key}]` 下逐行 `<防线名> = <数值>`）")
+            table = merged[key] if merged[key] is not None else {}
+            for shard, num in value.items():
+                if shard in table:
+                    raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了分片表 "
+                                     f"`{key}` 的分片 `{shard}`——同一道防线的记账只能有一处"
+                                     "落点（两处会各写一半、彼此漂移，正是分片表要避开的事）")
+                table[shard] = num
+            merged[key] = table
 
 
 def load_rule_specs(spec) -> dict:
