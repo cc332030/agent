@@ -6111,6 +6111,19 @@ class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
         cm.check_windows_window_guard()
         self.assertIn("不切换前台窗口", self.error_texts())
 
+    def test_per_process_capture_dropped_reports(self):
+        # 反例：按进程取图的手段被抽（用户口径：截指定进程的图、后台截，不因跳最顶层影响用户）
+        # ——"被盖住也取得到"只剩一句愿望，执行者照旧先切前台再截
+        self._mutate(self.WIN, "按那个进程取、不靠把它摆到前台", "想办法把画面取到")
+        cm.check_windows_window_guard()
+        self.assertIn("按进程取图的手段", self.error_texts())
+
+    def test_process_stays_background_dropped_reports(self):
+        # 反例：抓图这一刻的边界被抽——"该进程全程留在后台"没了，执行者仍可能先把应用摆到眼前
+        self._mutate(self.WIN, "该进程全程留在后台", "抓图时可以放到前台")
+        cm.check_windows_window_guard()
+        self.assertIn("该进程全程留在后台", self.error_texts())
+
     def test_exemption_dropped_reports(self):
         # 反例⑦：例外被抽（真机交互被本条一并拦掉）
         self._mutate(self.WIN, "例外只有两类", "本无例外")
@@ -6164,7 +6177,7 @@ class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
         with open(os.path.join(self.root, self.RULES), encoding="utf-8") as fh:
             rules = fh.read()
         self.write(self.RULES,
-                   rules.replace('min = 12\ntoken_list = "WINDOWS_WINDOW_TOKENS"',
+                   rules.replace('min = 15\ntoken_list = "WINDOWS_WINDOW_TOKENS"',
                                  'min = 99\ntoken_list = "WINDOWS_WINDOW_TOKENS"', 1))
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
