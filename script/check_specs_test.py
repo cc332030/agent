@@ -27880,6 +27880,52 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
                              "「分发产物的体积与按需加载」整节")
         self.assertIn("产物外置", self.error_texts())
 
+    def test_derived_artifact_bullet_removed_reports(self):
+        # 反例：通用层「派生件与本体同处一个构建步骤」整条被抽 -> dist.zip 与 dist 的绑定
+        # 退回"记得同时更新"的自觉（用户点名的断层：压的是上一版、或被删了才发现）
+        self._write_all_valid()
+        text = self.base[self.CODING]
+        start = text.index("* **派生件与本体同处一个构建步骤、同属一个构建产物（L1）**")
+        end = text.index("\n* **存量边界（L1）**", start)
+        self.write(self.CODING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("派生件与本体", self.error_texts())
+
+    def test_derived_artifact_same_step_removed_reports(self):
+        # 反例：判据核心「同一次构建里产出」被抽 -> 手工压包重新成为合规做法
+        self._run_guard_with(self.CODING, "**同一次构建里产出**",
+                             "**在方便的时候产出**")
+        self.assertIn("同一次构建里产出", self.error_texts())
+
+    def test_derived_artifact_same_product_removed_reports(self):
+        # 反例：「同一个构建产物的两个组成」被抽 -> 本体与派生件又能在两处各自删改、各自交付
+        self._run_guard_with(self.CODING, "**同一个构建产物的两个组成**",
+                             "**两处各自独立的产物**")
+        self.assertIn("同一个构建产物的两个组成", self.error_texts())
+
+    def test_derived_artifact_no_manual_removed_reports(self):
+        # 反例：「派生件是规范的产物时不由人工手作」被抽 -> 手工压一份提交当兜底
+        self._run_guard_with(self.CODING, "**派生件是规范的产物时不由人工手作**",
+                             "**派生件可以手工补一份**")
+        self.assertIn("不由人工手作", self.error_texts())
+
+    def test_web_derived_artifact_landing_removed_reports(self):
+        # 反例：栈层「派生件与本体同处一个构建步骤」那一条被抽 -> 前端这一半又只剩通用层方向
+        self._write_all_valid()
+        text = self.base[self.WEB]
+        start = text.index("* **派生件与本体同处一个构建步骤（载体）**")
+        end = text.index("\n* **目录结构与宿主程序的落点分工", start)
+        self.write(self.WEB, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("派生件与本体", self.error_texts())
+
+    def test_derived_artifact_basis_removed_reports(self):
+        # 反例：依据行的取舍归属被抹掉 -> 读者把它当成标准规定
+        self._run_guard_with(self.CODING,
+                             "「派生件与本体同处一个构建步骤、同属一个构建产物」同样是本集合的判据化取舍",
+                             "「派生件与本体同处一个构建步骤」也是通行做法")
+        self.assertIn("判据化取舍", self.error_texts())
+
 
 class TestCheckUiStyleGuard(CheckSpecsTestCase):
     """钉住『界面与样式』防线（**用户提出**）。
