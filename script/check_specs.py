@@ -708,7 +708,18 @@ RESIDENT_FILES = ("AGENTS_COMMON.adoc",
 # 65756 字节、超 65500。按「先归位、再新增」把「任何代码活动」条目里重复的识别特征合并、
 # 界面与反馈两处登记压成短形态（落点与判定要点一个不少，`check_ui_spec_guard` 与
 # `UiStyleGuard` 那一组锚点全绿），落到 65191 字节、余量约 0.5%。**上限仍留在 65500**。
-RESIDENT_BUDGET = 65500
+# 本轮由 65500 上调为 66000：调度器「选容器或排表」那一行把识别特征补成
+# 「含定控件宽高、要不要滚动条」（用户口径：页面设计要同时考虑可用性与紧凑——输入框不许
+# 撑满整行、宽高按数据实际宽度定、尽量一屏显示完不加滚动条），使必加载层落到 65607 字节、
+# 超原天花板 107 字节；登记只加最短的识别特征（判据正文在 `specs/general/ui.adoc`
+# 「可用性与紧凑同为一等目标」、取值在 `specs/general/ui-patterns.adoc`），余量约 0.6%，
+# 下一次仍应先归位、再考虑抬数。
+# 本轮**不抬**（上限仍留在 66000）：调度器「选容器或排表」的识别特征补了最短半句
+# 「这一格用什么控件」（用户口径：输入框优先选择对应类型的输入框，比如日期最好不要用文本框、
+# 无法限制格式），必加载层实测 65558 字节、余量约 0.7%，仍在原上限之内——按「抬数须按实测
+# 用量就近取值」的口径，没有超限就不动这个数。判据正文在 `specs/general/ui.adoc`
+# 「输入控件按值域取、格式由控件与属性限住」，选型顺序在 `specs/general/ui-patterns.adoc`。
+RESIDENT_BUDGET = 66000
 # 核心清单「底线」节的**条数下限**：宁少不滥是取向，但少于这个数就说明清单被削过
 # （「底线」是浓缩后的全套底线，不是"挑几条最重要的"）。与 `SOFT_FILE_SIZE_HINT`
 # 同理：它是"拦无声删除"的下限、不是目标。
@@ -2003,6 +2014,10 @@ POINTER_SCAN_FILES = (
     "prompts/spec-refine.adoc",
     "specs-project-maintainer/context.adoc",
     "specs-project-maintainer/guards.adoc",
+    "specs-project-maintainer/ledger/README.adoc",
+    "specs-project-maintainer/ledger/generic-single-value-rows.adoc",
+    "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
+    "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
     "specs-project-maintainer/priority.adoc",
     "specs-project-maintainer/skills/spec-change-verify.adoc",
     "specs-project-maintainer/skills/spec-collection-refactor.adoc",
@@ -5009,8 +5024,14 @@ def check_install_repeat_update_guard():
 # 动作本身让"删了什么"在 diff 里可见**。
 
 GUARD_WIRING_BASELINE = 183  # 同源实取：`CHECKS` 序列唯一名（183 条，无重复项）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
-GUARD_TEST_BASELINE = 2517  # 同源实取（本轮：原有 2515 + `TestCheckWindowsWindowGuard` 新增 2 条反例——「按进程取图的手段」整组被抽 / 「该进程全程留在后台」被抽；再上一轮：原有 2510 + `TestCheckBundleSizeGuard` 新增 5 条反例——通用层「产物外置时仍是一个可交付件」条被抽 / 通用层「运行期不解压、按条目取用」半句被抽 / 栈层「单个归档件」落点被抽 / 栈层「归档件不解压成目录」条被抽 / 栈层回指被改宽）：`script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数（按 `unittest.TestLoader` 实取）。本轮为**并入 `main` 后的实测值**——两侧各加了用例（本分支 `TestCheckDevFlowGuard` 补「专家实践那一路被整条抽走」反例；`main` 侧 `TestCheckTestScopeGuard` / `TestCheckUiSpecGuard` 一族 / `TestDuplicateScanShortUnit` / `TestCheckGuardManifestNumberingTable`），合并后按现场 `unittest.TestLoader` 一次取齐、不逐侧相加；逐轮沿革见 `specs-project-maintainer/guards.adoc`「记账沿革」
 
+# 反例用例的记账**不在这里**：按防线分片落在规则数据
+# `script/specs-rules/_guard_test_floor.toml` 的 `[tokens.guard_test_floor]`（一道防线一行）。
+# 早先它是一个全局单值常量（`GUARD_TEST_BASELINE`），每个加反例的改动都要改同一行——
+# 两个并行改动**必然**撞在同一个物理行上（本仓库实证：近 12 次 main 提交 12 次动了那个
+# 常量、其中 5 次是同一行）。分片之后各改各的行，总数由脚本现算，不再有第二真源。
+# 接线数仍是一个数：它只在"新增/删除防线"时变动，而那是独占动作（一道防线一个落点），
+# 且改动同时要动 `CHECKS`、清单表与台账三处，本就不是能并行的活。
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -5307,45 +5328,131 @@ def _count_collectable_tests(module_name: str, src: str) -> int:
 
 
 
+# 名字里没有 `TestCheck...` 前缀的老测试类：按"它钉住哪一道防线"**显式点名**。
+# 不按"猜得像"归并——归错了等于把某道防线的反例记到别家头上，删掉时两边都不报。
+GUARD_TEST_CLASS_ALIASES = {
+    "check_test_data_desensitize_guard": ("TestTestDataDesensitizeGuard",),
+    "check_list_structure_guard": ("TestListStructureGuard",),
+    "check_table_row_pipe_guard": ("TestTableRowPipeGuard",),
+    "check_yaml_string_quote_guard": ("TestYamlStringQuoteGuard",),
+    "check_toolchain_present_guard": ("TestToolchainPresentGuard",),
+    "check_asciidoctor_stub_guard": ("TestAsciidoctorStubGuard",),
+    "check_asciidoctor_syntax": ("TestAsciidoctorFailureLevel", "TestAdocCompileCmd"),
+    "check_dispatcher_no_details_guard": ("TestDispatcherNoVerbatim",),
+    "check_ledger_source_paths_guard": ("TestLedgerSourceEntries",),
+    # 规则引擎自身的那一组（同一批用例同时钉着两道防线，记账归其中一道即可）
+    "check_rule_script_separation_guard": (
+        "TestSeparationInvariants", "TestRulesLoad", "TestDuplicateScan",
+        "TestDuplicateScanAutomatonReuse", "TestDuplicateScanEarlyExit",
+        "TestDuplicateScanGramPrefilter", "TestDuplicateScanSentenceFallback",
+        "TestDuplicateScanShortUnit", "TestBulletTokens", "TestBulletTokensAnchorFloor",
+        "TestSectionGroups", "TestSubsectionGroups", "TestFileGroups",
+        "TestFileTokensAndLineTokens", "TestForbidSection", "TestSectionBulletsCutMarks",
+        "TestPromptFilesGroups", "TestSplitBlock", "TestRegexSection", "TestProseMentions",
+        "TestPointerNoVerbatim", "TestSentencesCache",
+        "TestLongestCommonSubstring", "TestRefKindPredicates"),
+}
+
+# 反例用例记账的分片表名（规则数据 `[tokens.<名>]` 下按防线名逐行取值）
+GUARD_TEST_FLOOR_TOKEN = "guard_test_floor"
+
+
+def _guard_test_classes(src_of=None):
+    """按防线名取"钉住它的 `TestCase` **类**名集合"（`{防线名: {类名, ...}}`）。
+
+    口径是**类**、不是条数：同一测试类里加一条反例是追加在本类末尾，与并行改动天然不同
+    hunk；按条数记账则总数仍是一行、冲突只是从常量搬到了表里（见规则数据表头的说明）。
+
+    类的归属按命名约定推：`TestCheck<N>Guard` → `check_<n>_guard`（`TestCheckFoo` →
+    `check_foo`）。名字里没有那段前缀的老测试类（如 `TestTestDataDesensitizeGuard`、
+    `TestListStructureGuard`）由 `GUARD_TEST_CLASS_ALIASES` **显式点名**——不按"猜得像"
+    归并：归错了等于把某道防线的反例记到别家头上，删掉时两边都不报。
+
+    `src_of` 允许注入"按相对路径取源码"的读法（默认读现场仓库）：单测夹具把测试文件落在
+    临时仓库根、再直接注入，读到的才是夹具那一份（缓存键是相对路径，换根不清缓存即读到
+    上一轮的现场文件——本仓库实测踩过这一格）。
+    """
+    out = {}
+    read = src_of or (lambda rel: _read_script_src(rel) or "")
+    script_dir = os.path.join(REPO_ROOT, "script")
+    if not os.path.isdir(script_dir):
+        return out
+    for fn in sorted(os.listdir(script_dir)):
+        if not fn.endswith("_test.py"):
+            continue
+        src_i = read(f"script/{fn}")
+        if not src_i:
+            continue
+        for cls in re.findall(r"(?m)^class ([A-Za-z_][A-Za-z0-9_]*)\(", src_i):
+            guard = _guard_of_test_class(cls)
+            if guard:
+                out.setdefault(guard, set()).add(cls)
+    return out
+
+
+def _guard_of_test_class(cls: str) -> str | None:
+    """把测试类名归到防线名；归不到返回 `None`（不参与记账）。"""
+    for guard, classes in GUARD_TEST_CLASS_ALIASES.items():
+        if cls in classes:
+            return guard
+    if not cls.startswith("TestCheck"):
+        return None
+    words = cls[len("TestCheck"):]
+    if not words:
+        return None
+    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", words).lower()
+    # 类名写成 `TestCheckXGuard` 时补回 `check_` 前缀；`TestCheckFoo` 这类名字本身就是
+    # 防线名去前缀的形态（`check_foo`），两种都收，由调用方按 `CHECKS` 里的真名过滤。
+    return "check_" + snake
+
+
+def _guard_test_floor():
+    """取规则数据里的反例用例记账分片表（`{防线名: 类数}`）；读不到返回 `{}`。"""
+    floor = _RULES_TOKENS.get(GUARD_TEST_FLOOR_TOKEN)
+    return floor if isinstance(floor, dict) else {}
+
+
 def _manifest_baseline_refs():
-    """从 `specs-project-maintainer/guards.adoc` 取三处**手写的基线引用值**。
+    """取**逐轮记账**里引用的接线数（`specs-project-maintainer/ledger/` 的全部轮次文件）。
 
-    返回 `(接线数引用值, 用例数引用值, 记账表末行接线数)`，取不到处为 `None`；
-    本表整体缺失时返回 `None`（由 `check_guard_order_guard` 报红）。
+    返回 `(引用值, 用例数引用值, 引用值)`：第一项与第三项都是"记账里出现过的最大接线数"
+    （两个槽位是为既有调用方保留的形状，不承载不同口径）；**取不到时返回 `None`**
+    （`ledger/` 与 `guards.adoc` 都缺失时由 `check_guard_order_guard` 报红）。
 
-    为什么需要它：本表「记账沿革」逐轮引用 `GUARD_WIRING_BASELINE` / `GUARD_TEST_BASELINE`，
-    那是**同一数值的第二份写法**——两个常量改了而这里没改（或反过来）时，
-    两个基线的核对全部照常通过，而读者按本表核到的数指向别处。
+    为什么需要它：逐轮记账逐行以 `a → **b**` 记该轮结束时的接线数，而那是
+    `GUARD_WIRING_BASELINE` 的**第二份写法**——常量改了而记账没改（或反过来）时，
+    基线的核对全部照常通过，读者按记账核到的数指向别处。
+
+    落点是 `ledger/` 目录（一轮一个文件）**而不是 `guards.adoc` 里的同一张表**：
+    每轮往同一张表的同一位置插行，两个并行改动必然撞在同一行上——这正是本轮从
+    `guards.adoc` 把那张表整体搬走的原因。搬走之后 `guards.adoc` 里不再有轮次行，
+    故这里连"从哪个文件取"也跟着改：判据核的是**现值**，来源换了位置不算放宽。
+
+    **用例数那一格已不再核**：反例记账已从全局单值改成按防线分片（见
+    `[tokens.guard_test_floor]`），逐轮记账里的 `用例数 a → b` 只是当时的记录。
     """
     # 落点**现场推导**（与本文件里其它落点同口径）：模块级常量在 import 时就绑定了当时的
     # 仓库根，夹具换根后 `PROJECT_SPECS_DIR` 可能仍指向真实仓库——那样反例会静默读到真文件、
-    # "本表改了数"这个形态永远报不出来（本仓库实测过的同类坑）。
-    # 路径按 `REPO_ROOT` 现算（夹具一致地重定向它），故这里也只用 `REPO_ROOT`。
-    path = os.path.join(REPO_ROOT, "specs-project-maintainer", "guards.adoc")
-    if not os.path.isfile(path):
+    # "记了错误的数"这个形态永远报不出来（本仓库实测过的同类坑）。
+    ledger_dir = os.path.join(REPO_ROOT, "specs-project-maintainer", "ledger")
+    if not os.path.isdir(ledger_dir):
         return None
-    text = open(path, encoding="utf-8").read()
-    # 接线数现值：**按本表自己声明的形态取**——「新增防线的记账（按轮次）」逐行以
-    # `a → **b**` 记该轮结束时的现值。
-    # **现值＝记账表里最大的那个接线数**，不取"物理最后一行"：记账表里混着多条分支各自的"本轮"
-    # （合并后按合入次序排列，最后一行的接线数不一定是现值），取最大者是唯一稳的读数
-    # ——接线数只增不减，历史轮次留在正文里的数都比现值小。
+    # 接线数现值：**取记账里最大的那个**，不取"物理最后一行"——多个并行轮次各记自己那一行
+    # 的现值（合并后按合入次序排列），接线数只增不减，故现值一定是最大者。
+    # 同一份文件的读取顺序按文件名排序，保证夹具与现场的读数一致。
     rows = []
-    for row in re.findall(r"(?m)^\| 本轮[^\n]*", text):
-        m = re.search(r"→\s*\*\*(\d+)\*\*", row)
-        if m:
-            rows.append(int(m.group(1)))
-    wiring = max(rows) if rows else None
-    # 用例数现值：本表记用例数沿革的既有写法是 `用例数 \`a → b\``
-    # （也有 `\`a → **b**\`` 与 `用例数回填为 **b**` 两种变体）——按这三种形态取
-    # 其中**最大的那个**：用例数只增不减，历史轮次留在正文里的数都比现值小，
-    # 故现值一定是最大者（取法只是读数的辅助，判据是与常量**等值**）。
-    wired = [int(n) for n in re.findall(
-        r"用例数\s*`?[^`\n]{0,20}?→\s*\*{0,2}(\d+)", text)]
-    wired += [int(n) for n in re.findall(r"用例数回填为 \*{0,2}(\d+)", text)]
-    tests = max(wired) if wired else None
-    return wiring, tests, wiring
-
+    for fn in sorted(os.listdir(ledger_dir)):
+        if not fn.endswith(".adoc"):
+            continue
+        text = open(os.path.join(ledger_dir, fn), encoding="utf-8").read()
+        for row in re.findall(r"(?m)^\| 本轮[^\n]*", text):
+            m = re.search(r"→\s*\*\*(\d+)\*\*", row)
+            if m:
+                rows.append(int(m.group(1)))
+    if not rows:
+        return None
+    wiring = max(rows)
+    return wiring, None, wiring
 
 
 def _newest_changelog_wiring_ref():
@@ -5418,6 +5525,57 @@ def check_guard_manifest():
             "（清单表的重复行由 `check_guard_order_guard` 的逐一同序核对报出）",
             "script/check_specs.py")
 
+    # 反例用例的记账：**按防线分片**核（一道防线一行，见规则数据
+    # `_guard_test_floor.toml`）。核的是"钉住这道防线的 `TestCase` **类**还在不在"，
+    # 不是"用例总条数够不够"——总条数是一个全局单值：同文件内删一条加一条（甚至改名、
+    # 把一条掏空成空壳）都能维持它，而**并行改动各加自己的反例**又必然要改它那一行。
+    # 分片之后：增删哪道防线的反例只动自己那一行，且**加减都报**（旧基线只拦"减"，
+    # 于是"新增时没登记"这一格从来没人核）。
+    # **测试类名按现场现读、不吃缓存**：`_read_script_src` 的缓存键是"仓库根相对路径"，
+    # 夹具换根后同一个键会命中上一轮（甚至现场仓库）的那一份——那样"减到/增到"两条判据
+    # 核的是一批与夹具无关的类名，反例静默全绿。故这里显式传一个**每次现读**的读者
+    # （同 `check_guard_order_guard` 的处置口径）。
+    def _fresh_src(rel: str) -> str:
+        try:
+            with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
+                return fh.read()
+        except OSError:
+            return ""
+
+    class_cnt = _guard_test_classes(src_of=_fresh_src)
+    floor = _guard_test_floor()
+    if not floor:
+        err(f"规则数据里取不到反例用例记账表 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]`"
+            "（`script/specs-rules/_guard_test_floor.toml`）——这张表是「删防线时连带删掉"
+            "它的反例」唯一的记账处，取不到时整道判据空转，而脚本照样报绿",
+            "script/specs-rules/_guard_test_floor.toml")
+    else:
+        for guard in sorted(set(seq_names) | set(floor)):
+            have = len(class_cnt.get(guard, ()))
+            want = floor.get(guard)
+            if want is None:
+                err(f"防线 `{guard}` 在 `CHECKS` 序列里、却**没有登记**反例用例记账行——"
+                    "新增一道防线时须在 `script/specs-rules/_guard_test_floor.toml` 的 "
+                    f"`[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里补一行（值为钉住它的 `TestCase` "
+                    "类数，没有就写 0）。不登记时这道防线的反例此后**不受任何数量判据保护**",
+                    "script/specs-rules/_guard_test_floor.toml")
+            elif have < want:
+                err(f"防线 `{guard}` 的反例用例类从 {want} 减到 {have}——**反例是防线的实际"
+                    "效力来源**（删一道防线时常连它的反例一起删，而脚本与单测仍全绿）。"
+                    "确实要删就得说明删了哪些、为什么删，并把这一行改小（改这一行这个动作"
+                    "本身让「删了什么」在 diff 里可见）",
+                    "script/specs-rules/_guard_test_floor.toml")
+            elif have > want:
+                err(f"防线 `{guard}` 的反例用例类从 {want} 增到 {have}——**新加的反例要当场"
+                    "记账**：不改这一行时，此后删掉这批反例不会有任何判据发声（旧基线只拦"
+                    f"「减」，这一格从来没人核）。请把 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里"
+                    f"`{guard}` 这一行改成 {have}",
+                    "script/specs-rules/_guard_test_floor.toml")
+            elif want and guard not in class_cnt:
+                err(f"防线 `{guard}` 的记账行还写着 {want}，而现场已经找不到钉住它的测试类——"
+                    "两道防线的测试类命名对不上时，这一行会**永远报绿**（核的是一个不存在的名字）",
+                    "script/specs-rules/_guard_test_floor.toml")
+
     # "定义了但没人调"的防线：看起来还在（函数体完好、台账也点了名），但永远不会执行。
     # 判据按**接线闭包**算（与 `check_wiring_guard` 同口径）——被别的防线带着跑的不算
     # 未接线（本仓库实证形态：公共内容自足两道由 `check_adoption_guard` 收尾调用；
@@ -5429,30 +5587,6 @@ def check_guard_manifest():
         err(f"存在**已定义但任何地方都没被调用**的防线函数 {dead}——它们看起来还在"
             "（函数体完好、台账也点了名），但永远不会执行；要么接线、要么删掉并记账",
             "script/check_specs.py")
-
-    # 用例数口径：`script/` 下**全部** `*_test.py` 里**真正被执行**的 `test_*` 用例数
-    # 逐条相加（与"防线放在哪个文件"无关——新增一个测试文件时该数随之增长）。
-    # **必须是"真实执行"、不是"源码里写了几个 `def test_`"**：实测（本仓库）在测试文件
-    # 末尾 `if __name__ == "__main__":` 块**之后**注入一个仍缩进 4 的 `def test_`——
-    # 源码正则数得到、`unittest` 收集不到，于是"用例数减少"不报红而基线防线全程未报红。
-    tests = 0
-    script_dir = os.path.join(REPO_ROOT, "script")
-    if os.path.isdir(script_dir):
-        for fn in sorted(os.listdir(script_dir)):
-            if not fn.endswith("_test.py"):
-                continue
-            src_i = _read_script_src(f"script/{fn}") or ""
-            tests += _count_collectable_tests(fn, src_i)
-    if tests < GUARD_TEST_BASELINE:
-        err(f"防线反例用例数从基线 {GUARD_TEST_BASELINE} 减到 {tests}——**反例用例是防线的"
-            "实际效力来源**（一条防线被删时常连带删掉它的全部反例，而脚本与单测仍全绿）；"
-            "确实要删就得说明删了哪些、为什么删（并同步 `GUARD_TEST_BASELINE`）。"
-            "**本数是 `script/` 下全部 `*_test.py` 里真正被 `unittest` 收集到的用例数**"
-            "（不是源码里写了几个 `def test_`——两者不等的形态即『写了却跑不到』，"
-            f"本仓库实测：末尾 `if __name__` 块之后仍缩进的 `def test_` 源码数得到、"
-            f"执行收集不到，两者当前 {tests}）；只核**数量不得减少**，"
-            "同文件内改名/增删一进一出都能维持该数，故别把它读成「某条用例仍在」",
-            "script/check_specs_test.py")
 
     # 每条用例**逐个**核对"它那一节还在不在"：只核总数存在一个已点名的空缺——
     # 同文件内"删 1 条、加 1 条"（甚至"改名"）都能维持该数，故总数过绿不代表某条用例仍在。
@@ -5477,8 +5611,40 @@ def check_guard_manifest():
                         "总数基线只保证用例数不减少，同文件内删一条加一条（或把用例掏空成"
                         "空壳）都能维持该数；被抽空的反例用例仍会被收集、仍占着那个数，"
                         "却什么都证不了。要么把断言补回去，要么说明删了哪条、为什么删"
-                        "（并同步 `GUARD_TEST_BASELINE`）",
+                        f"（并同步 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里这道防线那一行）",
                         f"script/{fn}")
+
+    # 同名的模块级测试类**只认最后一份**：`class` 语句在模块级按名绑定，后一份把前一份
+    # 整个覆盖掉——前一份里的全部用例**从未被 `unittest` 收集过**，跑起来却全绿。
+    # 本仓库实测两轮：① `TestCheckUiSpecGuard` 里 6 条反例被逐字写了两遍（读者数
+    # `def test_` 以为有三份、实际一份）；② 合并解冲突时整段测试类被重复贴入
+    # （`TestCheckGuardManifest` 等 50 个类各两份、共 7450 行），用例数从 2527 掉到 1953
+    # 而 `check_specs.py` 报 OK、单测全绿。
+    # 为什么上述两种既有判据都拦不住：被覆盖那一份里的**用例限定名**仍在、断言也齐，
+    # 故"条目清单"与"空壳"两条一路放行；"用例总数"只核下限。故另立一条：同名即报。
+    if os.path.isdir(script_dir):
+        for fn in sorted(os.listdir(script_dir)):
+            if not fn.endswith("_test.py"):
+                continue
+            src_i = _read_script_src(f"script/{fn}") or ""
+            # 口径与 `_test_cases` **同源**：只有模块级（顶格）的 `class` 才会被收集，
+            # 用例体里一层缩进的局部类（如伪造响应用的 `class _R:`）不参与。
+            seen = {}
+            for idx, line in enumerate(src_i.splitlines()):
+                mc = re.match(r"(?P<indent>[ \t]*)class ([A-Za-z_][A-Za-z0-9_]*)\b", line)
+                if not mc or mc.group("indent").expandtabs(4):
+                    continue
+                seen.setdefault(mc.group(2), []).append(idx + 1)
+            dup = {name: rows for name, rows in seen.items() if len(rows) > 1}
+            if dup:
+                detail = "、".join(f"`{name}`（第 {'/'.join(map(str, rows))} 行）"
+                                  for name, rows in sorted(dup.items())[:5])
+                err(f"script/{fn} 里存在**同名的模块级测试类** {len(dup)} 个：{detail}——"
+                    "`unittest` 只收集最后一份，**前一份里的用例从未执行过**，而单测全绿、"
+                    "读者数 `def test_` 也看不出来（本仓库实测两次：反例被逐字写两遍；"
+                    "合并解冲突时整段被重复贴入、7450 行、用例数 2527 → 1953）。"
+                    "请删掉重复的那一份——两份若内容不同，先合到一处再删",
+                    f"script/{fn}")
 
     # 测试文件不得在**中段**结束模块级代码（`if __name__ == "__main__":` 出现在中段、
     # 或在其之后仍写模块级定义）：`unittest.main()` 只跑到那里为止，其后的测试类**永远
@@ -5553,8 +5719,8 @@ def check_guard_manifest():
                 "它看起来还在、却永远不会执行；台账与接线两处必须同口径",
                 "script/check_effective.py")
 
-    # **记账本表自己引用的两个基线值**：`specs-project-maintainer/guards.adoc`「记账沿革」
-    # 里逐轮引用了 `GUARD_WIRING_BASELINE` / `GUARD_TEST_BASELINE`，而那是**手写的数**——
+    # **逐轮记账自己引用的接线数**：`specs-project-maintainer/ledger/` 的各轮文件
+    # 逐行引用 `GUARD_WIRING_BASELINE`，而那是**手写的数**——
     # 本轮实测：把两个常量各改一个数（`1793 → 1800`）、旧轮次行里引用的数一并改掉，
     # 脚本与本表都**全绿**（本表自身的引用值与"本轮新增了哪几道"没有任何核对）。
     # 口径与既有的基线核对同源：**数要改就改常量，引用处随之**；改不成就报红、逼人核对。
@@ -5569,26 +5735,20 @@ def check_guard_manifest():
         # ② 接线数等于常量（说明基线抬到与实取一致）时引用须**逐字跟上**——否则同一数值
         # 两处各写一份、两处都能改（本仓库实测：两处各改一个数，脚本与本表**都全绿**）。
         if ref_wiring is not None and ref_wiring > GUARD_WIRING_BASELINE:
-            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用接线数 "
+            err(f"specs-project-maintainer/ledger/ 的逐轮记账引用接线数 "
                 f"{ref_wiring}，**高于** `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）——"
                 "记了一个当前还不存在的数；同一数值两处各写一份即第二真源，数要改就改常量",
-                "specs-project-maintainer/guards.adoc")
+                "specs-project-maintainer/ledger")
         elif ref_wiring is not None and wiring_now == GUARD_WIRING_BASELINE \
                 and ref_wiring != GUARD_WIRING_BASELINE:
-            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用接线数 "
+            err(f"specs-project-maintainer/ledger/ 的逐轮记账引用接线数 "
                 f"{ref_wiring}，而 `GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——"
                 "同一数值两处各写一份即第二真源（本仓库实测：两处各改一个数，脚本与本表"
                 "**都全绿**）。数要改就改常量、引用处随之",
-                "specs-project-maintainer/guards.adoc")
-        # 用例数引用是"历史上各轮记下的取值"，合并来的分支里可能记着高于当前基线的数
-        # （那一轮在本分支上没跟进来），故**只在本表最后记的那一轮接线数＝当前常量时才核**
-        # ——那一轮说明"记账表已跟上本轮"，此时引用须逐字一致；未跟上时不核（避免误伤）。
-        if ref_test is not None and last_row == wiring_now \
-                and ref_test != GUARD_TEST_BASELINE:
-            err(f"specs-project-maintainer/guards.adoc 的「记账沿革」引用用例数 "
-                f"{ref_test}，而 `GUARD_TEST_BASELINE` 是 {GUARD_TEST_BASELINE}——"
-                "同一数值两处各写一份即第二真源；数要改就改常量、引用处随之",
-                "specs-project-maintainer/guards.adoc")
+                "specs-project-maintainer/ledger")
+        # 用例数引用**不再核**：反例的记账已从"全局单值"改成按防线分片（见
+        # `[tokens.guard_test_floor]`），沿革行里的 `用例数 a → b` 只是**当时的记录**、
+        # 不再是"某个常量的第二份写法"——再按等值核它，等于让那个单值在半路上复活。
     # **变更日志新版条目**里也记了这一轮的接线数（形如 `防线接线基线 139 → **142**`）——
     # 同一数值的第三处写法，同样须与常量一致（本仓库实测：条目里的数改了、脚本与本表
     # 都全绿，因为两处都没核）。只在**版本号最大的那条**里核：旧条目记的是**当时**的
@@ -5611,12 +5771,12 @@ def check_guard_manifest():
     if manifest_test is not None:
         ref_wiring, ref_test, last_row = manifest_test
         if ref_wiring is not None and last_row is not None and last_row < ref_wiring:
-            err(f"specs-project-maintainer/guards.adoc「新增防线的记账（按轮次）」最后一行"
-                f"的接线数是 {last_row}、低于 `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）"
+            err(f"specs-project-maintainer/ledger/ 的逐轮记账里最大的接线数是 {last_row}、"
+                f"低于 `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）"
                 "——**本轮新增了哪几道防线**这一行是「防线的增删必须留下痕迹」唯一的记账处，"
                 "低报说明有新增的防线没进这一列（本仓库实测：删掉两道新防线后，"
                 "本表与脚本一样全绿，因为两处都没核）",
-                "specs-project-maintainer/guards.adoc")
+                "specs-project-maintainer/ledger")
 
     # 脚本头部清单的编号：出现断号即说明有条目被整条删掉；出现**重号**即说明重排编号时
     # 把两条并成了同一个号（后者曾漏报：只核"有没有断号"时，重号与连通的两段编号都过）。

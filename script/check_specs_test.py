@@ -110,6 +110,12 @@ def _mk_blackbox_base(root: str) -> str:
 NL = "\n"   # 夹具里的换行占位（避免源码里出现真换行、读起来分不清"这是内容还是缩进"）
 
 
+# 夹具里的第二个测试类：反例记账**按防线分片**，`_write_valid` 虚构的两道防线
+# （`check_alpha_guard` / `check_beta_guard`）各要有一个测试类钉住。
+BN_CASE = ("\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
+           "    def test_extra(self):\n        self.assertTrue(True)\n")
+
+
 class CheckSpecsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
@@ -20952,7 +20958,7 @@ class TestCheckGuardManifestNumberingTable(CheckSpecsTestCase):
              "| 编号 | 检查项或所属防线\n\n")
     SRC = (HEAD + "def check_alpha():\n    pass\n\n\n"
            "CHECKS = (\n    check_alpha,\n)\n"
-           "GUARD_WIRING_BASELINE = 1\nGUARD_TEST_BASELINE = 0\n"
+           "GUARD_WIRING_BASELINE = 1\n"
            "GUARD_EMPTY_TEST_NAMES = set()\n")
 
     def _run(self, rows):
@@ -21024,11 +21030,16 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self._orig_baseline = (cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE)
+        self._orig_baseline = cm.GUARD_WIRING_BASELINE
+        self._orig_floor = cm._RULES_TOKENS.get(cm.GUARD_TEST_FLOOR_TOKEN)
         os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
 
     def tearDown(self) -> None:
-        cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
+        cm.GUARD_WIRING_BASELINE = self._orig_baseline
+        if self._orig_floor is None:
+            cm._RULES_TOKENS.pop(cm.GUARD_TEST_FLOOR_TOKEN, None)
+        else:
+            cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = self._orig_floor
         super().tearDown()
 
     # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
@@ -21074,13 +21085,18 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         if test_file is None:
             body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
                            for i in range(tests))
-            test_file = ("import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
+            # 两道防线各有一个测试类：反例记账**按防线分片**，夹具须给得起两边的类
+            test_file = ("import unittest\n\n\n"
+                         "class TestCheckAlphaGuard(unittest.TestCase):\n" + body + BN_CASE)
         self.write("script/check_specs_test.py", test_file)
         self.write("script/check_effective_test.py",
                    "import unittest\n\n\nclass E(unittest.TestCase):\n"
                    "    def test_x(self):\n        self.assertTrue(True)\n")
         cm.GUARD_WIRING_BASELINE = 2
-        cm.GUARD_TEST_BASELINE = 5
+        # 反例记账是**按防线分片**的规则数据表（不是全局单值常量）：夹具直接换掉这张表，
+        # 两道防线各一行——这正是"并行改动各改自己那一行"的形态本身。
+        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
+                                                      "check_beta_guard": 1}
 
     def test_valid_passes(self):
         # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
@@ -21115,17 +21131,18 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
         self.assertIn("防线接线数从基线", self.error_texts())
 
-    # 记账沿革（`guards.adoc` 的「新增防线的记账（按轮次）」）引用的两个基线值。
-    # 夹具里的现值跟着 `_write_valid` 设的两个基线常量走（`**2**` / `5`）——
-    # **正例的形就是"实取的两处与常量一致"**，故这里不能写死一套与夹具无关的数。
+    # 逐轮记账里引用的接线数。**落点是 `ledger/`（一轮一个文件）**——那张表已从
+    # `guards.adoc` 整体搬走：每轮往同一张表的同一位置插行，两个并行改动必然撞在同一行上。
+    # 夹具里的现值跟着 `_write_valid` 设的接线基线走（`**2**`）——**正例的形就是
+    # "记账里引用的数与常量一致"**，故这里不能写死一套与夹具无关的数。
     _MANIFEST = (
-        "= 机械防线清单\n\n"
+        "= 本轮记账\n\n"
         "| 轮次 | 新增防线 | 接线数 | 承接了什么\n\n"
         "| 本轮（甲） | `check_alpha_guard` | 1 → **2** | 用例数 `4 → 5`。\n"
     )
 
     def _write_manifest(self, text):
-        self.write("specs-project-maintainer/guards.adoc", text)
+        self.write("specs-project-maintainer/ledger/round-a.adoc", text)
 
     def test_manifest_baseline_refs_consistent_passes(self):
         # 正例：本表引用的两个基线值 = 常量、记账表末行的接线数 = 常量
@@ -21143,11 +21160,13 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertIn("接线数", self.error_texts())
 
     def test_manifest_test_ref_drift_reports(self):
-        # 反例：**本表**引用的用例数被改（常量不动）
+        # 正例（口径变更）：**沿革里记的用例数**被改、其它都不动——沿革里的数是**当时的
+        # 记录**、不是某个常量的第二份写法，故**不得报红**：反例记账改成按防线分片之后，
+        # 再按等值核沿革里的用例数，等于让那个全局单值在半路上复活。
         self._write_valid()
         self._write_manifest(self._MANIFEST.replace("用例数 `4 → 5`", "用例数 `4 → 9`"))
         cm.check_guard_manifest()
-        self.assertIn("用例数", self.error_texts())
+        self.assertEqual([], cm.errors)
 
     def test_manifest_ledger_row_missing_reports(self):
         # 反例：本轮新增了防线、而「新增防线的记账（按轮次）」**没有记这一轮**——
@@ -21229,10 +21248,14 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertIn("check_beta_guard", self.error_texts())
 
     def test_tests_removed_without_note_reports(self):
-        # 反例②：反例用例被整批删掉（防线随之失效力）→ 用例数减少必须报红
-        self._write_valid(tests=1)
+        # 反例②：反例用例被整批删掉（跟着防线一起删时常发生）→ **钉住它的测试类整个消失**
+        # 必须报红。判据取"类还在不在"：同一类里增删条数是并行改动的常态、不报；
+        # 整类没了才说明这道防线的反例真的没了。
+        self._write_valid(test_file=(
+            "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
+            "    def test_case_0(self):\n        self.assertTrue(True)\n"))
         cm.check_guard_manifest()
-        self.assertIn("反例用例数", self.error_texts())
+        self.assertIn("反例用例类", self.error_texts())
 
     def test_ledger_names_missing_guard_reports(self):
         # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
@@ -21314,7 +21337,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 反例：`if __name__ == "__main__":` 落在**中段**、其后仍有缩进的 `def test_`
         # （块内局部函数）——源码正则数得到、`unittest` 收集不到，脚本与基线全绿。
         self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
             "    def test_case_0(self):\n        self.assertTrue(True)\n"
             "\n\nif __name__ == \"__main__\":\n"
             "    import unittest\n    unittest.main()\n"
@@ -21328,11 +21351,13 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # ——总数基线只保证"数量不减少"，删一条加一条、或把用例掏空都能维持该数；
         # 被抽空的反例仍会被收集、仍占着那个数，却什么都证不了。
         self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
             "    def test_case_0(self):\n        pass\n"
             "    def test_case_1(self):\n        self.assertTrue(True)\n"
             "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"
+            "\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
+            "    def test_extra(self):\n        self.assertTrue(True)"))
         cm.check_guard_manifest()
         self.assertIn("没有任何断言", self.error_texts())
 
@@ -21342,7 +21367,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 这一节会被截在夹具处、只覆盖前半段：断言留在节外，于是**该用例的那一节"没有
         # 断言"**、用例数也被压低（实测少 11 条、基线因此虚降）。判据＝同层级的定义才是边界。
         self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
             "    def test_case_0(self):\n"
             "        calls = []\n"
             "\n"
@@ -21355,8 +21380,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
             "        self.assertEqual(calls[:1], [])\n"
             "    def test_case_1(self):\n        self.assertTrue(True)\n"
             "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
-        cm.GUARD_TEST_BASELINE = 4
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"
+            "\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
+            "    def test_extra(self):\n        self.assertTrue(True)"))
         cm.check_guard_manifest()
         self.assertEqual([], cm.errors)
 
@@ -21364,7 +21390,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 反例⑬：同一形态的反面——真被掏空（通篇没有断言）时仍须报出，不得因
         # "夹具里也有个 `def`"而把这一节算成"有断言了"。
         self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
             "    def test_case_0(self):\n"
             "        class _R:\n"
             "            returncode = 0\n"
@@ -21375,7 +21401,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
             "        _run(None)\n"
             "    def test_case_1(self):\n        self.assertTrue(True)\n"
             "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
+            "    def test_case_3(self):\n        self.assertTrue(True)\n"
+            "\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
+            "    def test_extra(self):\n        self.assertTrue(True)"))
         cm.check_guard_manifest()
         self.assertIn("没有任何断言", self.error_texts())
 
@@ -21410,6 +21438,105 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.check_guard_manifest()
         self.assertIn("编号形态不规范", self.error_texts())
 
+    # ---- 反例记账改成**按防线分片**之后的形态（一处改动各改各的行，不再抢同一行）----
+
+    def test_floor_shard_missing_for_new_guard_reports(self):
+        # 反例：新增一道防线却**没登记**记账行——旧基线只核"总数不得减少"，
+        # 新增时没人核，于是这道防线的反例此后不受任何数量判据保护
+        self._write_valid()
+        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1}
+        cm.check_guard_manifest()
+        self.assertIn("没有登记", self.error_texts())
+
+    def test_floor_shard_class_removed_reports(self):
+        # 反例：某道防线的反例类被整类删掉、而记账行没跟着改——删防线时常连带删反例，
+        # 那件事必须在 diff 里留下痕迹
+        self._write_valid()
+        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 2,
+                                                      "check_beta_guard": 1}
+        cm.check_guard_manifest()
+        self.assertIn("减到", self.error_texts())
+
+    def test_floor_shard_class_added_without_note_reports(self):
+        # 反例：**新加**了反例却没改记账行——旧基线只拦"减"，这一格从来没人核；
+        # 分片之后加减都报，否则此后删掉这批反例不会有任何判据发声
+        self._write_valid()
+        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
+                                                      "check_beta_guard": 0}
+        cm.check_guard_manifest()
+        self.assertIn("增到", self.error_texts())
+
+    def test_floor_table_absent_reports(self):
+        # 反例：记账表整体缺失（规则数据里那张表被删/改名）→ 整道判据空转而脚本报绿，
+        # 故"取不到"必须报红，不得当成"没有记账就是通过"
+        self._write_valid()
+        cm._RULES_TOKENS.pop(cm.GUARD_TEST_FLOOR_TOKEN, None)
+        cm.check_guard_manifest()
+        self.assertIn("取不到反例用例记账表", self.error_texts())
+
+    def test_floor_shard_unknown_test_class_reports(self):
+        # 反例：记账行还写着数、而现场已经找不到钉住它的测试类（命名对不上）——
+        # 这一行会永远报绿，因为它核的是一个不存在的名字
+        self._write_valid()
+        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
+                                                      "check_beta_guard": 1,
+                                                      "check_gone_guard": 1}
+        cm.check_guard_manifest()
+        self.assertIn("check_gone_guard", self.error_texts())
+
+    # ---- 同名模块级测试类：只收集最后一份，前一份**从未执行** ----
+    # 本仓库实测两次：反例被逐字写两遍（读者数 `def test_` 以为有三份）、合并解冲突时
+    # 整段被重复贴入（7450 行、用例数 2527 → 1953）。两次 `check_specs.py` 都报绿：
+    # 被覆盖那份里的限定名还在、断言也齐，"条目清单"与"空壳"两条一路放行。
+
+    DUP_CLASS = ("import unittest\n\n\n"
+                 "class TestCheckAlphaGuard(unittest.TestCase):\n"
+                 "    def test_one(self):\n        self.assertTrue(True)\n"
+                 "\n\n"
+                 "class TestCheckAlphaGuard(unittest.TestCase):\n"
+                 "    def test_two(self):\n        self.assertTrue(True)\n")
+
+    def test_duplicate_module_class_reports(self):
+        # 反例：同名的模块级测试类写了两份——后一份把前一份整个覆盖掉，前一份的用例
+        # 从未被收集；它在源码里、在"用例条目清单"里都还在，故须单独报红
+        self._write_valid()
+        self.write("script/check_specs_test.py",
+                   self.DUP_CLASS
+                   + "\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
+                     "    def test_extra(self):\n        self.assertTrue(True)\n")
+        cm.check_guard_manifest()
+        self.assertIn("同名的模块级测试类", self.error_texts())
+
+    def test_fresh_read_ignores_stale_src_cache(self):
+        # 反例（口径）：`_read_script_src` 的缓存键是"仓库根相对路径"，换根后同一个键会
+        # 命中上一轮（或现场仓库）的那一份——读缓存时本判据核的是一批与夹具无关的类名，
+        # "减到/增到"两条反例静默全绿。故本判据须**现读现场**：先往缓存里塞一份假的
+        # `script/check_specs_test.py`（不含任何钉住这两道防线的类），夹具也照样要报红。
+        self._write_valid()
+        cm.REPO_SCRIPT_SRC_CACHE["script/check_specs_test.py"] = (
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n")
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
+    def test_nested_local_class_with_same_name_passes(self):
+        # 正例：用例体里一层缩进的局部类（伪造响应用的 `class _R:` 一类）不是测试类，
+        # 两处同名**不构成重复**——误报会误伤整批用例
+        self._write_valid()
+        self.write("script/check_specs_test.py",
+                   "import unittest\n\n\n"
+                   "class TestCheckAlphaGuard(unittest.TestCase):\n"
+                   "    def test_one(self):\n"
+                   "        class _R:\n            pass\n"
+                   "        self.assertTrue(_R)\n"
+                   "\n\n"
+                   "class TestCheckBetaGuard(unittest.TestCase):\n"
+                   "    def test_two(self):\n"
+                   "        class _R:\n            pass\n"
+                   "        self.assertTrue(_R)\n")
+        cm.check_guard_manifest()
+        self.assertEqual([], cm.errors)
+
     def test_well_formed_item_number_passes(self):
         # 正例：规范形态（单空格缩进 + 纯数字序号）不得被误报——本条判据的假阳性
         # 会误伤整份清单，故须有正例钉住。
@@ -21418,61 +21545,6 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
             ' 1. 丙。\n\n\ndef check_beta_guard():'))
         cm.check_guard_manifest()
         self.assertEqual([], cm.errors)
-
-
-class TestCheckStaleWordingGuard(CheckSpecsTestCase):
-    """钉住『已被证否的旧口径不得写回』防线。
-
-    失效形态（本仓库实证）：口径被现场实测证否后改掉的是**方向**，而"旧的错法长什么样"
-    只留在改动记录里——下一个人照旧句子复述一遍，就把错口径带回脚本注释。故把特征措辞
-    外置成规则数据（`script/specs-rules/_tokens.toml`）并逐条核"有没有被写回来"。
-
-    **核对对象是措辞形态**（`file_forbidden` 原语），"这条口径今天还成不成立"属语义判断。
-    """
-
-    def _write(self, extra: str = "") -> None:
-        self.write("script/check_specs.py",
-                   "def check_alpha_guard():\n"
-                   '    """甲。"""\n\n\n'
-                   + extra)
-
-    def test_stale_wording_absent_passes(self):
-        # 正例：脚本里没有旧口径的特征措辞——不得误报（假阳性会误伤整份脚本的注释）
-        self._write()
-        cm.check_stale_wording_guard()
-        self.assertEqual([], cm.errors)
-
-    def test_stale_def_test_count_wording_reports(self):
-        # 反例①：写回"`*_test.py` 里的 `def test_` 个数"这一**已被证否**的计数口径
-        # （实测证否：源码正则数得到、`unittest` 收集不到，两者不等）
-        self._write("# 用例数＝全部 `*_test.py` 里的 `def test_` 个数\n")
-        cm.check_stale_wording_guard()
-        self.assertIn("证否", self.error_texts())
-
-    def test_stale_single_file_counting_wording_reports(self):
-        # 反例②：写回"只数某一个测试文件"的旧口径（被证否：它长期低于实际收集数，
-        # 使基线虚低、删掉若干条用例都不报红）
-        self._write('# 口径：写成"只数 check_specs_test.py"\n')
-        cm.check_stale_wording_guard()
-        self.assertIn("证否", self.error_texts())
-
-    def test_missing_script_reports(self):
-        # 反例③：核对对象整体缺失 → 须报红，不得静默通过（"核不到"与"核过且通过"要分得清）
-        cm.check_stale_wording_guard()
-        self.assertIn("check_specs.py", self.error_texts())
-
-    def test_anchor_present_in_rule_data(self):
-        # 反向核对：本条钉的措辞**逐条来自规则数据**（不是散落在脚本里的字面量），
-        # 改措辞只改规则数据——两处各写一份正是本仓库反复出现的"第二真源"。
-        import rules_engine
-        specs = rules_engine.load_rule_files(cm._rules_spec())
-        steps = specs["guards"]["check_stale_wording_guard"]
-        # 同一道防线的规则步骤可能不止一条（通用层的一份与 `_tokens.toml` 里的一族），
-        # 故按 `kind` 取本步、不按条数取——按条数断言时，别处新增一步即报红，
-        # 而报的是"这条测试不行"，不是真因。
-        forbidden_steps = [x for x in steps if x.get("kind") == "file_forbidden"]
-        self.assertEqual(1, len(forbidden_steps))
-        self.assertTrue(forbidden_steps[0]["forbidden"])
 
 
 class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
@@ -28448,413 +28520,6 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
 
 
 
-class TestCheckGuardManifest(CheckSpecsTestCase):
-    """钉住『防线清单与删除记账』（防"删了却全绿"）。
-
-    本仓库实测的三条失效路径：①一道防线被从 `main()` 摘掉（代码并进别的防线）、它的
-    反例用例一并被删，脚本报 OK、单测全通过、台账上的"抓手数"也没变；②台账里点名的
-    防线名改成不存在的名字仍报"有抓手"；③脚本头部清单条目被整条删掉时编号断开、
-    而清单描述不参与一致性核对。故本条把三件事变成可核对的：接线数、反例用例数、
-    台账点名的防线名。
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        self._orig_baseline = (cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE)
-        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
-
-    def tearDown(self) -> None:
-        cm.GUARD_WIRING_BASELINE, cm.GUARD_TEST_BASELINE = self._orig_baseline
-        super().tearDown()
-
-    # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排（2026-09 重构后次序是数据）。
-    # 判据本身没有被放宽——接线数、用例数、台账点名三件事一条不少，只是喂给它的脚本
-    # 换成当前的编排形态（旧夹具写的是 `main()` 里逐行调用，重构后自然不再命中）。
-    _SRC = (
-        'def check_alpha_guard():\n'
-        '    """甲。"""\n'
-        '\n'
-        '\n'
-        'def check_beta_guard():\n'
-        '    """乙。"""\n'
-        '\n'
-        '\n'
-        'CHECKS = (\n'
-        '    check_alpha_guard,\n'
-        '    check_beta_guard,\n'
-        ')\n'
-        '\n'
-        '\n'
-        'def main(argv=None):\n'
-        '    """入口。"""\n'
-        '    for check in CHECKS:\n'
-        '        check()\n'
-        '    return 0\n'
-        '\n'
-        '\n'
-        'if __name__ == "__main__":\n'
-        '    main()\n'
-    )
-    # 台账逐条声明：`(条款名, 来源, 抓手路径, 声明的抓手, 备注)`——第 4 段是**必填**的
-    # 「这条规范由哪一道钉住」（有抓手＝防线名、无抓手＝`NO_GRIP_DECLARED`）。
-    _LEDGER = ("MECHANISMS = [\n"
-               "    (\"甲\", \"X.adoc\", \"script/check_specs.py\",\n"
-               "     \"check_alpha_guard\", \"备注甲\"),\n"
-               "    (\"乙\", \"X.adoc\", \"script/check_specs.py\",\n"
-               "     \"check_beta_guard\", \"备注乙\"),\n"
-               "]\n")
-
-    def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
-        self.write("script/check_specs.py", src if src is not None else self._SRC)
-        self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
-        if test_file is None:
-            body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
-                           for i in range(tests))
-            test_file = ("import unittest\n\n\nclass T(unittest.TestCase):\n" + body)
-        self.write("script/check_specs_test.py", test_file)
-        self.write("script/check_effective_test.py",
-                   "import unittest\n\n\nclass E(unittest.TestCase):\n"
-                   "    def test_x(self):\n        self.assertTrue(True)\n")
-        cm.GUARD_WIRING_BASELINE = 2
-        cm.GUARD_TEST_BASELINE = 5
-
-    def test_valid_passes(self):
-        # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
-        self._write_valid()
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_wiring_duplicate_registration_reports(self):
-        # 反例⑤（本轮实测失效）：同一道防线在 `CHECKS` 序列里**登记两次**——
-        # 条数被重复项凑够，掩盖了"真防线被删掉一道"（删掉的那道由重复项顶上，
-        # 接线数不掉、`check_guard_manifest` 与 `check_guard_order_guard` 都全绿）。
-        # 本轮 `check_pagination_guard` 正是这种形态：序列里一次、末尾又追加一次。
-        self._write_valid(src=self._SRC.replace(
-            "    check_beta_guard,\n",
-            "    check_beta_guard,\n    check_alpha_guard,\n"))
-        cm.check_guard_manifest()
-        self.assertIn("重复", self.error_texts())
-
-    def test_wiring_duplicate_hiding_removal_reports(self):
-        # 反例：删一道真防线（连同函数体、用例、台账声明）再把另一道重复登记一次，
-        # 序列元素个数仍等于基线——"定义了却没被调用"与"重复"两条都说不出"少了一道真防线"。
-        # 判据须让重复项**不计入**唯一防线数：删一道 + 重复顶一道必然低于基线。
-        self._write_valid(src=self._SRC
-                          .replace("    check_alpha_guard,\n", "")
-                          .replace("def check_alpha_guard():\n"
-                                   '    """甲。"""\n'
-                                   '\n'
-                                   '\n', "")
-                          .replace("    check_beta_guard,\n",
-                                   "    check_beta_guard,\n    check_beta_guard,\n"))
-        cm.check_guard_manifest()
-        # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
-        self.assertIn("防线接线数从基线", self.error_texts())
-
-    # 记账沿革（`guards.adoc` 的「新增防线的记账（按轮次）」）引用的两个基线值。
-    # 夹具里的现值跟着 `_write_valid` 设的两个基线常量走（`**2**` / `5`）——
-    # **正例的形就是"实取的两处与常量一致"**，故这里不能写死一套与夹具无关的数。
-    _MANIFEST = (
-        "= 机械防线清单\n\n"
-        "| 轮次 | 新增防线 | 接线数 | 承接了什么\n\n"
-        "| 本轮（甲） | `check_alpha_guard` | 1 → **2** | 用例数 `4 → 5`。\n"
-    )
-
-    def _write_manifest(self, text):
-        self.write("specs-project-maintainer/guards.adoc", text)
-
-    def test_manifest_baseline_refs_consistent_passes(self):
-        # 正例：本表引用的两个基线值 = 常量、记账表末行的接线数 = 常量
-        self._write_valid()
-        self._write_manifest(self._MANIFEST)
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_manifest_wiring_ref_drift_reports(self):
-        # 反例（本轮实测的空转）：**本表**引用的接线数被改（常量不动）——两个基线的核对
-        # 照常通过、没有任何防线会因此报红（本仓库实测：两处各改一个数即两边都绿）
-        self._write_valid()
-        self._write_manifest(self._MANIFEST.replace("1 → **2**", "1 → **1**"))
-        cm.check_guard_manifest()
-        self.assertIn("接线数", self.error_texts())
-
-    def test_manifest_test_ref_drift_reports(self):
-        # 反例：**本表**引用的用例数被改（常量不动）
-        self._write_valid()
-        self._write_manifest(self._MANIFEST.replace("用例数 `4 → 5`", "用例数 `4 → 9`"))
-        cm.check_guard_manifest()
-        self.assertIn("用例数", self.error_texts())
-
-    def test_manifest_ledger_row_missing_reports(self):
-        # 反例：本轮新增了防线、而「新增防线的记账（按轮次）」**没有记这一轮**——
-        # 记账表末行的接线数低于常量（本仓库实测：删掉两道新防线后，本表与脚本一样全绿）
-        self._write_valid()
-        self._write_manifest(self._MANIFEST.replace("1 → **2**", "0 → **1**"))
-        cm.check_guard_manifest()
-        self.assertIn("接线数", self.error_texts())
-
-    def test_new_guard_without_baseline_refill_hides_later_removal(self):
-        # 反例（本轮实测的真实形态）：新增了一道防线、接线数**高出**基线，却没把基线抬到实取数。
-        # `check_guard_manifest` 只核「不得低于基线」，故"多出来的那道"此后**不在保护范围内**——
-        # 把它从 `CHECKS` 里删掉时，唯一防线数恰好回落到基线、一切照旧全绿，
-        # 正是本基线存在的理由（防"防线静默消失"）在这一格失效。
-        # 本 PR 实测：新增了 `check_skill_doc_guard`（唯一防线 2 道），而常量仍是 1——
-        # 此时删掉 `check_beta_guard` 仍报绿。
-        self._write_valid()
-        cm.GUARD_WIRING_BASELINE = 1           # 基线未随新增回填（＝本轮的真实形态）
-        src = self._SRC.replace("    check_beta_guard,\n", "")
-        self.write("script/check_specs.py", src)
-        cm.check_guard_manifest()
-        # 唯一防线数已回落到基线之上（2 → 1）：基线是**下限**、不回填就永远筛不出这一格
-        self.assertEqual(1, cm._guard_wiring_count(src))
-        self.assertNotIn("防线接线数", self.error_texts())
-
-    def test_baseline_refilled_after_new_guard_catches_later_removal(self):
-        # 正例（配套上一条）：新增防线后把基线抬到实取数，此后删掉任一道都会被拦下
-        self._write_valid()
-        src = self._SRC.replace("    check_beta_guard,\n", "")
-        cm.GUARD_WIRING_BASELINE = 2           # 按同源实取回填
-        self.write("script/check_specs.py", src)
-        cm.check_guard_manifest()
-        self.assertIn("防线接线数", self.error_texts())
-
-    def test_changelog_wiring_ref_drift_reports(self):
-        # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法。
-        # 记的取值**高于**常量即记了一个抬基线时还不存在的值（条目按定义写在抬基线之后），
-        # 这是本道要拦的形态。
-        self._write_valid()
-        self._write_manifest(self._MANIFEST)
-        self.write("CHANGELOG.adoc",
-                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **9**、其余不变。\n")
-        cm.check_guard_manifest()
-        self.assertIn("CHANGELOG.adoc", self.error_texts())
-
-    def test_changelog_wiring_ref_older_entry_passes(self):
-        # 正例：本轮**没写**变更日志条目（默认动作是「不新增、不修改」），最新条目记的是
-        # 某一轮当时的基线、低于现值——不得据此报红（本仓库实证：新增防线而不写条目时，
-        # 最新条目仍记着上一轮的取值，按"必须等值"核即误报）
-        self._write_valid()
-        self._write_manifest(self._MANIFEST)
-        self.write("CHANGELOG.adoc",
-                   "- 9.9 | 2026-09-27 | 更早一轮：防线接线基线 0 → **1**。\n")
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_changelog_wiring_ref_historic_entries_pass(self):
-        # 正例：旧条目记的是**当时**的基线（按定义不得改写）——只核最新那条
-        self._write_valid()
-        self._write_manifest(self._MANIFEST)
-        self.write("CHANGELOG.adoc",
-                   "- 9.9 | 2026-09-27 | 本轮调整：防线接线基线 1 → **2**、其余不变。\n"
-                   "- 9.8 | 2026-09-20 | 更早一轮：防线接线基线 0 → **1**。\n")
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_guard_unwired_reports(self):
-        # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
-        # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
-        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
-        cm.check_guard_manifest()
-        self.assertIn("防线接线数", self.error_texts())
-
-    def test_guard_defined_but_never_called_reports(self):
-        # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
-        # → 看起来还在、却永远不会执行
-        self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
-        cm.check_guard_manifest()
-        self.assertIn("check_beta_guard", self.error_texts())
-
-    def test_tests_removed_without_note_reports(self):
-        # 反例②：反例用例被整批删掉（防线随之失效力）→ 用例数减少必须报红
-        self._write_valid(tests=1)
-        cm.check_guard_manifest()
-        self.assertIn("反例用例数", self.error_texts())
-
-    def test_ledger_names_missing_guard_reports(self):
-        # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
-        self._write_valid(ledger=self._LEDGER.replace("check_beta_guard",
-                                                      "check_gone_guard"))
-        cm.check_guard_manifest()
-        self.assertIn("check_gone_guard", self.error_texts())
-
-    def test_checklist_gap_reports(self):
-        # 反例④：脚本头部清单出现断号（条目被整条删掉）→ 清单描述不参与一致性核对、
-        # 写死不报红（本仓库实测），故按编号连续性核对
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 2. 乙\n 4. 丙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("断号", self.error_texts())
-
-    def test_checklist_duplicate_number_reports(self):
-        # 反例⑤：清单编号出现**重号**（重排时把两条并成同一个号）→ 只核"有没有断号"时
-        # 两种写法都能过：编号仍是连通的 1..N，而"第 3 项"同时指向两条条目——本仓库实测
-        # （新增「防线清单与删除记账」时把原有的「性能测试防线」也编成 27，此后编号所指的
-        # 那一项随重排静默错位）。故按**严格递增**核对。
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 2. 乙\n 2. 丙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("重号", self.error_texts())
-
-    def test_checklist_out_of_order_number_reports(self):
-        # 反例⑤b：编号**乱序**（既无断号也无重号，但文件里的出现次序不是递增的）——
-        # 新条目被插到了编号更小的条目之前。这是断号与重号两条判据都拦不住的形态：集合仍是
-        # 1..N 齐备，只是次序错了。本仓库实测：新增的第 63 条被插在第 60 条之前，
-        # 清单次序成了 `…55, 60, 61, 62, 63, 56, 57, 58, 59`，当时全绿。
-        src = self._SRC.replace(
-            'def check_alpha_guard():',
-            '"""清单：\n 1. 甲\n 3. 丙\n 4. 丁\n 2. 乙\n"""\n\n\ndef check_alpha_guard():')
-        self._write_valid(src=src)
-        cm.check_guard_manifest()
-        self.assertIn("乱序", self.error_texts())
-
-    def test_ledger_without_declaration_reports(self):
-        # 反例⑥（上一轮点名的悬置）：台账条目**没声明**自己由哪一道钉住 → "有抓手"这个数字
-        # 可以靠把备注里的防线名删掉来维持（删名字比删防线容易得多），读者却以为还有抓手。
-        # 故声明为必填：缺了即报红（旧实现只核"点名的名字存在"，没点名就没核对）。
-        self._write_valid(
-            ledger=self._LEDGER.replace(
-                '     "check_beta_guard", "备注乙"),\n', '     "check_beta_guard"),\n'))
-        cm.check_guard_manifest()
-        self.assertIn("未声明抓手", self.error_texts())
-
-    def test_ledger_declares_no_grip_but_has_path_reports(self):
-        # 反例⑦：条目声明为「无机械抓手」、却填了抓手路径 → 声明与实现不一致
-        self._write_valid(
-            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
-                                        '"%s", "备注乙"' % cm.NO_GRIP_DECLARED))
-        cm.check_guard_manifest()
-        self.assertIn("声明与实现不一致", self.error_texts())
-
-    def test_ledger_declares_guard_but_unwired_reports(self):
-        # 反例⑧：台账声明的防线**定义了却没人调用** → 它看起来还在、却永远不会执行；
-        # 台账与接线两处必须同口径（这正是本仓库实测的"摘出执行序列"形态）
-        self._write_valid(
-            src=self._SRC.replace("    check_beta_guard,\n", ""),
-            ledger=self._LEDGER.replace('"check_beta_guard", "备注乙"',
-                                        '"check_beta_guard", "备注乙"'))
-        cm.check_guard_manifest()
-        self.assertIn("check_beta_guard", self.error_texts())
-
-    def test_missing_script_reports(self):
-        # 反例⑤：防线清单本体被删 → 无从核对
-        self._write_valid()
-        os.remove(os.path.join(self.root, "script", "check_specs.py"))
-        cm.check_guard_manifest()
-        self.assertIn("check_specs.py", self.error_texts())
-
-    def test_entry_block_in_middle_reports(self):
-        # 反例：`if __name__ == "__main__":` 落在**中段**、其后仍有缩进的 `def test_`
-        # （块内局部函数）——源码正则数得到、`unittest` 收集不到，脚本与基线全绿。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n        self.assertTrue(True)\n"
-            "\n\nif __name__ == \"__main__\":\n"
-            "    import unittest\n    unittest.main()\n"
-            "\n    def test_injected_never_collected(self):\n"
-            "        self.assertTrue(True)\n"))
-        cm.check_guard_manifest()
-        self.assertIn("中段", self.error_texts())
-
-    def test_emptied_test_case_reports(self):
-        # 反例⑩（本轮 main 上实测的缺口）：用例被**掏空成空壳**（这一节里一条断言都没有）
-        # ——总数基线只保证"数量不减少"，删一条加一条、或把用例掏空都能维持该数；
-        # 被抽空的反例仍会被收集、仍占着那个数，却什么都证不了。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n        pass\n"
-            "    def test_case_1(self):\n        self.assertTrue(True)\n"
-            "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
-        cm.check_guard_manifest()
-        self.assertIn("没有任何断言", self.error_texts())
-
-    def test_nested_class_in_test_body_is_not_a_boundary(self):
-        # 反例⑫（本仓库实测）：用例体里定义**局部夹具**（`class _R:` / `def _run(...)`，
-        # 见 `TestAsciidoctorFailureLevel` 等三处）——边界若按"任意深度的下一个定义"取，
-        # 这一节会被截在夹具处、只覆盖前半段：断言留在节外，于是**该用例的那一节"没有
-        # 断言"**、用例数也被压低（实测少 11 条、基线因此虚降）。判据＝同层级的定义才是边界。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n"
-            "        calls = []\n"
-            "\n"
-            "        class _R:\n"
-            "            returncode = 0\n"
-            "\n"
-            "        def _run(cmd):\n"
-            "            calls.append(cmd)\n"
-            "\n"
-            "        self.assertEqual(calls[:1], [])\n"
-            "    def test_case_1(self):\n        self.assertTrue(True)\n"
-            "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
-        cm.GUARD_TEST_BASELINE = 4
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
-    def test_nested_class_body_hollowing_still_reports(self):
-        # 反例⑬：同一形态的反面——真被掏空（通篇没有断言）时仍须报出，不得因
-        # "夹具里也有个 `def`"而把这一节算成"有断言了"。
-        self._write_valid(test_file=(
-            "import unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_case_0(self):\n"
-            "        class _R:\n"
-            "            returncode = 0\n"
-            "\n"
-            "        def _run(cmd):\n"
-            "            return None\n"
-            "\n"
-            "        _run(None)\n"
-            "    def test_case_1(self):\n        self.assertTrue(True)\n"
-            "    def test_case_2(self):\n        self.assertTrue(True)\n"
-            "    def test_case_3(self):\n        self.assertTrue(True)\n"))
-        cm.check_guard_manifest()
-        self.assertIn("没有任何断言", self.error_texts())
-
-    def test_same_name_deleted_in_one_class_kept_in_another_passes_by_name(self):
-        # 反例⑪（本轮 main 上实测的缺口）：用例名**跨类复用**——类 A 的那条被删、类 B 的
-        # 同名用例仍留。只记"名字"的口径看不见这个动作（名字仍在集合里、计数也够），
-        # 故清单按 `类名.用例名` 限定；此处正例确认"同名分居两类"会被算成两条。
-        src = ("import unittest\n\n\nclass A(unittest.TestCase):\n"
-               "    def test_same(self):\n        self.assertTrue(True)\n"
-               "\n\nclass B(unittest.TestCase):\n"
-               "    def test_same(self):\n        self.assertTrue(True)\n")
-        names = cm._collectable_test_names("script/check_specs_test.py", src)
-        self.assertEqual({"A.test_same", "B.test_same"}, names)
-
-    def test_malformed_item_number_reports(self):
-        # 反例⑭（本轮实测的缺口）：清单里一条真条目被写成 ` 31b.`、且**缩进 5 格**——
-        # 编号判据的正则取 `^ (\d+)[a-z]?\. `，凡不合该形态的条目行**一条判据都核不到**
-        # （断号/重号/乱序三条全部放行），它于是成了藏在清单里、永不参与核对的第二份描述。
-        # 本仓库实证：`31b.` 那条与它前后的条目并存了多轮，任何检查都没有报过它。
-        self._write_valid(src=self._SRC.replace(
-            'def check_beta_guard():',
-            '     31b. 丙。\n\n\ndef check_beta_guard():'))
-        cm.check_guard_manifest()
-        self.assertIn("编号形态不规范", self.error_texts())
-
-    def test_item_number_with_multi_char_suffix_reports(self):
-        # 反例⑮：后缀不止一个字符（`36b2.`）同样是判据盲区——字符类放宽到 `[a-z0-9]*`
-        # 之后仍须靠"形态"这一条兜住（前缀字符类只保证 `31b` 这类进得来）。
-        self._write_valid(src=self._SRC.replace(
-            'def check_beta_guard():',
-            '     36b2. 丙。\n\n\ndef check_beta_guard():'))
-        cm.check_guard_manifest()
-        self.assertIn("编号形态不规范", self.error_texts())
-
-    def test_well_formed_item_number_passes(self):
-        # 正例：规范形态（单空格缩进 + 纯数字序号）不得被误报——本条判据的假阳性
-        # 会误伤整份清单，故须有正例钉住。
-        self._write_valid(src=self._SRC.replace(
-            'def check_beta_guard():',
-            ' 1. 丙。\n\n\ndef check_beta_guard():'))
-        cm.check_guard_manifest()
-        self.assertEqual([], cm.errors)
-
 
 class TestCheckStaleWordingGuard(CheckSpecsTestCase):
     """钉住『已被证否的旧口径不得写回』防线。
@@ -29060,7 +28725,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表** → `specs/general/ui-patterns.adoc`；",
+                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件） → `specs/general/ui-patterns.adoc`；",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -29219,6 +28884,70 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         end = text.index("== 新增或改界面时的核对清单")
         self._run_guard_with("specs/general/ui.adoc", text[start:end], "")
         self.assertTrue(cm.errors, "状态恢复整节被抽走须报红")
+
+    def test_compact_controls_rule_removed_reports(self):
+        # 反例㊳（录入既有分析结果）：『可用性与紧凑同为一等目标』被抽走——输入框撑满整行、
+        # 短值字段占半屏、表单被切成两屏再拿内层滚动兜住，重新成为合规（那几条都跑不失败，
+        # 只有人看得出来）。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**可用性与紧凑同为一等目标：控件与容器按数据实际尺寸取，不撑满、不靠滚动兜底（L1）**",
+                             "表单可以整行铺满")
+        self.assertTrue(cm.errors, "按数据定宽那条被抽走须报红")
+
+    def test_compact_controls_dispatch_gate_removed_reports(self):
+        # 反例㊴：调度器不再把「定控件宽高、要不要滚动条」列为识别特征——定表单宽度的人
+        # 读不到排布模板，判据存在而走不到它。
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "、这一格用什么控件）",
+                             "）")
+        self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
+
+    def test_patterns_value_width_removed_reports(self):
+        # 反例㊵：模板里的「每格按值域定宽」被抹——排布只剩「几列」，每格宽度又回到
+        # 「容器多宽就多宽」。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**每格多宽：按值域定、不按容器剩余空间定**",
+                             "每格宽度")
+        self.assertTrue(cm.errors, "每格按值域定宽被抹须报红")
+
+    def test_web_size_carrier_removed_reports(self):
+        # 反例㊶：栈层不再给尺寸与滚动的落点——`width: 100%` 写在哪一层、弹窗里再套一层
+        # `overflow` 都无人判得。
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**滚动只留一层（载体）**",
+                             "滚动")
+        self.assertTrue(cm.errors, "栈层滚动落点被抽走须报红")
+
+    def test_input_control_rule_removed_reports(self):
+        # 反例㊷（录入既有分析结果）：『输入控件按值域取、格式由控件与属性限住』被抽走——
+        # 日期、枚举、定长编号一律给文本框、格式靠提交后正则校验，重新成为合规（那形态
+        # 跑不失败、也没人会报：WCAG 只要求错误能被识别并说明、输入用途可由程序判定）。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**输入控件按值域取、格式由控件与属性限住（L1）**",
+                             "输入框按手边的控件取")
+        self.assertTrue(cm.errors, "控件按值域取那条被抽走须报红")
+
+    def test_input_control_structure_hint_removed_reports(self):
+        # 反例㊸：模板里的『先给值分型，再挑控件』被抹——选型回到"手边有文本框就用文本框"
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**先给值分型，再挑控件**",
+                             "控件按习惯挑")
+        self.assertTrue(cm.errors, "控件选型顺序被抹须报红")
+
+    def test_input_control_web_carrier_removed_reports(self):
+        # 反例㊹：栈层不再给控件类型与格式限制的落点——"文本框 + 提交后正则"在前端无从判
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**控件类型与格式限制落在控件属性上（载体）**",
+                             "控件随意")
+        self.assertTrue(cm.errors, "栈层控件类型落点被抽走须报红")
+
+    def test_input_control_dispatch_gate_removed_reports(self):
+        # 反例㊺：调度器不再把「这一格用什么控件」列为识别特征——给表单挑控件的人
+        # 读不到选型顺序，判据存在而走不到它。
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "、这一格用什么控件",
+                             "")
+        self.assertTrue(cm.errors, "控件选型的加载门被抽走须报红")
 
     def test_validation_timing_removed_reports(self):
         # 反例㊲（录入既有分析结果）：模板里的校验时机被抹——「一填就报错」与「提交后一句话」

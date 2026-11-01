@@ -978,8 +978,38 @@ class TestSeparationInvariants(unittest.TestCase):
                 # 哪些算"记录禁令的放行标记"）——**仍是纯数据**，只是不必包在 `tokens` 里。
                 self.assertTrue(set(data) <= {"guards", "tokens", "merge_state_guard"},
                                 f"{name} 只允许承载 guards/tokens/merge_state_guard 三类键")
+                # 分片表（`tokens.guard_test_floor`）本身也是**纯数据**：`{防线名: 数值}`，
+                # 不是锚点组，故也不能写成可执行的东西。
+                floor = data.get("tokens", {}).get("guard_test_floor")
+                if floor is not None:
+                    self.assertIsInstance(floor, dict,
+                                          f"{name} 的 guard_test_floor 须是分片表（防线名 → 数值）")
                 for key, value in data.get("guards", {}).items():
                     self.assertIsInstance(value, list, f"{name} 的 {key} 须是步骤列表")
+
+    def test_sharded_table_merges_by_shard(self):
+        # 分片表**按分片键**并入：两份文件各写自己那一道防线的行 → 合并成一张表。
+        # 这正是"并行改动各改自己那一行"在加载层的形态。
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, guard, body in (
+                    ("a.toml", "check_a_guard", "[tokens.guard_test_floor]\ncheck_a = 1\n"),
+                    ("b.toml", "check_b_guard", "[tokens.guard_test_floor]\ncheck_b = 2\n")):
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as fh:
+                    fh.write('[[guards.' + guard + ']]\nkind = "exists"\nfiles = ["X"]\n'
+                             + body)
+            merged = re_.load_rule_files(tmp)
+            self.assertEqual({"check_a": 1, "check_b": 2}, merged["guard_test_floor"])
+
+    def test_sharded_table_duplicate_shard_raises(self):
+        # 同一道防线在两份文件里各写一行 → 加载期即报错：两处会各写一半、彼此漂移，
+        # 正是分片表要避开的事
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, guard in (("a.toml", "check_a_guard"), ("b.toml", "check_b_guard")):
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as fh:
+                    fh.write('[[guards.' + guard + ']]\nkind = "exists"\nfiles = ["X"]\n'
+                             "[tokens.guard_test_floor]\ncheck_a = 1\n")
+            with self.assertRaises(re_.RulesError):
+                re_.load_rule_files(tmp)
 
     def test_duplicate_rule_key_raises(self):
         # 两份规则文件定义同一个防线名 → 必须报错，不得静默覆盖（否则改了其中一份、

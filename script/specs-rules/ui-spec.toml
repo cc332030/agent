@@ -89,6 +89,17 @@ kind = "section_groups"
 section = "交互（按输入设备定，不按端定）"
 token_list = "UI_SPEC_INPUT_ANCHORS"
 
+# 输入控件按值域取（用户提出）：表单那条只管「标签常驻、错误就地」，**这一格用什么控件、
+# 格式由谁限住**没有判据——于是「日期、枚举、定长编号一律给文本框，格式靠提交后正则校验」
+# 在通行规范里是合规的（WCAG 只要求错误能被识别并说明、输入用途可由程序判定，各设计系统
+# 给的是各控件用法与个别类型的坑）。这一组与「可用性与紧凑」那条**分工不同、不得合并**：
+# 那条管宽高与滚动，这条管控件类型与格式限制落在哪。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "组件的通用形态（自建件按这类东西本该长成什么样）"
+token_list = "UI_SPEC_CONTROL_ANCHORS"
+
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui.adoc"
 kind = "section_groups"
@@ -105,19 +116,7 @@ token_list = "UI_SPEC_PATTERN_ANCHORS"
 file = "specs/general/ui.adoc"
 kind = "anchor_count"
 token_list = "UI_SPEC_PATTERN_ANCHORS"
-min = 16
-
-[[guards.check_ui_spec_guard]]
-file = "specs/general/ui.adoc"
-kind = "section_groups"
-section = "承载与呈现（同一个操作开成什么、一条数据怎么看、一列多宽）"
-token_list = "UI_SPEC_PATTERN_ANCHORS"
-
-[[guards.check_ui_spec_guard]]
-file = "specs/general/ui.adoc"
-kind = "anchor_count"
-token_list = "UI_SPEC_PATTERN_ANCHORS"
-min = 16
+min = 22
 
 # 界面状态的保留与恢复（后补判据）：**逐节核**——这一节整段被抽走时，剩下的判据仍会
 # 「容器一次一种」「列宽有上下限」，但「动作类状态被自动重放」「失效引用打开即报错」
@@ -304,6 +303,42 @@ groups = [
             "**向导（分步）**",
         ],
         "缺则分组只剩一种做法：要么处处隔离（跨组比较要来回点）、要么一律同页（长到没人滚到底）",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "二、表单：排布与分组"
+groups = [
+    [
+        "每一格按值域取控件、格式限制写在控件上、选项与拆分按值判",
+        [
+            "**每一格用什么控件：按值域取、格式由控件限**",
+            "**先给值分型，再挑控件**",
+            "**格式限制写在控件上、不写在提交后**",
+            "**用一条格式规则去判一个字符一个字符**",
+            "**拆分输入只在值本身是分量的集合时**",
+            "**个别类型的坑按\"取哪个\"处置",
+        ],
+        "缺则控件选型回到「手边有文本框就用文本框」：日期与枚举都靠提交后校验兜，选项少的用下拉藏起比较、拆分输入把焦点自动跳来跳去",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "二、表单：排布与分组"
+groups = [
+    [
+        "每格按值域定宽、内层滚动是最后一步",
+        [
+            "**每格多宽：按值域定、不按容器剩余空间定**",
+            "**宽度跟值域走**",
+            "**内层滚动是最后一步**",
+            "**结果集不套本条**",
+        ],
+        "缺则排布只剩「几列」：每格宽度回到「容器多宽就多宽」，短值字段占半屏、表单被切成两屏再拿内层滚动兜住",
     ],
 ]
 
@@ -547,6 +582,31 @@ groups = [
 [[guards.check_ui_spec_guard]]
 file = "specs/stack/web.adoc"
 kind = "section_groups"
+section = "表单与控件的尺寸（载体）"
+groups = [
+    [
+        "判据本体回指通用层（不另立判据）",
+        [
+            "`specs/general/ui.adoc`",
+            "本文件只给**前端落点**",
+        ],
+        "缺则栈层成为尺寸判据的第二处真源：判据与取值在两份文件里各自漂移",
+    ],
+    [
+        "宽度由字段定、高度由令牌定、滚动只留一层",
+        [
+            "**宽度由字段定，不由栅格定（载体）**",
+            "**高度由控件类型与令牌定（载体）**",
+            "**控件类型与格式限制落在控件属性上（载体）**",
+            "**滚动只留一层（载体）**",
+        ],
+        "缺则「按数据定宽」在前端没有落点：`width: 100%` 写在哪一层无人判得，弹窗里再套一层 `overflow` 也无人报红；控件类型的落点没了则不回退成「文本框 + 提交后正则」这条也无人判得",
+    ],
+]
+
+[[guards.check_ui_spec_guard]]
+file = "specs/stack/web.adoc"
+kind = "section_groups"
 section = "风格与文案（载体）"
 groups = [
     [
@@ -598,6 +658,7 @@ kind = "line_tokens"
 anchor = ["**任何代码活动**"]
 tokens = [
     "**选容器或排表**",
+    "含定控件宽高、要不要滚动条、这一格用什么控件",
     "`specs/general/ui-patterns.adoc`",
 ]
 message = "调度器「任何代码活动」条目未登记「选容器或排表」的识别特征（或其模板）——点详情开弹窗还是侧栏、表单怎么排、列宽上限多少时读不到判据，规则实际失效"
