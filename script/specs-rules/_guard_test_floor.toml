@@ -94,6 +94,7 @@ check_abstraction_adoption_guard = 1
 check_reuse_precedent_guard = 1
 check_external_script_guard = 1
 check_cross_platform_script_guard = 1
+check_powershell_version_guard = 1
 check_script_header_guard = 1
 check_script_selfdoc_guard = 1
 check_rule_script_separation_guard = 24

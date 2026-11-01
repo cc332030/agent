@@ -560,3 +560,208 @@ groups = [
 kind = "section_groups"
 section = "文件命名"
 message = "脚本文档命名防线被破坏：{file}「文件命名」缺失要点 {missing}——{desc}；本条依据用户口径『不允许一个脚本对应一个文档』，不得删除或降级"
+
+# PowerShell 栈的**跨版本兼容面**（`specs/stack/powershell.adoc`）：用户报告"AI 在 PowerShell 上
+# 经常执行出问题"，成因是 PowerShell 同时存在 Windows PowerShell 5.1 与 PowerShell 7+ 两个版次，
+# 二者**语言核心相同、机制与默认值不同**（有的写法在一版上直接解析失败）。故这一栈多出一个
+# **版本口径**维度：① 运行环境从引擎取（不猜命令名）、最低版本写成 `#Requires`；
+# ② 版本敏感项的取值面（编码参数、编码默认值、7 才有的运算符、`$?` 语义、原生命令与
+# `$LASTEXITCODE`、`$ErrorActionPreference` 的效力边界、`Write-Host` 与输出流、退出码）；
+# ③ 解析模式与传参（两种解析模式、元字符、不搬 bash/cmd 写法、不用反引号续行）。
+# 缺任一项，该栈执行者又只能"凭像不像 PowerShell"写——正是本条要防的失效形态。
+[[guards.check_powershell_version_guard]]
+file = "specs/stack/powershell.adoc"
+section = "版本口径：先认运行环境，再选写法"
+groups = [
+    [
+        "运行环境取引擎自身的取值",
+        [
+            "$PSVersionTable",
+            "PSEdition",
+            "特性探测",
+            "判定标准",
+        ],
+        "须写明**运行环境从引擎取**（`$PSVersionTable`/`$PSEdition`/特性探测）并给判定标准——缺则执行者按'机器是 Windows 就按 5.1 写''有 pwsh 就当 7 用'这类命令名推断，跨版本失效从这里开始",
+    ],
+    [
+        "最低版本写成 `#Requires`",
+        [
+            "#Requires",
+            "-Version",
+            "不满足就不执行",
+        ],
+        "须写明**要求的最低版本写成 `#Requires -Version`**（不满足就不执行，而不是跑到一半报语法错）——缺则最低版本只写在注释里，读注释的调用方会以为能跑",
+    ],
+    [
+        "跨版本按特性探测分支",
+        [
+            "特性探测",
+            "不按版本号硬编码",
+        ],
+        "须写明**跨版本分支按特性探测、不按版本号硬编码**——缺则一串手写版本阈值在补丁版本/预览版上判错",
+    ],
+]
+kind = "section_groups"
+message = "PowerShell 版本口径防线被破坏：{file}「{POWERSHELL_VERSION_SECTION}」缺失要点 {missing}——{desc}；本条对应用户报告『AI 在 powershell 经常执行出问题』，不得删除、不得降级为建议"
+
+[[guards.check_powershell_version_guard]]
+file = "specs/stack/powershell.adoc"
+section = "版本敏感项（同一处代码，两版行为不同）"
+groups = [
+    [
+        "编码参数的取值集合两版不同",
+        [
+            "utf8NoBOM",
+            "UTF8",
+            "判定标准",
+        ],
+        "须写明**`-Encoding` 的取值集合两版不同**（`utf8NoBOM`/`utf8BOM` 是 6+ 才有、5.1 只有 `UTF8` 等）——缺则跨版本脚本写高版本专有取值，5.1 上参数绑定直接失败",
+    ],
+    [
+        "重定向与 `Out-File` 的默认编码两版不同",
+        [
+            "UTF-16LE",
+            "UTF-8 无 BOM",
+            "显式写 `-Encoding`",
+        ],
+        "须写明**`>`/`>>`/`Out-File` 的默认编码两版不同**（5.1 落 UTF-16LE、6+ 落 UTF-8 无 BOM），故产出文件须显式写 `-Encoding`——缺则同一条重定向在两版给出不同字节，Unix 工具与 `git diff` 看到的结果不同",
+    ],
+    [
+        "7 才有的运算符不得进跨版本脚本",
+        [
+            "??",
+            "&&",
+            "解析错误",
+        ],
+        "须写明**7 才有的运算符（`??`/`??=`/`?.`/`?[]`/三元/`&&`/`||`）在 5.1 上是解析错误**——缺则整份脚本在 5.1 上跑不起来（不是某个分支失效），而执行者只看到'写法很新'",
+    ],
+    [
+        "原生命令的成败按 `$LASTEXITCODE` 判定",
+        [
+            "$LASTEXITCODE",
+            "不参与",
+            "catch",
+        ],
+        "须写明**外部程序不参与 PowerShell 的错误体系**（非 0 退出码不生成 `ErrorRecord`、不触发 `catch`），故须显式判 `$LASTEXITCODE`——缺则'用 `try/catch` 包外部命令'被读成能抓到失败，而它一条都抓不到",
+    ],
+    [
+        "`$ErrorActionPreference` 的效力边界",
+        [
+            "ThrowTerminatingError",
+            "CmdletBinding",
+            "高级",
+        ],
+        "须写明**`$ErrorActionPreference` 管非终止错误、`-ErrorAction` 对 `ThrowTerminatingError` 无效、Stop 在高级/非高级函数里停的位置不同**——缺则'在脚本开头设 Stop 兜住一切'被当成通用做法，实际漏掉一半失败",
+    ],
+    [
+        "`Write-Host` 不是标准输出",
+        [
+            "Write-Host",
+            "信息流",
+            "Write-Output",
+            "成功流",
+        ],
+        "须写明**`Write-Host` 走信息流、`Write-Output` 才走成功流（管道/stdout）**——缺则结果写进 `Write-Host`，在重定向、管道与非交互执行里丢掉，调用方与 CI 看不到任何输出",
+    ],
+    [
+        "退出码只由 `exit` 决定",
+        [
+            "exit",
+            "$LASTEXITCODE",
+        ],
+        "须写明**进程退出码只由 `exit <n>` 决定**、入口须取 `$LASTEXITCODE` 再 `exit` 原样返回——缺则退出码取执行到的那条命令的，调用方/CI 看不到真实成败（与批处理不写 `exit /b %errorlevel%` 同一个失效形态）",
+    ],
+    [
+        "`Set-StrictMode` 取显式版本号",
+        [
+            "Set-StrictMode",
+            "Latest",
+            "判定标准",
+        ],
+        "须写明**`Set-StrictMode` 取显式版本号、不取 `Latest`**——缺则 `Latest` 的含义随新版本发布而变，同一个脚本在新引擎上突然报更多错（属'换台机器就失败'）",
+    ],
+]
+kind = "section_groups"
+message = "PowerShell 版本敏感项防线被破坏：{file}「版本敏感项（同一处代码，两版行为不同）」缺失要点 {missing}——{desc}；这些条目逐条对应用户报告的执行故障形态，不得删除、不得降级为建议"
+
+[[guards.check_powershell_version_guard]]
+file = "specs/stack/powershell.adoc"
+section = "解析与传参（AI 实际最常翻车的一层）"
+groups = [
+    [
+        "两种解析模式",
+        [
+            "参数模式",
+            "表达式模式",
+            "判定标准",
+        ],
+        "须写明**PowerShell 有参数模式与表达式模式两种解析**（同一段运算在两种位置结果不同）——缺则'算得对、传出去是字符串'的形态无从判定",
+    ],
+    [
+        "元字符与引号",
+        [
+            "元字符",
+            "引号",
+        ],
+        "须写明**参数模式的元字符清单与'含空格/括号/`&` 的取值须加引号或作为变量传入'**——缺则路径与取值被拼进字符串再执行，含空格的路径当场断成两段",
+    ],
+    [
+        "不把 bash/cmd 的写法搬进来",
+        [
+            "$1",
+            "export",
+            "判定标准",
+        ],
+        "须写明**不得把 Linux/bash 与 cmd 的写法搬进 `.ps1`**（`$1`/`$@`/`$#`、`export`、`VAR=` 赋值式、`2>/dev/null`）并给出 PowerShell 的对应取值——缺则跨平台脚本在 PowerShell 侧整段失效，且失效形态看起来'语法没错'",
+    ],
+    [
+        "续行按自然断点",
+        [
+            "反引号",
+            "splatting",
+        ],
+        "须写明**续行按自然断点（`|`、二进制运算符、`,`、`[`/`{`/`(` 之后）而不靠反引号**，参数多时用 splatting——缺则反引号被尾随空格打断，长命令只跑了一半",
+    ],
+    [
+        "首行声明留在首行",
+        [
+            "BOM 是唯一允许出现在首行之前",
+            "param()",
+        ],
+        "须写明**`#Requires`/`param()` 一类首行声明须留在首行、BOM 是唯一允许出现在此前的东西**——缺则空行或注释把 `param()` 挤出首位，脚本语法错",
+    ],
+]
+kind = "section_groups"
+message = "PowerShell 解析与传参防线被破坏：{file}「解析与传参」缺失要点 {missing}——{desc}；该层对应用户报告的执行故障（AI 按别的语言习惯拼命令），不得删除、不得降级为建议"
+
+[[guards.check_powershell_version_guard]]
+file = "specs/stack/powershell.adoc"
+section = "外部命令与跨版本传参"
+groups = [
+    [
+        "传参差异按最低支持版本取值",
+        [
+            "$PSNativeCommandArgumentPassing",
+            "7.3",
+            "--%",
+            "判定标准",
+        ],
+        "须写明**原生命令的参数拼接自 7.3 起由 `$PSNativeCommandArgumentPassing` 控制、此前是旧行为**，故含空格/引号的取值须自己拼好或用 `--%` 接管——缺则'引号会自动被正确转义'被当成事实，5.1 上参数被拆错",
+    ],
+]
+kind = "section_groups"
+message = "PowerShell 外部命令传参防线被破坏：{file}「外部命令与跨版本传参」缺失要点 {missing}——{desc}；不得删除、不得降级为建议"
+
+[[guards.check_powershell_version_guard]]
+file = "AGENTS_COMMON.adoc"
+groups = [
+    [
+        "5.1 与 7+",
+        [
+            "5.1 与 7+",
+        ],
+        "加载调度器的 PowerShell 栈识别特征须写明**跨版本兼容面**（要判定某段 PowerShell 在 5.1 与 7+ 上是不是同一结果时即命中）——缺则该条只有'要写/改 `.ps1`'一个特征，版本口径永远不会被触发加载、规则实际失效。**不核**条目的取值（编码默认值、`$LASTEXITCODE` 一类是 `powershell.adoc` 的条目本体，抄进调度器即第二真源",
+    ],
+]
+kind = "file_groups"
+message = "PowerShell 版本口径防线被破坏：AGENTS_COMMON.adoc 缺失 {missing}——{desc}"

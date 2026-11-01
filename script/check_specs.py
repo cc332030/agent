@@ -1064,6 +1064,17 @@ CROSS_PLATFORM_STACK_FILES = (
 # 触发特征可命中、编码/行尾/块语句延迟展开/退出码这些专属规则无处承载（且 powershell.adoc 用
 # `link:specs/stack/powershell.adoc[]` 自己指自己的写法，实际落点不成立）。故按技术栈扩展约定
 # 补一个栈文件，并把**批处理专属规则从 powershell.adoc 收敛到该文件**（引用不复制）。
+# PowerShell 栈的**跨版本兼容面**（`specs/stack/powershell.adoc`）：PowerShell 同时存在
+# Windows PowerShell 5.1（`powershell.exe`，随 Windows 自带）与 PowerShell 6/7+
+# （`pwsh.exe`）两个**版次**，二者语言核心相同、机制与默认值不同——有的写法在一版上直接
+# **解析失败**（`??`/`&&` 一类）、有的同名取值含义相反（`UTF8` 带不带 BOM）、有的失败根本
+# 抓不到（原生命令的退出码不进 `$Error`）。用户报告「AI 在 powershell 经常执行出问题，貌似
+# 对 powershell 的支持很差」——成因不是缺一条格式规则，而是**缺"认运行环境 + 逐项取两版都
+# 成立的写法"这一层**：执行者只能凭"像不像 PowerShell"写，而按这套直觉写出来的东西在 5.1 与
+# 7+ 上表现不同。故本防线钉住**版本口径 + 版本敏感项 + 解析与传参 + 外部命令传参**四节的要点，
+# 以及调度器的对应识别特征（少了识别特征，这一层永远不会被触发加载）。
+POWERSHELL_STACK_FILE = os.path.join(SPECS_DIR, "stack", "powershell.adoc")
+POWERSHELL_VERSION_SECTION = "版本口径：先认运行环境，再选写法"
 BATCH_STACK_FILE = os.path.join(SPECS_DIR, "stack", "batch.adoc")
 # 批处理栈必须承载的要点（键元组须全部出现），逐条对应用户要的"bat 脚本规范"：
 #   ① 编码/行尾（`cmd.exe` 按字节读行尾、按系统 ANSI 代码页解析 → CRLF + 纯 ASCII + 不写 BOM）；
@@ -5079,7 +5090,7 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 
-GUARD_WIRING_BASELINE = 184  # 同源实取：`CHECKS` 序列唯一名（184 条，无重复项）。本轮新增 `check_example_not_surface_guard`（用户追问的『举例不是面』方法论：旧值 183）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
+GUARD_WIRING_BASELINE = 184  # 同源实取：`CHECKS` 序列唯一名（184 条，无重复项）。本轮新增 `check_example_not_surface_guard`（用户追问的『举例不是面』方法论：旧值 183）。本轮再 +1：`check_powershell_version_guard`（PowerShell 跨版本防线，用户报告"AI 在 powershell 经常执行出问题"；与 `check_example_not_surface_guard` 同轮，旧值 183）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
 
 # 反例用例的记账**不在这里**：按防线分片落在规则数据
 # `script/specs-rules/_guard_test_floor.toml` 的 `[tokens.guard_test_floor]`（一道防线一行）。
@@ -10851,6 +10862,29 @@ def check_external_script_guard():
     phase_done()
 
 
+def check_powershell_version_guard():
+    """『PowerShell 跨版本防线』：两版差异当兼容面处理，不靠"像不像 PowerShell"判断。
+
+    规则措辞在 `script/specs-rules/script.toml`（一类规则一处）；本函数只做两件事：
+    ① 栈文件与本节在不在（不在则规则无处承载）；② 跑规则。逐条要点由规则数据自报。
+    """
+    phase("PowerShell 跨版本防线检查")
+    rel = os.path.relpath(POWERSHELL_STACK_FILE, REPO_ROOT).replace("\\", "/")
+    if not os.path.isfile(POWERSHELL_STACK_FILE):
+        err(f"缺少 PowerShell 技术栈文件 {rel}——两版差异（编码默认值、`$LASTEXITCODE`、"
+            "7 才有的运算符）无处承载，跨版本脚本只能凭直觉写", rel)
+        phase_done()
+        return
+    text = open(POWERSHELL_STACK_FILE, encoding="utf-8").read()
+    if POWERSHELL_VERSION_SECTION not in text:
+        err(f"PowerShell 跨版本防线被破坏：{rel} 缺少「{POWERSHELL_VERSION_SECTION}」节——"
+            "没了这一节，其余各条失去'先版本、后写法'的前提，读者会照单条规则各写各的", rel)
+        phase_done()
+        return
+    run_rule_guard("check_powershell_version_guard")
+    phase_done()
+
+
 def check_cross_platform_script_guard():
     """『跨环境脚本防线』：一份跨平台逻辑 + 薄入口（逻辑不得落进入口）。
 
@@ -14280,6 +14314,7 @@ CHECKS = (
     check_reuse_precedent_guard,
     check_external_script_guard,
     check_cross_platform_script_guard,
+    check_powershell_version_guard,
     check_script_header_guard,
     check_script_selfdoc_guard,
     check_rule_script_separation_guard,

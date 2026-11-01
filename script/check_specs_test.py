@@ -18357,6 +18357,203 @@ class TestCheckCrossPlatformScriptGuard(CheckSpecsTestCase):
 
 
 
+class TestCheckPowershellVersionGuard(CheckSpecsTestCase):
+    """钉住『PowerShell 跨版本防线』：两版差异当兼容面处理，不靠"像不像 PowerShell"判断。
+
+    对应用户报告：「ai 在 powershell 经常执行出问题，貌似对 powershell 的支持很差」，
+    并指明「powershell 尤其是还分好几个版本，各版本好像还不兼容」。故反例逐项覆盖：
+    ① 整份栈文件缺失（两版差异无处承载）；② 版本口径节被删（其余各条失去"先版本、后写法"
+    的前提）；③ 版本口径节里"从引擎取运行环境""最低版本写 `#Requires`""按探测分支"被删；
+    ④ 版本敏感项各条被删（编码取值集合、默认编码、7 才有的运算符、`$LASTEXITCODE`、
+    `$ErrorActionPreference` 边界、`Write-Host`、`exit`、`Set-StrictMode`）；
+    ⑤ 解析与传参四要点、外部命令传参被删；⑥ 调度器的跨版本识别特征被删（校验通过，但该层
+    永远不会被触发加载）；⑦ 校验通过（不误报）。
+    """
+
+    VERSION_SECTION = (
+        "== 版本口径：先认运行环境，再选写法\n"
+        "* **运行环境取引擎自身的取值**：`$PSVersionTable`、`PSEdition`；特性探测；"
+        "**判定标准**：缺一处即违规。\n"
+        "* **要求的最低版本写成 `#Requires`**：`#Requires -Version`，不满足就不执行。\n"
+        "* **跨版本时按特性探测分支、不按版本号硬编码**：探测该能力在不在。\n"
+    )
+    SENSITIVE_SECTION = (
+        "== 版本敏感项（同一处代码，两版行为不同）\n"
+        "* 编码取值集合两版不同：`utf8NoBOM`/`utf8BOM` 5.1 不认，只有 `UTF8`；**判定标准**：写了即违规。\n"
+        "* `>`/`>>`/`Out-File` 默认编码两版不同（UTF-16LE 与 UTF-8 无 BOM），"
+        "须**显式写 `-Encoding`**。\n"
+        "* 7 才有的运算符进 5.1 是**解析错误**：`??`、`&&`。\n"
+        "* 原生命令非 0 退出码**不参与** PowerShell 错误体系、不触发 `catch`，须判 `$LASTEXITCODE`。\n"
+        "* `-ErrorAction` 对 `ThrowTerminatingError` 无效；Stop 在**高级**函数里只到语句终止"
+        "（`CmdletBinding`）。\n"
+        "* `Write-Host` 走**信息流**，`Write-Output` 才走**成功流**。\n"
+        "* 退出码只由 `exit` 决定，入口取 `$LASTEXITCODE` 再 `exit`。\n"
+        "* `Set-StrictMode` 取显式版本号、不取 `Latest`（**判定标准**：写了 `Latest` 即违规）。\n"
+    )
+    PARSING_SECTION = (
+        "== 解析与传参（AI 实际最常翻车的一层）\n"
+        "* 有**参数模式**与**表达式模式**两种解析，**判定标准**：参数位置放表达式即违规。\n"
+        "* 参数模式的**元字符**：含空格的取值须**引号**包住。\n"
+        "* 不把 bash/cmd 写法搬进来：`$1`、`export` 一类；**判定标准**：出现即违规。\n"
+        "* 续行按自然断点，不靠**反引号**；参数多用 splatting。\n"
+        "* **BOM 是唯一允许出现在首行之前**的东西，`param()` 须留在首行。\n"
+    )
+    EXTERNAL_SECTION = (
+        "== 外部命令与跨版本传参\n"
+        "* 原生命令传参自 **7.3** 起由 `$PSNativeCommandArgumentPassing` 控制，"
+        "含空格/引号的取值须自己拼或由 `--%` 接管；**判定标准**：没说明拼接口径即违规。\n"
+    )
+
+    def _text(self, version=None, sensitive=None, parsing=None, external=None) -> str:
+        return ("= PowerShell 脚本规范\n\n"
+                + (self.VERSION_SECTION if version is None else version)
+                + "\n" + (self.SENSITIVE_SECTION if sensitive is None else sensitive)
+                + "\n" + (self.PARSING_SECTION if parsing is None else parsing)
+                + "\n" + (self.EXTERNAL_SECTION if external is None else external))
+
+    def _write_valid(self) -> None:
+        self.write("specs/stack/powershell.adoc", self._text())
+        self.write("AGENTS_COMMON.adoc",
+                   "PowerShell 栈识别特征：要写/改 `.ps1`，或要判定某段 PowerShell 在 "
+                   "5.1 与 7+ 上是不是同一结果。\n")
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_powershell_version_guard()
+        self.assertNotIn("PowerShell", self.error_texts())
+
+    def test_missing_stack_file_reports(self):
+        # 反例：整份栈文件缺失 → 两版差异无处承载
+        self.write("AGENTS_COMMON.adoc", "PowerShell 栈识别特征：5.1 与 7+。\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("specs/stack/powershell.adoc", self.error_texts())
+
+    def test_missing_version_section_reports(self):
+        # 反例：版本口径节被删 → 其余各条失去"先版本、后写法"的前提
+        self.write("specs/stack/powershell.adoc",
+                   self._text(version="== 别的节\n随便写点。\n"))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn(cm.POWERSHELL_VERSION_SECTION, self.error_texts())
+
+    def test_engine_probe_removed_reports(self):
+        # 反例：不再要求"从引擎取运行环境" → 执行者按命令名推断版次
+        v = ("== 版本口径：先认运行环境，再选写法\n"
+             "* **要求的最低版本写成 `#Requires`**：`#Requires -Version`，不满足就不执行。\n"
+             "* **跨版本时按特性探测分支、不按版本号硬编码**：探测。\n")
+        self.write("specs/stack/powershell.adoc", self._text(version=v))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("$PSVersionTable", self.error_texts())
+
+    def test_requires_removed_reports(self):
+        # 反例：最低版本不再写成 `#Requires` → 只写在注释里，调用方以为能跑
+        v = ("== 版本口径：先认运行环境，再选写法\n"
+             "* **运行环境取引擎自身的取值**：`$PSVersionTable`、`PSEdition`；特性探测；"
+             "**判定标准**：缺一处即违规。\n"
+             "* **跨版本时按特性探测分支、不按版本号硬编码**：探测。\n")
+        self.write("specs/stack/powershell.adoc", self._text(version=v))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("#Requires", self.error_texts())
+
+    def test_encoding_values_removed_reports(self):
+        # 反例：编码取值集合的两版差异被删 → 跨版本脚本写高版本专有取值
+        s = self.SENSITIVE_SECTION.replace("utf8NoBOM", "").replace("`UTF8`", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("utf8NoBOM", self.error_texts())
+
+    def test_default_encoding_removed_reports(self):
+        # 反例：默认编码的两版差异被删 → 同一条重定向给出不同字节而无人知道
+        s = self.SENSITIVE_SECTION.replace("UTF-16LE", "").replace("UTF-8 无 BOM", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("UTF-16LE", self.error_texts())
+
+    def test_v7_operators_removed_reports(self):
+        # 反例：7 才有的运算符在 5.1 上是解析错误这一条被删 → 整份脚本跑不起来而没人预警
+        s = self.SENSITIVE_SECTION.replace("`??`、`&&`", "").replace("解析错误", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("??", self.error_texts())
+
+    def test_last_exit_code_removed_reports(self):
+        # 反例：原生命令不进错误体系、须判 `$LASTEXITCODE` 被删 → "try/catch 能抓到"被当成事实
+        s = self.SENSITIVE_SECTION.replace("$LASTEXITCODE", "").replace("不参与", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("$LASTEXITCODE", self.error_texts())
+
+    def test_error_preference_boundary_removed_reports(self):
+        # 反例：`$ErrorActionPreference` 的效力边界被删 → "开头设 Stop 兜住一切"被当成通用做法
+        s = self.SENSITIVE_SECTION.replace("ThrowTerminatingError", "").replace("CmdletBinding", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("ThrowTerminatingError", self.error_texts())
+
+    def test_write_host_removed_reports(self):
+        # 反例：`Write-Host` 与输出流的分工被删 → 结果写进信息流，管道与 CI 拿不到
+        s = self.SENSITIVE_SECTION.replace("Write-Host", "").replace("信息流", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("Write-Host", self.error_texts())
+
+    def test_exit_code_removed_reports(self):
+        # 反例：退出码只由 `exit` 决定这条被删 → 成败对调用方不可见
+        s = self.SENSITIVE_SECTION.replace("退出码只由 `exit` 决定", "").replace(
+            "入口取 `$LASTEXITCODE` 再 `exit`", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("exit", self.error_texts())
+
+    def test_strict_mode_latest_removed_reports(self):
+        # 反例：`Set-StrictMode` 不得取 `Latest` 这条被删 → 同一脚本在新引擎上突然报更多错
+        s = self.SENSITIVE_SECTION.replace("Set-StrictMode", "").replace("Latest", "")
+        self.write("specs/stack/powershell.adoc", self._text(sensitive=s))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("Set-StrictMode", self.error_texts())
+
+    def test_parsing_mode_removed_reports(self):
+        # 反例：两种解析模式被删 → "算得对、传出去是字符串"无从判定
+        p = self.PARSING_SECTION.replace("参数模式", "").replace("表达式模式", "")
+        self.write("specs/stack/powershell.adoc", self._text(parsing=p))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("参数模式", self.error_texts())
+
+    def test_bash_cmd_syntax_removed_reports(self):
+        # 反例："不把 bash/cmd 写法搬进来"被删 → 跨平台脚本在 PowerShell 侧整段失效
+        p = self.PARSING_SECTION.replace("`$1`", "").replace("export", "")
+        self.write("specs/stack/powershell.adoc", self._text(parsing=p))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("$1", self.error_texts())
+
+    def test_native_arg_passing_removed_reports(self):
+        # 反例：原生命令传参的版本差异被删 → "引号会自动转义"被当成事实，5.1 上参数被拆错
+        e = "== 外部命令与跨版本传参\n* 随便写点。\n"
+        self.write("specs/stack/powershell.adoc", self._text(external=e))
+        self.write("AGENTS_COMMON.adoc", "5.1 与 7+\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("$PSNativeCommandArgumentPassing", self.error_texts())
+
+    def test_dispatcher_feature_removed_reports(self):
+        # 反例：调度器识别特征只剩"要写/改 .ps1" → 版本口径永远不会被触发加载
+        self.write("specs/stack/powershell.adoc", self._text())
+        self.write("AGENTS_COMMON.adoc", "PowerShell 栈识别特征：要写/改 `.ps1`。\n")
+        cm.check_powershell_version_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+
 class TestCheckScriptHeaderGuard(CheckSpecsTestCase):
     """钉住『脚本头部注释（文档头）防线』：文档头先行 + 细节不随维护丢失。
 
