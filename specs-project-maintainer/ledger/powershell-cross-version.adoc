@@ -1,0 +1,10 @@
+= 本轮记账：PowerShell 跨版本兼容面
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（PowerShell 跨版本） | 新增 `check_powershell_version_guard` | 183 → **184** | 用户报告「ai 在 powershell 经常执行出问题，貌似对 powershell 的支持很差」，并指明「powershell 尤其是还分好几个版本，各版本好像还不兼容」。原有 `specs/stack/powershell.adoc` 只有编码/行尾/文档头/启动脚本几条，**没有"两版差异"这一层**——执行者只能凭"像不像 PowerShell"写，而按这套直觉写出来的东西在 Windows PowerShell 5.1 与 PowerShell 7+ 上表现不同（`??`/`?.`/`&&` 一类在 5.1 上是解析错误、`utf8NoBOM` 5.1 不认、原生命令非 0 退出码不进 `$Error`）。本轮补「版本口径」「版本敏感项」「解析与传参」「外部命令与跨版本传参」四节，并把调度器的识别特征从"要写/改 `.ps1`"扩到"要判定这段 PowerShell 在 5.1 与 7+ 上是不是同一结果」——否则这一层永远不会被触发加载。依据（Microsoft Learn 各 `about_*` 页与 5.1↔7.x 差异页，官方网页已取回、逐字摘）落在 `library/sources.adoc`；规则数据在 `script/specs-rules/script.toml`；反例用例 17 条（`TestCheckPowershellVersionGuard`）。
+|===
