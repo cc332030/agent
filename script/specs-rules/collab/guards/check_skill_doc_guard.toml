@@ -1,0 +1,67 @@
+[[guards.check_skill_doc_guard]]
+file = "specs/general/collab.adoc"
+section = "专家与技能（默认按角色/技能移交，主 agent 只编排）"
+kind = "section_groups"
+groups = [
+    [
+        "落点登记（技能文档按模板类内容单独成篇）",
+        [
+            "**落点登记（L1）**",
+            "复用既有的\"要么不读、要么读全部\"归类",
+            "技能文档按模板类内容单独成篇",
+            "写文件与登记加载落点是同一个动作",
+        ],
+        "落点登记条缺一则技能文档没有落点：建成后要么与规则混放、要么无人加载",
+    ],
+    [
+        "技能文档只作序、判据回指规范本体",
+        [
+            "**技能文档答步骤、不答规范（L1）**",
+            "只作序",
+            "每一步的\"必须/不得\"与判定标准一律回指规范本体",
+            "同一件事在技能文档与规范里各写一份判定标准",
+        ],
+        "该条缺一则技能文档会新造条款、绕过规范本体",
+    ],
+    [
+        "任务提示词（题面）不是技能文档",
+        [
+            "**任务提示词不是技能文档（L1）**",
+            "**即使它与技能文档同为\"整份复制照着做\"的取用形态**",
+            "题面**自带**它的\"必须/不得\"",
+            "也不得**把题面自带的\"必须/不得\"当成可从题面抽走、挪进技能文档的内容",
+            "把一份任务提示词登记/取用为技能文档",
+        ],
+        "该条缺一则会把题面按技能文档归类、或把题面自带的边界抽进技能文档（把题面降格、边界掏空）",
+    ],
+]
+
+# 维护方入口登记：已抽象出的技能文档逐份登记（写文件与登记是同一个动作）。
+[[guards.check_skill_doc_guard]]
+file = "AGENTS.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "specs-project-maintainer/skills/",
+]
+message = "『技能文档』未在维护方入口 AGENTS.adoc 登记：缺失 {missing}（写文件与登记是同一个动作，不登记则该技能不会被加载）"
+
+# 两份已抽象出的技能文档本身：只核它们**回指判据本体**、且**没有新造规范级别词**。
+[[guards.check_skill_doc_guard]]
+file = "specs-project-maintainer/skills/spec-change-verify.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "判据本体不在这里",
+    "specs/general/verify.adoc",
+]
+message = "技能文档 `spec-change-verify.adoc` 被破坏：缺失 {missing}（技能文档须声明自己不是判据本体、并把判据回指到规范）"
+[[guards.check_skill_doc_guard]]
+file = "specs-project-maintainer/skills/spec-collection-refactor.adoc"
+kind = "file_tokens"
+tokens = [
+    "技能文档",
+    "判据本体不在这里",
+    "specs-project-maintainer/spec-lifecycle.adoc",
+]
+message = "技能文档 `spec-collection-refactor.adoc` 被破坏：缺失 {missing}（技能文档须声明自己不是判据本体、并把判据回指到规范）"

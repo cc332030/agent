@@ -1,0 +1,16 @@
+[[guards.check_dispatcher_no_details_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "dispatcher_no_verbatim"
+# 阈值取 14：低于它的重合多为主题名/文件基名这类本来就该出现的词（如 `新建数据对象`），
+# 属巧合；到 14 字以上基本只可能是把本体成句抄了过来（实证：以 14 为界可拦下
+# `持久化访问（数据库/缓存等）`/`组件/库/工具为主、要求每个类` 这类本体复述）。
+min_overlap = 14
+# 必加载层那几行本就只给路径与主题名（不涉及被引文件的取值），不参与检测。
+ignore = [
+    "必加载层（每次工作都加载）",
+]
+# **只作用于加载调度器那一节**：入口的「最高优先级铁律」是刻意写成"可先读、不必先加载
+# 其他文件"的摘要（它每条都带"完整定义见…"），与本条要拦的"把条目本体抄进调度器不是同一件事。
+scope_after = "== 分类与懒加载（加载调度器）"
+scope_until = "== 技术栈扩展约定"
+message = "调度器加载项与 `{ref}` 正文逐字重合 {overlap} 字：`{frag}`（AGENTS_COMMON.adoc:{line}）——调度器只写『哪个文件 + 何时加载』，条目的取值/判据一律写在该文件里；抄进调度器就是第二份会各自漂移的正文、还把常驻层撑大（判据见 specs/general/terminology.adoc「反膨胀」与 specs/general/doc-design.adoc「信息归属」）"

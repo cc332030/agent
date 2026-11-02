@@ -981,23 +981,26 @@ class TestSeparationInvariants(unittest.TestCase):
         return re_.default_rules_spec(HERE)
 
     def test_rules_dir_exists_and_auto_scanned(self):
-        # 规则数据是**一个目录**（一类规则一个文件），加载侧按目录自动扫描——
-        # 新增一个规则文件不必改任何脚本。
+        # 规则数据是**一个目录**（一类规则一个文件），加载侧按目录自动扫描（含再下一层
+        # 子目录）——新增一个规则文件不必改任何脚本、也不必在别处登记。
         d = self._rules_dir()
         self.assertTrue(os.path.isdir(d), "规则目录须存在（一类规则一个文件）")
-        files = sorted(f for f in os.listdir(d) if f.endswith(".toml"))
-        self.assertGreaterEqual(len(files), 5, "规则目录里应有多个按落点切分的规则文件")
-        self.assertEqual(files, [os.path.basename(p)
-                                 for p in re_.load_rule_specs(d)],
-                         "load_rule_specs 须按目录自动扫描出全部 *.toml")
+        on_disk = []
+        for dirpath, _dirnames, filenames in os.walk(d):
+            on_disk.extend(os.path.join(dirpath, f) for f in filenames if f.endswith(".toml"))
+        self.assertGreaterEqual(len(on_disk), 5, "规则目录里应有多个按落点切分的规则文件")
+        self.assertEqual(sorted(on_disk), sorted(re_.load_rule_specs(d)),
+                         "load_rule_specs 须按目录自动扫描出全部 *.toml（含子目录那一层）")
 
     def test_every_rules_file_is_pure_toml(self):
         import tomllib
         d = self._rules_dir()
-        for name in os.listdir(d):
-            if not name.endswith(".toml"):
-                continue
-            with open(os.path.join(d, name), "rb") as fh:
+        all_files = []
+        for dirpath, _dirnames, filenames in os.walk(d):
+            all_files.extend(os.path.join(dirpath, f) for f in filenames if f.endswith(".toml"))
+        for path in sorted(all_files):
+            name = os.path.relpath(path, d)
+            with open(path, "rb") as fh:
                 data = tomllib.load(fh)
             with self.subTest(name=name):
                 self.assertIsInstance(data, dict)
@@ -1120,9 +1123,14 @@ class TestSeparationInvariants(unittest.TestCase):
     def test_every_guard_name_in_config_used_by_script(self):
         # 规则文件里的防线名须在脚本里被接线（防"规则写了却没人执行"）——
         # 脚本只需登记**规则目录**，具体的规则文件由加载侧自动扫描。
+        # 例外：**哨兵文件** `guard-scripts.toml` 里的名字不是"规则"，它是脚本侧防线的
+        # 登记（一道防线一份行正文靠它与规则数据同层），判据本就在 `.py` 里，故不核接线。
         data = re_.load_rule_files(self._rules_dir())
         script = open(os.path.join(HERE, "check_specs.py"), encoding="utf-8").read()
+        sentinel = re_.load_rules(os.path.join(HERE, "specs-rules", "guard-scripts.toml"))
         for name in data["guards"]:
+            if name in (sentinel.get("guards") or {}):
+                continue
             self.assertIn(f'run_rule_guard("{name}")', script,
                           f"规则文件里的 `{name}` 没有被脚本接线")
 

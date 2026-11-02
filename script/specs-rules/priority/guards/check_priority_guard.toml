@@ -1,0 +1,25 @@
+[[guards.check_priority_guard]]
+file = "specs-project-maintainer/priority.adoc"
+groups = [
+    [
+        "不得点名外部 Agent",
+        [
+            "不得点名外部 Agent",
+            "同 Agent 身份",
+            "降级",
+        ],
+        "P6 须与公共侧同口径写『强制同 Agent、不得点名外部 NPC、不可用时降级为本人串行或如实标悬置而不换外部来源』",
+    ],
+    [
+        "要求（L1，最高",
+        [
+            "要求（L1，最高",
+            "依据",
+        ],
+        "P6 的级别与依据行仍须保留（级别不得被静默改动、依据不得整段删除）",
+    ],
+]
+kind = "regex_section"
+label = "P6."
+message = "规范优先级防线被破坏：{file} 的 P6（协作执行者选择）缺失 {missing}——{desc}"
+pattern = "^===\\s*P6\\..*?(?=\\n=== |\\Z)"

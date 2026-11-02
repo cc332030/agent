@@ -1,0 +1,51 @@
+[[guards.check_config_class_guard]]
+file = "specs/general/coding.adoc"
+groups = [
+    [
+        "配置类不写逻辑",
+        [
+            "配置类不写逻辑",
+            "任何情况都不允许",
+            "ConfigurationProperties",
+        ],
+        "条文：须有『配置类不写逻辑』条、写明『任何情况都不允许』（无例外），并点名 `@ConfigurationProperties` 一类承载配置的类",
+    ],
+    [
+        "POJO",
+        [
+            "POJO",
+            "工具类或服务",
+        ],
+        "边界与去向：须写明配置类只保持 POJO 的基本功能、逻辑下沉到工具类或服务（不写去向则逻辑无处安放，执行者只能塞回去）",
+    ],
+    [
+        "判定标准",
+        [
+            "判定标准",
+            "条件分支",
+            "对外部对象",
+        ],
+        "判定标准：须给出可逐条核对的形态（条件分支/循环、计算与对外访问、`@Bean` 装配形态），否则只剩一句口号、无法判定",
+    ],
+    [
+        "存量处理",
+        [
+            "存量处理",
+            "随动迁移，见 `specs/core/execution.adoc`",
+        ],
+        "存量边界：该条严于框架常规用法（Spring 官方允许配置类里放派生 getter），须指向「规范变更的存量处理」这一真源，否则等于静默推翻引用方既有做法",
+    ],
+    [
+        "识别特征",
+        [
+            "识别特征",
+            "Config",
+            "Properties",
+            "Options",
+            "Settings",
+        ],
+        "识别特征：须按 Config/Properties/Options/Settings 等命名识别，否则命名不规范的配置类会被漏过",
+    ],
+]
+kind = "file_groups"
+message = "配置类不写逻辑防线被破坏：{file} 缺失要点 {missing}——{desc}；该条是用户明确要求的硬性约定（无例外），不得删除、不得降级为建议"

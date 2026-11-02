@@ -1,0 +1,46 @@
+[[guards.check_run_artifact_guard]]
+file = "specs/general/verify.adoc"
+section = "编译/运行验证"
+token_list = "RUN_ARTIFACT_TOKENS"
+kind = "section_groups"
+[[guards.check_run_artifact_guard]]
+file = "specs/stack/windows.adoc"
+section = "要跑的那一份须是本次构建的那一份"
+token_list = "RUN_ARTIFACT_WINDOWS_TOKENS"
+kind = "section_groups"
+
+# 与上面成对：只核正文时，把锚点清单自身削掉几项（正文一字不少）防线仍全绿。
+[[guards.check_run_artifact_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 15
+token_list = "RUN_ARTIFACT_TOKENS"
+[[guards.check_run_artifact_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 16
+token_list = "RUN_ARTIFACT_WINDOWS_TOKENS"
+
+# 公开面同步（读者不从公开面知道有这条，就仍按"双击能开就是能跑"行事）。
+[[guards.check_run_artifact_guard]]
+file = "README.adoc"
+tokens = [
+    "要跑的那一份须是本次产出的那一份",
+    "specs/stack/windows.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「要跑的那一份须是本次产出的那一份」{missing}——公开面只看得见\"启动起来看一眼\"，这条判据对读者不存在"
+
+# 调度器须能被触发（否则在 Windows 上跑打包产物时这一条永远不会被加载）。
+[[guards.check_run_artifact_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "specs/stack/windows.adoc",
+    "要跑/要截的是一个打包出来的 exe",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「要跑/要截的是一个打包出来的 exe」这一识别特征 {missing}——缺则跑打包产物、或唯一实例把启动交给既有实例时 `specs/stack/windows.adoc` 永远不加载，规则实际失效"
+
+# 需要看显示效果时不接管桌面（用户提出）：判据本体在 `specs/general/verify.adoc`
+# 「编译/运行验证」——用户实际在用这台机器，切前台/动鼠标键盘抢焦点，整屏图还把桌面
+# 一并拍下来。锚点清单只写一处（`_tokens.toml` 的 `NO_DESKTOP_TAKEOVER_TOKENS`）。

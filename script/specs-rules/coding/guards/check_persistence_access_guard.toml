@@ -1,0 +1,180 @@
+[[guards.check_persistence_access_guard]]
+file = "specs/general/coding.adoc"
+groups = [
+    [
+        "持久化访问（数据库/缓存等）",
+        [
+            "持久化访问（数据库/缓存等）",
+        ],
+        "条文：须有「持久化访问（数据库/缓存等）」节，作为该条的抽象形态落点",
+    ],
+    [
+        "统一入口（L1）",
+        [
+            "统一入口（L1）",
+        ],
+        "统一入口：须写明持久化操作走该技术给定的统一入口（**不点名具体框架**），并标 L1（防被降级成建议）",
+    ],
+    [
+        "优先用类型安全/声明式查询构造 API（L1）",
+        [
+            "优先用类型安全/声明式查询构造 API（L1）",
+            "方法引用",
+            "findByXxx",
+        ],
+        "替代形态优先：须写明优先且一律使用类型安全/声明式查询构造 API（以方法引用/属性名引用表达列名、声明式方法名如 `findByXxx`、类型化 Criteria），标 L1",
+    ],
+    [
+        "替代优先（L1）",
+        [
+            "替代优先（L1）",
+            "表达不了",
+        ],
+        "替代优先：须写明技术自带的替代写法（类型安全/声明式形态）强制优先、仅在表达不了时才退回通用构造器且须写明理由（无此条则'无法替代'的边界无处可判）",
+    ],
+    [
+        "判定标准",
+        [
+            "判定标准",
+            "字符串",
+            "绕过",
+        ],
+        "判定标准：须给出可逐条核对的**抽象**形态（构造器 `new`、字符串写列名、绕过统一入口），否则只剩一句口号",
+    ],
+    [
+        "例外与边界",
+        [
+            "例外与边界",
+            "跨语言执行脚本的落点",
+        ],
+        "例外与边界：须写明本条不禁止跨语言语句的承载（映射文件）与类型安全 API 表达不了的语义（退回时调用入口不变），否则会与「跨语言执行脚本的落点」互相打架",
+    ],
+    [
+        "存量边界",
+        [
+            "存量边界",
+            "`specs/core/execution.adoc`",
+        ],
+        "存量边界：须指向「规范变更的存量处理」这一真源，否则等于静默推翻引用方既有的 `new` 用法",
+    ],
+    [
+        "依据",
+        [
+            "依据",
+            "ISO/IEC 25010",
+        ],
+        "依据行：须标标准名/编号（防依据被整段删除后无从追溯）",
+    ],
+]
+kind = "file_groups"
+message = "持久化访问防线被破坏：{file} 缺失要点 {missing}——{desc}；该条对应用户明确提出的硬性要求（强制走统一入口、禁止 `new` 查询构造器），不得删除、不得降级为建议"
+[[guards.check_persistence_access_guard]]
+file = "specs/stack/java.adoc"
+groups = [
+    [
+        "持久化访问（MyBatis-Plus / JPA 等）",
+        [
+            "持久化访问（MyBatis-Plus / JPA 等）",
+            "coding.adoc",
+        ],
+        "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按栈文件学仍会随手 new）",
+    ],
+    [
+        "lambdaQuery",
+        [
+            "lambdaQuery",
+            "lambdaUpdate",
+            "ktQuery",
+            "ktUpdate",
+        ],
+        "四个成员方法名须齐全（`lambdaQuery()`/`lambdaUpdate()`/`ktQuery()`/`ktUpdate()`）——漏掉 `kt*` 会让 Kotlin 项目学不全、漏掉 `lambdaUpdate` 则更新侧无落点",
+    ],
+    [
+        "new QueryWrapper",
+        [
+            "new QueryWrapper",
+            "子类",
+            "new LambdaQueryWrapper",
+        ],
+        "禁止面须点名 `new QueryWrapper` 的**子类**（含 `new LambdaQueryWrapper`）——用户要求'禁止 new QueryWrapper 及其子类'，只写非 Lambda 形态即被放宽",
+    ],
+    [
+        "Wrappers",
+        [
+            "Wrappers",
+            "静态构造",
+            "不得",
+            "Mapper 接口",
+        ],
+        "`Wrappers` 一族静态构造方法须明确**同在禁止面**（`Wrappers` + “静态构造” + “不得”同现），且须给出 `IService` 之外的唯一落点（`Mapper 接口`上的注解/映射文件或默认方法）——只写“改用 `Wrappers`”等于把 static 形态重新放行、只禁 static 而不给落点则执行者无处可去",
+    ],
+    [
+        "例外（L2",
+        [
+            "例外（L2",
+            "理由",
+        ],
+        "例外须标级并写明'须写清理由'（无例外条文则等于把既有写法一刀切，无例外且不写理由则等于留后门）",
+    ],
+    [
+        "判定标准",
+        [
+            "判定标准",
+            "字符串",
+            "方法引用",
+        ],
+        "判定标准：须给出可逐条核对的形态（构造器 new / 字符串列名 / 绕过 IService），含'可用方法引用表达却写字符串'这一条",
+    ],
+    [
+        "`specs/core/execution.adoc`",
+        [
+            "`specs/core/execution.adoc`",
+            "execution.adoc",
+        ],
+        "存量边界：须指向「规范变更的存量处理」这一真源",
+    ],
+]
+kind = "file_groups"
+message = "持久化访问防线被破坏：{file} 缺失要点 {missing}——{desc}"
+
+# 『`IService` 的最终实现类须继承 `ServiceImpl` 一族』**按条目自己的正文核**（`bullet_tokens`，
+# 不是整节）：同一节里相邻条目共用大量字样（上一条含「统一入口」「Service 实现类」、下一条含
+# 「例外」「判定标准」「存量」，而该节末尾**整节共用**一条「判定标准」「存量边界」与「依据」），
+# 按整节 `file_groups` 核时这些相邻条目会把从本条抽走的要点**兜住**。本轮实测（`file_groups`
+# 期间，11 种形态逐一试过）：与上一条的分工句 / 判定标准①②③ / 边界①② / 本条 L1 降 L2 / 条文
+# 里的间接继承口径，**八种全部报绿**——只剩「可以不继承」一项有效力，其余几项虽报红、命中的是
+# 同一节别的条目的字样。
+# 锚点一律取**本条 bullet 内只出现一次**的词（「抽象类」「ServiceImpl」「最终实现类」在本条内
+# 各出现多次，不能当锚点）。
+[[guards.check_persistence_access_guard]]
+bullet = "`IService` 的最终实现类须继承 `ServiceImpl` 或其子类"
+file = "specs/stack/java.adoc"
+kind = "bullet_tokens"
+section = "持久化访问（MyBatis-Plus / JPA 等）"
+tokens = [
+    "（L1，用户点名）",
+    "其**最终实现类**须是 `ServiceImpl` 的本子类",
+    "**或其子类**",
+    "**抽象类可以不继承**",
+    "约束落在它的最终实现类上",
+    "① 非抽象的 `XxxServiceImpl` 实现 `XxxService` 却不继承 `ServiceImpl` 一族",
+    "为由自我豁免",
+    "把本条的约束错落到抽象类上",
+    "只管 `IService` 这一族入口",
+    "本条管「最终实现类由谁承载入口」",
+    "上一条管「在哪个类里调这个入口」",
+    "两条同向、互不替代",
+    "**存量**：随动迁移，见 `specs/core/execution.adoc`",
+    "依据（标准名/编号）",
+    "属**本集合自己的取舍**",
+]
+message = "持久化访问防线被破坏：{file} 的该条**本条自己的正文**缺失 {missing}——缺的若是 L1 标记，约束被降级成建议、「只 `implements` 不继承」重新成立；缺的若是豁免面，抽象类会被一并要求继承 `ServiceImpl`（与用户口径相反）；缺的若是边界或与上一条的分工，读者会二选一地读（以为继承了就能随便 `new`，或以为不继承也能调成员方法）。每条锚点须在**本条 bullet 内唯一**"
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时规范正文一字不少、
+# 上面那步一次都不报错（"核过且通过"与"没核"无从区分）。删锚点须与调 `min` 一并发生。
+[[guards.check_persistence_access_guard]]
+file = "specs/stack/java.adoc"
+kind = "anchor_count"
+bullet = "`IService` 的最终实现类须继承 `ServiceImpl` 或其子类"
+section = "持久化访问（MyBatis-Plus / JPA 等）"
+min = 15

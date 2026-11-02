@@ -1,0 +1,13 @@
+[[guards.check_comment_preservation_guard]]
+file = "AGENTS_COMMON.adoc"
+groups = [
+    [
+        "评论（要发评论/处置评论时即命中）",
+        [
+            "评论",
+        ],
+        "调度器须有本条的识别特征（要发评论或处置评论即命中）——否则该禁令永远不会被触发加载",
+    ],
+]
+kind = "file_groups"
+message = "评论不得删除防线被破坏：AGENTS_COMMON.adoc 缺失要点 {missing}——{desc}"

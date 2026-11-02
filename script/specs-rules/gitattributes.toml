@@ -1,0 +1,20 @@
+# 『只增不改的落点须配 `merge=union`』（`check_git_attributes_merge_guard`）的规则数据。
+# 判据本体在 `specs/general/version-control.adoc`「冲突处理」，git 侧取值在
+# `specs/general/git.adoc`「行尾与检出归一」；锚点清单在 `_tokens.toml` 的
+# `GIT_ATTRIBUTES_MERGE_TOKENS` / `GIT_ATTRIBUTES_MERGE_PATHS`（两侧按名引用，不在此抄第二份）。
+#
+# 为什么这条要机械核：落点全是"行集合"（规则文件的锚点、逐轮记账的行），两处并行改动各自
+# 往中间插一行就必撞——而 `.gitattributes` 里一条都没有时，这件事完全没有落点。
+
+[[guards.check_git_attributes_merge_guard]]
+kind = "exists"
+files = [".gitattributes"]
+message = "缺少 .gitattributes——行尾策略与合并策略都失去落盘口（判据见 specs/general/encoding.adoc「跨平台检出」与「冲突处理」）"
+
+[[guards.check_git_attributes_merge_guard]]
+kind = "file_tokens"
+file = ".gitattributes"
+tokens = [
+    "merge=union",
+]
+message = "{file} 里没有 `merge=union` 的声明 {missing}——只增不改的落点靠它合并，缺则两处并行改动必撞在同一片区域"

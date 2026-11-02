@@ -1,0 +1,56 @@
+# 『并行改动的独占落点：逐行登记表须是生成物』（`check_ledger_table_generated_guard`）
+# 的规则数据：**生成器的登记表** + 本道自己的判据。生成器 `script/gen_derived.py` 与判据
+# 两侧都从这一处取——生成器里再抄一份清单，就是同一份清单的第二处来源
+# （`specs/general/coding.adoc`「取值的唯一来源」）。
+#
+# 为什么这几段要生成：它们把**已经唯一的那一份真源**逐行抄了第二份，而每一轮改动都要往
+# 中间插一行、其后各行整体位移——两个并行改动必然撞在同一片区域。生成之后，改动的落点
+# 只剩真源那一处。判据：现场与重算结果**逐字节一致**。
+# 「还有哪些表该收进生成器」属语义判断，交人/子 agent 复核。
+
+[tokens.not_collision_catalog]
+# 每段：`[文件, 节名, 真源, 产出什么, 段起点标记, 段终点标记]`；起点为空＝按整节重出。
+sections = [
+    # ① 检查项编号表：按 `script/check_specs.py` 头部的检查项清单现算
+    ["specs-project-maintainer/guards.adoc", "检查项编号", "script/check_specs.py",
+     "检查项编号表的表体", "", ""],
+    # ② 生成物一览：按本段 `sections` 现算（加一个生成物只往这里加一条，那一行自己长出来）
+    ["specs-project-maintainer/guards.adoc", "生成物一览", "script/specs-rules/ledger.toml",
+     "生成物逐条一览", "// BEGIN GENERATED: 生成物一览", "// END GENERATED: 生成物一览"],
+]
+
+# 生成物的**接线**：生成器真的被这一道防线管着。缺这层接线时，生成物照样能被 `--write`
+# 重算，却没有任何一道防线核"现场＝重算结果"——生成物于是退回成"手抄的第二份"。
+[[guards.check_ledger_table_generated_guard]]
+kind = "file_tokens"
+file = "script/check_specs.py"
+tokens = [
+    "`script/gen_derived.py`",
+    "`specs-project-maintainer/guards.adoc`「检查项编号」",
+    "独占落点",
+]
+message = "{file} 缺了生成物的接线要点 {missing}——生成物必须登记在本道防线里（清单题头写明它由 `script/gen_derived.py` 产出、落点是「检查项编号」那一段、以及它治的是哪一类独占落点），否则改了现场也没人报红"
+
+[[guards.check_ledger_table_generated_guard]]
+kind = "exists"
+files = ["script/gen_derived.py"]
+message = "缺少生成器 `script/gen_derived.py`——逐行登记表就退回成手抄的第二份（每轮插入一行、其后整体位移，两个并行改动必撞）"
+
+[[guards.check_ledger_table_generated_guard]]
+kind = "file_tokens"
+file = "script/specs-rules/ledger.toml"
+tokens = [
+    "not_collision_catalog",
+    "specs-project-maintainer/guards.adoc",
+    "script/check_specs.py",
+]
+message = "{file} 的生成器登记表缺了生成物条目 {missing}——登记表是生成器与判据共用的唯一一处清单，缺项时那一段既不被生成也不被核对（手抄的第二份于是又能悄悄长回来）"
+
+[[guards.check_ledger_table_generated_guard]]
+kind = "file_forbidden"
+file = "specs-project-maintainer/guards.adoc"
+forbidden = [
+    "手工维护这张表",
+    "逐行手工补",
+]
+message = "guards.adoc 把生成物写回了「{hit}」——这一段整段由 `script/gen_derived.py` 产出，手改会在下一次重算时被覆盖（判据核的就是现场＝重算结果）"

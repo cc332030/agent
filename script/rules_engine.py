@@ -136,7 +136,7 @@ DEFAULTS = {
 # 重合的片段是什么、在第几行"——写错的占位符会原样留在报错正文里，故同样在加载期拦住。
 # `a`/`b`/`line_a`/`line_b` 供 `duplicate_scan` 报告"哪两处、各自在第几行"。
 PLACEHOLDERS = ("file", "missing", "desc", "hit", "cite", "ref", "overlap", "frag", "line",
-                "a", "b", "line_a", "line_b", "name", "where", "stale", "kind")
+                "a", "b", "line_a", "line_b", "name", "where", "stale", "kind", "dir")
 
 
 def _fill(msg, **kw):
@@ -407,7 +407,10 @@ def _step_regex_section(rules, step):
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["label"]), rel)
         return
-    _check_groups(ctx.err, rel, f"「{step['label']}」", m.group(0), step["groups"],
+    groups = _groups_of(rules, step)
+    if groups is None:
+        return
+    _check_groups(ctx.err, rel, f"「{step['label']}」", m.group(0), groups,
                   prefix=step.get("prefix", ""), template=step.get("message"))
 
 
@@ -485,11 +488,35 @@ def _paired_bullet_token_count(rules, step):
                     and isinstance(group[1], (list, tuple)):
                 total += len(group[1])
         return total
+    # 成对的那一步：同防线、同文件、同位置的 `bullet_tokens`（按条 bullet 核）或
+    # `section_groups` / `subsection_groups` / `regex_section`（按节核）——这两种形态的
+    # 锚点同样只写在规则数据里，删掉其中一项时现场文档一字未动、逐项核对全绿。
+    paired_kinds = ("bullet_tokens", "section_groups", "subsection_groups", "regex_section")
+    # 成对的判据：位置三元组（`bullet` / `section` / `label`）须**一致**——两侧写的落点不同时
+    # 是两条各管一处，不是一对；`label` 是 `regex_section` 的节名。
     for other in rules.steps(guard):
-        if (other is not step and other.get("kind") == "bullet_tokens"
-                and other.get("file") == step.get("file")
-                and other.get("bullet") == step.get("bullet")):
+        if other is step or other.get("kind") not in paired_kinds:
+            continue
+        if other.get("file") != step.get("file"):
+            continue
+        if other.get("bullet") != step.get("bullet") \
+                or other.get("section") != step.get("section") \
+                or other.get("label") != step.get("label"):
+            continue
+        # `anchor_count` 自身若写了 `token_list`，成对的必须是**同一份清单**那一组——
+        # 否则同文件、同位置、不同清单的两步会被错配成一对（本仓库实测：一个文件里
+        # 多份清单各成一对时，条数判据全部数到 0 或数到别人那一份）。
+        if step.get("token_list") and other.get("token_list") != step.get("token_list"):
+            continue
+        if other["kind"] == "bullet_tokens":
             return len(other.get("tokens", []))
+        groups = other.get("groups", [])
+        total = 0
+        for group in groups:
+            if isinstance(group, (list, tuple)) and len(group) >= 2 \
+                    and isinstance(group[1], (list, tuple)):
+                total += len(group[1])
+        return total
     return None
 
 
@@ -1415,6 +1442,17 @@ def _step_prose_mentions(rules, step):
             break
 
 
+def _step_registry_owner(rules, step):
+    """**声明**一处登记面（不核任何东西）：表在哪里、表头长什么样。
+
+    为什么它也是一种步骤而不是脚本里的常量：这类声明的寿命与规则数据一样长——本轮定下
+    "清单表的行正文按防线名分份、序号现算"，下一轮可能改成别的排布；改排布不该改 `.py`
+    （`specs/general/script.adoc`「规则与脚本的隔离」判定标准①）。真正的**核对**仍由脚本做，
+    因为"按 `CHECKS` 现算序号"这件事要读脚本自己。
+    """
+    del rules, step
+
+
 def _prose_paragraphs(text):
     """把文本切成段落（空行、标题行、代码块定界处断开）——判据的粒度是"同一段落里有没有回指"。
 
@@ -1518,6 +1556,10 @@ KINDS = {
     "table_row_pipe": _step_table_row_pipe,
     "list_structure": _step_list_structure,
     "prose_mentions_generated": _step_prose_mentions,
+    # 不是"核对"：声明一处**登记面**（表长什么样、行正文落在哪个目录）。判据由脚本按它
+    # 现算后核（本仓库：`check_guard_order_guard` 装配清单表、`check_guard_manifest` 核条目），
+    # 引擎只把声明交出去——判据不进引擎，措辞留在规则数据里。
+    "registry_owner": _step_registry_owner,
 }
 
 
@@ -1737,13 +1779,46 @@ def _merge_file(name: str, data, merged: dict) -> None:
                 raise RulesError(f"规则文件 {name} 的分片表 `{key}` 不是对象——"
                                  f"它按防线名分片（`[tokens.{key}]` 下逐行 `<防线名> = <数值>`）")
             table = merged[key] if merged[key] is not None else {}
-            for shard, num in value.items():
+            # **两档层级**：`[tokens.<表>]` 下直接写 `<防线名> = n`（单张表时最省事），
+            # `[tokens.<表>.<主题>]` 下一格一格写——一格是一份独立的编辑落点，并行改动
+            # 各改自己那一格。一档是一张表的写法、另一档是一组小表的写法，**读到的结果
+            # 是同一张**（脚本侧只认 `{防线名: 数值}`），否则"分片"就变成两种口径。
+            for shard, num in _flatten_sharded(name, key, value).items():
                 if shard in table:
                     raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了分片表 "
                                      f"`{key}` 的分片 `{shard}`——同一道防线的记账只能有一处"
                                      "落点（两处会各写一半、彼此漂移，正是分片表要避开的事）")
                 table[shard] = num
             merged[key] = table
+
+
+def _flatten_sharded(name: str, key: str, value: dict) -> dict:
+    """把分片表的两档层级**压成一张**（`{分片键: 数值}`）；形态不合即抛 `RulesError`。
+
+    值只有两种合法形态：数值（该分片自己那一格），或**一层**同构的子表（`<主题>` 那一格）。
+    再深就不收了：层级越深，"这条该写在哪一格"越没有唯一答案，而多一层只为省一次
+    查找的便利换不来任何判据。
+    """
+    out = {}
+    for shard, num in value.items():
+        if isinstance(num, dict):
+            for sub, n in num.items():
+                if isinstance(n, dict):
+                    raise RulesError(
+                        f"规则文件 {name} 的分片表 `{key}` 只收两层（`[tokens.{key}]` 与 "
+                        f"`[tokens.{key}.<主题>]`）——`{shard}.{sub}` 又套了一层")
+                _merge_shard(name, key, out, sub, n)
+        else:
+            _merge_shard(name, key, out, shard, num)
+    return out
+
+
+def _merge_shard(name: str, key: str, out: dict, shard: str, num) -> None:
+    """同一份合并结果内**同名分片**即报错（否则后者静默顶掉前者）。"""
+    if shard in out:
+        raise RulesError(f"规则文件 {name} 的分片表 `{key}` 里重复写了分片 `{shard}`——"
+                         "同一道防线只能有一处记账落点")
+    out[shard] = num
 
 
 def load_rule_specs(spec) -> dict:
@@ -1755,6 +1830,10 @@ def load_rule_specs(spec) -> dict:
       的落点"——新增一个规则文件**不必改任何脚本**（脚本只登记目录，不登记文件名）；
     * **文件**：只有确需单点指定的场合才写具体文件名。
 
+    目录可以再套**一层**子目录：一个主题的规则多到"每加一道防线都往同一片区域追加"时，
+    主题下再切一份一份（`<主题>/guards/<防线名>.toml`），扫描跟上这一层——
+    否则分不分家都要求改脚本，等于没分。
+
     据此 `spec` 可以只是**一个目录**，脚本侧不必逐个列出规则文件——"自动扫描规则文件
     加载"要买的正是这件事：加一个规则文件不需要动 `.py`。
     """
@@ -1763,15 +1842,29 @@ def load_rule_specs(spec) -> dict:
     for item in items:
         item = str(item)
         if os.path.isdir(item):
-            names = sorted(f for f in os.listdir(item)
-                           if f.endswith(RULES_FILE_SUFFIX) and not f.startswith("."))
-            if not names:
+            found = _scan_rule_dir(item, top=True)
+            if not found:
                 raise RulesError(f"规则目录 {item} 里没有任何 *{RULES_FILE_SUFFIX}——目录是'一类规则的"
                                  "落点'，空目录意味着这一批规则整体消失（不得静默放过）")
-            files.extend(os.path.join(item, f) for f in names)
+            files.extend(found)
         else:
             files.append(item)
     return files
+
+
+def _scan_rule_dir(path: str, top: bool = False) -> list:
+    """扫一层目录下的规则文件；子目录**再下一层**（`<主题>/guards/*.toml`），不再更深。"""
+    out = []
+    for name in sorted(os.listdir(path)):
+        full = os.path.join(path, name)
+        if os.path.isdir(full):
+            if top and name.startswith("."):
+                continue
+            out.extend(_scan_rule_dir(full))
+            continue
+        if name.endswith(RULES_FILE_SUFFIX) and not name.startswith("."):
+            out.append(full)
+    return out
 
 
 def load_rule_files(spec) -> dict:

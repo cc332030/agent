@@ -54,11 +54,13 @@ import unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 
-_SPEC = importlib.util.spec_from_file_location(
-    "check_specs", os.path.join(HERE, "check_specs.py"))
-cm = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(cm)  # type: ignore[union-attr]
+# 被测模块按**常规导入**取：与 `specs_test_base.py` 及其余测试文件拿到**同一份实例**。
+# 早先这里按文件路径 `spec_from_file_location` 单独加载一份、且不登记进 `sys.modules`：
+# 拆文件后每个测试文件各得到两个模块对象——夹具改的是这一份的 `REPO_ROOT`、判据跑的是
+# 那一份的真仓库路径，整类反例静默全绿（本仓库实测）。
+import check_specs as cm  # noqa: E402
 import rules_engine  # noqa: E402  （加载期判据：自定义文案里不得出现 `{section}`）
 import pathconfig   # noqa: E402  （运行期配置的落点：端到端用例要按它供给配置）
 
@@ -116,7 +118,67 @@ BN_CASE = ("\n\nclass TestCheckBetaGuard(unittest.TestCase):\n"
            "    def test_extra(self):\n        self.assertTrue(True)\n")
 
 
-class CheckSpecsTestCase(unittest.TestCase):
+def _tokens_rel() -> list:
+    """锚点/名单数据当前的真实落点（相对仓库根，按目录递归取全部 `*.toml`）。
+
+    这些清单按主题分份落在规则数据里（一份文件或一组主题子目录文件）——写成死路径时，
+    清单随主题搬家，一批用例会静默失效（读到的是一份不存在的文件，改它当然没反应）。
+    """
+    repo = os.path.dirname(HERE)
+    folder = os.path.join(repo, "script", "specs-rules")
+    out = []
+    for dirpath, _dirnames, filenames in os.walk(folder):
+        for name in sorted(filenames):
+            if name.endswith(".toml"):
+                rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                out.append(rel.replace(os.sep, "/"))
+    return out
+
+
+def _find_rule_file(marker: str) -> str:
+    """按**内容**找承载某个标记（如 `XXX_TOKENS = [`）的那一份规则数据。"""
+    repo = os.path.dirname(HERE)
+    for rel in _tokens_rel():
+        with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+            if marker in fh.read():
+                return rel
+    raise AssertionError(f"夹具失效：规则数据里找不到 {marker}")
+
+
+def _rules_rel(topic: str) -> str:
+    """规则数据里**这个主题**当前的真实落点（相对仓库根）。
+
+    规则按主题切成一份一份之后，落点可能是一份文件（`<主题>.toml`），也可能是一组
+    `<主题>/guards/<防线名>.toml`。用例里写死文件名时，规则一搬家这些用例就整批
+    `FileNotFoundError`——而它们要核的是判据，不是落点布局。
+    """
+    repo = os.path.dirname(HERE)
+    base = os.path.join(repo, "script", "specs-rules")
+    direct = os.path.join(base, topic + ".toml")
+    if os.path.isfile(direct):
+        return f"script/specs-rules/{topic}.toml"
+    for dirpath, _dirnames, filenames in os.walk(os.path.join(base, topic)):
+        for name in sorted(filenames):
+            if name.endswith(".toml"):
+                rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                return rel.replace(os.sep, "/")
+    return f"script/specs-rules/{topic}.toml"
+
+
+class GuardNamingTestCase(unittest.TestCase):
+    """把 `TestCheck<Name>` 类名推导成 `check_<name>` 防线名（靠这条约定认"谁钉住哪道防线"）。
+
+    **不记账**：反例用例的类数由类名现数（`check_specs._guard_test_classes`），不在规则数据
+    里另记一份——记的那份与代码各改一个数时，判据照样全绿。基类只提供这条推导，不提供夹具。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.guard = cm._guard_of_test_class(cls.__name__)
+
+
+class CheckSpecsTestCase(GuardNamingTestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
         self._orig = (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
@@ -145,6 +207,15 @@ class CheckSpecsTestCase(unittest.TestCase):
          cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
+    def _write_source_management(self, mode: str):
+        """把**源码管理档**落进运行期配置对象（取值只有一处：`[source-management].mode`）。
+
+        不落一份整配置：整份配置手抄一份就有了第二份取值，而这里要测的恰恰是"取哪一档"
+        ——故直接换一个只带这个键的配置对象（`Config` 的必填项在构造时不校，取值时才取）。
+        """
+        cm._PATHCFG = cm.pathconfig.Config(
+            {"source-management": {"mode": mode}}, os.path.join(self.root, "specs-config.toml"))
+
     def write(self, relpath: str, content: str) -> None:
         """在临时根下按相对路径写文件（自动建父目录）。
 
@@ -169,54 +240,25 @@ class CheckSpecsTestCase(unittest.TestCase):
     # 其夹具都须把这两份按**原样**落进来（**不手抄**——手抄必然与现场漂移，本轮实测：
     # 手抄版少一组锚点即产生假红）。规则文件由防线按仓库根相对路径读取，故夹具落点与
     # 现场一致即可。
-    RULES_FIXTURE_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml",
-                           "script/specs-rules/verify.toml",
-                           # 本道（问与答对齐）的规则数据按原地原样落进夹具——手抄必然漂移
-                           "script/specs-rules/intent-answer.toml",
-                           # 本道（长方法的反复调用点）的判据措辞亦外置在该文件里
-                           "script/specs-rules/coding.toml",
-                           # 本道（分发产物的体积与按需加载）的判据措辞外置在该文件里
-                           "script/specs-rules/bundle.toml",
-                           # 本道（界面与样式）的判据措辞外置在该文件里
-                           "script/specs-rules/ui.toml",
-                           # 本道（界面的规模与性能）的判据措辞外置在该文件里
-                           "script/specs-rules/ui-perf.toml",
-                           # 本道（一个 issue 一个 PR、不私开分支与 PR）的判据措辞外置在该文件里
-                           "script/specs-rules/cnb.toml",
-                           # 本道（请求服务须有本机断言）的判据措辞与扫描面外置在该文件里
-                           "script/specs-rules/local-service.toml",
-                           # 本道（用例数据的脱敏）的判据措辞外置在该文件里
-                           "script/specs-rules/desensitize.toml",
-                           # 本道（猜到的行为先报、待人工确认）的判据措辞外置在该文件里
-                           "script/specs-rules/execution.toml",
-                           # 本道（缓存统一管理、先缓存后在线）的判据措辞外置在该文件里
-                           "script/specs-rules/cache.toml",
-                           # 本道（冲突与压缩提交）的判据措辞外置在该文件里
-                           "script/specs-rules/version-control.toml",
-                           # 本道与相邻几道（提交信息、注释保留）的判据措辞外置在这两份里
-                           "script/specs-rules/git.toml",
-                           "script/specs-rules/dispatcher.toml",
-                           # 本道（卡住时先自证）的判据措辞外置在该文件里
-                           "script/specs-rules/self-serve.toml",
-                           # 本道（降级式表述：review 必查 + 一键优化规范借用同一份判据）同在该文件里
-                           "script/specs-rules/degradation.toml",
-                           # 本道（列表结构不得被写坏）与其余按节核的防线同用这几份规则数据
-                           "script/specs-rules/list.toml",
-                           "script/specs-rules/table.toml",
-                           "script/specs-rules/declarative.toml",
-                           "script/specs-rules/ci-cd.toml",
-                           # 本道（取规范进度与停住窗口）的判据措辞外置在该文件里
-                           "script/specs-rules/progress.toml",
-                           # 本道（界面的形状、尺度、颜色与交互）的判据措辞外置在该文件里
-                           "script/specs-rules/ui-spec.toml",
-                           # 本道（规范优先级与最高关注项）的判据措辞外置在该文件里
-                           "script/specs-rules/priority.toml")
-
     def write_rules_fixture(self) -> None:
+        """把**现场那份规则目录**按原样落进夹具（不手抄清单）。
+
+        为什么不再列一份文件名：`script/specs-rules/` 是"一类规则一个文件、新增不必改
+        脚本"的落点，而夹具里列一串文件名时，"新增一个规则文件"就变成了两处改动——
+        与那条口径正相反（本仓库实证：规则数据按主题分成子目录之后，这份手写清单
+        整批失效，几百个用例一起报"缺少规则文件"）。故这里按目录**递归照抄**：
+        现场有什么、夹具就有什么，一份不漏、一份不多。
+        """
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        for rel in self.RULES_FIXTURE_FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.write(rel, fh.read())
+        src_root = os.path.join(repo_root, "script", "specs-rules")
+        for dirpath, _dirnames, filenames in os.walk(src_root):
+            for name in sorted(filenames):
+                if not name.endswith(".toml"):
+                    continue
+                full = os.path.join(dirpath, name)
+                rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
+                with open(full, encoding="utf-8") as fh:
+                    self.write(rel, fh.read())
 
     def write_real_file(self, rel: str) -> None:
         """把仓库里**真实的那份文件**原样落进夹具（判据本体的正例用它，不手抄）。"""
@@ -253,6 +295,7 @@ class CheckSpecsTestCase(unittest.TestCase):
             if line.startswith("▶") and idx == len(lines) - 1:
                 return False
         return True
+
 
 
 
@@ -1379,7 +1422,7 @@ class TestYamlStringQuoteGuard(CheckSpecsTestCase):
         # 落点是「文件编码与换行符」层（`specs/general/encoding.adoc`）：该条管配置文本里字符串
         # 怎么书写，与"怎么跑流水线"无关；原误落在 CI/CD 层，用户指出后归位。
         self.write_real_file("specs/general/encoding.adoc")
-        self.write_real_file("script/specs-rules/encoding.toml")
+        self.write_real_file(_rules_rel("encoding"))
         self._reset_rules()
 
     def _reset_rules(self):
@@ -5379,10 +5422,6 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
     通用层口径与调度器/README 登记。
     """
 
-    RULES_FIXTURE_FILES = CheckSpecsTestCase.RULES_FIXTURE_FILES + (
-        "script/specs-rules/java.toml",
-    )
-
     JAVA_TEST = "specs/stack/java-testing.adoc"
     GEN_TEST = "specs/general/testing.adoc"
     COMMON = "AGENTS_COMMON.adoc"
@@ -5649,11 +5688,14 @@ class TestCheckLightestPathGuard(CheckSpecsTestCase):
     def test_anchor_list_shrunk_reports(self):
         # 反例⑪：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
         # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里
+        # 落点按内容找：`anchor_count` 那一步（带 `min`）在**这道防线自己那一份**里
         self._write_valid()
-        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+        rel = _find_rule_file('token_list = "LIGHTEST_PATH_TOKENS"')
+        path = os.path.join(self.root, *rel.split("/"))
+        with open(path, encoding="utf-8") as fh:
             rules = fh.read()
-        self.write("script/specs-rules/verify.toml",
-                   rules.replace("min = 24", "min = 99", 1))
+        self.assertIn("min = ", rules, "夹具失效：这一份里没有 anchor_count 的 min")
+        self.write(rel, re.sub(r"min = \d+", "min = 999", rules, count=1))
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         self._guard(cm.check_lightest_path_guard)
@@ -6023,11 +6065,12 @@ class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
     def test_anchor_list_shrunk_reports(self):
         # 反例⑭：**锚点清单自身**被削（规范正文一字不少、正文核全绿）
         self._write_valid()
-        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+        rel = _find_rule_file('token_list = "NO_DESKTOP_TAKEOVER_TOKENS"')
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
             rules = fh.read()
-        self.write("script/specs-rules/verify.toml",
-                   rules.replace('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"',
-                                 'min = 99\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', 1))
+        self.assertIn('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', rules)
+        self.write(rel, rules.replace('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"',
+                                      'min = 999\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', 1))
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.check_no_desktop_takeover_guard()
@@ -6055,7 +6098,7 @@ class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
     COMMON = "AGENTS_COMMON.adoc"
     PROMPT = "prompts/_common.txt"
     README = "README.adoc"
-    RULES = "script/specs-rules/verify.toml"
+    RULES = _rules_rel("verify")
     SECTION = "== 开窗口不得影响正在用这台机器的用户"
 
     def setUp(self) -> None:
@@ -6181,9 +6224,10 @@ class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
     def test_anchor_list_shrunk_reports(self):
         # 反例⑭：**锚点清单自身**被削（规范正文一字不少、正文核全绿）
         self._write_valid()
-        with open(os.path.join(self.root, self.RULES), encoding="utf-8") as fh:
+        rel = _find_rule_file('token_list = "WINDOWS_WINDOW_TOKENS"')
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
             rules = fh.read()
-        self.write(self.RULES,
+        self.write(rel,
                    rules.replace('min = 15\ntoken_list = "WINDOWS_WINDOW_TOKENS"',
                                  'min = 99\ntoken_list = "WINDOWS_WINDOW_TOKENS"', 1))
         cm.RULES = None
@@ -6341,11 +6385,12 @@ class TestCheckReusableScenarioGuard(CheckSpecsTestCase):
         # 反例⑮：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
         # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里
         self._write_valid()
-        with open(os.path.join(self.root, "script/specs-rules/verify.toml"), encoding="utf-8") as fh:
+        rel = _find_rule_file('token_list = "REUSABLE_SCENARIO_TOKENS"')
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
             rules = fh.read()
-        self.write("script/specs-rules/verify.toml",
-                   rules.replace('min = 19\ntoken_list = "REUSABLE_SCENARIO_TOKENS"',
-                                 'min = 99\ntoken_list = "REUSABLE_SCENARIO_TOKENS"', 1))
+        self.assertIn('min = 19\ntoken_list = "REUSABLE_SCENARIO_TOKENS"', rules)
+        self.write(rel, rules.replace('min = 19\ntoken_list = "REUSABLE_SCENARIO_TOKENS"',
+                                      'min = 999\ntoken_list = "REUSABLE_SCENARIO_TOKENS"', 1))
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         cm.check_reusable_scenario_guard()
@@ -6500,11 +6545,12 @@ class TestCheckLocalOnlyGuard(CheckSpecsTestCase):
         # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里。
         # 改动落在**规则数据**（基线值），清单本体与规范正文都不动。
         self._write_valid()
-        path = os.path.join(self.root, "script/specs-rules/verify.toml")
+        rel = _find_rule_file('token_list = "LOCAL_ONLY_TOKENS"')
+        path = os.path.join(self.root, *rel.split("/"))
         with open(path, encoding="utf-8") as fh:
             rules = fh.read()
         self.assertIn('min = 4\ntoken_list = "LOCAL_ONLY_TOKENS"', rules)
-        self.write("script/specs-rules/verify.toml",
+        self.write(rel,
                    rules.replace('min = 4\ntoken_list = "LOCAL_ONLY_TOKENS"',
                                  'min = 99\ntoken_list = "LOCAL_ONLY_TOKENS"', 1))
         cm.RULES = None
@@ -6654,11 +6700,11 @@ class TestCheckLocalServiceAssertGuard(CheckSpecsTestCase):
         # 反例⑪：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
         # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里。
         self._write_valid()
-        path = os.path.join(self.root, "script/specs-rules/local-service.toml")
+        path = os.path.join(self.root, _rules_rel("local-service"))
         with open(path, encoding="utf-8") as fh:
             rules = fh.read()
         self.assertIn('min = 15\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"', rules)
-        self.write("script/specs-rules/local-service.toml",
+        self.write(_rules_rel("local-service"),
                    rules.replace('min = 15\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"',
                                  'min = 99\ntoken_list = "LOCAL_SERVICE_ASSERT_TOKENS"', 1))
         cm.RULES = None
@@ -6693,7 +6739,7 @@ class TestTestDataDesensitizeGuard(CheckSpecsTestCase):
     COMMON = "AGENTS_COMMON.adoc"
     PROMPTS = "prompts/_common.txt"
     README = "README.adoc"
-    RULES = "script/specs-rules/desensitize.toml"
+    RULES = _rules_rel("desensitize")
 
     def setUp(self) -> None:
         super().setUp()
@@ -9326,7 +9372,8 @@ class TestCheckPointerNoVerbatimGuard(CheckSpecsTestCase):
         # 清单**只有一处**：规则数据按名引用（`files_from_manifest`），职责是"核对面覆盖
         # 全部 .adoc"——把文件名再抄一份进规则数据即第二个来源（`corpus_ownership` 核它）。
         import tomllib
-        with open(os.path.join(HERE, "specs-rules", "duplicate.toml"), "rb") as fh:
+        rel = _find_rule_file("[[guards.check_pointer_no_verbatim_guard]]")
+        with open(os.path.join(os.path.dirname(HERE), *rel.split("/")), "rb") as fh:
             data = tomllib.load(fh)
         steps = data["guards"]["check_pointer_no_verbatim_guard"]
         inline = [f for st in steps for f in st.get("files", [])]
@@ -19346,7 +19393,9 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
         "[temporary]\n"
         'dir = "tmp"\n'
         'self_update_suffix = ".update"\n'
-        'self_handoff_suffix = ".handoff"\n'
+        'self_handoff_suffix = ".handoff"\n\n'
+        "[source-management]\n"
+        'mode = "conventional"\n'
     )
     # 判据本体（通用条）在真实仓库的 `specs/general/coding.adoc` 里：夹具只补"这一节在"，
     # 让规则数据那一步不因"缺文件/缺节"报红（真源是否完整由真实仓库的检查核）。
@@ -19426,7 +19475,8 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
              "scripts": {"all": [], "entry": [], "config": "script/specs-config.toml"},
              "network": {"timeout_seconds": 30, "workers": 4},
              "temporary": {"dir": "tmp", "self_update_suffix": ".update",
-                           "self_handoff_suffix": ".handoff"}},
+                           "self_handoff_suffix": ".handoff"},
+             "source-management": {"mode": "conventional"}},
             os.path.join(self.root, "script", "specs-config.toml"))
         cm.check_paths_single_source_guard()
         self.assertIn("app_dir", self.error_texts())
@@ -21122,20 +21172,76 @@ class TestCheckGuardOrderGuard(CheckSpecsTestCase):
     反例⑤（序列缺失）、反例⑥（清单表缺失）。
     """
 
+    def tearDown(self) -> None:
+        if getattr(self, "_orig_pathcfg", None) is not None:
+            cm._PATHCFG = self._orig_pathcfg
+            self._orig_pathcfg = None
+            cm.RULES = self._orig_rules
+        super().tearDown()
+
+    def read_repo(self, rel: str) -> str:
+        """读**真实仓库**里那一份文件（夹具不手抄，按原样落进来）。"""
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               *rel.split("/")), encoding="utf-8") as fh:
+            return fh.read()
+
     def _guard(self, name: str) -> str:
         return (f"def {name}():\n"
                 f"    \"\"\"{name}。\"\"\"\n"
                 f"    pass\n\n\n")
 
-    def _write_valid(self, seq=("alpha", "beta"), rows=("alpha", "beta"), nums=None):
+    # 行正文**跟着规则数据走**：`<防线名>.adoc`（零字节标记）与规则文件同层。
+
+    def _body_rel(self, name):
+        return "script/specs-rules/" + name + ".adoc"
+
+    def _write_valid(self, seq=("alpha", "beta"), rows=("alpha", "beta"),
+                     extra_files=(), rendered=None):
         src = "".join(self._guard("check_" + n) for n in seq) + \
             "CHECKS = (\n" + "".join(f"    check_{n},\n" for n in seq) + ")\n"
-        if nums is None:
-            nums = list(range(1, len(rows) + 1))
-        table = "== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n" + "".join(
-            f"| {i} | `check_{n}` | 用途 |\n" for i, n in zip(nums, rows))
+        # 表体是**生成物**：正常情况下由 `--write-guards-table` 按 `CHECKS` 现算后整段写入，
+        # 没有哪一格要人往里补字（判据按同一函数核"表里就是现算的那一份"）。
+        # 反例要造"手写的表"，故 `rendered` 允许直接给出行。
+        # 表体**整段**（定界行 + 表头 + 逐行 + 定界行）：判据核的是"这一整段是不是现算的
+        # 那一份"，故夹具也按同一形状写——少一行定界行都算"不是那一份"。
+        def _write_table():
+            if rendered is not None:
+                lines = rendered
+            else:
+                # 次序那一格**不写号**（位置就是次序）；正文那一格是它那一份标记的位置。
+                lines = [f"| {cm.MANIFEST_ORDER_CELL} | `check_{n}` | "
+                         f"`{self._body_rel('check_' + n)}`" for n in rows]
+            table = ("== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n"
+                     + cm.MANIFEST_TABLE_BOUND + "\n" + cm.MANIFEST_TABLE_HEAD + "\n"
+                     + "\n".join(lines) + "\n" + cm.MANIFEST_TABLE_BOUND + "\n")
+            self.write("specs-project-maintainer/guards.adoc", table)
+
         self.write("script/check_specs.py", src)
-        self.write("specs-project-maintainer/guards.adoc", table)
+        # 规则数据照抄现场那一份（登记面由 `registry_owner` 声明，不照抄就没有登记面），
+        # 再给两道夹具防线各一份规则文件——判据侧据此认出它们的行正文落在哪一层。
+        self.write_rules_fixture()
+        for n in rows:
+            self.write(f"script/specs-rules/topic-{n}.toml",
+                       f"[[guards.check_{n}]]\nkind = \"exists\"\n"
+                       f"file = \"specs/general/a.adoc\"\n")
+        # 行正文是**零字节标记**：话在规则数据的注释里，标记只回答"有没有这一份"
+        for n in rows:
+            self.write(self._body_rel("check_" + n), "")
+        for name in extra_files:
+            self.write(self._body_rel(name), "")
+        # 落点目录**只有一处来源**（`script/specs-config.toml`）：夹具把整份配置**原样**落进来
+        # （手抄一份必然与现场漂移），再按当前仓库根读它——与判据侧同一读取路径。
+        self.write("script/specs-config.toml", self.read_repo("script/specs-config.toml"))
+        self._orig_pathcfg = cm._PATHCFG
+        cm._PATHCFG = cm.pathconfig.load(self.root)
+        # 登记面由规则数据声明（`registry_owner`）：引擎实例换成**这一份夹具根**加载的规则集
+        # ——夹具没把规则数据落齐，这里当场就没有登记面（与现场同一判定）。
+        # 顺序在写表之后：表里的落点由这份规则集现算（先写表、后换规则集，表里那一格就按
+        # 现场的落点拼、与夹具对不上）。
+        self._orig_rules = cm.RULES
+        cm.RULES = cm.rules_engine.Rules(
+            cm.rules_engine.load_rule_files(cm._rules_spec()), cm.RulesContext())
+        _write_table()
 
     def test_valid_passes(self):
         self._write_valid()
@@ -21160,11 +21266,45 @@ class TestCheckGuardOrderGuard(CheckSpecsTestCase):
         cm.check_guard_order_guard()
         self.assertIn("check_gamma", self.error_texts())
 
-    def test_broken_numbering_reports(self):
-        # 反例④：清单表序号断开（有条目被整条删掉）
-        self._write_valid(rows=("alpha", "beta"), nums=(1, 3))
+    def test_missing_row_reports(self):
+        # 反例④：表行被整条删掉（指令没删、那一行不见了）——表里不写号，故它表现为
+        # "表里少一行"，读者按表核时缺的那一项无从发现
+        self._write_valid(seq=("alpha", "beta", "gamma"), rows=("alpha", "beta"))
         cm.check_guard_order_guard()
-        self.assertIn("序号不连续", self.error_texts())
+        self.assertIn("只在 `CHECKS` 里", self.error_texts())
+
+    def test_hand_written_number_reports(self):
+        # 反例⑤：那一份标记被写进内容——话在规则数据里，抄进 `.adoc` 就是同一段话的第二处
+        # 写法（写序号同理：次序由它在表里的位置表达）
+        self._write_valid()
+        self.write(self._body_rel("check_alpha"), "| 1 | 用途：alpha\n")
+        cm.check_guard_order_guard()
+        self.assertTrue("写了内容" in self.error_texts()
+                        or "写着序号" in self.error_texts())
+
+    def test_duplicated_body_reports(self):
+        # 反例⑦：表体被整段抄了第二遍（实测：逐行正文成了手写的第二来源，而装配只按
+        # `CHECKS` 现算，次序判据全绿）
+        one = (f"| {cm.MANIFEST_ORDER_CELL} | `check_alpha` | "
+               f"`{self._body_rel('check_alpha')}`")
+        two = (f"| {cm.MANIFEST_ORDER_CELL} | `check_beta` | "
+               f"`{self._body_rel('check_beta')}`")
+        self._write_valid(rendered=[one, two, one, two])
+        cm.check_guard_order_guard()
+        self.assertIn("不是现算的那一份", self.error_texts())
+
+    def test_stray_manifest_file_reports(self):
+        # 反例⑥：目录里多出一份不对应任何防线的标记（删防线时留下的尸块）
+        self._write_valid(extra_files=("check_gamma",))
+        cm.check_guard_order_guard()
+        self.assertIn("check_gamma", self.error_texts())
+
+    def test_missing_body_marker_reports(self):
+        # 反例⑧（本轮新增）：标记被删、防线还在——表里那一行指不到处
+        self._write_valid()
+        os.remove(os.path.join(self.root, *self._body_rel("check_alpha").split("/")))
+        cm.check_guard_order_guard()
+        self.assertIn("check_alpha", self.error_texts())
 
     def test_missing_checks_reports(self):
         # 反例⑤：序列缺失 → 次序失去唯一来源
@@ -21192,12 +21332,11 @@ class TestCheckGuardManifestNumberingTable(CheckSpecsTestCase):
 
     HEAD = " 1. 甲\n 2. 乙\n 3. 丙\n\nimport os\n"
     TABLE = ("== 执行次序与用途（`CHECKS` 序列，唯一来源）\n\n"
-             "| 1 | `check_alpha` | 用途 |\n\n"
+             "| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_alpha` | 用途 |\n\n"
              "== 检查项编号（索引与清单表之外的检查项）\n\n"
              "| 编号 | 检查项或所属防线\n\n")
     SRC = (HEAD + "def check_alpha():\n    pass\n\n\n"
            "CHECKS = (\n    check_alpha,\n)\n"
-           "GUARD_WIRING_BASELINE = 1\n"
            "GUARD_EMPTY_TEST_NAMES = set()\n")
 
     def _run(self, rows):
@@ -21273,7 +21412,6 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # `sys.modules['check_specs']` 可能**不是同一个实例**，别处的用例会把模块全局留在
         # 真实仓库上——那时防线读到的是真文件、造出来的删除一律报绿。
         cm.REPO_ROOT = self.root
-        self._orig_baseline = cm.GUARD_WIRING_BASELINE
         self._orig_floor = cm._RULES_TOKENS.get(cm.GUARD_TEST_FLOOR_TOKEN)
         # 覆盖面清单的取值函数换成夹具版：清单内容是夹具文件的事，与现场仓库无关
         # （覆盖面的判据照旧由下面的用例逐条核）。
@@ -21292,7 +21430,6 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
 
     def tearDown(self) -> None:
-        cm.GUARD_WIRING_BASELINE = self._orig_baseline
         cm.GUARD_MANIFEST_FILES = self._orig_manifest
         setattr(cm, "_fixture_manifest", None)
         if self._orig_floor is None:
@@ -21303,11 +21440,19 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
 
     # 覆盖面清单的**取值**在夹具里现给（等价于现场的 `_pointer_scan_files()`）：
     # 判据核的是"清单与收集结果逐项相等"，清单从哪来不影响这条判据。
-    rules_rel = "script/specs-rules/guards.toml"
-    # 清单的**登记处**（现场即 `guards.adoc` 第 19 行那一句）：它也是被收集的 `.adoc`，
-    # 故"清单与收集结果逐项相等"那条要求清单里含它——夹具按同一形态给。
-    GUARDS_ADOC_REL = "specs-project-maintainer/guards.adoc"
+    rules_rel = _rules_rel("guards")
+    # 清单的**登记处**：现场是防线清单表里 `check_guard_manifest` 那一份行正文。
+    # 它也是被收集的 `.adoc`，故"清单与收集结果逐项相等"那条要求清单里含它——夹具按同一形态给。
+    GUARDS_ADOC_REL = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"
     manifest_files = ()
+
+    def _drop_guard_files(self, *guards: str) -> None:
+        """把夹具里这几道防线的规则文件删掉（本用例要重写它们所属的那份规则数据）。"""
+        folder = os.path.join(self.root, "script", "specs-rules")
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in filenames:
+                if name.endswith(".toml") and name[:-len(".toml")] in guards:
+                    os.remove(os.path.join(dirpath, name))
 
     def _set_manifest(self, files):
         type(self).manifest_files = list(files)
@@ -21350,26 +21495,24 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
                "]\n")
 
     def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
+        # 规则数据落进夹具（引擎按**目录**扫描）：反例记账表与覆盖面临界值都在里面，
+        # 判据读现场那一份——夹具不备时读到的是真仓库的表，条数一条也对不上。
+        self.write_rules_fixture()
         self.write("script/check_specs.py", src if src is not None else self._SRC)
         self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
         if test_file is None:
             body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
                            for i in range(tests))
-            # 两道防线各有一个测试类：反例记账**按防线分片**，夹具须给得起两边的类
+            # 两道防线各有一个测试类（"谁钉住哪道防线"靠类名这条约定认，不记账）
             test_file = ("import unittest\n\n\n"
                          "class TestCheckAlphaGuard(unittest.TestCase):\n" + body + BN_CASE)
         self.write("script/check_specs_test.py", test_file)
         self.write("script/check_effective_test.py",
                    "import unittest\n\n\nclass E(unittest.TestCase):\n"
                    "    def test_x(self):\n        self.assertTrue(True)\n")
-        cm.GUARD_WIRING_BASELINE = 2
-        # 反例记账是**按防线分片**的规则数据表（不是全局单值常量）：夹具直接换掉这张表，
-        # 两道防线各一行——这正是"并行改动各改自己那一行"的形态本身。
-        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
-                                                      "check_beta_guard": 1}
         # 覆盖面清单的**登记处**同样要给得起：登记处那一行是"这道防线在核什么"的唯一可读处，
         # 缺它时本道会另报"落点无处承载"（那两条与本类要核的几件事无关，只把夹具补齐）。
-        self.write("specs-project-maintainer/guards.adoc", self._GUARDS_ADOC)
+        self.write(self.GUARDS_ADOC_REL, self._GUARDS_ADOC)
 
     def test_valid_passes(self):
         # 正例：接线 2 道、用例 5 条、台账点名的两个防线名都真实存在
@@ -21383,7 +21526,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
     # 只进得去一处，另一处**静默漏扫**——防线全绿、读者以为已覆盖。
 
     def _write_manifest_rules(self, files_body, single_body="", guards="check_guard_manifest",
-                              single_file="script/specs-rules/guards.toml", head=""):
+                              single_file="script/specs-rules/_fixture_cover.toml", head=""):
         """落两份规则数据：本道自己的步骤、以及**另一份文件里**的"被查对象"。
 
         `single_body` 里的步骤挂在哪道防线名下不影响判据（判据问的是"这份规则数据里有没有
@@ -21394,11 +21537,13 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         **TOML 的键归上一张表**：`single_body` 追加在同一份文件里，故那张表必须真有上一张
         表——`guards_files` 与它同文件同防线即可，不必新开一份文件。
         """
-        self.write("script/specs-rules/guards.toml",
+        self.write(_rules_rel("guards"),
                    f"[[guards.{guards}]]\n" + files_body
                    + (head + single_body if single_file.endswith("guards.toml") else ""))
         if single_body and not single_file.endswith("guards.toml"):
-            self.write(single_file, single_body)
+            # 另开一份文件时，`head`（表头）也落在这一份里——否则它写在顶层、**根本不加载**，
+            # 判据连"这里又列了一遍"都看不见（那是另一条判据报的形态）。
+            self.write(single_file, head + single_body)
 
     # 两步：① 清单与收集结果逐项相等；② 同一份清单不得在别处再列一遍。
     # 两步都写在这里，与现场的 `guards.toml` 同形（只换清单取值与规则数据落点）。
@@ -21407,19 +21552,19 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         'corpus = "adoc"\n'
         'exclude = ["CHANGELOG.adoc"]\n'
         '[guards.check_guard_manifest.manifest]\n'
-        'POINTER_SCAN_FILES = ["_fixture_manifest", "specs-project-maintainer/guards.adoc"]\n'
+        'POINTER_SCAN_FILES = ["_fixture_manifest", "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"]\n'
         'message = "清单 {name} 不一致：多 {stale}、少 {missing}"\n'
         '\n'
         '[[guards.check_guard_manifest]]\n'
         'kind = "manifest_single_owner"\n'
-        'guards_files = ["script/specs-rules/guards.toml"]\n'
+        f'guards_files = ["{_rules_rel("guards")}"]\n'
         'message = "清单 {name} 在 {where} 被再列了一遍"\n'
         '\n'
         # ③ 写法口径那两步（应然两组 + 不得写成提醒）：夹具里也得在，否则"改回提醒"
         # 与"抽掉应然那几句"两类反例都无从命中（缺这两步时它们静默全绿）。
         '[[guards.check_guard_manifest]]\n'
         'kind = "file_groups"\n'
-        'file = "specs-project-maintainer/guards.adoc"\n'
+        'file = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"\n'
         'message = "缺写法口径：{missing}"\n'
         'groups = [\n'
         '    ["清单只允许一处", ["**覆盖面清单只允许一处**", "`GUARD_MANIFEST_FILES`",\n'
@@ -21430,7 +21575,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         '\n'
         '[[guards.check_guard_manifest]]\n'
         'kind = "file_forbidden"\n'
-        'file = "specs-project-maintainer/guards.adoc"\n'
+        'file = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"\n'
         'forbidden = ["两处都要改", "记得改两处"]\n'
         'message = "把清单解法写回了「{hit}」式的提醒"\n')
 
@@ -21440,7 +21585,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.write("specs/general/one.adoc", "= 甲\n")
         self.write("CHANGELOG.adoc", "= 变更\n")
         self._write_manifest_rules(self._COVER_RULE)
-        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc"])
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
         cm.check_guard_manifest()
         self.assertNotIn("覆盖面清单", self.error_texts())
 
@@ -21450,16 +21595,19 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.write("specs/general/one.adoc", "= 甲\n")
         self.write("specs/general/two.adoc", "= 乙\n")
         self._write_manifest_rules(self._COVER_RULE)
-        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc"])
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
         cm.check_guard_manifest()
         self.assertIn("two.adoc", self.error_texts())
 
     def test_manifest_stale_entry_reports(self):
         # 反例：清单里列着一份不存在的文件（改名后忘了同步）——指向的落点已不在
         self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
         self.write("specs/general/one.adoc", "= 甲\n")
         self._write_manifest_rules(self._COVER_RULE)
-        self._set_manifest(["specs/general/one.adoc", "specs-project-maintainer/guards.adoc",
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL,
                             "specs/general/gone.adoc"])
         cm.check_guard_manifest()
         self.assertIn("gone.adoc", self.error_texts())
@@ -21470,14 +21618,22 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 那句 `files` 故意不带 `[[guards.X]]` 头：表头漏写一行时步骤会挂到上一道防线名下，
         # 按合并结果看它本来就在，只有按来源文件读才认得回来。
         self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
         self.write("specs/general/one.adoc", "= 甲\n")
         self._write_manifest_rules(
             self._COVER_RULE,
             'kind = "exists"\n'
             'files = ["specs/general/one.adoc", "POINTER_SCAN_FILES"]\n'
             'message = "缺 {file}"\n',
-            # 另起一张表头：同一张表里再写一遍 `message` 直接被 TOML 拒（"Cannot overwrite a value"）
-            head="[[guards.check_pointer_no_verbatim_guard]]\n")
+            # 另起一张表头：写在顶层的键**根本不加载**（那是另一条判据报的形态），
+            # 这里要核的是"清单又被列了一遍"，故必须挂在某道防线的表头下。
+            head="[[guards.check_pointer_no_verbatim_guard]]\n",
+            # 判据核的是"**被 `guards_files` 点名的那一份**里不得再列一遍"，而点名的正是
+            # `guards.toml`：故把再列一遍写在同一份里（另起一份文件时，那两份不是同一个
+            # 载体，判据按定义不核它）。
+            single_file=_rules_rel("guards"))
         self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
         cm.check_guard_manifest()
         self.assertIn("再列了一遍", self.error_texts())
@@ -21488,9 +21644,12 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 两份规则数据都不进 `[[guards.X]]` 头（工序上它们是"漏写表头"的那一格），
         # 故只在各自文件里按来源认回。
         self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
         self.write("specs/general/one.adoc", "= 甲\n")
         self._write_manifest_rules(
-            self._COVER_RULE.replace('"script/specs-rules/guards.toml"',
+            self._COVER_RULE.replace(f'"{_rules_rel("guards")}"',
                                      '"script/specs-rules/fixture-unnamed.toml"'))
         self.write("script/specs-rules/fixture-unnamed.toml",
                    'kind = "exists"\n'
@@ -21531,7 +21690,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         """
         self._write_valid()
         if guards_adoc_enabled:
-            self.write("specs-project-maintainer/guards.adoc", self._GUARDS_ADOC)
+            self.write(self.GUARDS_ADOC_REL, self._GUARDS_ADOC)
         self.write("specs/general/one.adoc", "= 甲\n")
         self._write_manifest_rules(self._COVER_RULE)
         self._cover_manifest()
@@ -21549,10 +21708,10 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
     def test_ownership_note_uses_single_carrier_wording(self):
         # 反例：成因改回"提醒人两处都要改"——解法被写成了动作清单，下一轮照样只改一处
         self._enable_covers()
-        self.write("specs-project-maintainer/guards.adoc",
+        self.write(self.GUARDS_ADOC_REL,
                    self._GUARDS_ADOC.replace(
-                       "这条判据要治的形态是**清单有两个载体**、单靠现算就够",
-                       "这条判据要治的形态是记得两处都要改"))
+                       "这条判据要治的形态是**清单有两个载体**、单靠现算就够，",
+                       "记得两处都要改", 1))
         self._cover_manifest()
         cm.check_guard_manifest()
         self.assertIn("两处都要改", self.error_texts())
@@ -21560,7 +21719,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
     def test_ownership_note_keeps_single_carrier_claim(self):
         # 反例：登记行把"清单只允许一处"整句抽掉——读者默认仍有两处要维护
         self._enable_covers()
-        self.write("specs-project-maintainer/guards.adoc",
+        self.write(self.GUARDS_ADOC_REL,
                    self._GUARDS_ADOC.replace("**覆盖面清单只允许一处**", "覆盖面清单见脚本"))
         self._cover_manifest()
         cm.check_guard_manifest()
@@ -21570,8 +21729,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 反例：登记处指向一份不存在的文件——报错时给出的落点读不到任何东西
         self._enable_covers()
         self._write_manifest_rules(
-            self._COVER_RULE.replace('"specs-project-maintainer/guards.adoc"',
-                                     '"specs-project-maintainer/gone.adoc"'))
+            self._COVER_RULE.replace('"specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"', '"specs-project-maintainer/gone.adoc"'))
         self._cover_manifest()
         cm.check_guard_manifest()
         self.assertIn("gone.adoc", self.error_texts())
@@ -21579,6 +21737,9 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
     def test_manifest_single_owner_passes_on_named_reference(self):
         # 正例：规则数据按名引用（`files_from_manifest`）即不是"又列一份"
         self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
         self.write("specs/general/one.adoc", "= 甲\n")
         self._write_manifest_rules(
             self._COVER_RULE +
@@ -21614,7 +21775,7 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
                                    "    check_beta_guard,\n    check_beta_guard,\n"))
         cm.check_guard_manifest()
         # 关键：唯一防线数（1）低于基线（2）被拦下——不再依赖"重复"那条文案自证
-        self.assertIn("防线接线数从基线", self.error_texts())
+        self.assertIn("重复登记", self.error_texts())
 
     # 逐轮记账里引用的接线数。**落点是 `ledger/`（一轮一个文件）**——那张表已从
     # `guards.adoc` 整体搬走：每轮往同一张表的同一位置插行，两个并行改动必然撞在同一行上。
@@ -21640,7 +21801,8 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         # 反例（本轮实测的空转）：**本表**引用的接线数被改（常量不动）——两个基线的核对
         # 照常通过、没有任何防线会因此报红（本仓库实测：两处各改一个数即两边都绿）
         self._write_valid()
-        self._write_manifest(self._MANIFEST.replace("1 → **2**", "1 → **1**"))
+        # 记账行记的是**当时**的数：高于现值即记了一个还不存在的数（现值由序列现算）
+        self._write_manifest(self._MANIFEST.replace("1 → **2**", "1 → **9**"))
         cm.check_guard_manifest()
         self.assertIn("接线数", self.error_texts())
 
@@ -21654,37 +21816,22 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
     def test_manifest_ledger_row_missing_reports(self):
-        # 反例：本轮新增了防线、而「新增防线的记账（按轮次）」**没有记这一轮**——
-        # 记账表末行的接线数低于常量（本仓库实测：删掉两道新防线后，本表与脚本一样全绿）
+        # 反例：记账行记的接线数**高于**现值——记了一个还不存在的数（现值由 `CHECKS` 现算，
+        # 记账行只是当时的记录；"高于现值"说明有一道防线被当真了却没进序列）
         self._write_valid()
-        self._write_manifest(self._MANIFEST.replace("1 → **2**", "0 → **1**"))
+        self._write_manifest(self._MANIFEST.replace("1 → **2**", "1 → **7**"))
         cm.check_guard_manifest()
         self.assertIn("接线数", self.error_texts())
 
-    def test_new_guard_without_baseline_refill_hides_later_removal(self):
-        # 反例（本轮实测的真实形态）：新增了一道防线、接线数**高出**基线，却没把基线抬到实取数。
-        # `check_guard_manifest` 只核「不得低于基线」，故"多出来的那道"此后**不在保护范围内**——
-        # 把它从 `CHECKS` 里删掉时，唯一防线数恰好回落到基线、一切照旧全绿，
-        # 正是本基线存在的理由（防"防线静默消失"）在这一格失效。
-        # 本 PR 实测：新增了 `check_skill_doc_guard`（唯一防线 2 道），而常量仍是 1——
-        # 此时删掉 `check_beta_guard` 仍报绿。
+    def test_removed_guard_without_ledger_row_reports(self):
+        # 反例：把一道防线从 `CHECKS` 里删掉、而反例记账表里它那一格还在——
+        # 「删防线时连带删掉它的反例」这件事必须在 diff 里留下痕迹（现值由序列现算，
+        # 不再有第二个数要人回填）。
         self._write_valid()
-        cm.GUARD_WIRING_BASELINE = 1           # 基线未随新增回填（＝本轮的真实形态）
-        src = self._SRC.replace("    check_beta_guard,\n", "")
-        self.write("script/check_specs.py", src)
+        self.write("script/check_specs.py",
+                   self._SRC.replace("    check_beta_guard,\n", ""))
         cm.check_guard_manifest()
-        # 唯一防线数已回落到基线之上（2 → 1）：基线是**下限**、不回填就永远筛不出这一格
-        self.assertEqual(1, cm._guard_wiring_count(src))
-        self.assertNotIn("防线接线数", self.error_texts())
-
-    def test_baseline_refilled_after_new_guard_catches_later_removal(self):
-        # 正例（配套上一条）：新增防线后把基线抬到实取数，此后删掉任一道都会被拦下
-        self._write_valid()
-        src = self._SRC.replace("    check_beta_guard,\n", "")
-        cm.GUARD_WIRING_BASELINE = 2           # 按同源实取回填
-        self.write("script/check_specs.py", src)
-        cm.check_guard_manifest()
-        self.assertIn("防线接线数", self.error_texts())
+        self.assertIn("check_beta_guard", self.error_texts())
 
     def test_changelog_wiring_ref_drift_reports(self):
         # 反例：**变更日志新版条目**里记的接线基数被改（常量不动）——同一数值的第三处写法。
@@ -21719,11 +21866,13 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
     def test_guard_unwired_reports(self):
-        # 反例①：一道防线被从 `main()` 摘掉 → 接线数减少（本仓库实测：删了它、连同反例
-        # 用例一起删，脚本与单测仍全绿、台账的"抓手数"也没变）
+        # 反例①：一道防线被从 `CHECKS` 摘掉 → 它的反例记账那一格成了"多出来的分片"
+        # （本仓库实测：删了它、连同反例用例一起删，脚本与单测仍全绿）。
+        # 接线数由序列现算，不再另有一个数要人回填——删防线的可见性靠这两处：清单表少一行、
+        # 记账表多一格。
         self._write_valid(src=self._SRC.replace("    check_beta_guard,\n", ""))
         cm.check_guard_manifest()
-        self.assertIn("防线接线数", self.error_texts())
+        self.assertIn("check_beta_guard", self.error_texts())
 
     def test_guard_defined_but_never_called_reports(self):
         # 反例①的另一形态：防线函数留着、也写进台账，但没有任何地方调用它
@@ -21732,15 +21881,14 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.check_guard_manifest()
         self.assertIn("check_beta_guard", self.error_texts())
 
-    def test_tests_removed_without_note_reports(self):
-        # 反例②：反例用例被整批删掉（跟着防线一起删时常发生）→ **钉住它的测试类整个消失**
-        # 必须报红。判据取"类还在不在"：同一类里增删条数是并行改动的常态、不报；
-        # 整类没了才说明这道防线的反例真的没了。
+    def test_floor_count_not_recorded_passes(self):
+        # 正例（本轮的口径）：反例用例的**类数不记账**——它由测试类名现数，规则数据里
+        # 不另记一份。只要测试类还在，"删掉记账这件事"本身不该让任何判据发声。
         self._write_valid(test_file=(
             "import unittest\n\n\nclass TestCheckAlphaGuard(unittest.TestCase):\n"
             "    def test_case_0(self):\n        self.assertTrue(True)\n"))
         cm.check_guard_manifest()
-        self.assertIn("反例用例类", self.error_texts())
+        self.assertNotIn("反例用例类", self.error_texts())
 
     def test_ledger_names_missing_guard_reports(self):
         # 反例③：台账点名一个不存在的防线 → 读者以为还有抓手（实测：改名后仍报"有抓手"）
@@ -21923,52 +22071,6 @@ class TestCheckGuardManifest(CheckSpecsTestCase):
         cm.check_guard_manifest()
         self.assertIn("编号形态不规范", self.error_texts())
 
-    # ---- 反例记账改成**按防线分片**之后的形态（一处改动各改各的行，不再抢同一行）----
-
-    def test_floor_shard_missing_for_new_guard_reports(self):
-        # 反例：新增一道防线却**没登记**记账行——旧基线只核"总数不得减少"，
-        # 新增时没人核，于是这道防线的反例此后不受任何数量判据保护
-        self._write_valid()
-        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1}
-        cm.check_guard_manifest()
-        self.assertIn("没有登记", self.error_texts())
-
-    def test_floor_shard_class_removed_reports(self):
-        # 反例：某道防线的反例类被整类删掉、而记账行没跟着改——删防线时常连带删反例，
-        # 那件事必须在 diff 里留下痕迹
-        self._write_valid()
-        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 2,
-                                                      "check_beta_guard": 1}
-        cm.check_guard_manifest()
-        self.assertIn("减到", self.error_texts())
-
-    def test_floor_shard_class_added_without_note_reports(self):
-        # 反例：**新加**了反例却没改记账行——旧基线只拦"减"，这一格从来没人核；
-        # 分片之后加减都报，否则此后删掉这批反例不会有任何判据发声
-        self._write_valid()
-        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
-                                                      "check_beta_guard": 0}
-        cm.check_guard_manifest()
-        self.assertIn("增到", self.error_texts())
-
-    def test_floor_table_absent_reports(self):
-        # 反例：记账表整体缺失（规则数据里那张表被删/改名）→ 整道判据空转而脚本报绿，
-        # 故"取不到"必须报红，不得当成"没有记账就是通过"
-        self._write_valid()
-        cm._RULES_TOKENS.pop(cm.GUARD_TEST_FLOOR_TOKEN, None)
-        cm.check_guard_manifest()
-        self.assertIn("取不到反例用例记账表", self.error_texts())
-
-    def test_floor_shard_unknown_test_class_reports(self):
-        # 反例：记账行还写着数、而现场已经找不到钉住它的测试类（命名对不上）——
-        # 这一行会永远报绿，因为它核的是一个不存在的名字
-        self._write_valid()
-        cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = {"check_alpha_guard": 1,
-                                                      "check_beta_guard": 1,
-                                                      "check_gone_guard": 1}
-        cm.check_guard_manifest()
-        self.assertIn("check_gone_guard", self.error_texts())
-
     # ---- 同名模块级测试类：只收集最后一份，前一份**从未执行** ----
     # 本仓库实测两次：反例被逐字写两遍（读者数 `def test_` 以为有三份）、合并解冲突时
     # 整段被重复贴入（7450 行、用例数 2527 → 1953）。两次 `check_specs.py` 都报绿：
@@ -22075,11 +22177,6 @@ class TestCheckTemplateSeparationGuard(CheckSpecsTestCase):
         "* **按需加载按文件切分、单文件别太大（L2）**：……**模板类内容（要用就得整份取用、"
         "平时不必常备）另按「要么不读、要么读全部」单独归类**：不与「每次会话要遵守的规则」混放、"
         "各自独立成篇（判据与例外属维护方自查层，本处不重复）。\n")
-
-    RULES_FIXTURE_FILES = CheckSpecsTestCase.RULES_FIXTURE_FILES + (
-        # 本道的判据措辞外置在 template.toml 里
-        "script/specs-rules/template.toml",
-    )
 
     def setUp(self) -> None:
         super().setUp()
@@ -24626,9 +24723,10 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         # 真实规则目录（本仓库那一份）：夹具按原样整份复制，**不手抄**（手抄必然与现场漂移）
         self._rules_src = os.path.join(
             os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
-        with open(self.CODING, encoding="utf-8") as fh:
+        repo = os.path.dirname(HERE)
+        with open(os.path.join(repo, *self.CODING.split("/")), encoding="utf-8") as fh:
             self.CODING_TEXT = fh.read()
-        with open(self.SYNTAX, encoding="utf-8") as fh:
+        with open(os.path.join(repo, *self.SYNTAX.split("/")), encoding="utf-8") as fh:
             self.SYNTAX_TEXT = fh.read()
 
     def tearDown(self) -> None:
@@ -24638,7 +24736,7 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
 
     # 规则数据（`coding.toml`）是判据措辞的唯一来源，且**本道另有一步核它自己的条数**，
     # 故夹具须把它按真实文件原样落进来（`_rules_spec()` 随 `REPO_ROOT` 走，正例才不是假红）。
-    RULES = "script/specs-rules/coding.toml"
+    RULES = _rules_rel("coding")
 
     def _write_valid(self) -> None:
         self.write(self.CODING, self.CODING_TEXT)
@@ -24772,9 +24870,10 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         # 真实规则目录（本仓库那一份）：夹具按原样整份复制，**不手抄**（手抄必然与现场漂移）
         self._rules_src = os.path.join(
             os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
-        with open(self.CODING, encoding="utf-8") as fh:
+        repo = os.path.dirname(HERE)
+        with open(os.path.join(repo, *self.CODING.split("/")), encoding="utf-8") as fh:
             self.CODING_TEXT = fh.read()
-        with open(self.SYNTAX, encoding="utf-8") as fh:
+        with open(os.path.join(repo, *self.SYNTAX.split("/")), encoding="utf-8") as fh:
             self.SYNTAX_TEXT = fh.read()
 
     def tearDown(self) -> None:
@@ -24785,7 +24884,7 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
     # 规则数据（`specs-rules/` 目录）是判据措辞的唯一来源，本道另有一步核**清单自己的条数**，
     # 故夹具须把整个目录按真实文件原样落进来（引擎按目录扫描加载，缺一份即整批静默失效），
     # 且 `_rules_spec()` 随 `REPO_ROOT` 走、正例才不是假红。
-    RULES = "specs-rules/coding.toml"
+    RULES = _rules_rel("coding")[len("script/"):]
 
     def _write_valid(self) -> None:
         self.write(self.CODING, self.CODING_TEXT)
@@ -24795,15 +24894,25 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         self._prime_rules()
 
     def _rule_files(self) -> list:
-        """规则目录下全部 `*.toml`（相对仓库根的路径），路径以 `script/` 起头。"""
+        """规则目录下全部 `*.toml`（相对**仓库根**的路径）。
+
+        规则目录可以套子目录（一个主题再切成一份一份），故按目录递归取、并保留相对路径——
+        只取这一层的文件名时，子目录里的那份读不到（`FileNotFoundError`）。
+        """
         folder = getattr(self, "_rules_src", None)
         assert folder, "setUp 须先记下真实规则目录"
-        return [f"specs-rules/{n}" for n in sorted(os.listdir(folder))
-                if n.endswith(".toml")]
+        repo = os.path.dirname(folder)
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
 
     def _rule_text(self, rel: str) -> str:
-        with open(os.path.join(self._rules_src, os.path.basename(rel)),
-                  encoding="utf-8") as fh:
+        repo = os.path.dirname(getattr(self, "_rules_src"))
+        with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
             return fh.read()
 
     def _prime_rules(self) -> None:
@@ -24909,9 +25018,11 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         # 于是 `miss` 是空集、"核过且通过"与"没核"完全一样（实测：删掉该行后
         # `check_specs.py` 仍报"OK 规范检查全部通过"）。
         self._write_valid()
-        rel = self.RULES
-        text = self._rule_text(rel).replace('    "**无状态、无多态**",\n', "", 1)
-        self.write(f"script/{rel}", text)
+        # 按内容找承载这段锚点的**那一份**（规则按主题分成一份一份后，文件名不再固定）
+        rel = _find_rule_file("[[guards.check_tool_class_inheritance_guard]]")
+        text = self._rule_text(rel[len("script/"):]).replace(
+            '    "**无状态、无多态**",\n', "", 1)
+        self.write(rel, text)
         cm.check_tool_class_inheritance_guard()
         self.assertIn("锚点", self.error_texts())
 
@@ -24946,7 +25057,7 @@ class TestCheckServiceInterfaceGuard(CheckSpecsTestCase):
     CODING = "specs/general/coding.adoc"
     JAVA = "specs/stack/java.adoc"
     # 本防线的规则数据（判据本体与 Java 载体同放这一份）
-    RULES_JAVA = "script/specs-rules/java.toml"
+    RULES_JAVA = _rules_rel("java")
     _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
 
     def setUp(self) -> None:
@@ -25088,7 +25199,9 @@ class TestCheckServiceInterfaceGuard(CheckSpecsTestCase):
         # 反例⑬：规则数据里这一条锚点被删（**规范正文一字未动**，`min` 与清单同步下调，
         # 于是 `bullet_tokens` 的 `miss` 是空集）-> 只剩成对的 `anchor_count` 能报红
         self._write_valid()
-        text = self._rule_text(self.RULES_JAVA).replace(
+        rel = _find_rule_file("[[guards.check_service_interface_guard]]")
+        self.RULES_JAVA = rel
+        text = self._rule_text(rel).replace(
             "    '**不承担任何替换与解耦**',\n", "", 1).replace(
             "min = 12\ntokens = [", "min = 11\ntokens = [", 1)
         self.assertNotIn("'**不承担任何替换与解耦**'", text)
@@ -25112,7 +25225,7 @@ class TestCheckReferenceCoordGuard(CheckSpecsTestCase):
     # 故正例夹具须把这两份也备齐——否则"落点缺失"会被本道一并报出、正例成了假红。
     # **不手抄**：规则数据是唯一的措辞来源，手抄一份必然与现场漂移（本轮实测：手抄版
     # 少一组锚点即产生假红），故按真实文件原样落进夹具。
-    _RULES_FILES = ("script/specs-rules/_tokens.toml", "script/specs-rules/source.toml")
+    _RULES_FILES = ("script/specs-rules/_tokens.toml", _rules_rel("source"))
 
     def _write_spec(self, body: str, extra: str = "") -> None:
         """落点＝**真实的** `source.adoc`（判据本体不手抄、不重写），被测形态**追加**在其后。
@@ -25782,6 +25895,29 @@ def _tick_num(value: int) -> str:
     return "`#" + str(value) + "`"
 
 
+def _rule_files_of(*topics: str) -> tuple:
+    """把规则数据的**主题名**展开成它当前真实的文件清单（相对仓库根）。
+
+    为什么不在用例里写死文件名：规则落点按主题切成一份一份（一个主题一份文件，或主题下
+    再切成 `<主题>/guards/<防线名>.toml`）。写死文件名时，规则一搬家这些用例就整批
+    `FileNotFoundError`——而它们要核的是判据，不是落点布局。
+    """
+    repo = os.path.dirname(HERE)
+    base = os.path.join(repo, "script", "specs-rules")
+    out = []
+    for topic in topics:
+        direct = os.path.join(base, topic + ".toml")
+        if os.path.isfile(direct):
+            out.append(f"script/specs-rules/{topic}.toml")
+            continue
+        for dirpath, _dirnames, filenames in os.walk(os.path.join(base, topic)):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+    return tuple(out)
+
+
 class TestCheckChangeNumberScopeGuard(CheckSpecsTestCase):
     """『变更编号的作用面』防线的用例（用户提出）。
 
@@ -25794,7 +25930,7 @@ class TestCheckChangeNumberScopeGuard(CheckSpecsTestCase):
     """
 
     GIT = "specs/general/git.adoc"
-    RULES = ("script/specs-rules/git.toml",)
+    RULES = _rule_files_of("git")
 
     def setUp(self) -> None:
         super().setUp()
@@ -25971,7 +26107,7 @@ class TestCheckSpecOptimizeGuard(CheckSpecsTestCase):
     LIFECYCLE = "specs-project-maintainer/spec-lifecycle.adoc"
     DOC = "specs/general/doc.adoc"
     FILES = (CMD, ENTRY, README, LIFECYCLE, DOC)
-    RULES = ("script/specs-rules/prompts.toml", "script/specs-rules/_tokens.toml")
+    RULES = _rule_files_of("prompts", "_tokens")
 
     def setUp(self) -> None:
         super().setUp()
@@ -26218,7 +26354,7 @@ class TestCheckOperationTimeoutGuard(CheckSpecsTestCase):
             self.write(rel, "# 夹具占位\n")
         # 规则数据是判据措辞的唯一来源：本道的锚点外置在 `script/specs-rules/`，
         # 夹具须把那份规则文件**按原样**落进来（不手抄——手抄必然与现场漂移）。
-        self.write_real_file("script/specs-rules/execution.toml")
+        self.write_real_file(_rules_rel("execution"))
 
     def _run(self) -> None:
         cm._RULES_RUN_THIS_PHASE.clear()
@@ -26542,10 +26678,19 @@ class TestCheckUserRequirementGuard(CheckSpecsTestCase):
             self.write(rel, self._rule_text(rel))
 
     def _rules_files(self) -> list:
-        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。"""
-        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
-        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
-                if n.endswith(".toml")]
+        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。
+
+        目录**可以套子目录**（一个主题再切成一份一份），故按目录递归取。
+        """
+        repo = os.path.dirname(HERE)
+        folder = os.path.join(repo, "script", "specs-rules")
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
 
     def _rule_text(self, rel: str) -> str:
         with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
@@ -26683,16 +26828,33 @@ class TestCheckUserRequirementGuard(CheckSpecsTestCase):
         self._run()
         self.assertIn("prompts/_common.txt", self.error_texts())
 
+    def _rules_file_containing(self, guard: str) -> str:
+        """找出承载某道防线规则的**那一份文件**（相对仓库根）。"""
+        repo = os.path.dirname(HERE)
+        folder = os.path.join(repo, "script", "specs-rules")
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if not name.endswith(".toml"):
+                    continue
+                path = os.path.join(dirpath, name)
+                with open(path, encoding="utf-8") as fh:
+                    if f"[[guards.{guard}]]" in fh.read():
+                        return os.path.relpath(path, repo).replace(os.sep, "/")
+        raise AssertionError(f"规则数据里找不到 {guard} 的落点")
+
     def test_anchor_list_shrunk_reports(self):
         # 反例⑰（锚点清单自身的条数）：删掉一条锚点、正文一字不少 -> 报绿与"核过且通过"无从区分
         self._write_valid()
-        rules_path = os.path.join(self.root, "script", "specs-rules", "execution.toml")
+        # 规则数据按主题切成一份一份：**那道防线自己那一份**在哪个文件里由落点决定，
+        # 不在这里写死文件名（写死时规则一搬家，这条用例就成了"文件不存在"的假红）。
+        rel = self._rules_file_containing("check_user_requirement_guard")
+        rules_path = os.path.join(self.root, *rel.split("/"))
         with open(rules_path, encoding="utf-8") as fh:
             rules = fh.read()
         # 只删 `check_user_requirement_guard` 的 bullet 锚点清单里的一项（保留其后的 anchor_count 步）。
         self.assertIn('    "与「歧义先问、不自行假设」的分工",\n', rules)
         rules = rules.replace('    "与「歧义先问、不自行假设」的分工",\n', "", 1)
-        self.write("script/specs-rules/execution.toml", rules)
+        self.write(rel, rules)
         self._run()
         self.assertIn("锚点", self.error_texts())
 
@@ -26726,10 +26888,24 @@ class TestCheckCorrectionGuard(CheckSpecsTestCase):
                 self._texts[rel] = fh.read()
 
     def _rules_files(self) -> list:
-        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。"""
-        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
-        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
-                if n.endswith(".toml")]
+        """规则目录下的全部 `*.toml`（相对仓库根路径）——引擎按**目录**扫描加载。
+
+        目录**可以套子目录**（一个主题再切成一份一份），故按目录递归取。
+        """
+        repo = os.path.dirname(HERE)
+        folder = os.path.join(repo, "script", "specs-rules")
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
+
+    def _rules_files_of(self, topic: str) -> list:
+        """这个主题当前真实的规则文件（相对仓库根）：一份文件或一组子目录文件都算。"""
+        return [rel for rel in self._rules_files()
+                if rel.startswith(f"script/specs-rules/{topic}")]
 
     def _rule_text(self, rel: str) -> str:
         with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
@@ -26863,22 +27039,23 @@ class TestCheckCorrectionGuard(CheckSpecsTestCase):
         # 反例⑩（锚点清单自身的条数）：删掉一条锚点、正文一字不少 ->
         # 报绿与"核过且通过"无从区分
         self._write_valid()
-        rules_path = os.path.join(self.root, "script", "specs-rules", "corrections.toml")
+        rel = self._rules_files_of("corrections")[0]
+        rules_path = os.path.join(self.root, *rel.split("/"))
         with open(rules_path, encoding="utf-8") as fh:
             rules = fh.read()
         self.assertIn('    "纠正方式属做法",\n', rules)
         rules = rules.replace('    "纠正方式属做法",\n', "", 1)
-        self.write("script/specs-rules/corrections.toml", rules)
+        self.write(rel, rules)
         self._run()
         self.assertIn("锚点", self.error_texts())
 
     def test_missing_rules_file_reports(self):
         # 反例⑪：规则数据整份缺失 -> 该道防线整批空转，须给直白的落点说明
         self._write_valid()
-        self.write("script/specs-rules/corrections.toml", "")
-        os.remove(os.path.join(self.root, "script", "specs-rules", "corrections.toml"))
+        for rel in self._rules_files_of("corrections"):
+            os.remove(os.path.join(self.root, *rel.split("/")))
         self._run()
-        self.assertIn("corrections.toml", self.error_texts())
+        self.assertIn("corrections", self.error_texts())
 
 
 class TestCheckRoleSkillHandoffGuard(CheckSpecsTestCase):
@@ -26916,9 +27093,21 @@ class TestCheckRoleSkillHandoffGuard(CheckSpecsTestCase):
                 self._texts[rel] = fh.read()
 
     def _rules_files(self) -> list:
-        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
-        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
-                if n.endswith(".toml")]
+        # 规则目录**可以有子目录**（一个主题下再切成一份一份）：故按目录递归取，不只看这一层。
+        repo = os.path.dirname(HERE)
+        folder = os.path.join(repo, "script", "specs-rules")
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
+
+    def _rules_files_of(self, topic: str) -> list:
+        """这个主题当前真实的规则文件（相对仓库根）：一份文件或一组子目录文件都算。"""
+        return [rel for rel in self._rules_files()
+                if rel.startswith(f"script/specs-rules/{topic}")]
 
     def _rule_text(self, rel: str) -> str:
         with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
@@ -27050,10 +27239,10 @@ class TestCheckRoleSkillHandoffGuard(CheckSpecsTestCase):
     def test_missing_rules_file_reports(self):
         # 反例⑫：规则数据整份缺失 -> 该道防线整批空转，须给直白的落点说明
         self._write_valid()
-        self.write("script/specs-rules/collab.toml", "")
-        os.remove(os.path.join(self.root, "script", "specs-rules", "collab.toml"))
+        for rel in self._rules_files_of("collab"):
+            os.remove(os.path.join(self.root, *rel.split("/")))
         self._run()
-        self.assertIn("collab.toml", self.error_texts())
+        self.assertIn("collab", self.error_texts())
 
 
 class TestCheckSkillDocGuard(CheckSpecsTestCase):
@@ -27086,9 +27275,16 @@ class TestCheckSkillDocGuard(CheckSpecsTestCase):
                 self._texts[rel] = fh.read()
 
     def _rules_files(self) -> list:
-        folder = os.path.join(os.path.dirname(HERE), "script", "specs-rules")
-        return [f"script/specs-rules/{n}" for n in sorted(os.listdir(folder))
-                if n.endswith(".toml")]
+        # 规则目录**可以有子目录**（一个主题下再切成一份一份）：故按目录递归取，不只看这一层。
+        repo = os.path.dirname(HERE)
+        folder = os.path.join(repo, "script", "specs-rules")
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
 
     def _rule_text(self, rel: str) -> str:
         with open(os.path.join(os.path.dirname(HERE), *rel.split("/")),
@@ -27832,7 +28028,7 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
     def test_rule_anchor_removed_reports(self):
         # 反例⑫：判据措辞（规则数据）里某项锚点被删 -> 现场一字不少、防线少核一项
         self._write_all_valid()
-        rel = "script/specs-rules/bundle.toml"
+        rel = _rules_rel("bundle")
         with open(os.path.join(self.root, rel), encoding="utf-8") as fh:
             rules = fh.read()
         self.write(rel, rules.replace('    "**不得**整类关闭",\n', "", 1))
@@ -28205,7 +28401,7 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
 
     **夹具形态**：仓库里那几份**真文件的逐字副本**（判据本体 `specs/general/coding.adoc`、
     前端载体 `specs/stack/web.adoc`、测试触发特征 `specs/general/testing.adoc`、加载门
-    `AGENTS_COMMON.adoc`、README、规则数据 `script/specs-rules/ui-perf.toml` 与
+    `AGENTS_COMMON.adoc`、README、规则数据 `script/specs-rules/ui-perf/` 与
     `_tokens.toml`）——每个用例在内存副本上做一处定点改动后落进临时根再跑防线。
     手抄节选会与现场漂移，故一律不手抄；也**不写仓库里的真文件**。
     """
@@ -28999,13 +29195,23 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
 
     def test_anchor_count_removed_reports(self):
         # 反例⑦：锚点清单被删项（文档一字不少、按文档核的步骤全绿）
+        # 锚点在**这道防线自己那一份**里：按内容找文件，不按路径猜（落点会随主题分份而变）
         self._write_all_valid()
-        rel = "script/specs-rules/execution.toml"
-        path = os.path.join(self.root, *rel.split("/"))
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-        text = text.replace('    "须报、须等人工确认",\n', "", 1)
-        self.write(rel, text)
+        marker = '    "须报、须等人工确认",\n'
+        base = os.path.join(self.root, "script", "specs-rules")
+        done = False
+        for dirpath, _dirnames, filenames in os.walk(base):
+            for name in filenames:
+                if done or not name.endswith(".toml"):
+                    continue
+                path = os.path.join(dirpath, name)
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
+                if marker in text:
+                    rel = os.path.relpath(path, self.root).replace(os.sep, "/")
+                    self.write(rel, text.replace(marker, "", 1))
+                    done = True
+        self.assertTrue(done, "夹具失效：规则数据里找不到那段锚点")
         self._run_guard()
         self.assertIn("只剩", self.error_texts())
 
@@ -29377,10 +29583,15 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
 
     def test_rule_data_missing_reports(self):
         # 反例①：规则数据整体缺失 → 整批空转须报红（"核不到"与"核过且通过"要分得清）
+        # 删的是**这一主题的全部规则文件**（一份文件或一组子目录文件都算同一件事）
         self._write_all_valid()
-        os.remove(os.path.join(self.root, "script", "specs-rules", "ui-spec.toml"))
+        for dirpath, _dirnames, filenames in os.walk(
+                os.path.join(self.root, "script", "specs-rules"), topdown=False):
+            for name in filenames:
+                if name.endswith(".toml"):
+                    os.remove(os.path.join(dirpath, name))
         self._run_guard()
-        self.assertIn("ui-spec.toml", self.error_texts())
+        self.assertIn("ui-spec", self.error_texts())
 
     def test_template_missing_reports(self):
         # 反例②：取值模板缺失（判据在、取值无处可取）
@@ -30151,9 +30362,12 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
     def _write_valid(self) -> None:
         self.write_real_file(self.EXECUTION_DOC)
         self.write_real_file(self.COMMON_PROMPT)
-        src = os.path.join(self._rules_dir(), "execution.toml")
-        with open(src, encoding="utf-8") as fh:
-            self.write("script/specs-rules/execution.toml", fh.read())
+        # 落点是**这一主题当前的那几份文件**（一份文件或一组子目录文件都算）
+        for rel in cm.rules_engine.load_rule_specs(
+                os.path.join(self._rules_dir(), "execution")):
+            with open(rel, encoding="utf-8") as fh:
+                self.write(os.path.relpath(rel, os.path.dirname(self._rules_dir()))
+                           .replace(os.sep, "/"), fh.read())
 
     def _mutate(self, text: str, removed: str, replacement: str = "") -> None:
         self.assertIn(removed, text)
@@ -30326,6 +30540,744 @@ class TestCheckSourceFileScaleGuard(CheckSpecsTestCase):
         body = src.split("def check_source_file_scale_guard():", 1)[1].split("\ndef ", 1)[0]
         self.assertIn('run_rule_guard("check_source_file_scale_guard")', body)
 
+
+
+class TestCheckManifestSingleOwner(CheckSpecsTestCase):
+    """覆盖面清单**只有一个载体**：清单与收集结果逐项相等、别处不得再列一遍、写法口径不得被改写。
+
+    失效形态（本仓库实证）：清单在脚本常量与规则数据里各一份，新增一个 `.adoc` 只进得去
+    一处，另一处**静默漏扫**——防线全绿、读者以为已覆盖。
+    """
+
+    rules_rel = _rules_rel("guards")
+    # 清单的**登记处**（现场即防线清单里"这件事由哪一道防线核"的那一行）：它也是被收集的
+    # `.adoc`，故"清单与收集结果逐项相等"那条要求清单里含它——夹具按同一形态给。
+    GUARDS_ADOC_REL = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"
+    manifest_files = ()
+
+    def setUp(self) -> None:
+        super().setUp()
+        # 本类用到的夹具根在这里再钉一次：`unittest` 按模块名加载时本模块里的 `cm` 与
+        # `sys.modules['check_specs']` 可能**不是同一个实例**，别处的用例会把模块全局留在
+        # 真实仓库上——那时防线读到的是真文件、造出来的删除一律报绿。
+        cm.REPO_ROOT = self.root
+        self._orig_floor = cm._RULES_TOKENS.get(cm.GUARD_TEST_FLOOR_TOKEN)
+        self._orig_manifest = dict(cm.GUARD_MANIFEST_FILES)
+        # 未显式设定的用例：清单**现算**（等价于现场的 `_pointer_scan_files()`，含历史留痕
+        # 之外的全部 .adoc）——判据核的是"清单与收集结果逐项相等"，清单从哪来不影响它。
+        type(self).manifest_files = None
+        cm.GUARD_MANIFEST_FILES = {"POINTER_SCAN_FILES": ("_fixture_manifest", self.rules_rel)}
+
+        def _manifest():
+            files = type(self).manifest_files
+            if files is None:
+                files = [f for f in cm.collect_adoc_files() if f not in cm.HISTORICAL_FILES]
+            return list(files)
+
+        setattr(cm, "_fixture_manifest", _manifest)
+        os.makedirs(os.path.join(self.root, "script"), exist_ok=True)
+
+    def tearDown(self) -> None:
+        cm.GUARD_MANIFEST_FILES = self._orig_manifest
+        setattr(cm, "_fixture_manifest", None)
+        if self._orig_floor is None:
+            cm._RULES_TOKENS.pop(cm.GUARD_TEST_FLOOR_TOKEN, None)
+        else:
+            cm._RULES_TOKENS[cm.GUARD_TEST_FLOOR_TOKEN] = self._orig_floor
+        super().tearDown()
+
+    def _drop_guard_files(self, *guards: str) -> None:
+        """把夹具里这几道防线的规则文件删掉（本用例要重写它们所属的那份规则数据）。"""
+        folder = os.path.join(self.root, "script", "specs-rules")
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for name in filenames:
+                if name.endswith(".toml") and name[:-len(".toml")] in guards:
+                    os.remove(os.path.join(dirpath, name))
+
+    def _set_manifest(self, files):
+        type(self).manifest_files = list(files)
+
+    def _write_valid(self, src=None, ledger=None, tests=4, test_file=None):
+        # 规则数据落进夹具（引擎按**目录**扫描）：反例记账表与覆盖面临界值都在里面，
+        # 判据读现场那一份——夹具不备时读到的是真仓库的表，条数一条也对不上。
+        self.write_rules_fixture()
+        self.write("script/check_specs.py", src if src is not None else self._SRC)
+        self.write("script/check_effective.py", ledger if ledger is not None else self._LEDGER)
+        if test_file is None:
+            body = "".join(f"    def test_case_{i}(self):\n        self.assertTrue(True)\n"
+                           for i in range(tests))
+            test_file = ("import unittest\n\n\n"
+                         "class TestCheckAlphaGuard(unittest.TestCase):\n" + body + BN_CASE)
+        self.write("script/check_specs_test.py", test_file)
+        self.write(self.GUARDS_ADOC_REL, self._GUARDS_ADOC)
+
+    # 夹具按**当前实现形态**给：防线经 `CHECKS` 序列编排。
+    _SRC = (
+        'def check_alpha_guard():\n'
+        '    """甲。"""\n'
+        '\n'
+        '\n'
+        'def check_beta_guard():\n'
+        '    """乙。"""\n'
+        '\n'
+        '\n'
+        'CHECKS = (\n'
+        '    check_alpha_guard,\n'
+        '    check_beta_guard,\n'
+        ')\n'
+        '\n'
+        '\n'
+        'def main(argv=None):\n'
+        '    """入口。"""\n'
+        '    for check in CHECKS:\n'
+        '        check()\n'
+        '    return 0\n'
+        '\n'
+        '\n'
+        'if __name__ == "__main__":\n'
+        '    main()\n'
+    )
+    _LEDGER = ("MECHANISMS = [\n"
+               "    (\"甲\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_alpha_guard\", \"备注甲\"),\n"
+               "    (\"乙\", \"X.adoc\", \"script/check_specs.py\",\n"
+               "     \"check_beta_guard\", \"备注乙\"),\n"
+               "]\n")
+    # 写法口径那几句只在**防线清单**里有一处落点：本道核"清单只允许一处 + 单靠现算就够"，
+    # 且不得把它写回"两处都要改"式的提醒（那正是失效来源）。
+    _GUARDS_ADOC = ("**覆盖面清单只允许一处**（`GUARD_MANIFEST_FILES`，取值由收集规则现算）。\n\n"
+                    "`POINTER_SCAN_FILES` 由收集规则现算。\n\n"
+                    "**清单有两个载体**时各自漂移；**单靠现算就够**。\n")
+
+    def _write_manifest_rules(self, files_body, single_body="", guards="check_guard_manifest",
+                              single_file="script/specs-rules/_fixture_cover.toml", head=""):
+        """落两份规则数据：本道自己的步骤、以及**另一份文件里**的"被查对象"。
+
+        `single_body` 里的步骤挂在哪道防线名下不影响判据（判据问的是"这份规则数据里有没有
+        把清单再列一遍"）——**它故意不带 `[[guards.X]]` 头**、挂在上一道防线名下，并按来源
+        文件认出它所属的那一份：表头漏写一行正是"按合并结果看不到、按来源才看得见"的那一格。
+        """
+        self.write(_rules_rel("guards"),
+                   f"[[guards.{guards}]]\n" + files_body
+                   + (head + single_body if single_file.endswith("guards.toml") else ""))
+        if single_body and not single_file.endswith("guards.toml"):
+            # 另开一份文件时，`head`（表头）也落在这一份里——否则它写在顶层、**根本不加载**，
+            # 判据连"这里又列了一遍"都看不见（那是另一条判据报的形态）。
+            self.write(single_file, head + single_body)
+
+    # 两步：① 清单与收集结果逐项相等；② 同一份清单不得在别处再列一遍。附写法口径那两步。
+    _COVER_RULE = (
+        'kind = "corpus_ownership"\n'
+        'corpus = "adoc"\n'
+        'exclude = ["CHANGELOG.adoc"]\n'
+        '[guards.check_guard_manifest.manifest]\n'
+        'POINTER_SCAN_FILES = ["_fixture_manifest", "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"]\n'
+        'message = "清单 {name} 不一致：多 {stale}、少 {missing}"\n'
+        '\n'
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "manifest_single_owner"\n'
+        f'guards_files = ["{_rules_rel("guards")}"]\n'
+        'message = "清单 {name} 在 {where} 被再列了一遍"\n'
+        '\n'
+        # ③ 写法口径那两步（应然两组 + 不得写成提醒）：夹具里也得在，否则"改回提醒"
+        # 与"抽掉应然那几句"两类反例都无从命中（缺这两步时它们静默全绿）。
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "file_groups"\n'
+        'file = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"\n'
+        'message = "缺写法口径：{missing}"\n'
+        'groups = [\n'
+        '    ["清单只允许一处", ["**覆盖面清单只允许一处**", "`GUARD_MANIFEST_FILES`",\n'
+        '                      "取值由收集规则现算"], "缺则读者默认它仍是一串手写字面量"],\n'
+        '    ["不得写成提醒", ["**清单有两个载体**", "单靠现算就够"],\n'
+        '                  "缺则解法被写成一句提醒——那正是失效的来源"],\n'
+        ']\n'
+        '\n'
+        '[[guards.check_guard_manifest]]\n'
+        'kind = "file_forbidden"\n'
+        'file = "specs-project-maintainer/guards-manifest/check_guard_manifest.adoc"\n'
+        'forbidden = ["两处都要改", "记得改两处"]\n'
+        'message = "把清单解法写回了「{hit}」式的提醒"\n')
+
+    # ---- 覆盖面清单：只有一处、且覆盖全部 .adoc（`corpus_ownership`）----
+
+    def test_manifest_covers_all_adoc_passes(self):
+        # 正例：清单从收集规则现算 → 与"全部 .adoc（历史留痕除外）"逐项相等
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self.write("CHANGELOG.adoc", "= 变更\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertNotIn("覆盖面清单", self.error_texts())
+
+    def test_manifest_missing_entry_reports(self):
+        # 反例：清单没覆盖到某份 `.adoc`（＝新增文件没进核对面）——那份文件永远不被扫
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self.write("specs/general/two.adoc", "= 乙\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertIn("two.adoc", self.error_texts())
+
+    def test_manifest_stale_entry_reports(self):
+        # 反例：清单里列着一份不存在的文件（改名后忘了同步）——指向的落点已不在
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL,
+                            "specs/general/gone.adoc"])
+        cm.check_guard_manifest()
+        self.assertIn("gone.adoc", self.error_texts())
+
+    def test_manifest_listed_again_elsewhere_reports(self):
+        # 反例：同一份清单在 `guards_files` **点名的那份**规则数据里又列了一遍（`files` 就地
+        # 列着）——两处各维护一份，新增文件只进得去一处，另一处静默漏扫。
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE,
+            'kind = "exists"\n'
+            'files = ["specs/general/one.adoc", "POINTER_SCAN_FILES"]\n'
+            'message = "缺 {file}"\n',
+            head="[[guards.check_pointer_no_verbatim_guard]]\n",
+            # 再列一遍写在**被点名的那一份**里（`guards.toml`）：两处各维护一份、
+            # 新增文件只进得去一处、另一处静默漏扫——这正是判据要报的形态。
+            single_file=_rules_rel("guards"))
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertIn("再列了一遍", self.error_texts())
+
+    def test_manifest_listed_again_in_unnamed_file_not_checked(self):
+        # 边界：**没被 `guards_files` 点名**的规则数据不在这条判据的核对范围内——判据核的是
+        # "被点名的那一份里不得再列一遍"，不是"全仓库任何地方都不得再列"。
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE,
+            'kind = "exists"\n'
+            'files = ["specs/general/one.adoc", "POINTER_SCAN_FILES"]\n'
+            'message = "缺 {file}"\n',
+            head="[[guards.check_pointer_no_verbatim_guard]]\n")
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertNotIn("再列了一遍", self.error_texts())
+
+    def test_ownership_note_uses_single_carrier_wording(self):
+        # 写法口径：应然（清单只允许一处 + 现算）必须在——缺则读者默认它仍是一串手写字面量
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        self.write(self.GUARDS_ADOC_REL, "只有一句话。\n")
+        cm.check_guard_manifest()
+        self.assertIn("写法口径", self.error_texts())
+
+    def test_ownership_note_keeps_single_carrier_claim(self):
+        # 反例：把解法写回"两处都要改"式的提醒——那正是本条要治的失效来源
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(self._COVER_RULE)
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        self.write(self.GUARDS_ADOC_REL,
+                   self._GUARDS_ADOC + "\n`POINTER_SCAN_FILES`：新增 .adoc 时两处都要改。\n")
+        cm.check_guard_manifest()
+        self.assertIn("两处都要改", self.error_texts())
+
+    def test_manifest_pointer_must_resolve(self):
+        # 反例：清单登记处指过去的文件里**连清单名都没有**——那一跳等于空指
+        self._write_valid()
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self.write(_rules_rel("guards"),
+                   '[[guards.check_guard_manifest]]\n'
+                   'kind = "corpus_ownership"\n'
+                   'corpus = "adoc"\n'
+                   'exclude = ["CHANGELOG.adoc"]\n'
+                   '[guards.check_guard_manifest.manifest]\n'
+                   'POINTER_SCAN_FILES = ["_fixture_manifest", '
+                   '"script/specs-rules/empty.toml"]\n')
+        # 落点那份文件里连清单名都别提：指过去什么也读不到
+        self.write("script/specs-rules/empty.toml",
+                   '[[guards.check_fixture_empty_guard]]\nkind = "exists"\n'
+                   'file = "specs/general/one.adoc"\nmessage = "缺 {file}"\n')
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertIn("并不提这份清单", self.error_texts())
+
+    def test_manifest_single_owner_passes_on_named_reference(self):
+        # 正例：别处按名引用（`files_from_manifest`）即合规——它没有第二份载体
+        self._write_valid()
+        # 现场那份防线规则已按防线一份一份搬进主题子目录；本用例要重写这份规则数据自身，
+        # 故先把夹具里同名的那几份挪开（另起同名防线是另一条判据报的形态）。
+        self._drop_guard_files("check_pointer_no_verbatim_guard")
+        self.write("specs/general/one.adoc", "= 甲\n")
+        self._write_manifest_rules(
+            self._COVER_RULE,
+            'kind = "pointer_no_verbatim"\n'
+            'files_from_manifest = "POINTER_SCAN_FILES"\n',
+            head="[[guards.check_pointer_no_verbatim_guard]]\n")
+        self._set_manifest(["specs/general/one.adoc", self.GUARDS_ADOC_REL])
+        cm.check_guard_manifest()
+        self.assertNotIn("再列了一遍", self.error_texts())
+
+
+class TestCheckFileRoleGuard(CheckSpecsTestCase):
+    """钉住「文件的角色」这一节：三档角色、五条 L1 与两条边界，缺一条都让排布失去判据。"""
+
+    CODING = "specs/general/coding.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        self.write_real_file(self.CODING)
+        self.write_rules_fixture()
+        # 锚点清单在 `_tokens.toml`：`_RULES_TOKENS` 是导入期读出的那一次，夹具重定根后
+        # 须按夹具那份重取——否则核的是真仓库的清单、造出来的删除一律报绿。
+        import rules_engine
+        cm._RULES_TOKENS["FILE_ROLE_ANCHORS"] = (
+            rules_engine.load_rule_files(cm._rules_spec())["tokens"]["FILE_ROLE_ANCHORS"])
+
+    def _mutate(self, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.CODING), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(self.CODING, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_file_role_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_section_dropped_reports(self):
+        # 反例①：整节被抽——"这份文件能不能并行改"重新没有判据
+        self._mutate("== 文件的角色", "== 文件大小")
+        cm.check_file_role_guard()
+        self.assertIn("文件的角色", self.error_texts())
+
+    def test_section_belonging_dropped_reports(self):
+        # 反例⑯：**归属那一格被抽**——本节是并发档的执行细则。该格一删，它就退回成"对一切
+        # 项目强制"：单线顺序开发的仓库为它把文件铺开、多出上百个文件而收益为零；反过来
+        # "本项目取常规档"也说不出口了。
+        self._mutate("**本节的归属（L1，先定条件再谈强制）**", "**怎么做都行**")
+        cm.check_file_role_guard()
+        self.assertIn("本节的归属", self.error_texts())
+
+    def test_mode_key_dropped_reports(self):
+        # 反例⑰：取值那一处（配置里的档位键名）被抽——"在哪声明取哪一档"无从查起，
+        # 两档于是各按自己的理解办（一边说必须分份、一边说不用）。
+        # 键名写在本节的「归属」那一格里，故这一条与反例⑯落点相同、判据不同（这一条核键名）。
+        self._mutate("`[source-management].mode`", "配置文件里")
+        cm.check_source_management_guard()
+        self.assertIn("[source-management].mode", self.error_texts())
+
+    def test_parallel_role_dropped_reports(self):
+        # 反例②：并行落点那一档被抽——最常撞的那一类没有名字，仍按独占处置
+        self._mutate("** **并行落点**", "** **热点文件**")
+        cm.check_file_role_guard()
+        self.assertIn("并行落点", self.error_texts())
+
+    def test_decision_rule_dropped_reports(self):
+        # 反例③：定性那一条被抽——"先判断、再排布"的顺序没有落点
+        self._mutate("先给文件一个角色、再决定它能不能并行改（L1）", "注意文件怎么排布")
+        cm.check_file_role_guard()
+        self.assertIn("先给文件一个角色", self.error_texts())
+
+    def test_split_by_part_dropped_reports(self):
+        # 反例④：按份切那一条被抽——各份又挤在同一段、靠顺延编号表达次序
+        self._mutate("并行落点按‘份’切、不按‘条’切（L1）", "并行落点尽量小（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("并行落点按份切", self.error_texts())
+
+    def test_exclusive_needs_judgement_dropped_reports(self):
+        # 反例⑤：独占落点配机械判据那半句被抽——"只有一处"被读成"靠人记得改那一处"
+        self._mutate("没有判据的独占落点", "独占落点")
+        cm.check_file_role_guard()
+        self.assertIn("没有判据的独占落点", self.error_texts())
+
+    def test_order_dependency_dropped_reports(self):
+        # 反例⑥：次序依赖那一条被抽——各份里各写序号，等于把独占落点摊回并行落点
+        self._mutate("次序写在**唯一那一处独占落点**", "次序自己定")
+        cm.check_file_role_guard()
+        self.assertIn("次序写在", self.error_texts())
+
+    def test_computed_over_listing_dropped_reports(self):
+        # 反例⑦：能现算的不列清单被抽——手写清单这个最典型的并行热点仍是默认做法
+        self._mutate("能由规则现算的，就不要列成清单（L1）", "清单可以手写（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("能由规则现算的", self.error_texts())
+
+    def test_exclusive_action_boundary_dropped_reports(self):
+        # 反例⑧：独占动作那条边界被抽——"同时改多处"被当成热点去拆另一处
+        self._mutate("一次动作本身就必须同时改多处", "一次动作也可以拆开")
+        cm.check_file_role_guard()
+        self.assertIn("同时改多处", self.error_texts())
+
+    def test_identify_rule_dropped_reports(self):
+        # 反例⑨：识别判据（按文件数一遍）被抽——热点靠感觉认
+        self._mutate("**识别判据（先判这是不是一个并行热点）**", "**怎么看**")
+        cm.check_file_role_guard()
+        self.assertIn("识别判据", self.error_texts())
+
+    def test_basis_dropped_reports(self):
+        # 反例⑩：依据行被抽——后人无从判断这条口径还成不成立。
+        # 「源码管理方法」「文件的角色」两节的依据行都点了 ISO 10007，而本用例只核后者，
+        # 故只把**后者那一节**里的这一项抽掉（按节切出来再拼回去，不碰前一节）。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        text = open(os.path.join(repo_root, self.CODING), encoding="utf-8").read()
+        head = text.index("== 文件的角色")
+        section = text[head:]
+        self.assertIn("ISO 10007", section)
+        section = section.replace("ISO 10007（配置项须可辨识、变更须受控）、", "", 1)
+        self._write_valid()
+        self.write(self.CODING, text[:head] + section)
+        cm.check_file_role_guard()
+        self.assertIn("ISO 10007", self.error_texts())
+
+    def test_grain_by_identity_dropped_reports(self):
+        # 反例⑫：切口单位那条被抽——"拆"被读成"拆得越细越不冲突"，把一张表拆成一行一个文件
+        self._mutate("切口的单位是\"份\"，不是\"行\"（L1）", "拆得越细越好（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("切口的单位是", self.error_texts())
+
+    def test_merge_strategy_dropped_reports(self):
+        # 反例⑬：合并策略那条被抽——只增不改的清单仍靠拆碎消冲突，而配按行合并只要一行配置
+        self._mutate("能靠合并策略解决的，不靠拆分解决（L1）", "冲突只能靠拆分解决（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("能靠合并策略解决的", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑪：锚点清单自己少一项（正文一字未动）——逐项核对全绿，只有条数判据拦得住。
+        # 抽的是**夹具里**那一份：`anchor_count` 的 `min` 调大，等价于"清单被削到只剩 N 项"。
+        self._write_valid()
+        rel = 'script/specs-rules/collab-hotspot.toml'
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn("min = ", rules, "夹具失效：这一份里没有 anchor_count 的 min")
+        # 本文件现在承载两份清单（源码管理两档、文件的角色），两处各核一次：先只把前一份的
+        # `min` 调大、再只把后一份的调大——两处都得各自报出来，不能只拦前一份。
+        for shard, name, guard in ((0, "SOURCE_MANAGEMENT_ANCHORS", cm.check_source_management_guard),
+                                   (1, "FILE_ROLE_ANCHORS", cm.check_file_role_guard)):
+            self._write_valid()
+            block = rules[rules.index(name):]
+            self.assertIn("min = ", block, f"夹具失效：{name} 这一份里没有 anchor_count 的 min")
+            patched, hits = [], 0
+            for seg in re.split(r"(min = \d+)", rules):
+                if seg.startswith("min = "):
+                    if hits == shard:
+                        seg = "min = 999"
+                    hits += 1
+                patched.append(seg)
+            self.write(rel, "".join(patched))
+            cm.RULES = None
+            cm._RULES_RUN_THIS_PHASE.clear()
+            guard()
+            self.assertIn(name, self.error_texts())
+
+    def test_no_counts_principle_dropped_reports(self):
+        # 反例⑭（本轮新增）：不做那条被抽——"来源只有一处"被读成"每一格都得有个汇总处"，
+        # 于是文件在不在、挨着谁这些事又被立一份清单/编号/总数值去回答（第二处必漂移）
+        self._mutate("不做：靠文件与目录就能回答的，不另立一处回答（L1）", "该记的都要记（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("不另立一处回答", self.error_texts())
+
+    def test_convention_order_dropped_reports(self):
+        # 反例⑮（本轮新增）：可依赖的约定关系那条被抽——"靠文件名与目录"全凭自觉，
+        # 结论落回"再立一份清单更方便"
+        self._mutate("可以依赖的约定关系（L1，按可靠程度排序）", "可以靠约定（L1）")
+        cm.check_file_role_guard()
+        self.assertIn("按可靠程度排序", self.error_texts())
+
+
+class TestCheckSourceManagementGuard(CheckSpecsTestCase):
+    """钉住『源码管理方法』两档：档位须声明、两档的规则本体都须在。
+
+    用户口径：**规范里就要定义两套规则**——以后要给其他项目用，作为其他项目源码管理的参考。
+    故这里的反例不是"本项目取错档"，而是"取不到另一档的完整规则"与"档位没有唯一一处声明"。
+    """
+
+    CODING = "specs/general/coding.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+        self._mode = getattr(cm, "_PATHCFG", None)
+
+    def tearDown(self) -> None:
+        cm._PATHCFG = self._mode
+        super().tearDown()
+
+    def _write_valid(self):
+        self.write_real_file(self.CODING)
+        self.write_rules_fixture()
+        import rules_engine
+        cm._RULES_TOKENS["SOURCE_MANAGEMENT_ANCHORS"] = (
+            rules_engine.load_rule_files(cm._rules_spec())["tokens"]["SOURCE_MANAGEMENT_ANCHORS"])
+
+    def _mutate(self, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        text = open(os.path.join(repo_root, self.CODING), encoding="utf-8").read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(self.CODING, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_source_management_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_section_dropped_reports(self):
+        # 反例①：整节被抽——两档规则集没有落点，项目无从知道自己该照哪一套做
+        self._mutate("== 源码管理方法", "== 源码管理")
+        cm.check_source_management_guard()
+        self.assertIn("源码管理方法", self.error_texts())
+
+    def test_conventional_mode_dropped_reports(self):
+        # 反例②：**常规档的规则集被抽**——用户要的是"两套规则"而不是"一档 + 一句开关"：
+        # 没有这一档，"不启用并发做法"的项目就没有可照做的说明（只剩什么都不要求）
+        self._mutate("=== 常规档（默认，单线顺序开发即可照用）", "=== 另一档")
+        cm.check_source_management_guard()
+        self.assertIn("常规档", self.error_texts())
+
+    def test_concurrent_mode_dropped_reports(self):
+        # 反例③：并发档的规则集被抽——本项目声明取这一档，而规范里没有它那套完整做法
+        self._mutate("=== 并发档（多处并行改动同一目标分支时取用）", "=== 另一档")
+        cm.check_source_management_guard()
+        self.assertIn("并发档", self.error_texts())
+
+    def test_shared_rules_dropped_reports(self):
+        # 反例④：两档共用那一段被抽——两档各说各的，同一份事实的第二处来源在两档里都躲不掉
+        self._mutate("=== 两档共用（与取哪一档无关，任何项目一律成立）", "=== 其他")
+        cm.check_source_management_guard()
+        self.assertIn("两档共用", self.error_texts())
+
+    def test_mode_missing_reports(self):
+        # 反例⑤：档位没有声明（配置里缺键、或取值不在两档之内）——补默认值不算声明
+        cm._PATHCFG = cm.pathconfig.Config(
+            {"source-management": {"mode": "whatever"}}, os.path.join(self.root, "specs-config.toml"))
+        self._write_valid()
+        cm.check_source_management_guard()
+        self.assertIn("[source-management].mode", self.error_texts())
+
+
+class TestCheckRunArtifactGuard(CheckSpecsTestCase):
+    """钉住『要跑的那一份须是本次产出的那一份』（用户口径：**取值的唯一来源指的是配置这类，
+    测试取值好像没有说**；而且取值就算对了也没用——**触发 exe 的唯一实例规则时，取到的那一份
+    根本起不来、被交给既有实例，启动的是老实例**，除非让测试实例把唯一实例原则停用）。
+
+    失效形态：取值收敛对了，启动却落到快捷方式/已装那份上；或唯一实例把第二次启动交给既有实例，
+    界面亮着的是**旧那一份**，而结论记成"本次改动验证通过"。故按两串锚点分别核
+    `specs/general/verify.adoc`「编译/运行验证」（对象身份怎么核）与
+    `specs/stack/windows.adoc`「要跑的那一份须是本次构建的那一份」（取值形态与单实例怎么办），
+    并钉加载门识别特征与公开面 README。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    WINDOWS = "specs/stack/windows.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+    START = "* **要跑的那一份须是本次产出的那一份（L1）**"
+    NEXT = "* **以真实结果为准（L1）**"
+    SECTION = "要跑的那一份须是本次构建的那一份"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.REPO_SCRIPT_SRC_CACHE.clear()
+
+    def _write_valid(self):
+        for rel in (self.VERIFY, self.WINDOWS, self.COMMON, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_run_artifact_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        # 反例①：通用侧条文整条被抽——"取值对、跑的是老的"这条失效没有判据
+        self._mutate(self.VERIFY, self.START, "* **验证脚本另议**")
+        cm.check_run_artifact_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_identity_evidence_dropped_reports(self):
+        # 反例②：判据对象被抽——"界面亮起来了"重新成为跑通的证据
+        self._mutate(self.VERIFY, "跑起来的到底是什么", "验证相关")
+        cm.check_run_artifact_guard()
+        self.assertIn("跑起来的到底是什么", self.error_texts())
+
+    def test_absolute_path_dropped_reports(self):
+        # 反例③：绝对路径点名被抽——仍按名字/注册表/快捷方式启动
+        self._mutate(self.VERIFY, "**启动的那一个按绝对路径点名**", "**启动那一个**")
+        cm.check_run_artifact_guard()
+        self.assertIn("绝对路径点名", self.error_texts())
+
+    def test_image_path_dropped_reports(self):
+        # 反例④：核进程映像路径被抽——启动后无从证明跑的是这一份
+        self._mutate(self.VERIFY, "**启动后核那个进程的映像路径**", "**启动后看一眼窗口**")
+        cm.check_run_artifact_guard()
+        self.assertIn("映像路径", self.error_texts())
+
+    def test_existing_instance_halfdropped_reports(self):
+        # 反例⑤：通用侧"已有实例挡在前面"半句被抽——唯一实例把判据顶掉后无人察觉
+        self._mutate(self.VERIFY, "**已有实例挡在前面时不得把它的画面当结果**", "**注意**")
+        cm.check_run_artifact_guard()
+        self.assertIn("已有实例挡在前面时不得把它的画面当结果", self.error_texts())
+
+    def test_stale_render_dropped_reports(self):
+        # 反例⑥：最典型的失效形态被抽（渲染出来的可以是旧版本）
+        self._mutate(self.VERIFY, "渲染出来的可以是旧版本，与本次改动无关",
+                     "可能与本次改动无关")
+        cm.check_run_artifact_guard()
+        self.assertIn("渲染出来的可以是旧版本", self.error_texts())
+
+    def test_windows_section_dropped_reports(self):
+        # 反例⑦：Windows 侧整节被抽（用户点名的现象没有落点）
+        self._mutate(self.WINDOWS, "== " + self.SECTION, "== 打包产物验证")
+        cm.check_run_artifact_guard()
+        self.assertIn(self.SECTION, self.error_texts())
+
+    def test_single_instance_rule_dropped_reports(self):
+        # 反例⑧：**单实例挡路**整条被抽——用户点的现象照旧：启动命令返回了、窗口出现了，
+        # 就记成这一份跑通了
+        self._mutate(self.WINDOWS, "* **单实例是既有实例时，不得把它当成结果（L1）**",
+                     "* **单实例另议**")
+        cm.check_run_artifact_guard()
+        self.assertIn("单实例挡路", self.error_texts())
+
+    def test_single_instance_value_dropped_reports(self):
+        # 反例⑨：取值（先退掉既有实例 / 标识取自运行期 / 改从更轻入口）任一被抽
+        self._mutate(self.WINDOWS, "唯一实例的**标识取自运行期可给的值**", "唯一实例的标识固定")
+        cm.check_run_artifact_guard()
+        self.assertIn("唯一实例的", self.error_texts())
+
+    def test_shell_bypass_dropped_reports(self):
+        # 反例⑩：绕过壳（快捷方式/开始菜单/App Paths 指向旧那一份）被抽
+        self._mutate(self.WINDOWS, "按本次产出目录下的那一个 exe 绝对路径启动（L1）",
+                     "启动应用（L1）")
+        cm.check_run_artifact_guard()
+        self.assertIn("绕过壳", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        # 反例⑪：调度器识别特征被抽（跑打包产物时想不到加载该条）
+        self._mutate(self.COMMON, "要跑/要截的是一个打包出来的 exe", "打包相关")
+        cm.check_run_artifact_guard()
+        self.assertIn("要跑/要截的是一个打包出来的 exe", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        # 反例⑫：公开面 README 未登记（读者只看得见"启动起来看一眼"）
+        self._mutate(self.README, "要跑的那一份须是本次产出的那一份", "验证说明")
+        cm.check_run_artifact_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_missing_file_reports(self):
+        # 反例⑬：规范文件整体缺失
+        cm.check_run_artifact_guard()
+        self.assertIn("缺少 specs/general/verify.adoc", self.error_texts())
+
+    def test_adjacent_items_do_not_mask(self):
+        # 反例⑭：本条被整段抽掉，但相邻两条里仍有"启动""验证""进程"这类同形字样
+        # （「看显示效果时不接管桌面」那条也写着"按进程取图""不接管桌面"）——核对面若落在
+        # 整节上就会被兜住、报绿。本条按**本 bullet 自己的措辞**核，故仍须报红。
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.VERIFY), encoding="utf-8") as fh:
+            text = fh.read()
+        start = text.index(self.START)
+        end = text.index(self.NEXT, start)
+        self._write_valid()
+        self.write(self.VERIFY, text[:start] + text[end:])
+        cm.check_run_artifact_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        # 反例⑮：**锚点清单自身**被削（规范正文一字不少、正文核全绿）——只有 `anchor_count`
+        # 能拦：删锚点须与调基线一并发生，该动作于是出现在 diff 里
+        self._write_valid()
+        rel = _find_rule_file('token_list = "RUN_ARTIFACT_WINDOWS_TOKENS"')
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
+            rules = fh.read()
+        self.assertIn('min = 16\ntoken_list = "RUN_ARTIFACT_WINDOWS_TOKENS"', rules)
+        self.write(rel, rules.replace('min = 16\ntoken_list = "RUN_ARTIFACT_WINDOWS_TOKENS"',
+                                      'min = 999\ntoken_list = "RUN_ARTIFACT_WINDOWS_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_run_artifact_guard()
+        self.assertIn("RUN_ARTIFACT_WINDOWS_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
+class TestRuleAssemblyConflicts(CheckSpecsTestCase):
+    """装配期三格反例 + 一正例：清单写两处、裸写顶层、同一张表定义两次。"""
+
+    TOKENS_INDEX = "script/specs-rules/_tokens.toml"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_rules_fixture()
+
+    def _conflicts(self):
+        return cm._assembly_conflicts(cm._rules_spec())
+
+    def test_valid_passes(self):
+        self.assertEqual([], self._conflicts())
+
+    def test_duplicate_manifest_in_second_file_reports(self):
+        # 反例①：同一份清单在**另一个顶层文件**里又写一遍（同目录）——后一份静默覆盖前一份
+        self.write("script/specs-rules/zz-dup.toml", '[tokens]\nADOC_ROOTS = [""]\n')
+        text = "\n".join(self._conflicts())
+        self.assertIn("ADOC_ROOTS", text)
+        self.assertIn("zz-dup.toml", text)
+
+    def test_top_level_manifest_reports(self):
+        # 反例②：清单裸写在顶层——规则文件只认 `guards` / `tokens`，顶层键根本不加载
+        self.write("script/specs-rules/zz-top.toml", 'ADOC_ROOTS = [""]\n')
+        self.assertIn("裸写在顶层", "\n".join(self._conflicts()))
+
+    def test_duplicate_table_header_reports(self):
+        # 反例③：同一份文件里 `[tokens]` 被写两遍——TOML 的表只能定义一次（展开 include 后同算）
+        self.write("script/specs-rules/zz-tbl.toml", "[tokens]\nA = 1\n[tokens]\nB = 2\n")
+        self.assertIn("出现了两遍", "\n".join(self._conflicts()))
+
+    def test_manifest_in_place_passes(self):
+        # 正例的另一半：清单写在装配表自己那一份里时，装配期一条都不报
+        with open(os.path.join(cm.REPO_ROOT, *self.TOKENS_INDEX.split("/")), encoding="utf-8") as fh:
+            self.assertIn("ADOC_ROOTS = [", fh.read())
 
 
 if __name__ == "__main__":

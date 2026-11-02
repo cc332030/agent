@@ -1,0 +1,10 @@
+= 本轮记账：逐行登记面的序号与「谁在用」交给现算，行正文按身份分份
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（用户口径：『如何在当前的基础上，并行处理避免冲突』） | 无（**未新增、未删除防线**） | 185 → **185**（接线数不抬） | **问题**：前几轮在「把一行拆成一个文件」与「整张表留着每轮插一行」之间来回，两条都不成立——前者把 `git log`/`git blame`/IDE 跳转一起废掉，冲突面一点没缩小；后者每次新增防线都要在同一片区域插行、并把其后每一行的序号改掉。两难的根子是**把"行的正文"和"行的坐标"当成了一件事**。**取值**：只把**正文**按身份分份（`specs-project-maintainer/guards-manifest/<防线名>.adoc`，一份一格「钉住什么」，文件名即防线名），**序号与「谁在用」由判据现算**（`CHECKS` 序列的投影 + 防线函数体的调用关系）。表体只剩一行 `include::`，于是新增一道防线的编辑动作只有一处：写自己那一份——不碰别人的行、不碰任何数字。**判据本体**：`specs/general/coding.adoc`「文件的角色」新增 L1「逐行登记面：把行数与序号也交给现算」，锚点清单 `FILE_ROLE_ANCHORS` 31 → 32 项、`anchor_count` 基线同步。**机械核**：① 登记面由规则数据声明（`script/specs-rules/guards.toml` 的 `registry_owner` 步骤，落点目录经 `dir_from_config` 取 `script/specs-config.toml` 的 `[paths].manifests_dir`，脚本里不写第二份字面量）；② `check_guard_order_guard` 按 `include::` 次序**装配**表再与 `CHECKS` 逐一同序；③ 新增三格反例口径——那一份里写着序号（位置的第二个来源）、目录里多出不对应任何防线的文件（删防线留下的尸块）、登记面防线缺自己那一份；④ `--print-guards-table` 按同一套算法重拼整表，供改完 `CHECKS` 之后更新那一段。**顺带修掉**：`POINTER_SCAN_FILES` 的登记处从"表所在的那一份文件"改成"它自己那一份行正文"——口径句随表拆开之后，指回 `guards.adoc` 等于指到一张只剩 `include::` 的空表；`check_guard_manifest` 的两步口径核对对象同步改为那一份。`duplicate_scan` 把 `guards-manifest/` 排除：那一格按定义就是防线用途的摘要，与规则数据报错文案、规范正文判据句逐字重合是它的职责。**验证**：`python3 script/check_specs.py` 除一条 git 历史判据（分支历史里那条合入提交 `6143e7dd`）外全绿（本机装 `asciidoctor 2.0.26` 跑真编译）；`python3 -m unittest discover -s script -p "*_test.py"` → `Ran 2639 tests, OK`。 **归位（同轮 review）**：`guards.adoc` 的表体改由 `--print-guards-table` 现算后整段写入——三格（序号、防线、「谁在用」）一个都不手写，`check_guard_order_guard` 按同一函数（`_manifest_rows`）核「表里恰好是现算的那一份」；「谁在用」取前一道与调用方的并集。手抄的表体是逐行的第二来源：抄第二遍、整行删掉都查不出来。
+|===

@@ -1,0 +1,93 @@
+[[guards.check_ternary_extraction_guard]]
+bullet = "不得新增只做条件取值的方法"
+file = "specs/general/coding.adoc"
+kind = "bullet_tokens"
+message = "条件取值方法防线被破坏：{file} 的「不得新增只做条件取值的方法」条**本条自己的正文**缺失 {missing}——判据被抽走时，「调用点会更短」「复述一下意图」会把只做三元取值的方法放回来。每条锚点须在**本条 bullet 内唯一**"
+section = "表达式与调用写法"
+min = 11
+tokens = [
+    "不得新增只做条件取值的方法（L1）",
+    "不得让方法体只剩一处条件取值",
+    "**没有自己的语义**",
+    "**判定标准（任一命中即违规）**",
+    "**不得反向放大**",
+    "**有自身语义的取值方法",
+    "**例外与边界（L2）**",
+    "**先加通用工具方法**",
+    "**存量边界（L1）**",
+    "改到哪处才顺带调整",
+    "批量内联、批量删方法",
+    "随动迁移，见 `specs/core/execution.adoc`",
+]
+
+# 同条的去向（没有现成工具方法时**加一个通用工具方法**、而非就地抽专用方法）落在相邻的
+# 「判空/默认值兜底优先用工具方法」条上——它也是 `bullet_tokens` 取不到的独立 bullet，
+# 故另起一步按该 bullet 的正文核。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "不得新增只做条件取值的方法"
+section = "表达式与调用写法"
+min = 11
+[[guards.check_ternary_extraction_guard]]
+bullet = "判空/默认值兜底优先用工具方法"
+file = "specs/general/coding.adoc"
+kind = "bullet_tokens"
+message = "条件取值方法防线被破坏：{file} 的「判空/默认值兜底优先用工具方法」条**本条自己的正文**缺失 {missing}——缺「没有现成工具方法就加一个通用方法、不就地抽专用方法」的去向时，兜底会重新退回逐处内联与逐处专用方法"
+section = "表达式与调用写法"
+min = 9
+tokens = [
+    "判空/默认值兜底优先用工具方法",
+    "**没有现成工具方法时，取值的去向是",
+    "加一个通用工具方法",
+    "而不是就地写三段式或就地为这一次调用抽一个专用方法",
+    "**判定标准（任一命中即违规）**",
+    "**例外与边界（L2）**",
+    "**存量边界**",
+    "随动迁移，见 `specs/core/execution.adoc`",
+    "依据（标准名/编号）",
+    "**「没有现成工具方法就加一个通用方法、不就地抽专用方法」是本集合自己的判据化取舍**",
+]
+
+# Java 落点：没有现成入口时给项目自有工具类**补一个通用方法**（`@UtilityClass`
+# 的 `*Utils`），不得就地写三元/if-else、也不得就地抽专用方法。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+bullet = "判空/默认值兜底优先用工具方法"
+section = "表达式与调用写法"
+min = 9
+[[guards.check_ternary_extraction_guard]]
+bullet = "判空兜底用默认值工具方法"
+file = "specs/stack/java-syntax.adoc"
+kind = "bullet_tokens"
+message = "条件取值方法防线被破坏：{file} 的「判空兜底用默认值工具方法」条**本条自己的正文**缺失 {missing}——缺 Java 落点时，执行者不知道该把通用方法补到哪、会把三元写回调用点"
+section = "工具类使用约定"
+min = 8
+tokens = [
+    "判空兜底用默认值工具方法（Java 落点）",
+    "`specs/general/coding.adoc`",
+    "此处不复述",
+    "**Java 侧只给载体**",
+    "`ObjectUtil.defaultIfNull(x, default)`",
+    "`CollUtil.defaultIfEmpty(x, default)`",
+    "`StrUtil.emptyToDefault(x, default)`",
+    "**没有现成入口时补通用方法的落点是项目自有工具类**",
+]
+
+# 工具类不继承另一个工具类（**用户提出**）——判据本体跨语言，落通用层
+# 「类设计」；Java 侧载体落 `java-syntax.adoc`「工具类定义」。两处都按**条目自己的正文**核
+# （相邻条目含「工具类」字样，按整节核会被兜住）。只钉"判据是否仍在"——"某个类算不算
+# 工具类""某处继承是不是工具类之间的继承"属语义判断，交人/子 agent 复核。
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_ternary_extraction_guard]]
+file = "specs/stack/java-syntax.adoc"
+kind = "anchor_count"
+bullet = "判空兜底用默认值工具方法"
+section = "工具类使用约定"
+min = 8

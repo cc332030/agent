@@ -1,0 +1,135 @@
+[[guards.check_http_semantics_guard]]
+file = "specs/general/coding.adoc"
+groups = [
+    [
+        "== HTTP 接口语义",
+        [
+            "== HTTP 接口语义",
+        ],
+        "HTTP 接口语义须有独立承载节（缺则方法与状态码语义无处可查，只剩路径命名风格）",
+    ],
+    [
+        "适用范围",
+        [
+            "适用范围",
+            "对外提供或调用 HTTP 接口",
+        ],
+        "须写明**适用范围**（对外提供或调用 HTTP 接口的项目才适用）——无 HTTP 接口的项目不应被这条约束（准入面：不引入高频误伤）",
+    ],
+    [
+        "安全方法不得产生状态变更（L1）",
+        [
+            "安全方法不得产生状态变更（L1）",
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "TRACE",
+        ],
+        "安全方法不得产生状态变更须是 **L1** 且点明四个安全方法——这是唯一一条不可豁免且可判定的底线，被降级即等于允许用 GET 做写操作",
+    ],
+    [
+        "不得",
+        [
+            "不得",
+            "承载写",
+        ],
+        "须有正向禁令：不得用安全方法承载写/删/状态流转等有副作用的动作",
+    ],
+    [
+        "幂等",
+        [
+            "幂等",
+            "PUT",
+            "DELETE",
+            "自动重试",
+        ],
+        "幂等语义与重试须对齐（`PUT`/`DELETE` 幂等、非幂等请求不得配自动重试）",
+    ],
+    [
+        "状态码按语义使用（L2）",
+        [
+            "状态码按语义使用（L2）",
+            "4xx",
+            "5xx",
+            "success:false",
+        ],
+        "状态码按语义使用须是 L2 且含**可判定的反例**（把错误包成 `200` + 响应体 `success:false`）——没有反例的「按语义使用」无法判定",
+    ],
+    [
+        "对外错误响应统一结构（L3",
+        [
+            "对外错误响应统一结构（L3",
+            "application/problem+json",
+        ],
+        "Problem Details 须**如实定为 L3（可选）**并点明媒体类型——外部材料只定义了一种格式、未要求必须采用，不得升成 L1/L2",
+    ],
+    [
+        "RFC 9110",
+        [
+            "RFC 9110",
+            "RFC 9457",
+        ],
+        "依据行须写标准名/编号（RFC 9110 / RFC 9457，只写名称、不附链接）",
+    ],
+]
+kind = "file_groups"
+message = "HTTP 接口语义防线被破坏：{file} 缺失要点 {missing}——{desc}"
+[[guards.check_http_semantics_guard]]
+file = "library/sources.adoc"
+groups = [
+    [
+        "HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）",
+        [
+            "HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）",
+        ],
+        "图书馆须有该主题节（缺则条文无逐字依据可核对）",
+    ],
+    [
+        "essentially read-only",
+        [
+            "essentially read-only",
+            "GET, HEAD, OPTIONS, and TRACE methods are defined to be safe",
+        ],
+        "须有 RFC 9110 安全方法的**逐字**引文锚点（依据不得被压成一句名称）",
+    ],
+    [
+        "idempotent",
+        [
+            "idempotent",
+            "automatically retry",
+        ],
+        "须有 RFC 9110 幂等与重试的**逐字**引文锚点",
+    ],
+    [
+        "three-digit integer code",
+        [
+            "three-digit integer code",
+        ],
+        "须有 RFC 9110 状态码定义的**逐字**引文锚点",
+    ],
+    [
+        "machine-readable details of errors",
+        [
+            "machine-readable details of errors",
+            "application/problem+json",
+        ],
+        "须有 RFC 9457 的**逐字**引文锚点与媒体类型",
+    ],
+    [
+        "同义性",
+        [
+            "同义性",
+            "判据化取值",
+        ],
+        "须**如实标注同义性差异**：标准给的是协议语义，不得用 200 包错误、非幂等请求不得自动重试是本集合推出的**判据化取值**，不得读成标准原文",
+    ],
+    [
+        "可选项",
+        [
+            "可选项",
+        ],
+        "须标明 Problem Details 是标准定义的**格式**、非强制要求（本集合据此定 L3）",
+    ],
+]
+kind = "file_groups"
+message = "HTTP 接口语义依据被破坏：library/sources.adoc 缺失要点 {missing}——{desc}"

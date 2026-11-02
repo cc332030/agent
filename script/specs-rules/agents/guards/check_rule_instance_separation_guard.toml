@@ -1,0 +1,47 @@
+[[guards.check_rule_instance_separation_guard]]
+file = "script/check_effective.py"
+anchor = ["check_rule_instance_separation_guard", "规范保持通用"]
+tokens = [
+    "check_rule_instance_separation_guard",
+    "规范保持通用",
+]
+kind = "line_tokens"
+message = "规则与实例分离防线未登记：{file} 里凡提到 `check_rule_instance_separation_guard` 的行都须同时写明『规范保持通用』（缺 {missing}）——须登记该条（定义了却没抓手＝这条又变成靠自觉，与它要治的失效同形）；判据只认**登记表那一行**，不认全仓库任何一处提到该名字的地方"
+[[guards.check_rule_instance_separation_guard]]
+file = "AGENTS.adoc"
+groups = [
+    [
+        "规则与实例分离",
+        [
+            "规则与实例分离",
+            "本仓库默认动作：不写实例",
+            "保持通用",
+            "用户原话",
+            "tmp/",
+            "library/adoption.adoc",
+            "library/sources.adoc",
+            "CHANGELOG.adoc",
+        ],
+        "须有『规则与实例分离（本仓库默认动作：不写实例）』条，写明本仓库自身规范与公共规范**保持通用**、**不得**把本仓库/当前环境/session 专有的实例（用户原话、本机路径、`tmp/` 文件名、轮次与日期、内部代号）写进规范文件、公共内容与提示词，并给出实例的登记落点（图书馆 `adoption.adoc` / `sources.adoc`、changelog）——缺则『用户说调整项目规范』会被读成『把原话抄进规范』，读者拿不到这句话的场景会静默改写规则",
+    ],
+    [
+        "默认动作是",
+        [
+            "默认动作是「不写」",
+            "不得",
+            "顺手",
+        ],
+        "须写明**默认为不写**：只有用户本次明确要求登记时才写，用户说『调整项目规范』时改的是规则本身",
+    ],
+    [
+        "失效形态与依据",
+        [
+            "失效形态",
+            "静默改写",
+            "用户指出",
+        ],
+        "须同时给出失效形态与该条的出处（把某次的原话/实跑环境当成规则的一部分登记 → 读者拿不到该场景就静默改写本集合规则），否则后人只看到一句禁止、读不出它治的是什么",
+    ],
+]
+kind = "file_groups"
+message = "规则与实例分离防线被破坏：{file} 缺失要点 {missing}——{desc}"
