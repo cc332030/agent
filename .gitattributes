@@ -14,3 +14,13 @@
 *.ico binary
 *.zip binary
 *.jar binary
+
+# 合并策略：**只增不改**的落点按路径声明 merge=union（判据本体见
+# specs/general/version-control.adoc「冲突处理」，本条在本仓库的落地由 check_git_attributes_merge_guard 核）。
+# 判定标准：① 这类落点里的内容是一行一项、行与行可交换、位置不承载含义；② 配了 union 的落点各自再守一条
+# 不撞的写法——按顺序追加、不去动别人的行（union 只合并两侧**各自新增**的那几行，两边改到同一行时照旧报冲突，
+# 所以"配了就万事大吉"是错的）；③ 落地文件里不得出现有序行表（按编号排的行表两处同时插入相邻行时左右顺序
+# 不确定，那是"union 只解了一半"，该改成生成物）。
+# 二进制与行尾规则在上；这两种属性不冲突：merge 只管三方合并，eol 只管检出/提交。
+script/specs-rules/*.toml merge=union
+specs-project-maintainer/ledger/*.adoc merge=union

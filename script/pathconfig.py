@@ -59,10 +59,13 @@ class Config:
 
     # 必填项的属性名清单（读完即逐个取一遍）：一份配置缺了哪一项都须在加载时报出来，
     # 而不是等某条分支用到了才炸——"这一轮没走到那条分支"会把缺项伪装成一切正常。
+    # `source_management_mode` 一档：项目的源码管理档，**缺键即报错、不补默认值**——退回一个
+    # 默认值等于把"取哪一档"变成可选装饰（取值只有一处，见 `specs/general/coding.adoc`
+    # 「源码管理方法」）。放在必填里，才会在加载时当场报出来、而不是等某条分支用到才炸。
     REQUIRED = ("landing_home_dir", "landing_app_dir", "base_url", "manifest_entry",
                 "manifest_optional", "install_scripts", "entry_scripts", "config_rel",
                 "timeout_seconds", "workers", "tmp_dir", "self_update_suffix",
-                "self_handoff_suffix")
+                "self_handoff_suffix", "source_management_mode")
 
     def __init__(self, data, path):
         self.path = path
@@ -166,6 +169,25 @@ class Config:
     def self_handoff_suffix(self):
         """待换标记（交接文件）的文件名后缀。"""
         return str(self._get("temporary", "self_handoff_suffix"))
+
+    @property
+    def source_management_mode(self):
+        """本项目取的**源码管理档**；取值只此一处（见 `script/specs-config.toml`）。
+
+        两档的规则本体见 `specs/general/coding.adoc`「源码管理方法」。这里不加校验：
+        "取值是不是两档之一"由 `check_specs.source_management_mode()` 判，读取层只负责取值。
+        """
+        return str(self._get("source-management", "mode"))
+
+    def value(self, dotted):
+        """按 `节.键` 取**本仓库自己新增**的取值（`[source-management].mode` 一类只有本仓库读的取值）。
+
+        为什么不逐个开属性：属性清单是**通用**的（每个装这份配置的仓库都读过），逐项添加
+        等于让通用读取层跟着本仓库长；而取值本身仍只有这一处来源——`dotted` 由调用方的
+        规则数据给出，脚本里不写第二份字面量。缺项与 `_get` 同一口径：报错，不补默认值。
+        """
+        section, _, key = dotted.partition(".")
+        return self._get(section, key)
 
 
 def config_path(repo_root):

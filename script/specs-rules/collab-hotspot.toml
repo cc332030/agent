@@ -1,0 +1,41 @@
+# 『源码管理方法（两档并行）』与『文件的角色（会不会被并行改动，决定它怎么排布）』的判据措辞。
+#
+# **这道为什么单独一个规则文件**：它管的是"落点怎么排布"，与"某条规范该说什么"不是同一批改动；
+# 而规则数据文件本身也是按主题切的一份一份（见该节正文"并行落点按份切"）——本文件即按该节
+# 自己的口径落在本主题名下，新增别的主题不往这里追加。
+#
+# 判据本体在通用层 `specs/general/coding.adoc`「源码管理方法」（两档规则集，本文件只放锚点
+# 与报错文案）。两档**各写成一份完整规则集**，别的项目可整份取用其一；档位取值只有一处
+# （`[source-management].mode`），本仓库取并发档。
+[[guards.check_source_management_guard]]
+file = "specs/general/coding.adoc"
+kind = "regex_section"
+label = "源码管理方法"
+pattern = "^== 源码管理方法.*?(?=^== |\\Z)"
+token_list = "SOURCE_MANAGEMENT_ANCHORS"
+
+# 入场核：核**锚点清单自己的条数**——清单删项时规范正文一字未动、上面那步一次都不报错。
+[[guards.check_source_management_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+token_list = "SOURCE_MANAGEMENT_ANCHORS"
+min = 5
+
+# 『文件的角色』是并发档的执行细则（判据本体在 `specs/general/coding.adoc` 同名节）。
+[[guards.check_file_role_guard]]
+file = "specs/general/coding.adoc"
+kind = "regex_section"
+label = "文件的角色"
+pattern = "^== 文件的角色.*?(?=^== |\\Z)"
+# 锚点**不在这里**：清单只有一处（`script/specs-rules/_tokens.toml` 的
+# `FILE_ROLE_ANCHORS`），这里按名引用——两处各写一份时，改一处必漏另一处（见
+# `specs/general/coding.adoc`「取值的唯一来源」）。本文件只留"核哪一节、用哪份清单"。
+token_list = "FILE_ROLE_ANCHORS"
+
+# 入场核：核**锚点清单自己的条数**——清单删项时规范正文一字未动、上面那步一次都不报错
+# （"核过且通过"与"没核"无从区分）。删锚点须与调 `min` 一并发生。
+[[guards.check_file_role_guard]]
+file = "specs/general/coding.adoc"
+kind = "anchor_count"
+token_list = "FILE_ROLE_ANCHORS"
+min = 40

@@ -58,6 +58,30 @@ config = "script/specs-config.toml"
 timeout_seconds = 30
 workers = 4
 
+[source-management]
+# 本项目取哪一档**源码管理方法**——两档规则本体都在 `specs/general/coding.adoc`「源码管理方法」：
+#   `"conventional"`：常规档（默认档）。单线顺序开发、或由单一执行者按序改动即可照用——
+#                    落点按职责与体量排布，不按份铺开；冲突现场逐处解；派生件允许人工维护
+#                    （但须有可核对的判据）；不要求 `merge=union`、不要求生成器。
+#   `"concurrent"`：并发档。多个未完工分支并存、都要合入同一目标分支时取用——落点按份切、
+#                    逐行登记面只留身份、派生件由生成器产出、只增不改的落点声明合并策略、
+#                    短命文件先声明再落地。执行细则见同文件「文件的角色」一节。
+#
+# **取值只有这一处**：这两档是**并列的两套完整规则集**（别处引它们时按档取，不复述条文），
+# 一个项目只取一档、整档生效，**不得跨档拼装**（两档的差别不在严与松，而在对同一个失效给
+# 的是两个不同的解；混用等于两个解各用一半、两个失效面都还在）。
+#
+# **本仓库取 `concurrent`**：本仓库并发任务多、合入频繁，常规档下每一轮都在同一片区域插行。
+# 换成 `conventional` 只需把下面那一行改成 `"conventional"`，其余一个字节都不用动——
+# 两档的规则本体都留在规范里，谁想照哪一档做都有完整的规则可读（规则可以不用，取值不能不存在）。
+#
+# 判据：`script/check_specs.py` 的 `source_management_mode()` 是唯一判别式——
+# `concurrent` 时按 `script/specs-rules/collab-hotspot.toml` 的锚点逐项核并**要求**本仓库
+# 真的分份／配 `merge=union`／上生成器；`conventional` 时只核"那一档的取值还在不在"
+# （判据本体不许连取值一起删）。开关本身**须有判据**：缺 `[source-management].mode`
+# 或取值不是这两档之一即报错、不补默认值（见 `specs/general/coding.adoc`「取值的唯一来源」）。
+mode = "concurrent"
+
 [temporary]
 # 临时产物的根目录名（工作目录下）：临时产物一律落这里，不进落点、不进项目其他位置。
 # 目录布局与命名判据见 `specs/core/execution.adoc`「临时产物」。

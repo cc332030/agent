@@ -1,0 +1,25 @@
+[[guards.check_script_selfdoc_name_guard]]
+file = "specs/general/script.adoc"
+groups = [
+    [
+        "命名条不得把脚本名当文档名的合法来源",
+        [
+            "脚本不参与「文档取源文件名」的命名规则",
+            "不按脚本名给文档命名",
+            "不新增脚本配套文档",
+        ],
+        "须写明**脚本不参与「文档取源文件名」的命名规则**（**不按脚本名给文档命名**）、并写明**脚本没有自己的文档、不新增脚本配套文档**——缺则 `check_specs.py` → `check_specs.adoc` 这类同源命名被读成合法、『一个脚本配一个文档』当场变成合规做法",
+    ],
+]
+kind = "section_groups"
+section = "文件命名"
+message = "脚本文档命名防线被破坏：{file}「文件命名」缺失要点 {missing}——{desc}；本条依据用户口径『不允许一个脚本对应一个文档』，不得删除或降级"
+
+# PowerShell 栈的**跨版本兼容面**（`specs/stack/powershell.adoc`）：用户报告"AI 在 PowerShell 上
+# 经常执行出问题"，成因是 PowerShell 同时存在 Windows PowerShell 5.1 与 PowerShell 7+ 两个版次，
+# 二者**语言核心相同、机制与默认值不同**（有的写法在一版上直接解析失败）。故这一栈多出一个
+# **版本口径**维度：① 运行环境从引擎取（不猜命令名）、最低版本写成 `#Requires`；
+# ② 版本敏感项的取值面（编码参数、编码默认值、7 才有的运算符、`$?` 语义、原生命令与
+# `$LASTEXITCODE`、`$ErrorActionPreference` 的效力边界、`Write-Host` 与输出流、退出码）；
+# ③ 解析模式与传参（两种解析模式、元字符、不搬 bash/cmd 写法、不用反引号续行）。
+# 缺任一项，该栈执行者又只能"凭像不像 PowerShell"写——正是本条要防的失效形态。

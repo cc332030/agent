@@ -1,0 +1,61 @@
+[[guards.check_service_interface_guard]]
+bullet = '没有多态时不得为 service 类加同方法父接口'
+file = 'specs/general/coding.adoc'
+kind = 'bullet_tokens'
+section = '类设计'
+message = 'service 父接口防线被破坏：{file} 的「没有多态时不得为 service 类加同方法父接口」条**本条自己的正文**缺失 {missing}——该条对应用户要求（没有多态时不得为 service 类添加有相同方法的父接口），缺了它「接口 + 唯一实现」的两件套又会被当成"面向接口编程"照写'
+min = 12
+tokens = [
+    '没有多态时不得为 service 类加同方法父接口（L1，任何语言）',
+    '不得**为它另建一个**声明了同样的方法**的父接口',
+    '**「没有多态」的判据**',
+    '**且没有任何注入点、参数、返回值或集合以该接口类型声明**',
+    '**不承担任何替换与解耦**',
+    '**没有多态时的去向是「直接用该类」**',
+    '**框架由接口生成实现**的契约',
+    '**该处已有先例**',
+    '**反向误用**',
+    '**只管 service 类的父接口**',
+    '**批量删接口、批量把注入类型改成实现类**',
+    '**「没有多态时不为 service 类加同方法父接口」是本集合自己的判据化取舍**',
+]
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤一次都不报错。
+[[guards.check_service_interface_guard]]
+file = 'specs/general/coding.adoc'
+kind = 'anchor_count'
+bullet = '没有多态时不得为 service 类加同方法父接口'
+section = '类设计'
+min = 12
+
+# Java 落点：判据本体在通用层，本处只给载体。
+[[guards.check_service_interface_guard]]
+file = 'specs/stack/java.adoc'
+kind = 'bullet_tokens'
+section = '编码'
+bullet = '没有多态时不为 service 加同方法的父接口（L1，Java 落点）'
+message = 'service 父接口防线被破坏：{file} 的「没有多态时不为 service 加同方法的父接口」条缺失 {missing}——缺 Java 载体时，执行者认不出「`XxxService` + `XxxServiceImpl` 一对一」这一形态，也分不清框架契约（`Mapper`/Feign）不在核对面'
+min = 8
+tokens = [
+    '没有多态时不为 service 加同方法的父接口（L1，Java 落点）',
+    '只有一个实现',
+    '`specs/general/coding.adoc`',
+    '此处**不复述**',
+    '**Java 侧只给载体**',
+    '**注入与声明类型**',
+    '**去向是直接用该类**',
+    '**框架由接口生成实现的契约不在核对面**',
+]
+
+
+# 『源类不 @see 其测试类、关系由测试侧单边承载』防线（`specs/stack/java.adoc`「javadoc」）。
+# 用户报告的真实失效：规范原写"源类 javadoc `@see` 其各类测试类"，执行者照做后
+# **主源码 javadoc 解析不到 `src/test/java`**——裸类名报 `reference not found`
+# （`failOnError` 断构建），加引号则降级成**纯文本**（实测：生成的文档里就是带引号的
+# 一串字面量、不成链接）。两种写法都不成引用，故规则本身要改向，不是改写法。
+# 钉三面，缺任一面即口径会退回旧形态或退回"加引号绕过"：
+#   ① 正文方向（测试类引用源类、源类不写）；
+#   ② 引号的效力边界（只对路径成立、不用于绕过类名解析失败）；
+#   ③ 不可解析的原因（`src/test/java` 不在主源码 javadoc 解析范围内）。
+# 用户口径：路径引用用英文双引号包裹即可（文本引用、按字面记录路径、照路径找得到目标），
+# 不要求写成 `<a href>` 链接——链接形态只是可选，不作为规范要求。

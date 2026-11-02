@@ -1,0 +1,94 @@
+[[guards.check_pointer_no_verbatim_guard]]
+kind = "pointer_no_verbatim"
+# 参与核对的落点＝**维护范围内的全部 .adoc**（历史留痕 `CHANGELOG.adoc` 除外）。
+#
+# **落点不在这里列**：判据是"自称回指的行不得复述取值"，**任何一个文件都可能下一个改动里
+# 写出这样一行**，故它按**收集规则现算**；清单只有一处（`script/check_specs.py` 的
+# `GUARD_MANIFEST_FILES`），这里**按名引用**——两份清单并存时，新增一个 `.adoc` 只进得去
+# 一处、另一处**静默漏扫**（原实现正是这样：清单 21 个文件，`specs/general/coding.adoc`、
+# `prompts/*.adoc` 等**从来就没被扫过**，而防线全绿）。
+files_from_manifest = "POINTER_SCAN_FILES"
+# 阈值取 20：本轮实证的漏网形态是 21 字（`library/mirrors.adoc` 里"每级先实测可用、不跳级、
+# 不覆盖既有配置"），低于 20 的多为"文件基名/节名"这类本就该出现的词。
+#
+# **这一道与 `duplicate_scan` 的阈值不是同一个数、也不该同步抬**：`duplicate_scan` 判的是
+# "同一描述写了几处"（阈值高、只报长度极显著的），本道判的是"自称回指的行**又**把取值抄了
+# 一遍"——回指句本身就把可用长度吃掉一截，抄来的那截通常只有二十几字。按 40 取时本道
+# 对"回指 + 抄一遍"这个形态整体失效（实测：把阈值抬到 40，本道的反例用例全绿）。
+min_overlap = 20
+# `exclude_refs`：**被引文件里不参与比对的**。取一组**规则数据文件**——回指的落点也可能是
+# 随规范分发的脚本/规则数据（`.py`/`.toml` 等，见引擎侧同一改动），此时"回指 + 复述取值"
+# 的对象是**脚本头部注释**、**规则数据自身的注释**。
+# 但 `specs-project-maintainer/guards.adoc` 是**防线清单**：它逐条说"这道防线钉住什么、
+# 规则数据在哪个文件"，与那份规则数据自己的头部注释讲的是**同一批事实**（分工已在
+# `guards.adoc` 开头写明：本文件答"有哪些防线、按什么次序跑"，台账答"某条规范有没有抓手"），
+# 逐字重合是这一层的**预期形态**而非第二真源——与 `duplicate_scan` 的 `ignore_units`
+# 把维护方自查层按"定位就是规则本体在别处、这里只补维护方口径"处理同源。
+# 判据见 `specs/general/review.adoc`「精炼性（同一描述只写一处）」。
+exclude_refs = [
+    "script/specs-rules/_tokens.toml",
+    "script/specs-rules/build-tool-migration.toml",
+    "script/specs-rules/collab.toml",
+    "script/specs-rules/corrections.toml",
+    "script/specs-rules/duplicate/guards/check_pointer_no_verbatim_guard.toml",
+    "script/specs-rules/execution.toml",
+    "script/specs-rules/git.toml",
+    "script/specs-rules/gradle.toml",
+    "script/specs-rules/intent-answer.toml",
+]
+# 依据行与标准名括注本就该逐字一致（`source.adoc`「外部引用」），排除在外——
+# 它们与 `duplicate_scan` 的 `ignore` 同口径，理由见上面的 `duplicate_scan` 规则数据。
+ignore = [
+    "依据（标准名/编号）",
+    "IEEE Std",
+    # 材料/标准名本身（`The Twelve-Factor App`、`ISO/IEC/IEEE 25010` 一类）**本就该逐字一致**：
+    # 名字写错一位即无法检索、也无从核对（`specs/general/source.adoc`「外部引用」）。本轮
+    # 实测的假命中即 `The Twelve-Factor App（依赖显式声明）`（去空白后与 `adoption.adoc`
+    # 的标准名逐字相同）——这是"引用名"、不是"复述取值"。
+    "The Twelve-Factor App",
+    # **条目名/两把尺子的名称**同理：回指时得说得出"我指的是哪一条"，故 `同一描述有几处`
+    # （`review.adoc`「精炼性」与 `doc.adoc`「信息密度」互指时各自引用的名称）、
+    # `同表同类操作合并为一条`（`sql.adoc` 的条目名，`java.adoc` 回指时引用）这类**名称**
+    # 本就该逐字一致——它们不是"取值"，换个说法就不成其为回指。
+    # 判据同 `specs/general/terminology.adoc`：名称是检索键、须逐字一致才检索得到。
+    "同一描述有几处",
+    "同表同类操作合并为一条",
+    # **节名/题名**同理：回指时得指名到节（`改完规范必做的五件事（机械手段必跑，干净子 agent
+    # 复核不可漏）`——`AGENTS.adoc` 与维护方 `verify.adoc` 都按题名回指 `specs/general/verify.adoc`
+    # 的那一节；`跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）`——三个栈文件都按题名回指
+    # `specs/general/script.adoc` 的那一节）。节名逐字一致才定位得到，换个说法即找不到，
+    # 与 `specs/general/doc.adoc`「引用路径」的"引用须指向真实存在的节名"同源。
+    "改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）",
+    "跨环境脚本（入口 + 跨平台逻辑 + 实现语言取舍）",
+    # **术语/固定译法**：`progressive disclosure` 是业界通行术语（`library/throughput.adoc`
+    # 与维护方 `priority.adoc` 都引它），译名不统一的代价高于逐字一致——与标准名同口径。
+    "progressive disclosure",
+    # **清单式目录**（`：编译/运行验证、判准维度、验证的适用边界、…`）——维护方 `verify.adoc`
+    # 用本节名清单告诉读者"哪些内容已随公共内容归位"，它本就是**节名的枚举**、不是判据正文；
+    # 节名逐字一致才核得到（与上面那组题名同口径）。
+    "编译/运行验证、判准维度、验证的适用边界",
+    # **主题名**（`决策记载（ADR/MADR/AWS Prescriptive Guidance）`）：图书馆的**主题登记名**，
+    # 用于"引用方按依据名反查"（`library/README.adoc`「依据的定位协议」）——名字逐字一致才定位得到。
+    "决策记载（ADR / MADR / AWS Prescriptive Guidance）",
+    # **自足提示词须内联的装配判据**（`prompts/review.adoc` 的「给 AI 的读取说明」）：
+    # 这一行指向 `prompts/_common.txt`（唯一落点＝其顶部的「查看与复制方式」），却又把那条
+    # 判据的措辞写了一遍——**这是刻意的**：`prompts/review.adoc` 属"会被复制到未知项目执行"
+    # 的自足交付物，读者可能在读到 `_common.txt` 之前就要按它判断该不该补齐；该内联口径由
+    # `check_prompt_delivery_surface_guard` **逐要点钉住**（含"内容有没有被 AsciiDoc 处理器
+    # 装配过""原始文件/不会被展开/补齐""不得/渲染视图/跳过补齐"三组），删掉即报红——即
+    # 它**不是**"同一件事写两遍"的收敛对象，而是自足性要求的必要重复（`review.adoc`「精炼性」
+    # 的「两类形态不得被当成重复收敛」同口径）。故按行豁免、不按文件豁免：
+    # `prompts/_common.txt` 仍是别处的核对面（如 `PROMPTS.adoc` 的回指行）。
+    "装配状态按内容判定",
+    # **跨两栈同源的单一取值**（"不要求用户手动修改系统执行策略"）：批处理栈与 PowerShell 栈
+    # **各自都要给出这一条**（两边都是"本栈的取值"，且**两边都必须让本栈读者直接读到**，
+    # 不许把一方推给另一方）。它不是"同一件事写两遍"——两栈的读者是两批人，
+    # 而它换任何说法都会改变语义（"不要求改策略"与"避免改策略"不是一回事）。
+    "不要求用户手动修改系统执行策略",
+    # **回指时点上被指文件的节名**（`取规范到本地副本` / `ISO/IEC Directives Part 2`）：
+    # 前者是 `AGENTS_COMMON.adoc` 的节名、后者是标准名，两者逐字一致才定位/检索得到
+    # （与上面那组"节名/标准名"同口径）。
+    "取规范到本地副本",
+    "ISO/IEC Directives Part 2",
+]
+message = "自称回指却复述了取值：{file}:{line} 与本行引用的 `{ref}` 逐字重合 {overlap} 字——`{frag}`；同一行里既写“见别处”、又把别处的话抄一遍，至少是多写的：取值只留一处（判据见 specs/general/review.adoc「精炼性（同一描述只写一处）」），本行只应留「这是什么 + 在哪」"

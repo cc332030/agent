@@ -21,6 +21,11 @@
  * **执行次序与逐项用途**：`specs-project-maintainer/guards.adoc`「执行次序与用途」表。
  * **某条规范由哪道防线钉住**：`script/check_effective.py` 的台账（`MECHANISMS`）。
 
+本清单**没有第二份**：`specs-project-maintainer/guards.adoc`「检查项编号」表由
+`script/gen_derived.py` 按本清单**生成**（不再手抄一份跨全文件的编号索引），
+`check_ledger_table_generated_guard` 核"现场＝按现场重算的结果"——手改那张表、或改了本清单
+忘了重算，都会当场报红（`python3 script/gen_derived.py --write` 重算）。
+
  1. 引用存在性
  2. 链接格式
  3. 节名引用存在性
@@ -113,6 +118,11 @@
  90. 对象初始化防线
  91. 取规范脚本自更新防线
  92. 缓存（统一管理、先缓存后在线）
+ 93. 并行改动的独占落点：只增不改的落点须配 `merge=union`
+ 94. 并行改动的独占落点：逐行登记表须是生成物
+
+**清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
+（两处都按"编号清单"读会把它们读成重号与乱序）。
 
 
 范围：只校验本仓库自己维护的规范、模板与工具（`.adoc` 文本、CI 配置、脚本行为、以及
@@ -299,9 +309,9 @@
      交人/子 agent 复核。
 
  105. 变更日志新版条目里的接线数防线：`CHANGELOG.adoc` 版本号最大的那条里记的
-     "防线接线基线 a → **b**"是同一数值的**第三处写法**（另两处是常量与
-     `specs-project-maintainer/guards.adoc`「记账沿革」）。只在**版本号最大的那条**里核
-     箭头**右侧**（＝抬到的常量值）须等于 `GUARD_WIRING_BASELINE`——旧条目记的是**当时**的
+     "防线接线基线 a → **b**"记的是该轮结束时的接线数，而现值由 `CHECKS` 序列现算。
+     只在**版本号最大的那条**里核
+     箭头**右侧**（＝该轮结束时的接线数）须不高于 `CHECKS` 序列**现算**的那个数——旧条目记的是**当时**的
      基线、按定义不得改写，故不得回溯改历史。核的是右侧这一处取值：**左侧（抬之前的值）
      无人核**，改错时不会报红（本仓库实测：把最新条目的 142 写成 143，脚本与本表都全绿）。
      由 `check_guard_manifest` 里的这一核对钉住；"该不该补一条新条目、旧条目该不该动"
@@ -401,7 +411,7 @@
      一处并写明理由；判定标准三条，其中『判定只在写它的那处算、不看调用点有多少』把「频繁」
      落成可核对的取值——以它覆盖它即违规）、从零写的唯一正当情形、从零也须收在一处、存量随动
      迁移；前端载体在技术栈层 `specs/stack/web.adoc`「界面（载体）」（只给落点、回指唯一真源）。
-     规则数据在 `script/specs-rules/ui.toml` + `_tokens.toml` 的 `UI_STYLE_ANCHORS`。由
+     规则数据在 `script/specs-rules/ui/` + `_tokens.toml` 的 `UI_STYLE_ANCHORS`。由
      `check_ui_style_guard` 钉住；「这一处算不算同一形态」「这一处算不算频繁加 `!important`」属
      语义判断与运行时事实，交人/子 agent 复核。
  115. 同一件事只有一个来源防线（**用户追问扩面**）：判据本体落通用层 `specs/general/coding.adoc`
@@ -413,7 +423,7 @@
      一处来源**）；语言只定载体、不定判据。另核上一节指回这一档、栈层只给载体
      （`specs/stack/web.adoc`「前后端各一份时的契约载体」、`specs/stack/java-syntax.adoc`
      「工具类使用约定」）、加载门与 README 同步、锚点条数下限。规则数据在
-     `script/specs-rules/ui.toml` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
+     `script/specs-rules/ui/` + `_tokens.toml` 的 `SAME_SOURCE_ANCHORS`。由
      `check_same_thing_one_source_guard` 钉住；「这两处算不算同一件事」「某一处该不该抽公共
      方法」属语义判断与运行时事实，交人/子 agent 复核。
  116. 界面的性能防线（**用户提出**，两轮）：判据本体落通用层 `specs/general/coding.adoc`
@@ -429,7 +439,7 @@
      界面做性能结论」不另立判据——回指 `specs/general/testing.adoc`「性能测试」的触发特征
      （界面**不默认加、也不默认不加**，按特征判）。另核前端载体（`specs/stack/web.adoc`
      「界面的性能（载体）」，只给载体、回指唯一真源）、加载门两处（调度器「任何代码活动」与
-     前端栈条）与 README 同步、锚点条数下限。规则数据在 `script/specs-rules/ui-perf.toml` +
+     前端栈条）与 README 同步、锚点条数下限。规则数据在 `script/specs-rules/ui-perf/` +
      `_tokens.toml` 的 `UI_PERFORMANCE_ANCHORS`。由 `check_ui_performance_guard` 钉住；
      同一用户问题引出的方法论另立一条（`check_example_not_surface_guard`，见下）。
  117. 举例不是面防线（**用户追问的方法论**）：判据本体落通用层 `specs/general/planning.adoc`
@@ -475,7 +485,7 @@
      平台层 `specs/platform/cnb.adoc`「分支与合并请求统一」的**同节条**（分支策略的同一条，另立
      一节即并存两套说法），提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被复制
      到未知项目执行）。边界两句一起写：本条**只限定承载位置**、不构成「不动手」的许可；**原 PR 已
-     关闭**时另开属**承继、不属私开**。规则数据在 `script/specs-rules/cnb.toml`。由
+     关闭**时另开属**承继、不属私开**。规则数据在 `script/specs-rules/cnb/`。由
      `check_pr_scope_guard` 钉住；「哪个 PR 才算承载该 issue」「用户有没有真的允许」属语义判断与
      运行时事实，交人/子 agent 复核。
 
@@ -511,9 +521,36 @@
      注释里的承诺，而唯一的核对手段是 PR 描述里的一次手工实测。由 `check_site_link_guard`
      钉住；「某个链接该不该拦」属语义判断，交人/子 agent 复核。
 
+ 124. 并行改动的独占落点：只增不改的落点须配 `merge=union`（**用户提出**）：本仓库每次改动
+     都在往一串「行集合」里加一项——一张表的行、一份清单的条目、一份台账的一条。这类落点的
+     **物理形态**决定了并行改动会撞：两处各自往同一片区域的中间插一行，git 只能报冲突。判据
+     本体落通用层 `specs/general/version-control.adoc`「冲突处理」，git 侧取值落
+     `specs/general/git.adoc`「行尾与检出归一」：**只增不改的落点按路径声明 `merge=union`**
+     （仓库根 `.gitattributes`），且**两处形态同时成立**——① 该落点的内容形态真是"只增不改"
+     （行之间可交换、不靠位置定含义）；② 配了的落点**各自再守一条不撞的写法**（按顺序追加、
+     不去动别人的行），因为 union 只合并"两侧各自新增的那几行"，两边改到**同一行**时照旧
+     报冲突。**判定标准（任一命中即不合规）**：① 一条 `merge=union` 都没有；② 清单点名的
+     落点没被声明（配了、但配的不是那些路径，等于没配）；③ 声明了 `merge=union` 的落点里
+     出现**有序行表**（两处同时插入相邻行时左右顺序不确定，属"union 只解了一半"）。由
+     `check_git_attributes_merge_guard` 钉住；「某个落点算不算只增不改」「这条路径该不该进
+     清单」属语义判断，交人/子 agent 复核。
+
+ 125. 并行改动的独占落点：逐行登记表须是生成物（**用户提出**）：同一批内容被**逐行抄成
+     第二份**（编号跨越全区的索引表、按主题排列的台账）时，每一轮改动都要往中间插一行、
+     其后各行整体位移——这是本仓库剩下最硬的独占落点。判据是**派生件不由人工手作、与本体
+     同一次产出**（`specs/general/coding.adoc`「分发产物的体积与按需加载」的「派生件与本体
+     同处一个构建步骤」条在**本仓库自身的登记表**上的落地）：那一份整段由生成器
+     （`script/gen_derived.py`）按**已经唯一的那一份真源**现算产出，现场与重算结果**逐字节
+     一致**；生成物不得成为第二份真源（不许反过来被读去驱动别处）。**判定标准（任一命中即
+     不合规）**：① 现场与重算结果不一致（手改了表、或改了真源忘了重算）；② 生成物的节头
+     不再写明"这是生成物、怎么重算"（读者会当手写表、下一轮照旧手改）。由
+     `check_ledger_table_generated_guard` 钉住；「还有哪些表该收进生成器」属语义判断，交人/
+     子 agent 复核。
+
 """
 
 import argparse
+import fnmatch
 import concurrent.futures
 import json
 import os
@@ -657,6 +694,46 @@ PATH_CONFIG_REL = pathconfig.CONFIG_REL
 # 公开内容站点：入口模板与取规范脚本的地址由它拼出（同一真源里的 `[source].base_url`）
 PUBLIC_BASE = _PATHCFG.base_url if _PATHCFG else ""
 
+
+# 『源码管理方法』两档（规则本体都在 `specs/general/coding.adoc`「源码管理方法」）：
+#   `conventional` —— 常规档：落点按职责与体量排布、冲突现场解、派生件允许人工维护
+#                    （但须有核对判据）、不要求合并策略与生成器。
+#   `concurrent`   —— 并发档：落点按份切、逐行登记面只留身份、派生件由生成器产出、
+#                    只增不改的落点声明合并策略、短命文件先声明再落地。
+# **两档并列、默认档由项目自己声明**：本仓库取并发档，但"不写就是常规档"这种默认值恰恰是
+# `specs/general/coding.adoc`「取值只有一处」禁的形态（补默认值＝把取值变成可选装饰），故
+# 缺键即报红、不猜。
+SOURCE_MANAGEMENT_MODES = ("conventional", "concurrent")
+
+
+def source_management_mode():
+    """本项目取的**源码管理档**：`conventional` / `concurrent`。
+
+    取值只有一处：`script/specs-config.toml` 的 `[source-management].mode`。两档是**并列的
+    两套完整规则集**（见 `specs/general/coding.adoc`「源码管理方法」），一个项目只取一档、
+    整档生效，**不得跨档拼装**。**缺键即报错、不补默认值**：退回一个默认值等于把"取哪一档"
+    变成可选装饰，两份口径又回来了（`specs/general/coding.adoc`「取值的唯一来源」）。
+    读不到或取值不在两档之内时返回 `None`，由 `check_source_management_guard` 报红。
+    """
+    cfg = _PATHCFG
+    if cfg is None:
+        return None
+    try:
+        mode = cfg.value("source-management.mode")
+    except pathconfig.ConfigError:
+        return None
+    return mode if mode in SOURCE_MANAGEMENT_MODES else None
+
+
+def file_role_enabled():
+    """本项目是否取**并发档**（`specs/general/coding.adoc`「文件的角色」那一节是否适用）。
+
+    就是 `source_management_mode() == "concurrent"`，不另立第二个开关：多一个"要不要并发档"
+    的布尔就等于给同一件事开第二处取值。取常规档（或取值缺失）时返回 `False`——那一节不适用，
+    但**规则取值仍要在规范里**（见 `check_file_role_guard`）。
+    """
+    return source_management_mode() == "concurrent"
+
 # 规则数据落点：与本脚本同目录的规则**目录**（随 `REPO_ROOT` 走，单测可重定向）。
 def _rules_spec():
     """规则数据落点（与脚本同目录的规则**目录**）；现场推导，便于单测重定向。
@@ -675,6 +752,105 @@ def _rules_spec():
     if not os.path.isdir(rules_engine.default_rules_spec(rel)):
         rel = os.path.dirname(os.path.abspath(__file__))
     return rules_engine.default_rules_spec(rel)
+
+
+def _rules_topic_present(topic: str) -> bool:
+    """规则数据里这个主题**在不在**（判据措辞有没有可读的来源）。
+
+    主题可以是一份文件，也可以是一组子目录（一个主题下再切成一份一份时）——两者都算在。
+    原先按"某个具体文件名在不在"判，而文件名只是落点、不是主题：规则一搬进子目录，
+    这道前置判断就整批误报"整道防线空转"（而判据其实一条也没少）。
+    """
+    base = os.path.join(REPO_ROOT, "script", "specs-rules")
+    if os.path.isfile(os.path.join(base, topic + ".toml")):
+        return True
+    if os.path.isdir(os.path.join(base, topic)):
+        try:
+            return bool(rules_engine.load_rule_specs(os.path.join(base, topic)))
+        except rules_engine.RulesError:
+            # 子目录在、里面却一份规则都没有：这就是"这一批规则整体消失"，按缺失判
+            return False
+    return False
+
+
+def _table_keys_conflicts(raw: bytes):
+    """找出一份 TOML 里**同名表头被写了两遍**处，返回 `[表名]`。
+
+    为什么自己要这一步：`tomllib` 对同名表头是**拒绝**的——而这条拒绝正是本轮要的抓手。
+    可它拒绝的前提是那些表头先被展开进同一份文本（`include::` 是本引擎自己的语义），
+    于是"同一张表在与 `_tokens.toml` 同目录的别处又写了一遍"在解析期一声不响：一份在
+    展开结果里、一份在另一个顶层文件里，两边解析各自合法（本仓库实证：`ADOC_ROOTS` 在
+    `_tokens.toml` 与 `tokens/adoc-roots.toml` 各写一份，谁都没报）。
+    """
+    names, dup = set(), []
+    for m in re.finditer(r"(?m)^\s*\[([^\[\]]+)\]\s*$", raw.decode("utf-8", "replace")):
+        name = m.group(1).strip()
+        if name in names and name not in dup:
+            dup.append(name)
+        names.add(name)
+    return dup
+
+
+# 规则数据里**可合计的表**：这些表的键是"清单名/防线名"，同名即两个来源各写一份。
+# `tokens` 一份表里全是清单，两个文件各写同名清单时**后一个静默覆盖前一个**——
+# 而"覆盖"看起来与"只有一份"完全一样（本仓库实证：`ADOC_ROOTS` 写两份时，改动只落在
+# 被覆盖掉的那一份上，判据照旧读另一份，谁都不报）。
+_RULE_TABLE_KEYS = ("tokens", "guards", "dialects", "project_types")
+# 规则文件顶层只许这两张表：裸写 `FOO = [...]` 的清单**一次都不加载**（顶层键被丢弃），
+# 于是"这份清单搬出去了"与"它从来没进过加载面"在结果上一模一样——判据读不到、也不报。
+_RULE_TOP_KEYS = ("guards", "tokens")
+
+
+def _assembly_conflicts(spec):
+    """装配期核对：一张表只能定义一次，清单也不许写在另一份文件里。
+
+    判据取自 TOML 自己：**一张表只能定义一次**。它就是本仓库「取值的唯一来源」在规则
+    数据侧的机械形态——同一份清单写两处＝同一张表定义两次，无需为每个清单名各立一条
+    "别处不许再列一遍"的判据（那种写法每加一份清单就得补一条，且清单名一多就漏）。
+
+    只核**同一目录**：不同目录的规则文件本来就是各写各的表（`tokens` 段的清单名在
+    `script/specs-rules/` 全域唯一，已由合并期核），把跨目录的同名也算成冲突会让
+    "分目录各一张表"的设计失效。
+    """
+    try:
+        paths = rules_engine.load_rule_specs(spec)
+    except rules_engine.RulesError as exc:
+        return [str(exc)]
+    problems, seen = [], {}
+    for path in paths:
+        base = os.path.dirname(os.path.abspath(path))
+        # ① 同名表头（按 TOML 语义，同一份文件里出现两次即非法）
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            problems.append(f"{os.path.relpath(path, REPO_ROOT)} 读不出来：{exc}")
+            continue
+        for name in _table_keys_conflicts(raw):
+            problems.append(f"{os.path.relpath(path, REPO_ROOT)} 里 `[{name}]` 出现了两遍"
+                            "——一张表只能定义一次")
+        # 同名清单在两份文件里各写一份也要拦：TOML 允许表分片（`[tokens]` 可写两次、
+        # 各写不同的键），故解析器不替我们拦这一格，下面的 `seen` 才是。
+        try:
+            data = rules_engine.load_rules(path)
+        except rules_engine.RulesError as exc:
+            problems.append(str(exc))
+            continue
+        # ② 清单裸写在顶层：`tokens` 表之外的位置一律不会被加载，等于没写
+        for name in data:
+            if name not in _RULE_TOP_KEYS:
+                problems.append(f"{os.path.relpath(path, REPO_ROOT)} 里的 `{name}` 裸写在顶层——"
+                                "规则文件只认 `guards` / `tokens` 两张表，顶层键**根本不加载**"
+                                "（清单搬到别处时最易犯：文件在、内容在，判据读不到）")
+        # ③ `tokens` 段里同名清单在两份**同目录**文件里各写一份：后一个静默覆盖前一个
+        for table in _RULE_TABLE_KEYS:
+            for name in (data.get(table) or {}):
+                owner = seen.setdefault((table, name), os.path.basename(path))
+                if owner != os.path.basename(path):
+                    problems.append(f"`[{table}.{name}]` 在 {owner} 与 {os.path.basename(path)} "
+                                    "各写了一份（同目录）——清单只允许一处，写两份时后一份静默"
+                                    "覆盖前一份，改另一份的人以为改到了")
+    return problems
 
 
 def _bootstrap_rules_tokens():
@@ -810,7 +986,12 @@ RESIDENT_FILES = ("AGENTS_COMMON.adoc",
 # 无法限制格式），必加载层实测 65558 字节、余量约 0.7%，仍在原上限之内——按「抬数须按实测
 # 用量就近取值」的口径，没有超限就不动这个数。判据正文在 `specs/general/ui.adoc`
 # 「输入控件按值域取、格式由控件与属性限住」，选型顺序在 `specs/general/ui-patterns.adoc`。
-RESIDENT_BUDGET = 66000
+# 本轮由 66000 上调为 67000：并入 `main` 的三批改动（界面性能按维度扩面、PowerShell 跨版本、
+# 另有两条新的界面识别特征）使必加载层落到 66130 字节、超原天花板 130 字节。两侧的登记都是
+# **识别特征 + 落点**、没有把判据正文搬进来（正文分别在 `specs/general/ui.adoc`、
+# `specs/general/ui-patterns.adoc`、`specs/stack/powershell.adoc`），故按实测用量就近抬到
+# 67000、余量约 1.3%。下一次仍应先归位、再考虑抬数。
+RESIDENT_BUDGET = 67000
 # 核心清单「底线」节的**条数下限**：宁少不滥是取向，但少于这个数就说明清单被削过
 # （「底线」是浓缩后的全套底线，不是"挑几条最重要的"）。与 `SOFT_FILE_SIZE_HINT`
 # 同理：它是"拦无声删除"的下限、不是目标。
@@ -1859,9 +2040,7 @@ def _section_anchor_check(rel, section_title, anchors, *, subsection=False):
 
 
 def check_quality_guard():
-    """『代码质量（新产出即高质）』防线：十项下限、判定标准与依据。
-
-"""
+    """『代码质量（新产出即高质）』防线：十项下限、判定标准与依据。"""
     phase("代码质量防线检查")
     _section_anchor_check(QUALITY_SPEC, QUALITY_SECTION, QUALITY_ANCHORS)
     with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:
@@ -1961,7 +2140,7 @@ def check_clean_subagent_review_guard():
     派发形式 + 硬超时 + 降级路径 + 三态留证）；② **锚点清单自己的条数与组内形状不得被削**
     ——清单是**纯数据**：删掉一项或整组时，规范正文一字不少、`_section_anchor_check` 的
     `miss` 是空集，"核过且通过"与"没核"无从区分（本仓库已有实证的口径，见
-    `script/specs-rules/coding.toml` 各处 `anchor_count`）；③ **不得被"复用上一次上下文"
+    `script/specs-rules/coding/` 各处 `anchor_count`）；③ **不得被"复用上一次上下文"
     这类放宽写法顶替**（放宽形态一律报红，禁止式表述不误伤）。
 
     "这次是不是真开了一次干净上下文"属**运行时事实**、机械核不到（见 `GUARD_CHECK_LIMITS`）：
@@ -2078,7 +2257,7 @@ def check_refinement_guard():
 # 它是**下界**——阈值以下、或换了说法的重复核不出来，那是语义复核的事；把下界当上界
 # （"机械全绿 ⇒ 没有重复"）与本条的初衷相反。
 def check_duplicate_scan_guard():
-    """『逐字重复扫描』防线：同一件事被两处逐字重复即报红（规则见 `specs-rules/duplicate.toml`）。
+    """『逐字重复扫描』防线：同一件事被两处逐字重复即报红（规则见 `specs-rules/duplicate/`）。
 
     落点与阈值一律在规则数据里；本函数只负责开阶段、接线与收尾——规则数据外置后，
     改判据（加一处落点、调阈值）不必动脚本（判据见 `specs/general/script.adoc`
@@ -2101,7 +2280,11 @@ def check_duplicate_scan_guard():
 # 第二段是**登记处**（防线清单里"这件事由哪一道防线核"的那一行）——清单纯数据无处可读，
 # 读者要能顺着它读到"这道防线在核什么"，而不是去推断。
 GUARD_MANIFEST_FILES = {
-    "POINTER_SCAN_FILES": ("_pointer_scan_files", "specs-project-maintainer/guards.adoc"),
+    # 登记处＝**写口径句的那一处**：这道防线自己那一份行正文（与它的规则数据同层）。
+    # 清单名与"清单只允许一处"的口径句都在那里——指回清单表等于指到一张只剩次序与
+    # 文件名的表，那一跳等于空指。
+    "POINTER_SCAN_FILES": ("_pointer_scan_files",
+                           "script/specs-rules/guards.toml"),
 }
 
 
@@ -2115,7 +2298,7 @@ def _pointer_scan_files():
 
 
 def check_pointer_no_verbatim_guard():
-    """『自称回指的行不得同时复述取值』防线（规则见 `specs-rules/duplicate.toml`）。
+    """『自称回指的行不得同时复述取值』防线（规则见 `specs-rules/duplicate/`）。
 
     `check_duplicate_scan_guard` 的阈值（40）是**下界**，只报"长度极显著"的重合；而"回指句 +
     顺手把取值抄一遍"这种形态的公共子串常只有二十几字（本轮实证：`library/mirrors.adoc` 自称
@@ -2523,7 +2706,7 @@ def check_sql_annotation_binding_guard():
 
     判据本体唯一落点在通用层 `specs/general/sql.adoc`「SQL 写法」的两条 bullet（禁止面 +
     字符串模板例外的四条取值）。故本道核**三处**：
-      * 真源两条 bullet 的要点（规则数据 `script/specs-rules/coding.toml`）；
+      * 真源两条 bullet 的要点（规则数据 `script/specs-rules/coding/`）；
       * **Java 落点**：`specs/stack/java.adoc`「跨语言执行脚本（SQL / Lua 等）」须把 MyBatis
         一侧钉到 `*.xml`、并点名被禁的注解——只写"改走 xml"而不点名禁止面，Java 执行者仍会
         按注解写（MyBatis 官方把注解与 XML 当两种等价承载，不提就默认注解更省事）；
@@ -2534,9 +2717,8 @@ def check_sql_annotation_binding_guard():
     模板」属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("SQL 不得写进宿主语言代码注解防线检查")
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "coding.toml")):
-        err("缺少 script/specs-rules/coding.toml——『SQL 不得写进宿主语言代码注解』的锚点"
+    if not _rules_topic_present("coding"):
+        err("缺少 script/specs-rules/coding/——『SQL 不得写进宿主语言代码注解』的锚点"
             "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2594,9 +2776,7 @@ def check_bundle_size_guard():
     判据本体唯一落点在通用层 `specs/general/coding.adoc`：跨语言那一条在「警告与弃用」
     （体积上限只是**质量哨兵**的一种），本主题在「分发产物的体积与按需加载」整节（含前端
     载体小节与依据行）。故本道核**四处**：
-      * 真源：两节的要点（规则数据 `script/specs-rules/bundle.toml`）——含「派生件与本体
-        同处一个构建步骤、同属一个构建产物」（**用户提出**：dist 与 dist.zip 的绑定不能靠
-        自觉，压缩须落在产出 dist 的那一个构建步骤里、两者同属一个构建产物）；
+      * 真源：两节的要点（规则数据 `script/specs-rules/bundle.toml`）；
       * **技术栈层 `specs/stack/web.adoc`**：只给前端载体（路由定义处、使用点、包清单、
         构型键），且须回指唯一真源——缺则前端那一半只剩口号，或栈层变成第二处真源；
       * **加载门**：调度器须登记该栈文件与它的独立识别特征（打包告警/构建配置）——缺则执行者
@@ -2608,8 +2788,8 @@ def check_bundle_size_guard():
     """
     phase("分发产物的体积与按需加载防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
-    if not os.path.isfile(os.path.join(rules_dir, "bundle.toml")):
-        err("缺少 script/specs-rules/bundle.toml——『分发产物的体积与按需加载』的锚点"
+    if not _rules_topic_present("bundle"):
+        err("缺少 script/specs-rules/bundle——『分发产物的体积与按需加载』的锚点"
             "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2637,7 +2817,7 @@ def check_ui_style_guard():
 
     判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」（任何语言、任何端）。
     故本道核**四处**：
-      * 真源：该节的要点（规则数据 `script/specs-rules/ui.toml` + `_tokens.toml`）；
+      * 真源：该节的要点（规则数据 `script/specs-rules/ui/` + `_tokens.toml`）；
       * **技术栈层 `specs/stack/web.adoc`「界面（载体）」**：只给前端载体（取用入口、唯一落点、
         框架外观与复刻差异的落点），且须回指唯一真源——缺则前端那一半只剩口号，或栈层变成
         第二处真源；
@@ -2650,8 +2830,8 @@ def check_ui_style_guard():
     """
     phase("界面与样式防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
-    if not os.path.isfile(os.path.join(rules_dir, "ui.toml")):
-        err("缺少 script/specs-rules/ui.toml——『界面与样式』的锚点（判据措辞）失去唯一"
+    if not _rules_topic_present("ui"):
+        err("缺少 script/specs-rules/ui——『界面与样式』的锚点（判据措辞）失去唯一"
             "来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2720,8 +2900,8 @@ def check_cache_guard():
     """
     phase("缓存（统一管理、先缓存后在线）防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
-    if not os.path.isfile(os.path.join(rules_dir, "cache.toml")):
-        err("缺少 script/specs-rules/cache.toml——『缓存（统一管理、先缓存后在线）』的锚点"
+    if not _rules_topic_present("cache"):
+        err("缺少 script/specs-rules/cache——『缓存（统一管理、先缓存后在线）』的锚点"
             "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2759,8 +2939,8 @@ def check_ui_performance_guard():
     """
     phase("界面的性能防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
-    if not os.path.isfile(os.path.join(rules_dir, "ui-perf.toml")):
-        err("缺少 script/specs-rules/ui-perf.toml——『界面的性能』的锚点（判据措辞）"
+    if not _rules_topic_present("ui-perf"):
+        err("缺少 script/specs-rules/ui-perf——『界面的性能』的锚点（判据措辞）"
             "失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2809,7 +2989,7 @@ def check_ui_spec_guard():
 
     钉四处：
       * 真源：通用层 `specs/general/ui.adoc` 的全部要点 + 依据行（规则数据
-        `script/specs-rules/ui-spec.toml` + `_tokens.toml` 的 `UI_SPEC_*_ANCHORS`）；
+        `script/specs-rules/ui-spec/` + `_tokens.toml` 的 `UI_SPEC_*_ANCHORS`）；
       * **五份模板**：`specs/general/ui-tokens.adoc`（令牌取值）、`specs/general/ui-targets.adoc`
         （各端框架与参照应用）、`specs/general/ui-styles.adoc`（风格族）、
         `specs/general/ui-voice.adoc`（文案词表）、`specs/general/ui-patterns.adoc`
@@ -2824,8 +3004,8 @@ def check_ui_spec_guard():
     """
     phase("界面与交互（跨端形状、尺度、颜色与交互）防线检查")
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
-    if not os.path.isfile(os.path.join(rules_dir, "ui-spec.toml")):
-        err("缺少 script/specs-rules/ui-spec.toml——『界面与交互』的锚点（判据措辞）失去"
+    if not _rules_topic_present("ui-spec"):
+        err("缺少 script/specs-rules/ui-spec——『界面与交互』的锚点（判据措辞）失去"
             "唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -2851,7 +3031,7 @@ def check_same_thing_one_source_guard():
 
     判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」的「同一件事只有一个
     来源（不限界面，任何语言）」。本道核**四处**：
-      * 真源：该小节要点（规则数据 `script/specs-rules/ui.toml` + `_tokens.toml`）；
+      * 真源：该小节要点（规则数据 `script/specs-rules/ui/` + `_tokens.toml`）；
       * 上一节须指向这一档（处置次序：先界面、再其余），否则两条各自成篇；
       * 栈层只给载体、不另立判据（`specs/stack/web.adoc`「前后端各一份时的契约载体」、
         `specs/stack/java-syntax.adoc`「工具类使用约定」）；
@@ -4591,12 +4771,11 @@ def _path_values(cfg=None):
         return []
     out = []
     for name, origin, desc in PATH_VALUE_SOURCES:
-        getter = {"landing_home_dir": lambda c: c.landing_home_dir,
-                  "landing_app_dir": lambda c: c.landing_app_dir,
-                  "base_url": lambda c: c.base_url,
-                  "tmp_dir": lambda c: c.tmp_dir,
-                  "self_update_suffix": lambda c: c.self_update_suffix,
-                  "self_handoff_suffix": lambda c: c.self_handoff_suffix}.get(name)
+        # 属性名与清单里的键同名：清单说"哪个取值"，读取层的属性名就是它的落地
+        # （逐个手写映射会漏——`[source-management].mode` 这一档当初就没进来，
+        # 于是它在正文里被复述也没人报）。
+        getter = (lambda c, attr=name: getattr(c, attr)) if name in pathconfig.Config.REQUIRED \
+            else None
         if getter is None:
             err(f"规则数据 `PATH_VALUE_SOURCES` 里有一个核不到的键 `{name}`——"
                 "取值清单与读取层的能力须一一对应，否则该取值没有任何抓手",
@@ -4942,9 +5121,8 @@ def check_repeat_call_passthrough_guard():
     phase("长方法的反复调用点防线检查（在本处加透传、跨类重复才上公共落点）")
     # 规则数据侧的步骤自己会报"文件缺失"（判据本体、栈落点、加载门、README 各一步），故先让
     # 规则跑完——本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "coding.toml")):
-        err("缺少 script/specs-rules/coding.toml——『长方法的反复调用点』的锚点（判据措辞）"
+    if not _rules_topic_present("coding"):
+        err("缺少 script/specs-rules/coding/——『长方法的反复调用点』的锚点（判据措辞）"
             "失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -5092,15 +5270,13 @@ def check_install_repeat_update_guard():
 # `specs-project-maintainer/guards.adoc`「记账沿革」**。数值要改时改基线——**改基线这个
 # 动作本身让"删了什么"在 diff 里可见**。
 
-GUARD_WIRING_BASELINE = 184  # 同源实取：`CHECKS` 序列唯一名（184 条，无重复项）。本轮新增 `check_example_not_surface_guard`（用户追问的『举例不是面』方法论：旧值 183）。本轮再 +1：`check_powershell_version_guard`（PowerShell 跨版本防线，用户报告"AI 在 powershell 经常执行出问题"；与 `check_example_not_surface_guard` 同轮，旧值 183）。本轮为**并入 `main` 后的实测值**——两侧各加一道（本分支 `check_dev_flow_guard` 侧不新增、`main` 侧 `check_test_scope_guard` 与 `check_ui_spec_guard`），合并后按 `CHECKS` 一次取齐、不逐侧相加；更早的逐轮沿革（`check_site_link_guard`、`check_source_file_scale_guard`、`check_handoff_durability_guard`、`check_core_digest_guard`、`check_paths_single_source_guard`、`check_test_data_desensitize_guard`、`check_fetch_progress_guard`、`check_windows_window_guard`、`check_degradation_scan_guard`/`check_self_serve_guard`、`check_cache_guard`、`check_changelog_edit_guard`、`check_tmp_layout_guard`）与 `check_clean_tmp_guard` 的删除记账见 `specs-project-maintainer/guards.adoc`「记账沿革」与「已删除的防线」
-
-# 反例用例的记账**不在这里**：按防线分片落在规则数据
-# `script/specs-rules/_guard_test_floor.toml` 的 `[tokens.guard_test_floor]`（一道防线一行）。
-# 早先它是一个全局单值常量（`GUARD_TEST_BASELINE`），每个加反例的改动都要改同一行——
-# 两个并行改动**必然**撞在同一个物理行上（本仓库实证：近 12 次 main 提交 12 次动了那个
-# 常量、其中 5 次是同一行）。分片之后各改各的行，总数由脚本现算，不再有第二真源。
-# 接线数仍是一个数：它只在"新增/删除防线"时变动，而那是独占动作（一道防线一个落点），
-# 且改动同时要动 `CHECKS`、清单表与台账三处，本就不是能并行的活。
+# 接线数**没有第二个数**：`CHECKS` 序列就是它，判据按序列现算（`_guard_wiring_count`）。
+# 早先这里有一个 `GUARD_WIRING_BASELINE` 常量，增删防线时人手改它——同一个数的两处写法，
+# 且那一行是本仓库最常被并行改动碰到的地方（近三十次合入里几乎每次都要动它）。
+#
+# 反例用例的类数**不记账**：那个数由测试类名现数（`_guard_test_classes`）。早先它是全局单值
+# 常量（`GUARD_TEST_BASELINE`，每个加反例的改动都要改同一行），后来按主题分片到规则数据——
+# 两次都还是"把可现算的数抄一份"：抄的那份与代码各改一个数时，判据照样全绿。
 GUARD_EMPTY_TEST_NAMES = set()
 
 
@@ -5139,8 +5315,8 @@ LEDGER_GRIP_DECLARED_GUARD = re.compile(r"`(check_[a-z0-9_]+_guard)`")
 NO_GRIP_DECLARED = _read_ledger_no_grip_declared()
 
 
-# 头部检查项清单的**规范编号形态**：单空格缩进 + 纯数字序号 + `. `。
-# 之所以把形态写死：断号/重号/乱序三条判据都以"取到号"为前提，凡取不到号的条目行
+# 脚本头部的**检查项清单**里每一条的规范编号形态：` 序号. ` 起头（单空格缩进）。
+# 之所以把形态写死：断号/重号/乱序三条判据都以"取到号"为前提，凡取不到号的条目
 # 都成了判据的盲区（本仓库实证：` 31b.` + 5 格缩进的条目被三条判据全部放行）。
 CHECKLIST_ITEM_RE = re.compile(r"^ (\d+)\. ")
 # "看着像清单条目"的宽松形态：缩进若干格 + 数字/数字带后缀 + `. `——用来把"写不成
@@ -5475,22 +5651,31 @@ def _guard_of_test_class(cls: str) -> str | None:
     return "check_" + snake
 
 
-def _guard_test_floor():
-    """取规则数据里的反例用例记账分片表（`{防线名: 类数}`）；读不到返回 `{}`。"""
-    floor = _RULES_TOKENS.get(GUARD_TEST_FLOOR_TOKEN)
-    return floor if isinstance(floor, dict) else {}
+def _guard_test_floors():
+    """取**现场**的反例用例类数（`{防线名: 类数}`）——这道数没有别处记，也不该有。
+
+    早先它是一张手写的记账表（先是全局单值常量 `GUARD_TEST_BASELINE`、后来按主题分片到
+    规则数据）：两者记的都是**同一个可由代码数出来的数**——测试类名已经把"这道防线有
+    几个反例类"写在代码里（`TestCheckXGuard` → `check_x_guard`），再抄一份到规则数据，
+    抄的那份就成了第二来源：两边各改一个数时判据照样全绿（本仓库点名的"基线是许可"）。
+
+    于是这一格**不做**：数由现算，防线的增减看**自己那一份行正文在不在**
+    （`<防线名>.adoc` 与它的规则数据同层同名：删防线会留下尸块、加防线
+    会缺自己那一份，两个方向都当场报红）——那是"这份文件在不在"，靠目录就能判，不必记账。
+    """
+    src_of = lambda rel: _read_script_src(rel) or ""
+    return {g: len(c) for g, c in _guard_test_classes(src_of=src_of).items()}
 
 
 def _manifest_baseline_refs():
     """取**逐轮记账**里引用的接线数（`specs-project-maintainer/ledger/` 的全部轮次文件）。
 
-    返回 `(引用值, 用例数引用值, 引用值)`：第一项与第三项都是"记账里出现过的最大接线数"
-    （两个槽位是为既有调用方保留的形状，不承载不同口径）；**取不到时返回 `None`**
-    （`ledger/` 与 `guards.adoc` 都缺失时由 `check_guard_order_guard` 报红）。
+    返回记账里出现过的**最大**接线数；**取不到时返回 `None`**。记账是一轮一个文件，
+    多个并行轮次各记自己那一行，接线数只增不减，故现值一定是最大者。
 
-    为什么需要它：逐轮记账逐行以 `a → **b**` 记该轮结束时的接线数，而那是
-    `GUARD_WIRING_BASELINE` 的**第二份写法**——常量改了而记账没改（或反过来）时，
-    基线的核对全部照常通过，读者按记账核到的数指向别处。
+    为什么需要它：逐轮记账逐行以 `a → **b**` 记该轮结束时的接线数；那是**当时的记录**，
+    不是"某个常量的第二份写法"——故这里只取它回来核一个方向：**不得高于现值**（现值由
+    `CHECKS` 序列现算）。记了一个还不存在的数，说明有防线被当真了却没进序列。
 
     落点是 `ledger/` 目录（一轮一个文件）**而不是 `guards.adoc` 里的同一张表**：
     每轮往同一张表的同一位置插行，两个并行改动必然撞在同一行上——这正是本轮从
@@ -5520,8 +5705,7 @@ def _manifest_baseline_refs():
                 rows.append(int(m.group(1)))
     if not rows:
         return None
-    wiring = max(rows)
-    return wiring, None, wiring
+    return max(rows)
 
 
 def _newest_changelog_wiring_ref():
@@ -5576,16 +5760,19 @@ def check_guard_manifest():
     # 另一处静默漏扫，而防线全绿。
     run_rule_guard("check_guard_manifest")
 
+    # 规则数据的**装配期**核对：清单写两处、清单裸写在 `tokens` 之外——两种都让
+    # "文件在、内容在、判据却读不到"。判据本体在 `_assembly_conflicts` 的文档头里。
+    for msg in _assembly_conflicts(_rules_spec()):
+        err(msg, "script/specs-rules")
+
+    # 接线数**不再另记一个数**：`CHECKS` 序列本身就是要记账的那一份，而"只许增"属
+    # 独占落点上的判定标准③（条目里手写着由别处现算即可得到的数目）。原先这里有一个
+    # `GUARD_WIRING_BASELINE` 常量（已删），增删防线时人手改它——它与 `CHECKS` 是同一个数的两处
+    # 写法，且那一行是本仓库最常被并行改动碰到的地方。删防线的可见性改由两处承担：
+    #   ① 清单表是 `CHECKS` 的投影（整段现算），删一道就少一行，diff 里必然可见；
+    #   ② 反例记账表按防线名分片：删防线时它那一格成为"多出来的分片"，当场报红。
     wiring = _guard_wiring_count(src)
-    if wiring < GUARD_WIRING_BASELINE:
-        err(f"防线接线数从基线 {GUARD_WIRING_BASELINE} 减到 {wiring}——**每摘掉一道防线都要留下"
-            f"记账**：说明「删的是哪一道、为什么删、由谁承接」，并同步 `guards.adoc` 的"
-            "「已删除的防线（删除记账，按次序留档）」与 `GUARD_WIRING_BASELINE`。"
-            "**判据不以「改了基线」为凭**——基线是**下限、不是许可**：改了基线只让删除在 "
-            "diff 里可见，删得对不对由「已删除的防线」那条账核对（删的是哪一道、由谁承接）。"
-            "不记账就减数＝防线静默消失（本仓库实测：一道防线被摘出执行序列后，脚本与"
-            "全部单测仍全绿）",
-            "script/check_specs.py")
+    log(f"  防线接线数：{wiring}（`CHECKS` 序列唯一名，按序列现算）")
 
     # **重复登记**：同一道防线在序列里出现两次以上——重复项不承载任何新判据，
     # 却能把接线数凑够、掩盖"真防线被删掉一道"（删掉的那道由重复项顶上，条数不掉）。
@@ -5599,62 +5786,19 @@ def check_guard_manifest():
         err(f"`CHECKS` 序列里出现**重复登记的防线** {dup_names}——重复项不承载任何新判据"
             "（同一道防线跑两遍，规则还按阶段去重、第二次直接跳过），**不计入唯一防线数**；"
             "它会把条数凑够、掩盖\u201c真防线被删掉一道\u201d。"
-            "**改基线不算记账**——重复项不构成一道防线，把 `GUARD_WIRING_BASELINE` 改成"
-            "含重复项的值只会把这条掩盖固化下来。请删掉重复项本身，并在 "
+            "**重复项不构成一道防线**——它只会把条数凑够、把\u201c真防线被删掉一道\u201d"
+            "掩盖起来。请删掉重复项本身，并在 "
             "`specs-project-maintainer/guards.adoc` 清单表里同步删掉对应的重复行"
             "（清单表的重复行由 `check_guard_order_guard` 的逐一同序核对报出）",
             "script/check_specs.py")
 
-    # 反例用例的记账：**按防线分片**核（一道防线一行，见规则数据
-    # `_guard_test_floor.toml`）。核的是"钉住这道防线的 `TestCase` **类**还在不在"，
-    # 不是"用例总条数够不够"——总条数是一个全局单值：同文件内删一条加一条（甚至改名、
-    # 把一条掏空成空壳）都能维持它，而**并行改动各加自己的反例**又必然要改它那一行。
-    # 分片之后：增删哪道防线的反例只动自己那一行，且**加减都报**（旧基线只拦"减"，
-    # 于是"新增时没登记"这一格从来没人核）。
-    # **测试类名按现场现读、不吃缓存**：`_read_script_src` 的缓存键是"仓库根相对路径"，
-    # 夹具换根后同一个键会命中上一轮（甚至现场仓库）的那一份——那样"减到/增到"两条判据
-    # 核的是一批与夹具无关的类名，反例静默全绿。故这里显式传一个**每次现读**的读者
-    # （同 `check_guard_order_guard` 的处置口径）。
-    def _fresh_src(rel: str) -> str:
-        try:
-            with open(os.path.join(REPO_ROOT, *rel.split("/")), encoding="utf-8") as fh:
-                return fh.read()
-        except OSError:
-            return ""
-
-    class_cnt = _guard_test_classes(src_of=_fresh_src)
-    floor = _guard_test_floor()
-    if not floor:
-        err(f"规则数据里取不到反例用例记账表 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]`"
-            "（`script/specs-rules/_guard_test_floor.toml`）——这张表是「删防线时连带删掉"
-            "它的反例」唯一的记账处，取不到时整道判据空转，而脚本照样报绿",
-            "script/specs-rules/_guard_test_floor.toml")
-    else:
-        for guard in sorted(set(seq_names) | set(floor)):
-            have = len(class_cnt.get(guard, ()))
-            want = floor.get(guard)
-            if want is None:
-                err(f"防线 `{guard}` 在 `CHECKS` 序列里、却**没有登记**反例用例记账行——"
-                    "新增一道防线时须在 `script/specs-rules/_guard_test_floor.toml` 的 "
-                    f"`[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里补一行（值为钉住它的 `TestCase` "
-                    "类数，没有就写 0）。不登记时这道防线的反例此后**不受任何数量判据保护**",
-                    "script/specs-rules/_guard_test_floor.toml")
-            elif have < want:
-                err(f"防线 `{guard}` 的反例用例类从 {want} 减到 {have}——**反例是防线的实际"
-                    "效力来源**（删一道防线时常连它的反例一起删，而脚本与单测仍全绿）。"
-                    "确实要删就得说明删了哪些、为什么删，并把这一行改小（改这一行这个动作"
-                    "本身让「删了什么」在 diff 里可见）",
-                    "script/specs-rules/_guard_test_floor.toml")
-            elif have > want:
-                err(f"防线 `{guard}` 的反例用例类从 {want} 增到 {have}——**新加的反例要当场"
-                    "记账**：不改这一行时，此后删掉这批反例不会有任何判据发声（旧基线只拦"
-                    f"「减」，这一格从来没人核）。请把 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里"
-                    f"`{guard}` 这一行改成 {have}",
-                    "script/specs-rules/_guard_test_floor.toml")
-            elif want and guard not in class_cnt:
-                err(f"防线 `{guard}` 的记账行还写着 {want}，而现场已经找不到钉住它的测试类——"
-                    "两道防线的测试类命名对不上时，这一行会**永远报绿**（核的是一个不存在的名字）",
-                    "script/specs-rules/_guard_test_floor.toml")
+    # 反例用例的**类数不记账**：这个数由代码自己数得出来（测试类名已把"钉住哪道防线"
+    # 写在名字上），再抄一份到规则数据就是同一个数的第二处写法——两边各改一个数时判据
+    # 照样全绿（本仓库点名的"基线是许可"）。删防线时连它的反例一起删，这件事的可见性
+    # 由**落点本身**承担：它旁边那份 `<防线名>.adoc` 少一份、`CHECKS` 少一行，diff
+    # 里必然看得见（`specs/general/coding.adoc`「不做：清单、编号、总数之外的第三类」）。
+    # 这里只留一处**不靠记账**的核对：每道防线都得真的有一套钉住它的用例（判据见
+    # `_guard_test_classes` 的说明；数不出来就是 0，没有"期望值"可对）。
 
     # "定义了但没人调"的防线：看起来还在（函数体完好、台账也点了名），但永远不会执行。
     # 判据按**接线闭包**算（与 `check_wiring_guard` 同口径）——被别的防线带着跑的不算
@@ -5691,7 +5835,7 @@ def check_guard_manifest():
                         "总数基线只保证用例数不减少，同文件内删一条加一条（或把用例掏空成"
                         "空壳）都能维持该数；被抽空的反例用例仍会被收集、仍占着那个数，"
                         "却什么都证不了。要么把断言补回去，要么说明删了哪条、为什么删"
-                        f"（并同步 `[tokens.{GUARD_TEST_FLOOR_TOKEN}]` 里这道防线那一行）",
+                        "（这一条只靠现场核，不靠记账）",
                         f"script/{fn}")
 
     # 同名的模块级测试类**只认最后一份**：`class` 语句在模块级按名绑定，后一份把前一份
@@ -5799,70 +5943,38 @@ def check_guard_manifest():
                 "它看起来还在、却永远不会执行；台账与接线两处必须同口径",
                 "script/check_effective.py")
 
-    # **逐轮记账自己引用的接线数**：`specs-project-maintainer/ledger/` 的各轮文件
-    # 逐行引用 `GUARD_WIRING_BASELINE`，而那是**手写的数**——
-    # 本轮实测：把两个常量各改一个数（`1793 → 1800`）、旧轮次行里引用的数一并改掉，
-    # 脚本与本表都**全绿**（本表自身的引用值与"本轮新增了哪几道"没有任何核对）。
-    # 口径与既有的基线核对同源：**数要改就改常量，引用处随之**；改不成就报红、逼人核对。
-    manifest_test = _manifest_baseline_refs()
-    if manifest_test is not None:
-        ref_wiring, ref_test, last_row = manifest_test
-        wiring_now = _guard_wiring_count(_read_script_src("script/check_specs.py") or "")
-        # **只在本轮确实抬了基线时核「本表引用的现值」**：`CHANGELOG.adoc` 的默认动作是
-        # 「不新增、不修改」，没写条目时本表引用的仍是**上一轮**的现值（低于当前常量属正常，
-        # 本仓库实证：新增一道防线而没写条目，本表末行仍记 `x → **y**`）。
-        # 判据因此分两条且只看一个方向：① 引用的值**高于**当前常量即错（记了一个还不存在的数）；
-        # ② 接线数等于常量（说明基线抬到与实取一致）时引用须**逐字跟上**——否则同一数值
-        # 两处各写一份、两处都能改（本仓库实测：两处各改一个数，脚本与本表**都全绿**）。
-        if ref_wiring is not None and ref_wiring > GUARD_WIRING_BASELINE:
-            err(f"specs-project-maintainer/ledger/ 的逐轮记账引用接线数 "
-                f"{ref_wiring}，**高于** `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）——"
-                "记了一个当前还不存在的数；同一数值两处各写一份即第二真源，数要改就改常量",
-                "specs-project-maintainer/ledger")
-        elif ref_wiring is not None and wiring_now == GUARD_WIRING_BASELINE \
-                and ref_wiring != GUARD_WIRING_BASELINE:
-            err(f"specs-project-maintainer/ledger/ 的逐轮记账引用接线数 "
-                f"{ref_wiring}，而 `GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——"
-                "同一数值两处各写一份即第二真源（本仓库实测：两处各改一个数，脚本与本表"
-                "**都全绿**）。数要改就改常量、引用处随之",
-                "specs-project-maintainer/ledger")
-        # 用例数引用**不再核**：反例的记账已从"全局单值"改成按防线分片（见
-        # `[tokens.guard_test_floor]`），沿革行里的 `用例数 a → b` 只是**当时的记录**、
-        # 不再是"某个常量的第二份写法"——再按等值核它，等于让那个单值在半路上复活。
-    # **变更日志新版条目**里也记了这一轮的接线数（形如 `防线接线基线 139 → **142**`）——
-    # 同一数值的第三处写法，同样须与常量一致（本仓库实测：条目里的数改了、脚本与本表
-    # 都全绿，因为两处都没核）。只在**版本号最大的那条**里核：旧条目记的是**当时**的
-    # 基线，按定义不得改写（`specs/general/changelog.adoc`）；核的是箭头**右侧**（＝当时
-    # 抬到的常量值，`_newest_changelog_wiring_ref`），右侧与常量一致即该条记的取值对。
-    if manifest_test is not None:
-        newest = _newest_changelog_wiring_ref()
-        # **只在最新条目记的取值不低于常量时核**：`CHANGELOG.adoc` 的默认动作是「不新增、
-        # 不修改」（`AGENTS.adoc`「版本与变更记录」），故"本轮没写条目"是合法状态——
-        # 此时最新条目记的是**某一轮当时**的基线、低于现值属正常，不得据此报红
-        # （本仓库实证：新增一道防线而不写条目，最新条目仍记着上一轮的 `144 → **145**`，
-        # 按"必须等值"核即误报）。条目记的取值若**高于**常量，说明写进了一个当时还不存在的
-        # 数（条目按定义写在抬基线之后），这才是必须拦下的形态；等于常量时须逐字一致。
-        if newest is not None and newest > GUARD_WIRING_BASELINE:
-            err(f"CHANGELOG.adoc 新版条目里记的防线接线基线是 {newest}、而 "
-                f"`GUARD_WIRING_BASELINE` 是 {GUARD_WIRING_BASELINE}——条目写的数**高于**"
-                "当前常量，即记了一个抬基线时还不存在的值（同一数值第三处写法）。"
-                "旧条目记的是**当时**的基线（按定义不得改写），故只在版本号最大的那条里核；"
-                "数要改就改常量、条目随之", "CHANGELOG.adoc")
-    if manifest_test is not None:
-        ref_wiring, ref_test, last_row = manifest_test
-        if ref_wiring is not None and last_row is not None and last_row < ref_wiring:
-            err(f"specs-project-maintainer/ledger/ 的逐轮记账里最大的接线数是 {last_row}、"
-                f"低于 `GUARD_WIRING_BASELINE`（{GUARD_WIRING_BASELINE}）"
-                "——**本轮新增了哪几道防线**这一行是「防线的增删必须留下痕迹」唯一的记账处，"
-                "低报说明有新增的防线没进这一列（本仓库实测：删掉两道新防线后，"
-                "本表与脚本一样全绿，因为两处都没核）",
-                "specs-project-maintainer/ledger")
+    # **逐轮记账自己引用的接线数**：`specs-project-maintainer/ledger/` 的各轮文件逐行以
+    # `a → **b**` 记该轮结束时的接线数。**现值只从 `CHECKS` 序列现算**——记账行是**当时**
+    # 的记录、不是"某个常量的第二份写法"，故这里只核一个方向：记的**高于**现值即错
+    # （记了一个还不存在的数）。原先两侧都拿一个手写常量比对，于是数与常量各写一份、
+    # 两处都能改（本仓库实测：两处各改一个数，脚本与本表都全绿）。
+    wiring_now = _guard_wiring_count(_read_script_src("script/check_specs.py") or "")
+    ledger_refs = _manifest_baseline_refs()
+    if ledger_refs is not None and ledger_refs > wiring_now:
+        err(f"specs-project-maintainer/ledger/ 的逐轮记账引用接线数 {ledger_refs}，"
+            f"**高于** `CHECKS` 序列现算的 {wiring_now}——记了一个当前还不存在的数"
+            "（记账行记的是当时的值，但不得高于现值：那说明有一道防线被当真了却没在序列里）",
+            "specs-project-maintainer/ledger")
+    # **变更日志新版条目**里也记了这一轮的接线数（形如 `防线接线基线 139 → **142**`）：
+    # 同一数值的第三处写法，同样只核"不高于现值"。旧条目记的是**当时**的基线，按定义
+    # 不得改写（`specs/general/changelog.adoc`），故只看版本号最大的那条。
+    newest = _newest_changelog_wiring_ref()
+    if newest is not None and newest > wiring_now:
+        err(f"CHANGELOG.adoc 新版条目里记的防线接线基线是 {newest}、而 `CHECKS` 序列现算是 "
+            f"{wiring_now}——条目写的数**高于**现值，即记了一个当时还不存在的值",
+            "CHANGELOG.adoc")
 
     # 脚本头部清单的编号：出现断号即说明有条目被整条删掉；出现**重号**即说明重排编号时
     # 把两条并成了同一个号（后者曾漏报：只核"有没有断号"时，重号与连通的两段编号都过）。
     # 头部 = 从文件开头到第一段可执行 import（夹具里可能没有，取不到就不核这一段）。
     cut = src.find("\nimport ")
     header = src[:cut] if cut >= 0 else src
+    # 清单收尾在「清单一到此为止」那一句：其后的 ` NN. ` 是逐项说明里的展开，不是索引条目。
+    # 不切这一刀时，两处同号会被读成**重号**、两段次序会被读成**乱序**（本轮实测）——
+    # 判据于是对"新加一条说明"报出两条假红，而真问题是它自己没分清清单与展开。
+    stop = header.find("**清单一到此为止**")
+    if stop > 0:
+        header = header[:stop]
     # **编号的"形态"也要核**：只认 `^ (\d+)[a-z]?\. ` 时，凡不符合该形态的条目行都
     # **不参与**断号/重号/乱序三条判据——本轮实测：清单里一条真条目被写成 ` 31b.`（后缀
     # 不在 `[a-z]` 单一字母的形态里，且缩进 5 格），三条判据对它**全部失效**，它于是既是
@@ -7353,7 +7465,7 @@ def check_local_only_guard():
     **替不替得动**（能不能只靠本机）；`specs/general/ci-cd.adoc`「运行环境须与项目声明一致」
     管版本与工具，本条**不放宽**它。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
     的 `LOCAL_ONLY_TOKENS`）；"某条用例到底连没连远端""某个地址算不算本机"属运行时事实与
     语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7518,7 +7630,7 @@ def check_lightest_path_guard():
     范围），本条定「每项怎么验」（手法）。缺它时条文都齐、执行照旧整包打包——只多付一次重流程，
     换不来任何新判据。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（改措辞不动脚本）；
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（改措辞不动脚本）；
     「某处算不算更轻、轻手段本机可不可行」属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），
     交人/子 agent 复核。
     """
@@ -7537,7 +7649,7 @@ def check_no_desktop_takeover_guard():
     与「最轻路径」同向但是另一件事：那条管手法轻重，本条管**别打扰正在用这台机器的人**
     （切前台/动鼠标键盘抢焦点、整屏图把用户桌面一并拍下来）。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
     的 `NO_DESKTOP_TAKEOVER_TOKENS`）；"这一处能不能离屏取到、某次是不是真抢了焦点"
     属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7554,7 +7666,7 @@ def check_windows_window_guard():
     不同：那条给通用取值（判据怎么取），本条给 **Windows 上的取值形态**（窗口该不该出现在
     用户眼前），故不属双份真源。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
     的 `WINDOWS_WINDOW_TOKENS`）；"某次启动到底有没有把窗口摆到前台、隐藏启动在本机这个
     版本上可不可行"属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7562,6 +7674,27 @@ def check_windows_window_guard():
     run_rule_guard("check_windows_window_guard")
     phase_done()
 
+
+def check_run_artifact_guard():
+    """『要跑的那一份须是本次产出的那一份』防线：跑起来的到底是什么。
+
+    用户提出：**取值（唯一来源）那条指的是配置这一类，测试取值没说**——而且取值就算对了也
+    没用：**触发 exe 的唯一实例规则时，取到的那一份根本起不来**、参数被交给既有实例，
+    **启动的是老实例**，除非让测试实例把唯一实例原则停用。
+
+    判据分两处、各管一面（不属双份真源）：`specs/general/verify.adoc`「编译/运行验证」管
+    **对象身份怎么核**（按本次产出绝对路径启动、核进程映像路径、已有实例挡路时不得拿它的
+    画面当结果）；`specs/stack/windows.adoc`「要跑的那一份须是本次构建的那一份」管
+    **Windows 上的取值形态**（绕过快捷方式/注册表，单实例挡路时先退掉既有实例、或让唯一实例
+    标识取自运行期可给的值、或改从不需要唯一实例的入口取判据）。
+
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
+    的 `RUN_ARTIFACT_TOKENS` / `RUN_ARTIFACT_WINDOWS_TOKENS`）；"这次启动的到底是哪一份、
+    单实例有没有把启动交给既有实例"属运行时事实（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("要跑的那一份须是本次产出的那一份防线检查（启动的是老实例）")
+    run_rule_guard("check_run_artifact_guard")
+    phase_done()
 
 def check_reusable_scenario_guard():
     """『要复用的验证场景归入测试源码』防线：验法本身是留还是扔。
@@ -7572,7 +7705,7 @@ def check_reusable_scenario_guard():
     与相邻两条分工：`check_lightest_path_guard` 管**每项怎么验**（手法轻重）、
     「按需验证、不滥验证」管**次数与范围**、本条管**验证场景的归属**（持久落点在哪）。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
     的 `REUSABLE_SCENARIO_TOKENS`）；"这个场景以后还要不要再验一次"属语义判断
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7592,7 +7725,7 @@ def check_test_scope_guard():
     不滥验证」管**次数**、本条管**范围**（这次跑哪几条）；基线侧不另立第二套判据，取法回指
     `specs/general/planning.adoc`「动手前先定基线」。测试侧只留一句载体：用例须能按落点选取。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/verify.toml`（清单在 `_tokens.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/verify/`（清单在 `_tokens.toml`
     的 `TEST_SCOPE_TOKENS`）；"这次改动到底牵连了哪些用例""某条用例算不算被波及"属语义判断
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7613,7 +7746,7 @@ def check_tmp_layout_guard():
     「临时产物」上面那几条管**落在哪、要不要清理、什么地方不能用临时产物**，本条只管
     **`tmp/` 内部怎么排布**（一级分类、任务目录命名、进度与规划分家、副本与产出分家、分档只改形态）。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`（`check_tmp_layout_guard`；
+    **规则数据**：锚点与核对面在 `script/specs-rules/execution/`（`check_tmp_layout_guard`；
     含提示词公共片段侧同口径一条）；"这次任务把文件放对了没""某份文件算不算产出"属运行时
     事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -7632,7 +7765,7 @@ def check_handoff_durability_guard():
     判据是不用打开任何文件就知道该不该接着做）；本条管**索引自己也易失之后靠什么接上**——
     派发对象的钉定、被否掉的方案、已核实事实连同核实方式，须按归属进持久落点。
 
-    **规则数据**：锚点与核对面在 `script/specs-rules/execution.toml`
+    **规则数据**：锚点与核对面在 `script/specs-rules/execution/`
     （`check_handoff_durability_guard`）；"这次任务把索引行写对了没""某份结论算不算不可重建"
     属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -8883,13 +9016,165 @@ def check_performance_guard():
     phase_done()
 
 
-# 防线清单表（`specs-project-maintainer/guards.adoc`）里每行的形态：`| 序号 | \`防线名\` | 用途 |`
-GUARDS_MANIFEST_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*`(check_[a-z0-9_]+)`\s*\|", re.M)
+# 防线清单表（`specs-project-maintainer/guards.adoc`）里**给读者看的**行形态：
+# `| <次序> | `防线名` | include::<落点>/<防线名>.adoc[]`。
+# **没有序号列**：次序由行在表里的位置表达（表逐行按 `CHECKS` 排开），写着数字就是第二份
+# 次序（插入一道防线，其后每一行的数字都得跟着改）。「谁在用」也不在表里：调用关系由
+# 函数体现在算，复制进表里即同一份事实的第二处写法。
+GUARDS_MANIFEST_ROW = re.compile(r"^\|[^|\n]*\|\s*`(check_[a-z0-9_]+)`\s*\|", re.M)
 
 
-# `guards.adoc`「检查项编号」表的行（`| 序号 | 检查项或所属防线`）：序号是纯数字、第二列是
-# **检查项名**而不是防线名（与上面的清单表区分开，两张表的行形态不同）。
 GUARDS_NUMBERING_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*[^`|]", re.M)
+
+
+# 判据写在脚本里（没有自己的规则文件）的那些防线的**哨兵文件**：只是一串名字，好让
+# "一道防线一份行正文"对两种形态都成立（名字旁边就是它的 `<防线名>.adoc`）。
+GUARD_SCRIPTS_FILE = "guard-scripts.toml"
+
+# 清单表登记面（`script/specs-rules/guards.toml`）：谁在这个面上，谁的行就由判据生成。
+GUARDS_REGISTRY_STEP = "check_guard_manifest"
+
+
+def _registry_owner_steps():
+    """取全部 `registry_owner` 声明（`[(防线名, 步骤), …]`）——登记面自己由哪段规则数据声明。
+
+    防线名不进脚本：**声明面在规则数据里**，脚本只按它现算行（"哪道防线占一行"这件事
+    改了不该改 `.py`，见 `specs/general/script.adoc`「规则与脚本的隔离」）。
+    """
+    rules = RULES
+    if rules is None:
+        return []
+    return [(name, step)
+            for name, steps in rules.all_steps().items()
+            for step in (steps if isinstance(steps, list) else ())
+            if isinstance(step, dict) and step.get("registry_owner")]
+
+
+def _manifest_dir(step) -> str:
+    """登记面的行正文落点目录（相对仓库根）；`dir_from_config` 给**键**，取值只从配置来。"""
+    key = step.get("dir_from_config") or ""
+    cfg = _PATHCFG
+    if cfg is None or not key:
+        return ""
+    try:
+        rel = cfg.value(key)
+    except pathconfig.ConfigError:
+        return ""
+    # 相对**维护方规范目录**：那一层是"维护方规范放哪"的取值，不在这里再写一遍。
+    return os.path.join(
+        os.path.relpath(PROJECT_SPECS_DIR, REPO_ROOT).replace(os.sep, "/"), rel)
+
+
+def _manifest_entries() -> dict:
+    """**现算**登记面里每道防线的那一行（防线名 → 落点），不读任何手写清单。
+
+    「谁在表里占一行」只由 `CHECKS` 序列定（它就是次序的唯一来源，表是它的投影）。次序
+    **不写成数字**：位置本身就是次序，写成数字就是第二份次序。因而这里也不现算序号——
+    没有序号这一格，就没有"插入一项要连带改其后各条"这件事（`specs/general/coding.adoc`
+    「文件的角色」的「编号：能靠结构表达的，不写进内容」）。
+    """
+    owners = _registry_owner_steps()
+    if not owners:
+        return {}
+    step = owners[0][1]
+    seq = _guard_wiring_names(_read_script_src("script/check_specs.py") or "")
+    return {name: {"step": step} for name in dict.fromkeys(seq)}
+
+
+def _manifest_body_follows(step) -> bool:
+    """行正文是否**跟着规则数据走**（`body_sibling`）：`.adoc` 与 `.toml` 同层、同名。
+
+    这一档是「目录即约定」的落地：一道防线的判据在 `…/guards/<防线名>.toml`，它那一格
+    正文就在旁边的 `<防线名>.adoc`——两边靠**同层同名**互相看见，谁都不必维护对照表，
+    新增一道防线也不必往别处登记（把两个文件放进同一层就完了）。
+    """
+    return bool(step.get("body_sibling"))
+
+
+def _guard_scripts_declared(path: str) -> set:
+    """读哨兵文件里那串防线名（`script/specs-rules/guard-scripts.toml`）。
+
+    形状刻意最简：`guards = { check_a = [], check_b = [] }`——值一律是空数组，这个文件
+    **不承载任何判据**，只回答"这道防线的行正文挨着谁"。用空数组而不是字符串，是为了让
+    它与规则数据的表形态同构（`rules_engine` 不必为它加新的解析分支）。
+    """
+    try:
+        data = rules_engine.load_rules(path)
+    except rules_engine.RulesError:
+        return set()
+    return {n for n in (data.get("guards") or {}) if n.startswith("check_")}
+
+
+def _manifest_body_files() -> dict:
+    """按 `body_sibling` 现算出每道防线的行正文落点：`{防线名: 仓库根相对路径}`。
+
+    **规则文件从加载面现取**（`load_rule_specs` 扫目录得来），不拿防线名去拼路径：防线落在
+    哪个主题下由它自己那一份 `.toml` 决定，拼路径等于在脚本里再记一遍主题归属。
+
+    两种形态都成立"一道防线一份"：
+
+    * 判据写在规则数据里的防线——`<防线名>.toml` 收起 `[[guards.<防线名>]]`，旁边就是
+      `<防线名>.adoc`；
+    * 判据写在脚本里的防线（本仓库多数是这一形态：函数体就是判据）——登记在**哨兵文件**
+      `guard-scripts.toml`（只是一串名字，按目录扫描收起，不必谁去登记它），旁边是它们
+      各自的 `<防线名>.adoc`。
+    """
+    out = {}
+    try:
+        paths = rules_engine.load_rule_specs(_rules_spec())
+    except rules_engine.RulesError:
+        return out
+    for path in paths:
+        names = set(rules_engine.load_rules(path).get("guards") or {})
+        if os.path.basename(path) == GUARD_SCRIPTS_FILE:
+            names |= _guard_scripts_declared(path)
+        if not names:
+            continue
+        for name in names:
+            out.setdefault(name, _rel_of(os.path.join(os.path.dirname(path), name + ".adoc")))
+    return out
+
+
+# 表里「次序」那一格的值：不写数字，写它从哪来（次序的唯一来源点名）。
+MANIFEST_ORDER_CELL = "按 `CHECKS` 序列：这一行的位置就是次序"
+
+
+def _manifest_row_render(name: str) -> str:
+    """拼出清单表里的那一行（三个格子都在这一处拼，别处不再各拼一遍）。
+
+    正文那一格是 `include::` 回指到**标记文件**：一道防线一份（`<防线名>.adoc`），它旁边
+    就是这道防线的规则数据。清单表**不复制正文**——复制进表里就是同一段话的第二处写法。
+    标记文件是零字节的，故这一格写的是它的**位置**（读者顺着它找到那道防线的那一份）。
+    """
+    rel = _manifest_body_files().get(name)
+    where = f"`{rel}`" if rel else "（没有行正文）"
+    return f"| {MANIFEST_ORDER_CELL} | `{name}` | {where}"
+
+
+def _manifest_rows() -> list:
+    """按 `CHECKS` 序列现算整张表（表头之后逐行的正文），供生成与核对**共用**。
+
+    返回值就是 `specs-project-maintainer/guards.adoc` 表体里该有的那几行：次序与防线名
+    都来自 `CHECKS`，行正文只有一句 `include::` 回指到它自己那一份——所以"表里有什么"
+    与"判据认什么"不可能给出两个答案（`--write-guards-table` 写的就是它）。
+    """
+    entries = _manifest_entries()
+    if not entries:
+        return []
+    return [_manifest_row_render(name) for name in entries]
+
+
+def _manifest_registry_rows(manifest: str) -> list:
+    """把 `guards.adoc` 里的清单表**装配**成防线名列表（按文件里逐行的次序）。
+
+    表体默认是**生成物**（与 `_manifest_rows()` 一模一样）；但读者按行序核次序，故这里读
+    的是**文件里那一串**——表被人手改过（抄第二遍、整行删掉）时，先由次序对账报出"哪一处
+    起不一致"，`_manifest_table_drift` 再补一句"表体不是现算的那一份"。
+    """
+    m = re.search(r"(?ms)^== 执行次序与用途.*?(?=^== |\Z)", manifest)
+    if m is None:
+        return []
+    return GUARDS_MANIFEST_ROW.findall(m.group(0))
 
 
 # 调度器里**允许出现的细节类型**：文件路径引用、加载触发特征（可判读的识别特征）、以及
@@ -8897,6 +9182,16 @@ GUARDS_NUMBERING_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*[^`|]", re.M)
 # 那会让调度器成为上游落点（`specs/general/terminology.adoc`「数据字典」的「反膨胀」：
 # 上游落点不得因收录下游细节而显著变大），且与 §数据字典「只引名称」相抵。
 DISPATCHER_DETAIL_MARKERS = _RULES_TOKENS["DISPATCHER_DETAIL_MARKERS"]
+
+# 『并行改动的独占落点』两道防线（`check_git_attributes_merge_guard` /
+# `check_ledger_table_generated_guard`）的取值：锚点清单在规则数据里（唯一真源），
+# 这里只取用；清单内容不在此复述（复述即第二份，改一处必漏另一处）。
+GIT_ATTRIBUTES_MERGE_TOKENS = _RULES_TOKENS["GIT_ATTRIBUTES_MERGE_TOKENS"]
+GIT_ATTRIBUTES_MERGE_PATHS = _RULES_TOKENS["GIT_ATTRIBUTES_MERGE_PATHS"]
+CATALOG_LEDGER_TOKENS = _RULES_TOKENS["CATALOG_LEDGER_TOKENS"]
+# 生成器与它的登记表（生成器那一侧也读同一份登记表：清单只有一处）
+GEN_DERIVED_REL = "script/gen_derived.py"
+CATALOG_RULES_REL = "script/specs-rules/ledger.toml"
 
 
 def check_dispatcher_no_details_guard():
@@ -8943,7 +9238,7 @@ def check_dispatcher_no_details_guard():
         log("  调度器条目形态合规：只登记文件与触发特征，未抄条目细节")
     # 细节词只能拦"判定标准/任一命中"这类**措辞标记**，拦不住把**取值**成串抄进来。
     # 补一道**逐字重合**核对：调度行的说明段与被引文件正文的最长公共子串超阈值即报红
-    # （规则与阈值见 `script/specs-rules/dispatcher.toml`）。
+    # （规则与阈值见 `script/specs-rules/dispatcher/`）。
     run_rule_guard("check_dispatcher_no_details_guard")
     phase_done()
 
@@ -9038,8 +9333,9 @@ def _guards_numbering_table_nums():
     """取 `specs-project-maintainer/guards.adoc`「检查项编号」表的全部序号。
 
     取**那一节**（`== 检查项编号`）里的表行，不按整份文件取：同一份 `guards.adoc` 里
-    还有一张防线清单表，它的行是 `| 序号 | `check_xxx` |`——两张表的行形态不同，
-    按整份文件取会把清单表的序号一起收进来，"两套编号"永远对得上，判据也就失效了。
+    还有一张防线清单表，它的行不写号（次序由行在表里的位置表达，见
+    `specs/general/coding.adoc`「文件的角色」的「编号：能靠结构表达的，不写进内容」）——
+    两张表的行形态不同，按整份文件取会把别的表一起收进来，"两套编号"永远对得上、判据失效。
     节或表缺失时返回 `None`（缺失由 `check_guard_order_guard` 对本表另行报红）。
     """
     path = os.path.join(PROJECT_SPECS_DIR, "guards.adoc")
@@ -9054,6 +9350,195 @@ def _guards_numbering_table_nums():
     return nums or None
 
 
+def _read_spec_text(rel: str) -> str:
+    """按仓库根相对路径读一份规范文本；读不到时返回空串（缺失由各自的文件存在性检查报）。"""
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        return ""
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _has_numbered_lines(text: str, least: int = 5) -> bool:
+    """文件里是否有**成片**的连续编号行（`1.`、`2.`…连续出现 `least` 行以上）。
+
+    判"有序行表"只看**连续性**：零散的几个编号（引用里的 `1.`）不构成行表，而
+    "1. …/2. …/3. …" 连成一片正是"位置即含义"的那一类。
+    """
+    nums = [int(m.group(1)) for m in re.finditer(r"(?m)^ *\**\s*(\d+)\.\s", text)]
+    # 起点取 1：一段连续的编号，它的第一条就落在某个"当前连了多少条"里——
+    # 从 0 起算时两行的有序表永远够不到阈值（`run` 只在比较里自增）。
+    run = 1 if nums else 0
+    for prev, cur in zip(nums, nums[1:]):
+        run = run + 1 if cur == prev + 1 else 1
+        if run >= least:
+            return True
+    return False
+
+
+def _expand_merge_paths(paths) -> list:
+    """把清单里的路径（含 `*` 通配）展开成**实际存在的那几份文件**。
+
+    清单是"哪一类落点"，`.gitattributes` 里写的也是通配形态；而"配了的那几份文件里有没有
+    有序行表"必须逐份看——不展开时通配项被整条跳过，那是本条最容易的假绿（本轮实测：
+    清单两项都是通配，反例③ 于是全绿）。
+    """
+    out = []
+    for rel in paths:
+        if "*" not in rel:
+            out.append(rel)
+            continue
+        base, _, tail = rel.rpartition("/")
+        directory = os.path.join(REPO_ROOT, *base.split("/")) if base else REPO_ROOT
+        if not os.path.isdir(directory):
+            continue
+        for name in sorted(os.listdir(directory)):
+            if fnmatch.fnmatch(name, tail):
+                out.append(f"{base}/{name}" if base else name)
+    return sorted(set(out))
+
+
+def check_git_attributes_merge_guard():
+    """『只增不改的落点须配 `merge=union`』：并行改动的第一处物理成因。
+
+    为什么需要它：本仓库每次改动都在往一串「行集合」里加一项——一张表的行、一份清单的条目、
+    一份台账的一条。这类落点的**物理形态**决定了并行改动会撞：两处各自往同一片区域的中间
+    插一行，git 只能报冲突。判据本体在 `specs/general/version-control.adoc`「冲突处理」，
+    git 侧取值在 `specs/general/git.adoc`「行尾与检出归一」。
+
+    **判据刻意不写成"配了就行"**：配了 `merge=union` 也可能配错（路径 pattern 打偏）、
+    配过的文件照样能改成"就地插一行"（那时 union 解不了）。故核两个方向——① **该配的都
+    配了**（`.gitattributes` 里 `merge=union` 覆盖清单点名的每一条路径）；② **配了的落点里
+    没有有序行表**（按编号/全局次序排的行表，两处同时插入相邻行时左右顺序不确定，属
+    "union 只解了一半"）。
+
+    效力边界：只核**配置与文件形态**；「某个落点算不算只增不改」「这条路径该不该进清单」
+    属语义判断，交人/子 agent 复核。
+    """
+    phase("并行改动的独占落点检查（只增不改的落点须配 merge=union）")
+    run_rule_guard("check_git_attributes_merge_guard")
+    require = file_role_enabled()
+    gitattr = os.path.join(REPO_ROOT, ".gitattributes")
+    if not os.path.isfile(gitattr):
+        err("仓库根缺少 `.gitattributes`——行尾策略与合并策略都失去落盘口"
+            "（`specs/general/encoding.adoc`「跨平台检出」与「冲突处理」的取值都在这一份里）",
+            ".gitattributes")
+        phase_done()
+        return
+    with open(gitattr, encoding="utf-8") as fh:
+        lines = [ln.split("#", 1)[0].strip() for ln in fh.read().splitlines()]
+    union_paths = [ln.split()[0] for ln in lines
+                   if ln and len(ln.split()) > 1 and "merge=union" in ln.split()[1:]]
+    listed = list(GIT_ATTRIBUTES_MERGE_PATHS) if require else []
+    if require and not union_paths:
+        err("`.gitattributes` 里一条 `merge=union` 都没有——本项目取的是「源码管理方法」的"
+            f"并发档（`script/specs-config.toml` 的 `[source-management].mode` = `{source_management_mode()}`），"
+            "而它那一档的代价正是"
+            "「改动都在往行集合里追加一项」（规则数据的锚点、逐轮记账的行），两处并行改动"
+            "必撞在同一片区域；"
+            "只增不改的落点须按路径声明 `merge=union`（判据见 "
+            "`specs/general/version-control.adoc`「冲突处理」）",
+            ".gitattributes")
+    else:
+        missing = [p for p in listed if p not in union_paths]
+        if missing:
+            err(f"`.gitattributes` 的 `merge=union` 没有覆盖清单点名的落点 {missing}——"
+                "配了、但配的不是该配的那些路径，等于没配（新增一类只增不改的落点须同步加一行）",
+                ".gitattributes")
+    # 反方向：配了 union 的落点里若有**有序行表**，union 只解一半——两处同时往相邻位置插行
+    # 时，合并结果的左右顺序不确定，读者按编号核对会读到错位的那一段。
+    for rel in _expand_merge_paths(listed) if require else []:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        if re.search(r"(?m)^\| \d+ \|", body) or _has_numbered_lines(body):
+            err(f"落点 {rel} 声明了 `merge=union`，但里面是**有序行表**（编号跨越全文、"
+                "位置即含义）——union 只在两处各自新增行时合并，两处同时往相邻位置插行时"
+                "左右顺序不确定（编号错位而检查全绿）；有序行表须改成生成物，"
+                "或改成按顺序追加、不去动别人的行", rel)
+    # 判据本体侧：`merge=union` 的要点须留在通用层（只留一句"配了"时，配错了也无人发现）
+    spec_text = _read_spec_text("specs/general/version-control.adoc")
+    miss = [t for t in GIT_ATTRIBUTES_MERGE_TOKENS if t not in spec_text]
+    if miss:
+        err(f"specs/general/version-control.adoc「冲突处理」缺 `merge=union` 的要点 {miss}——"
+            "判据只剩一句『配了就行』时，配错路径、配到有序行表上都不会有人发现"
+            "（本条的失效形态：判据只核配置在不在，而它钉不住的就是配置对不对）",
+            "specs/general/version-control.adoc")
+    if not require:
+        log("  本项目未启用「文件的角色」那一档：只核判据取值仍在，不要求声明 merge=union")
+    elif not errors:
+        log(f"  只增不改的落点已配 merge=union：{len(union_paths)} 条声明")
+    phase_done()
+
+
+def check_ledger_table_generated_guard():
+    """『逐行登记表须是生成物』：同一批内容抄成第二份，就必然在两处各改一遍。
+
+    为什么需要它：`specs-project-maintainer/guards.adoc`「检查项编号」表把
+    `script/check_specs.py` 已有的编号清单一**逐行抄了第二份**——每轮新增检查项都要往中间
+    插一行、其后各行整体位移，而每次改动都落在那两百多行里，两个并行改动必撞。台账
+    `script/check_effective.py` 的 `MECHANISMS` 是同一个成因的另一处。
+
+    判据是**派生件不得由人工手作**（`specs/general/coding.adoc`「分发产物的体积与按需加载」
+    的「派生件与本体同处一个构建步骤」条在本仓库自身登记表上的落地）：整段由
+    `script/gen_derived.py` 按**已经唯一的那一份真源**现算产出、现场与重算结果逐字节一致。
+
+    失效形态：手改了表、或改了真源忘了重算——两处静默漂移，而按表核对的人看不到新条目。
+    效力边界：只核"现场＝重算结果"这一件事实；「还有哪些表该收进生成器」属语义判断，
+    交人/子 agent 复核。
+
+    **按档要求**：派生件由生成器产出只在项目取**并发档**时才被要求（`file_role_enabled()`
+    即 `source_management_mode() == "concurrent"`）；取常规档的项目按原口径办——派生件允许
+    人工维护，不必为它建生成器。
+    """
+    phase("逐行登记表生成物检查（现场须等于重算结果）")
+    run_rule_guard("check_ledger_table_generated_guard")
+    if not file_role_enabled():
+        # 常规档：不要求上生成器，但**判据取值仍须在**（上面那一步已核规则数据里的接线与
+        # 依据）。"取另一档"与"删掉这条规则"必须分得清。
+        log("  本项目取常规档（[source-management].mode）：不要求派生件由生成器产出")
+        phase_done()
+        return
+    gen = os.path.join(REPO_ROOT, *GEN_DERIVED_REL.split("/"))
+    if not os.path.isfile(gen):
+        err("缺少 `script/gen_derived.py`——逐行登记表的生成器不在，"
+            "「检查项编号」表就退回成手抄的第二份（每轮插入一行、其后整体位移）",
+            GEN_DERIVED_REL)
+        phase_done()
+        return
+    sys.path.insert(0, os.path.dirname(gen))
+    try:
+        import gen_derived  # 就地导入：生成器随仓库走，路径由 REPO_ROOT 定
+        stale = gen_derived.stale_files(REPO_ROOT)
+    except Exception as exc:  # 生成器自身崩了也是"判据没了"，须报红不静默
+        err(f"`script/gen_derived.py` 跑不起来（{exc!r}）——生成物无从重算，"
+            "「现场＝重算结果」这一判据失效", GEN_DERIVED_REL)
+        phase_done()
+        return
+    for rel in stale:
+        err(f"{rel} 与 `script/gen_derived.py` 的重算结果不一致——这一段是**生成物**"
+            "（整段由生成器产出，手改会在下一次重算时被覆盖，而这一轮报红是因为两处已经"
+            "漂移）；改真源后重跑 `python3 script/gen_derived.py --write`", rel)
+    # 生成物的节头须写明"这是生成物、怎么重算"：读者当它是手写表，下一轮照旧手改。
+    adoc = os.path.join(PROJECT_SPECS_DIR, "guards.adoc")
+    if os.path.isfile(adoc):
+        with open(adoc, encoding="utf-8") as fh:
+            text = fh.read()
+        m = re.search(r"(?ms)^== 检查项编号.*?(?=^== |\Z)", text)
+        head = m.group(0) if m else ""
+        miss = [t for t in CATALOG_LEDGER_TOKENS if t not in head]
+        if miss:
+            err(f"specs-project-maintainer/guards.adoc「检查项编号」节头缺少 {miss}——"
+                "这一段是生成物，节头须写明「由 `script/gen_derived.py` 生成、怎么重算」与"
+                "「判定标准」；否则读者当它是手写表、下一轮照旧手改",
+                "specs-project-maintainer/guards.adoc")
+    if not errors:
+        log("  逐行登记表与重算结果一致")
+    phase_done()
+
+
 def check_guard_order_guard():
     """『防线次序与清单表一致』：`CHECKS` 的执行次序必须 = 防线清单表里的次序。
 
@@ -9061,7 +9546,8 @@ def check_guard_order_guard():
     （实测：把某道防线从编排中段移到末尾，脚本与 985 条单测全绿）。本轮把次序提成
     显式的 `CHECKS` 序列，再由本防线与 `specs-project-maintainer/guards.adoc` 逐行对账。
 
-    判据（三条）：① 两处的防线名逐一相同且次序一致；② 清单表的序号连续；③ 条数相同。
+    判据（两条）：① 两处的防线名逐一相同且次序一致（表里不写号，**位置就是次序**）；
+    ② 表体整段等于现算的那一份（抄第二遍、两行对调都会当场报红）。
     """
     phase("防线次序与清单表一致性检查（`CHECKS` ↔ guards.adoc）")
     # `_read_script_src` 以"相对仓库根路径"为缓存键：夹具换根后仍可能命中上一轮的值，
@@ -9090,20 +9576,17 @@ def check_guard_order_guard():
         return
     with open(manifest_path, encoding="utf-8") as fh:
         manifest = fh.read()
-    rows = GUARDS_MANIFEST_ROW.findall(manifest)
-    if not rows:
+    # **表里不写号**：次序由行在表里的位置表达，「谁在用」也不再进表（调用关系由函数体
+    # 现算，复制进表就是同一份事实的第二处写法）。行正文是回指，落到这道防线旁边的
+    # `<防线名>.adoc`（与它的规则数据同层同名）——于是"这一行说哪道防线"顺着文件名
+    # 就读得出来，不必先知道它在表里第几行。
+    names = _manifest_registry_rows(manifest)
+    if not names:
         err("specs-project-maintainer/guards.adoc 未找到「执行次序与用途」表——"
             "次序核对失去判据（表被改写或删掉时须报红，不得静默放行）",
             "specs-project-maintainer/guards.adoc")
         phase_done()
         return
-    nums = [int(n) for n, _ in rows]
-    names = [n for _, n in rows]
-    if nums != list(range(1, len(nums) + 1)):
-        err(f"防线清单表序号不连续：{nums[:8]}…（共 {len(nums)} 行）——"
-            "序号断了说明有条目被整条删掉；删条目须连带改序号并说明"
-            "（否则读者按序号核对照点时，缺的那一项无从发现）",
-            "specs-project-maintainer/guards.adoc")
     if names != seq:
         only_seq = [n for n in seq if n not in names]
         only_manifest = [n for n in names if n not in seq]
@@ -9129,7 +9612,166 @@ def check_guard_order_guard():
             "specs-project-maintainer/guards.adoc")
     else:
         log(f"  防线次序与清单表一致：{len(seq)} 道，逐一同序")
+    drift = _manifest_table_drift(manifest)
+    if drift:
+        err("specs-project-maintainer/guards.adoc 的清单表不是现算的那一份"
+            f"（{drift}）——表体是**生成物**：次序取 `CHECKS` 序列、不写号，整段只有一处来源；"
+            "逐行只比防线名时，被挪动的那几行仍对得上名字、于是静默放行，"
+            "而位置正是读者按表核次序时唯一能用的坐标。改写序或增删防线之后，用 "
+            "`python3 script/check_specs.py --write-guards-table` 重写整段，不手抄",
+            "specs-project-maintainer/guards.adoc")
+    _manifest_by_guard_rows(manifest, seq)
     phase_done()
+
+
+MANIFEST_TABLE_HEAD = "| 次序 | 防线 | 钉住什么"
+MANIFEST_TABLE_BOUND = "|==="
+
+
+def _manifest_table_text(manifest: str) -> str:
+    """取 `guards.adoc` 里那张清单表的**整段正文**（`|===` 定界之内，原样）。"""
+    m = re.search(r"(?ms)^== 执行次序与用途.*?(?=^== |\Z)", manifest)
+    if m is None:
+        return ""
+    sec = m.group(0)
+    begin = sec.find(MANIFEST_TABLE_BOUND)
+    if begin < 0:
+        return ""
+    end = sec.find(MANIFEST_TABLE_BOUND, begin + len(MANIFEST_TABLE_BOUND))
+    if end < 0:
+        return ""
+    return sec[begin:end + len(MANIFEST_TABLE_BOUND)]
+
+
+def _manifest_table_expected() -> str:
+    """按 `CHECKS` 序列**现写**整张表（表头 + 逐行 + 定界行），供核对与重写共用。"""
+    rows = _manifest_rows()
+    if not rows:
+        return ""
+    return "\n".join([MANIFEST_TABLE_BOUND, MANIFEST_TABLE_HEAD] + rows + [MANIFEST_TABLE_BOUND])
+
+
+def _manifest_table_drift(manifest: str) -> str:
+    """表体与现算结果**整段相等**核对；不一致时返回表体里第一处不同的那一行（原样）。
+
+    **为什么要整段比、而不逐行比**：次序在这张表里**只有位置**——没有序号列之后，
+    逐行只比防线名的话，"同一行被抄两遍""两行对调"这类改动里被挪动的那几行仍能对上名字、
+    于是静默放行，而位置正是读者按表核次序时唯一能用的坐标。整段相等还顺带把"表头被改"
+    "少了定界行"一并算进来：表体是一份**生成的文本**，它只有"是现算的那一份"与
+    "不是"两种状态，没有"部分是"。
+    """
+    have = _manifest_table_text(manifest)
+    expected = _manifest_table_expected()
+    if not expected:
+        return ""
+    if have == expected:
+        return ""
+    have_lines = have.split("\n")
+    exp_lines = expected.split("\n")
+    i = next((j for j, (a, b) in enumerate(zip(have_lines, exp_lines)) if a != b),
+             min(len(have_lines), len(exp_lines)))
+    got = have_lines[i] if i < len(have_lines) else "（更早结束）"
+    want = exp_lines[i] if i < len(exp_lines) else "（更早结束）"
+    return f"第 {i + 1} 行表体是 `{got[:60]}`、现算的是 `{want[:60]}`"
+
+
+def _manifest_by_guard_rows(manifest: str, seq: list):
+    """行正文按防线名分份：**一份一份现取、就地核**，不再有一张汇总清单要人同步。
+
+    两个方向各报一次，成因不同：
+
+    * 登记面里的防线**缺自己那一份**——它的用途从表上消失，而表里那一行仍指过去，
+      读者点开是空的；
+    * 目录里多出一份**不对应任何防线**的文件——那是删防线时留下的尸块，或文件名打错。
+
+    落点有两档，都由规则数据的 `registry_owner` 声明：① `body_sibling`——**跟着规则数据
+    走**（`.adoc` 与 `.toml` 同层同名，靠"同层"这条约定配对）；② 否则按 `dir_from_config`
+    给的目录（`.adoc` 全在一处）。两档的核对面分别是"规则文件所在的那一层"与"那一个目录"——
+    判据读的是**目录里有什么**，不是清单里写着什么（`specs/general/coding.adoc`
+    「不做：能靠文件/目录的上下级与名字找到的，不另立清单」）。
+    """
+    entries = _manifest_entries()
+    if not entries:
+        err(f"规则数据里没有 `{GUARDS_REGISTRY_STEP}` 的登记步骤——防线清单表没有可核对的口径"
+            "（表里写着指令、判据不知道该核哪些行）", f"script/specs-rules/{GUARDS_REGISTRY_STEP}")
+        return
+    step = next(iter(entries.values()))["step"]
+    if _manifest_body_follows(step):
+        _manifest_body_sibling_rows(seq)
+        return
+    rel_dir = _manifest_dir(step)
+    if not rel_dir:
+        err(f"`script/specs-config.toml` 里取不到防线清单表的落点目录——{GUARDS_REGISTRY_STEP} "
+            "的 `dir_from_config` 指向的键不存在；落点路径只有这一处来源", "script/specs-config.toml")
+        return
+    root = os.path.join(REPO_ROOT, *rel_dir.split("/"))
+    if not os.path.isdir(root):
+        err(f"缺少 {rel_dir}/ ——防线清单表的行正文按防线名分份落在这一目录，"
+            "目录不在时整张表没有可读处", rel_dir)
+        return
+    on_disk = {os.path.splitext(f)[0] for f in os.listdir(root) if f.endswith(".adoc")}
+    missing = [n for n in seq if n in entries and n not in on_disk]
+    extra = sorted(on_disk - set(entries))
+    if missing:
+        err(f"{rel_dir}/ 里缺这几道防线的行正文 {missing}——新增防线时须同时写上自己那一份"
+            f"（`{rel_dir}/<防线名>.adoc`，正文只有一格「用途」）；缺了它，表里这一行的用途是空的",
+            rel_dir)
+    if extra:
+        err(f"{rel_dir}/ 里有 {len(extra)} 份不对应任何防线：{extra}——防线被删时须连带删掉"
+            "自己那一份（留着它，读者按目录核会以为这条还在）", rel_dir)
+    for name in seq:
+        if name not in entries:
+            continue
+        path = os.path.join(root, name + ".adoc")
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read().strip()
+        if re.search(r"(?m)^\|\s*\d+\s*\|", body):
+            err(f"{rel_dir}/{name}.adoc 里写着序号——次序由它在表里的位置表达，写成数字就是"
+                "第二份次序（插入一道防线就得改其后每一行的数字）", f"{rel_dir}/{name}.adoc")
+        if not body:
+            err(f"{rel_dir}/{name}.adoc 是空的——表中这一行的用途无从读起", f"{rel_dir}/{name}.adoc")
+
+
+def _manifest_body_sibling_rows(seq: list):
+    """`body_sibling` 一档的核对：** `.adoc` 与 `.toml` 同层同名**，两边都从目录现取。
+
+    核的是两件"这份文件在不在"，都不是清单：① 每道防线旁边有没有它那一份 `.adoc`；
+    ② 有没有 `.adoc` 旁边根本没有规则数据（删防线留下的尸块）。
+    """
+    bodies = _manifest_body_files()
+    if not bodies:
+        err("规则数据加载面里取不到任何防线的规则文件——行正文按 `body_sibling` 跟着规则数据走，"
+            "加载面为空时整张表没有可读处", "script/specs-rules")
+        return
+    missing = [n for n in seq if n not in bodies]
+    if missing:
+        err(f"{len(missing)} 道防线旁边缺它们那一份行正文：{missing[:8]}——行正文跟着规则数据走"
+            "（`<防线名>.adoc` 与 `<防线名>.toml` 同层），缺了它、表里这一行点开就是空的",
+            "script/specs-rules")
+    roots = sorted({os.path.dirname(d) for d in bodies.values()})
+    for root in roots:
+        abs_root = os.path.join(REPO_ROOT, *root.split("/"))
+        if not os.path.isdir(abs_root):
+            continue
+        stray = sorted(os.path.splitext(f)[0] for f in os.listdir(abs_root)
+                       if f.endswith(".adoc") and os.path.splitext(f)[0] not in bodies)
+        if stray:
+            err(f"{root}/ 里有 {len(stray)} 份行正文旁边没有对应的规则数据：{stray}——防线被删时"
+                "须连带删掉它那一份（留着它，读者按目录核会以为这条还在）", root)
+    for name in seq:
+        rel = bodies.get(name)
+        if rel is None:
+            continue
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"{rel} 不在——行正文跟着规则数据走：`{name}.toml` 旁边须有同名 `.adoc`"
+                "（它只回答「这道防线有没有一份行正文」），缺了它表里这一行指不到处", rel)
+        elif os.path.getsize(path):
+            err(f"{rel} 写了内容——这一格的话在 `{name}.toml` 的注释里（判据、例外、边界各一段），"
+                "抄进 `.adoc` 就是同一段话的第二处写法；这个文件是**零字节标记**，只回答"
+                "「这道防线有没有一份行正文」", rel)
 
 
 def check_wiring_guard():
@@ -10514,7 +11156,7 @@ def check_maven_migration_crossref_guard():
     **而 Maven 侧一个字都没提**——从 Maven 迁出的项目读 `maven.adoc` 时看不到任何
     指引，于是照着**源工具**的形态（父子关系、继承档）往下写，而这条正是用户点名
     要治的形态。一跳引用是**跨构建工具对**的，故**逐对**都要有：新增一个源/目标
-    构建工具时须同步补上（`(源, 目标)` 的登记在 `script/specs-rules/maven.toml`）。
+    构建工具时须同步补上（`(源, 目标)` 的登记在 `script/specs-rules/_tokens.toml` 的 `MAVEN_MIGRATION_CROSSREF_ANCHORS`）。
 
     **与两道迁移/Gradle 防线的分工**：那两道核**判据本体**（迁移规范与 Gradle 规范
     自己的三段），本条只核 `maven.adoc` **侧的那一跳**——判据本体丢了这三条都会报，
@@ -10867,7 +11509,7 @@ def check_external_script_guard():
 def check_powershell_version_guard():
     """『PowerShell 跨版本防线』：两版差异当兼容面处理，不靠"像不像 PowerShell"判断。
 
-    规则措辞在 `script/specs-rules/script.toml`（一类规则一处）；本函数只做两件事：
+    规则措辞在 `script/specs-rules/script/`（一类规则一处）；本函数只做两件事：
     ① 栈文件与本节在不在（不在则规则无处承载）；② 跑规则。逐条要点由规则数据自报。
     """
     phase("PowerShell 跨版本防线检查")
@@ -11112,7 +11754,7 @@ def check_script_selfdoc_name_guard():
 
     它是「不允许一个脚本对应一个文档」在**命名**这一面的落点，坐落在另一个二级节——
     按节取锚点时核不到它（本轮实测：把「不按脚本名给文档命名」整句抽掉，主防线的规则
-    步骤全绿）。判据本体与报错文案在 `script/specs-rules/script.toml`。
+    步骤全绿）。判据本体与报错文案在 `script/specs-rules/script/`。
     """
     phase("脚本文档命名（不允许一对一的命名来源）防线检查")
     run_rule_guard("check_script_selfdoc_name_guard")
@@ -11274,8 +11916,9 @@ def check_rule_script_separation_guard():
     # 判据本体与加载侧会各指一套（改一处漏一处），故在此一并核。
     rules_dir = os.path.join(REPO_ROOT, "script", "specs-rules")
     if os.path.isdir(rules_dir):
-        names = [f for f in os.listdir(rules_dir) if not f.startswith(".")]
-        if not [f for f in names if f.endswith(rules_engine.RULES_FILE_SUFFIX)]:
+        # 规则文件可以就放在这一层，也可以再套一层子目录（一个主题下再切成一份一份）
+        found = rules_engine.load_rule_specs(rules_dir)
+        if not found:
             err(f"script/specs-rules/ 下没有任何 *{rules_engine.RULES_FILE_SUFFIX}——"
                 "规则文件的格式取 TOML（纯数据、标准库可读、重复表头由语法拒绝），"
                 "换成别的格式等于把「两处真源」再引回来", "script/specs-rules/")
@@ -11478,7 +12121,7 @@ JAVA_INTERFACE_ACCESSOR_SECTION = "字段接口只加 get 方法、不加 set �
 # 读完），判据本体在规范文件里（同一件事只有一处真源）——两处任一被删/被合并即防线失守。
 JAVA_OBJECT_TEMPLATE_FILE = "specs/stack/java-object.adoc"
 # 本条判据本体的条目名（只用于"条目整条不见了"时的报错文案；判据正文的锚点核对由
-# `script/specs-rules/java.toml` 的 `file_groups` 承担）。
+# `script/specs-rules/java/` 的 `file_groups` 承担）。
 JAVA_OBJECT_TEMPLATE_SECTION = "数据对象模板"
 
 
@@ -11550,7 +12193,7 @@ def check_java_object_template_guard():
         "review 不查存量缺注解"已升为全局口径（`specs/general/review.adoc`「review 的默认
         检查面」），判据本体与模板侧只须保留回指。
     故逐组核模板文件与规范文件的**可核对那句话**（取值 + 机制 + 判定标准 + 依据；锚点与
-    分组见 `script/specs-rules/java.toml`），并核调度器登记与 README 同步。"某个类算不算
+    分组见 `script/specs-rules/java/`），并核调度器登记与 README 同步。"某个类算不算
     数据对象、代码里到底标没标"属语义判断与运行时事实（见 `GUARD_CHECK_LIMITS`），
     交人/子 agent 复核。
     """
@@ -11564,7 +12207,7 @@ def check_java_object_template_guard():
         run_rule_guard("check_java_object_template_guard")
     # 判据本体：`specs/stack/java.adoc`「编码」里的「数据对象模板」条——先确认**条目还在**
     # （标题级，条目整条被删时给出可读的报错），再逐组核条目正文的锚点（锚点在
-    # `script/specs-rules/java.toml` 的 `file_groups` 里）。
+    # `script/specs-rules/java/` 的 `file_groups` 里）。
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_STACK_FILE):
         err(f"缺少文件 {rel_java}——『数据对象模板』的判据本体无处承载"
@@ -11680,7 +12323,7 @@ def check_java_interface_accessor_guard():
 #      再补一个空 `catch`。
 # 故防线钉**判据本体**（准入三条、判定标准、两类扩大的排除、仍须写理由注释），不钉轴名
 # （只核"「健壮性」这一节在不在"属防线空转）。锚点与分组见
-# `script/specs-rules/java.toml` 的 `check_java_enum_valueof_catch_guard`；接线处须写字面量
+# `script/specs-rules/java/` 的 `check_java_enum_valueof_catch_guard`；接线处须写字面量
 # （`run_rule_guard("check_java_enum_valueof_catch_guard")`）——规则接线完整性由
 # `script/rules_engine_test.py` 按字面量核对，抽成常量时它核不到（本轮实测）。
 
@@ -12071,7 +12714,7 @@ def check_pagination_guard():
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
     "有没有这一条"属防线空转——**两侧各自的返回类型**、`convert` 的**禁止面**
     （新建 page 再逐个搬运）、**保留分页元数据**这一理由、判定标准与存量边界任一被抽走时
-    照样全绿。故逐组核 `script/specs-rules/coding.toml` 里的锚点。
+    照样全绿。故逐组核 `script/specs-rules/coding/` 里的锚点。
     「某个分页接口算不算普通接口 / 该处该不该用自定义 page」属语义判断（见 `GUARD_CHECK_LIMITS`），
     交人/子 agent 复核。
     """
@@ -12094,7 +12737,7 @@ def check_logical_delete_naming_guard():
 
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
     "有没有这一条"属防线空转——**默认面怎么定**、非默认面须带特征、理由、判定标准、
-    边界与存量边界任一被抽走时照样全绿。故逐组核 `script/specs-rules/coding.toml`
+    边界与存量边界任一被抽走时照样全绿。故逐组核 `script/specs-rules/coding/`
     里的锚点；"某个方法算不算按实体查询、这个名字算不算带了特征"属语义判断
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
@@ -12232,7 +12875,7 @@ def check_method_placement_guard():
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
     "有没有这一条"属防线空转——**允许插前面或中间**、**重载相邻**、**转换跟随查询**、
     **只对新增成员生效**任一被抽走时照样全绿（只在台账里报"这一条在不在"）。故逐组核
-    `script/specs-rules/coding.toml` 里的锚点；"某个方法的调用方与被调用方各是哪一个""某次
+    `script/specs-rules/coding/` 里的锚点；"某个方法的调用方与被调用方各是哪一个""某次
     改动算不算新增"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("成员与方法次序防线检查")
@@ -12259,7 +12902,7 @@ def check_chain_assignment_order_guard():
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
     "有没有这一条"属防线空转——**字段顺序取哪两处**（回指既有两条、不另定）、赋值再排一次
     序即第二真源这一理由、判定标准、语义例外、边界与存量边界任一被抽走时照样全绿。
-    故逐组核 `script/specs-rules/coding.toml` 里的锚点；"这次构建算不算同一处 / 某两次赋值
+    故逐组核 `script/specs-rules/coding/` 里的锚点；"这次构建算不算同一处 / 某两次赋值
     的先后算不算语义相关"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("链式赋值顺序防线检查")
@@ -12286,7 +12929,7 @@ def check_object_init_guard():
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
     "有没有这一条"属防线空转——链式优先、Java 内分档、**严禁有参构造**（本条的靶心）、
     唯一例外（对象内构造转发）、判定标准、边界、存量边界与依据行任一被抽走时照样全绿。
-    故逐组核 `script/specs-rules/coding.toml` 里的锚点；"某个创建点算不算手动初始化 / 某个
+    故逐组核 `script/specs-rules/coding/` 里的锚点；"某个创建点算不算手动初始化 / 某个
     类型有没有可用的链式形态"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("对象初始化防线检查")
@@ -13399,6 +14042,52 @@ SITE_LINK_CASES = (
 )
 
 
+def check_file_role_guard():
+    """『文件的角色』防线：每份落点先定性（独占／并行／只读），再决定它怎么排布与怎么改。
+
+    要治的失效（本仓库实证）：近 60 次非 merge 合入里 `script/check_specs_test.py` 改了 59 次、
+    `script/check_specs.py` 54 次、`specs-project-maintainer/guards.adoc` 53 次——几乎每次改动
+    都落在同一片区域（往文件尾追加一个测试类、往同一张表插一行、往同一个头部清单插一条），
+    于是**两个任务并行时结构性撞车**。上一轮把三处拆开只是治了症状；缺的是**判据**：
+    一份落点属于哪一类、能不能并行改，此前没有一句可核对的取值。
+
+    本条只核**判据与它的取值是否仍在**（`specs/general/coding.adoc`「文件的角色」的三档角色、
+    五条 L1 与两条边界，以及「归属」那一格的取值）；"这份文件该不该拆、拆在哪一处"属
+    语义判断，交人/子 agent 复核。
+
+    **按档核**：本节是**并发档**的执行细则（取值见 `file_role_enabled()`）。**取常规档也照样
+    核这一节**——核的是"那一档的取值还在不在"（另一档的规则也不是可以连取值一起删掉的规则，
+    下一个人想换档时得有完整的规则可读），只是这时**不要求本仓库真的分份、配策略、上生成器**
+    （那三条各由下面三道按同一个取值决定）。
+    """
+    phase("文件的角色防线检查（独占／并行／只读三档与并行落点的排布）")
+    run_rule_guard("check_file_role_guard")
+    phase_done()
+
+
+def check_source_management_guard():
+    """『源码管理方法』两档的取值：档位须声明、两档的规则本体都须在。
+
+    要治的失效：把"照哪一套源码管理规则做"写成一句开关，而两档里只留一档的条文——项目换成
+    另一档时，规范里没有那套完整的规则可读（规则可以不用，取值不能不存在）。另一个方向：
+    声明了档却按别档办，等于两个解各用一半、两个失效面都还在。
+
+    本道只核**档位这一处取值与两档条目的在场**；"本项目该取哪一档"属决策，由项目自己声明。
+    """
+    phase("源码管理方法两档检查（取值一处、两档规则本体都在）")
+    rel = "script/specs-config.toml"
+    mode = source_management_mode()
+    if mode is None:
+        err(f"`{rel}` 缺少 `[source-management].mode`，或取值不在 "
+            f"{list(SOURCE_MANAGEMENT_MODES)} 之内——两档源码管理方法取哪一档必须有唯一一处"
+            "声明，不补默认值（见 `specs/general/coding.adoc`「源码管理方法」的「取值只有一处」）",
+            rel)
+    else:
+        log(f"  本项目取源码管理档：{mode}")
+    run_rule_guard("check_source_management_guard")
+    phase_done()
+
+
 def check_site_link_guard():
     """『站点正文区的站内链接』防线：点下去落在哪个 hash，得真的跑一遍才算数。
 
@@ -13832,7 +14521,7 @@ def check_change_number_scope_guard():
 
     判据本体落通用层 `specs/general/git.adoc`「提交信息」的**本条 bullet**（与"提交信息
     怎么写"同节：一边定提交信息写什么、一边定编号只能落在这里）；由本道防线做**机械扫描**
-    ——扫描面与形态表外置在规则数据 `script/specs-rules/git.toml`（`scan_prefixes` /
+    ——扫描面与形态表外置在规则数据 `script/specs-rules/git/`（`scan_prefixes` /
     `scan_root_files` / `scan_suffixes` / `exempt_files` / `allow_patterns` / `number_patterns`），
     改口径不动代码。**扫描面是枚举、须随动维护**：新增一级目录或一级文件时同步加进规则数据，
     否则那批内容静默漏扫（清单不够用即覆盖面不够用）。
@@ -13863,8 +14552,8 @@ def check_change_number_scope_guard():
     patterns = [re.compile(p) for p in data.get("number_patterns", ()) or ()]
     if not patterns:
         err("『变更编号的作用面』的形态表为空——编号的形态没有一处可核对，"
-            "本道防线不得静默空转（规则数据 `script/specs-rules/git.toml`）",
-            "script/specs-rules/git.toml")
+            "本道防线不得静默空转（规则数据 `script/specs-rules/git/`）",
+            "script/specs-rules/git/")
         phase_done()
         return
     exempt = set(data.get("exempt_files", ()) or ())
@@ -14034,9 +14723,8 @@ def check_role_skill_handoff_guard():
             return
     # 规则数据侧的步骤自己会报"文件缺失"（判据本体、依据侧、主题登记、加载门、目录说明各一步），
     # 故先让规则跑完——本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "collab.toml")):
-        err("缺少 script/specs-rules/collab.toml——『专家与技能』的锚点（判据措辞）"
+    if not _rules_topic_present("collab"):
+        err("缺少 script/specs-rules/collab——『专家与技能』的锚点（判据措辞）"
             "失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -14085,9 +14773,8 @@ def check_correction_guard():
     phase("用户打错字防线检查（先纠正、按纠正后的意思做）")
     # 规则数据侧的步骤自己会报"文件缺失"（判据本体、依据侧、主题登记各一步），故先让规则跑完——
     # 本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "corrections.toml")):
-        err("缺少 script/specs-rules/corrections.toml——『用户打错字不是他的真值』的锚点"
+    if not _rules_topic_present("corrections"):
+        err("缺少 script/specs-rules/corrections——『用户打错字不是他的真值』的锚点"
             "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -14116,9 +14803,8 @@ def check_user_requirement_guard():
     phase("用户要求是第一优先级、不得降级防线检查")
     # 规则数据侧的步骤自己会报"文件缺失"（判据本体、三处登记各一步），故先让规则跑完——
     # 本函数只在**规则数据整份缺失/格式非法**这一层另给一句更直白的落点说明。
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "execution.toml")):
-        err("缺少 script/specs-rules/execution.toml——『用户要求是第一优先级、不得降级』"
+    if not _rules_topic_present("execution"):
+        err("缺少 script/specs-rules/execution/——『用户要求是第一优先级、不得降级』"
             "的锚点（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -14153,9 +14839,8 @@ def check_guess_confirm_guard():
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("猜到的行为先报、待人工确认防线检查（可以猜，不得直接执行）")
-    if not os.path.isfile(os.path.join(REPO_ROOT, "script", "specs-rules",
-                                      "execution.toml")):
-        err("缺少 script/specs-rules/execution.toml——『猜到的行为先报、待人工确认』的锚点"
+    if not _rules_topic_present("execution"):
+        err("缺少 script/specs-rules/execution/——『猜到的行为先报、待人工确认』的锚点"
             "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
         phase_done()
         return
@@ -14274,6 +14959,7 @@ CHECKS = (
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
     check_windows_window_guard,
+    check_run_artifact_guard,
     check_reusable_scenario_guard,
     check_test_scope_guard,
     check_local_only_guard,
@@ -14424,8 +15110,69 @@ CHECKS = (
     check_task_completion_guard,
     check_self_serve_guard,
     check_degradation_scan_guard,
+    check_source_management_guard,
+    check_file_role_guard,
     check_site_link_guard,
+    check_ledger_table_generated_guard,
+    check_git_attributes_merge_guard,
 )
+
+
+def _print_guards_table() -> int:
+    """按现状重新拼出防线清单表并打印（`--print-guards-table`）。
+
+    它是**留给下一位的手**，不是第二真源：次序取 `CHECKS` 序列、防线名取序列里的名字，
+    打印出来的内容与判据核的是**同一个函数**（`_manifest_rows`）——所以"抄它"与"跑判据"
+    不会给出两个答案，`check_guard_order_guard` 也按同一份内容核表体。
+    """
+    global RULES
+    RULES = rules_engine.Rules(rules_engine.load_rule_files(_rules_spec()), RulesContext())
+    rows = _manifest_rows()
+    if not rows:
+        print("规则数据里没有 registry_owner 声明：防线清单表不由判据现算", file=sys.stderr)
+        return 1
+    for row in rows:
+        print(row)
+    return 0
+
+
+def _write_guards_table() -> int:
+    """把 `guards.adoc` 里那张清单表的表体**整段重写**（`--write-guards-table`）。
+
+    与 `--print-guards-table` 的分别只有"落到哪"：两者取的都是 `_manifest_rows()` 现算的
+    那一份，判据（`check_guard_order_guard`）核的也是同一份——于是"照它改"与"跑判据"
+    不会给出两个答案。
+
+    **为什么是整段重写、而不是逐行登记**：表体的行序就是 `CHECKS` 的次序。一行一行往
+    文件里插时，两条并行的改动只要都在中段加一道防线，改的就是**同一处**（后一行插在前
+    一行面前，位置就是冲突对象）——那不是合并策略能解的形态，只能靠"谁都不手写这段"来消：
+    表体由生成器整段写入，人手只碰自己那一份行正文、以及 `CHECKS` 序列里的那一行
+    （`specs/general/coding.adoc`「文件的角色」）。
+    """
+    global RULES
+    RULES = rules_engine.Rules(rules_engine.load_rule_files(_rules_spec()), RulesContext())
+    expected = _manifest_table_expected()
+    if not expected:
+        print("规则数据里没有 registry_owner 声明：防线清单表不由判据现算", file=sys.stderr)
+        return 1
+    rel = "specs-project-maintainer/guards.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        print(f"缺少 {rel}", file=sys.stderr)
+        return 1
+    with open(path, encoding="utf-8") as fh:
+        manifest = fh.read()
+    have = _manifest_table_text(manifest)
+    if not have:
+        print(f"{rel} 里找不到「执行次序与用途」那张表（`|===` 定界）", file=sys.stderr)
+        return 1
+    if have == expected:
+        print(f"{rel} 的清单表已是现算的那一份，未改动")
+        return 0
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(manifest.replace(have, expected, 1))
+    print(f"已按 `CHECKS` 序列重写 {rel} 的清单表（{expected.count(chr(10)) + 1} 行）")
+    return 0
 
 
 def main(argv=None) -> int:
@@ -14444,8 +15191,18 @@ def main(argv=None) -> int:
                     "用户要求是第一优先级、不得降级）")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="输出逐文件进度（默认静默，仅打印阶段进度与错误清单）")
+    parser.add_argument("--print-guards-table", action="store_true",
+                        help="把防线清单表按现状**重新拼一遍**（次序取 `CHECKS` 序列）并打印")
+    parser.add_argument("--write-guards-table", action="store_true",
+                        help="把 `specs-project-maintainer/guards.adoc` 的清单表**整段重写**"
+                             "（表体是生成物：次序取 `CHECKS` 序列、不写号）——"
+                             "增删防线或改写序之后跑它，不手抄那一百多行")
     args = parser.parse_args(argv)
     VERBOSE = args.verbose
+    if args.print_guards_table:
+        return _print_guards_table()
+    if args.write_guards_table:
+        return _write_guards_table()
 
     log(f"检查根目录: {REPO_ROOT}")
     log(f"共发现 {len(collect_adoc_files())} 个 .adoc 文件")

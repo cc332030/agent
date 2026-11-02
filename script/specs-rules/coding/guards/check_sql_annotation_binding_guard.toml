@@ -1,0 +1,25 @@
+[[guards.check_sql_annotation_binding_guard]]
+file = "specs/general/sql.adoc"
+section = "SQL 写法"
+kind = "section_groups"
+# 锚点清单只写一处（`_tokens.toml` 的 `SQL_ANNOTATION_BINDING_ANCHORS`），本步按名引用——
+# 清单再抄一份即第二真源（判据同 `rules_engine._groups_of` 的说明）。写错/漏登记会报错、
+# 不静默退化。`min` 取当前条数（21），由下面的 `anchor_count` 核。
+token_list = "SQL_ANNOTATION_BINDING_ANCHORS"
+message = "『SQL 不得写进宿主语言代码注解』防线被破坏：{file}「SQL 写法」缺失要点 {missing}——{desc}；该条对应用户点名要求（java 下 mybatis 禁止 `@Select` 一族注解、改用 xml；支持字符串模板的语言可用但须同时成立四条），不得删除、不得降级"
+
+# 入场核（与上面那步成对）：核**锚点清单自己的条数**——清单被删项时现场一字不少、上面的步骤
+# 一次都不报错（那条"防线零证据"的形态）。删清单须与调 `min` 一并发生。
+[[guards.check_sql_annotation_binding_guard]]
+file = "specs/general/sql.adoc"
+section = "SQL 写法"
+kind = "anchor_count"
+token_list = "SQL_ANNOTATION_BINDING_ANCHORS"
+min = 21
+
+# README 目录说明同步（读者按 README 学习时须知道有这条规则）。
+[[guards.check_sql_annotation_binding_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = ["**SQL 编写（`sql.adoc`；含 SQL 写法", "**不得写进宿主语言代码注解**"]
+message = "『SQL 不得写进宿主语言代码注解』防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须同步登记该条（通用层 `sql.adoc` 的条目清单里要能读到它），否则读者按 README 学习时无从知道有这条规则"

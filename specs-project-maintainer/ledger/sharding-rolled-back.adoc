@@ -1,0 +1,10 @@
+= 本轮记账：一条一份的拆分整体回滚，判据一件不留地收回来
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（用户口径：『这样的文件都回滚，回到之前的样子』『像 `script/guards/checks-020.adoc` 这样的拆成上百个文件的方案回滚』） | 无（**未新增、未删除防线**） | 185 → **185**（接线数不抬） | 前几轮为消并行冲突把三份「每次都改」的落点切成一条一份：检查项清单拆成 `script/guards/checks-<号段>.adoc`（13 份）、防线清单表拆成 `guards-manifest/<防线名>.adoc`（187 份）、锚点清单拆成 `script/specs-rules/tokens/<主题>.toml`（102 份），另把用例按防线拆成多个 `*_test.py`。用户点破：**拆成上百个文件、每份只有一行，不值**——离开那张表就说不出它是哪一条，`git log`/`git blame`/IDE 跳转全退化，而冲突面一点没缩小。本轮把上述四类落点**整体回滚**：检查项清单回到 `script/check_specs.py` 头部、防线清单表与检查项编号表回到 `specs-project-maintainer/guards.adoc`、锚点清单回到 `_tokens.toml`、用例回到 `check_specs_test.py`；TOML 侧的 `include::` 展开支持一并撤掉（它只为拆分服务）。**判据一件不收**：`check_run_artifact_guard`、`check_file_role_guard` 两条本轮新增的防线连锚点清单一起留在回滚后的落点上（`RUN_ARTIFACT_TOKENS` / `RUN_ARTIFACT_WINDOWS_TOKENS` / `FILE_ROLE_ANCHORS` 并进 `_tokens.toml`），装配期核对（`_assembly_conflicts`：同名表头、裸写顶层、同目录两份各写一份）与 `anchor_count` 成对判据的扩面（`section_groups` / `subsection_sections` / `regex_section` 也参与成对）留在原处——它们治的是"清单写两处、判据读不到"，与本轮撤回的落点形态无关。**回滚的边界**：`specs/general/coding.adoc`「文件的角色」仍保留（先给文件定性、按份切、能由规则现算的不列清单都是判据本体，不是落点方案），只把「一条一份」的具体做法与其记账一并删掉；`collab-hotspot.toml` 的锚点随之调整。**验证**：`python3 script/check_specs.py` 除两条既有项（本分支历史里的合入提交、本机未装 asciidoctor）外全绿；`python3 -m unittest discover -s script -p "*_test.py"` → `Ran 2636 tests, OK`。
+|===
