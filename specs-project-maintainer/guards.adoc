@@ -174,6 +174,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_validation_entry_guard` | `script/specs-rules/spring/guards/check_validation_entry_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_http_contract_guard` | `script/specs-rules/spring/guards/check_http_contract_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_baseline_sync_guard` | `script/specs-rules/check_baseline_sync_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_branch_sync_guard` | `script/specs-rules/git/guards/check_branch_sync_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_split_history_ownership_guard` | `script/specs-rules/git/guards/check_split_history_ownership_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_value_binding_guard` | `script/specs-rules/spring/guards/check_value_binding_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_spec_optimize_guard` | `script/specs-rules/prompts/guards/check_spec_optimize_guard.adoc`

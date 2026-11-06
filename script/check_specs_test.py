@@ -25918,6 +25918,139 @@ def _rule_files_of(*topics: str) -> tuple:
     return tuple(out)
 
 
+class TestCheckBranchSyncGuard(CheckSpecsTestCase):
+    """『动手前先确认当前分支与上游同步』防线的反例用例（用户提出）。
+
+    失效形态：**动手前没核当前分支是否落后上游**——本地看不出任何异常（编译过、用例绿、
+    与记忆里的代码一致），而基点是旧的：改动落在别人已经改过的同一处、提交建立在旧基线上，
+    冲突与覆盖在动手这一步就已注定，事后只能靠解冲突与逐处并回补救。
+
+    故本组把四类要点都钉在本节自己的正文上：**触发面**（改文件 / 构建 / 提交 / 据代码现状
+    给结论）、**取值**（上游没有本分支缺少的提交；本地领先不算未同步）、**接缝**（更新不得
+    丢本地未提交改动）、**边界**（无上游 / 取不到远端须明说，按任务核一次）。**常驻层那句
+    底线单列一组反例**：每次会话真正读到的只有 `specs/core/CORE.adoc`，通用层写得再全、
+    那句被删掉也等于没写。
+
+    **夹具＝真文档逐字读入、规则数据按现场原样落进夹具**：手抄夹具会与真文档脱节。
+    """
+
+    GIT = "specs/general/git.adoc"
+    CORE = "specs/core/CORE.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_rules_fixture()
+        repo = os.path.dirname(HERE)
+        self._docs = {}
+        for rel in (self.GIT, self.CORE):
+            with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+                self._docs[rel] = fh.read()
+
+    def _write_valid(self) -> None:
+        for rel in (self.GIT, self.CORE):
+            self.write(rel, self._docs[rel])
+
+    def _run(self) -> None:
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_branch_sync_guard()
+
+    def _mutate(self, rel: str, removed: str) -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        # **删全部出现**：同一要点常在本条正文里复述一次（如"无上游"先作粗体要求、后面
+        # 又在"须分别写明"里复现），只删第一处时锚点仍能命中，反例就成了假绿。
+        self.assertIn(removed, self._docs[rel])
+        self._write_valid()
+        self.write(rel, self._docs[rel].replace(removed, ""))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        self._run()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_git_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "git.adoc"))
+        self._run()
+        self.assertIn("缺少", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：整节被删 -> 动手前的同步判据一处都不剩
+        self._write_valid()
+        self.write(self.GIT, "= git 规范\n\n== 别的节\n* 略。\n")
+        self._run()
+        self.assertIn("动手前先确认当前分支与上游同步", self.error_texts())
+
+    def test_trigger_surface_removed_reports(self):
+        # 反例：删掉触发面里"据代码现状作判断并据此推进任务" -> 只有提交前才需要同步，
+        # 拿旧基点作判断、据此动手时不受约束（本条要防的正是"按旧代码下结论"）
+        self._mutate(self.GIT, "据代码现状作判断并据此推进任务")
+        self._run()
+        self.assertIn("据代码现状作判断并据此推进任务", self.error_texts())
+
+    def test_value_anchor_removed_reports(self):
+        # 反例：删掉取值（上游一侧为空）-> 只剩"要确认同步"，没有可核对的账
+        self._mutate(self.GIT, "git rev-list --count HEAD..@{u}")
+        self._run()
+        self.assertIn("git rev-list --count HEAD..@{u}", self.error_texts())
+
+    def test_local_ahead_removed_reports(self):
+        # 反例：删掉"本地领先不算未同步" -> 有未推送提交时被误判为未同步，空转更新
+        self._mutate(self.GIT, "本地领先上游不算未同步")
+        self._run()
+        self.assertIn("本地领先上游不算未同步", self.error_texts())
+
+    def test_local_changes_clause_removed_reports(self):
+        # 反例：删掉"更新不得丢本地未提交改动" -> 更新可以拿冲掉本地改动来换（比基点旧更不可恢复）
+        self._mutate(self.GIT, "未提交改动的集合不减少")
+        self._run()
+        self.assertIn("未提交改动的集合不减少", self.error_texts())
+
+    def test_no_upstream_clause_removed_reports(self):
+        # 反例：删掉"无上游" -> 核不到会被当成核过，汇报里无从分辨
+        self._mutate(self.GIT, "无上游")
+        self._run()
+        self.assertIn("无上游", self.error_texts())
+        self.assertIn("取不到远端", self.error_texts())
+
+    def test_once_per_task_removed_reports(self):
+        # 反例：删掉"按任务核一次" -> 被读成每步都取远端，与执行吞吐相抵、整条失效
+        self._mutate(self.GIT, "按任务核一次，不按动作核")
+        self._run()
+        self.assertIn("按任务核一次，不按动作核", self.error_texts())
+
+    def test_stale_ref_clause_removed_reports(self):
+        # 反例：删掉"先取远端当前指向" -> 本地跟踪引用（上次取回时的值）恒为 0，
+        # 不取远端也算通过（本条最容易被空转满足的形态，与它自己的判定标准②同一类）
+        self._mutate(self.GIT, "先取远端当前指向")
+        self._run()
+        self.assertIn("先取远端当前指向", self.error_texts())
+
+    def test_target_branch_division_removed_reports(self):
+        # 反例：删掉与「并入目标分支」的分工 ->「已与上游同步」被读成「已并入目标分支最新」
+        # （提示词 baseline 片段与「压缩提交」管的是后者，两处判准随即冲突）
+        self._mutate(self.GIT, "不是同一件事（L1）")
+        self._run()
+        self.assertIn("不是同一件事（L1）", self.error_texts())
+
+    def test_core_bullet_removed_reports(self):
+        # 反例：删掉常驻层那句底线 -> 每次会话读的那一层没有这条，通用层写得再全也读不到
+        self._write_valid()
+        text = self._docs[self.CORE].replace(
+            "* **动手前在 git 工作区里确认当前分支已与上游同步**：当场取远端、上游没有本分支"
+            "缺少的提交，有则先更新；同一任务核一次"
+            "（判据见 `specs/general/git.adoc`「动手前先确认当前分支与上游同步」）。\n", "", 1)
+        self.assertNotEqual(text, self._docs[self.CORE])
+        self.write(self.CORE, text)
+        self._run()
+        self.assertIn("动手前在 git 工作区里确认当前分支已与上游同步", self.error_texts())
+
+    def test_core_value_removed_reports(self):
+        # 反例：常驻层只留"要同步"、删掉取值与更新动作 -> 读的人不知道"同步"以什么为准
+        self._mutate(self.CORE, "上游没有本分支缺少的提交")
+        self._run()
+        self.assertIn("上游没有本分支缺少的提交", self.error_texts())
+
+
 class TestCheckChangeNumberScopeGuard(CheckSpecsTestCase):
     """『变更编号的作用面』防线的用例（用户提出）。
 

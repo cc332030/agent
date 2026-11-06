@@ -550,15 +550,15 @@
 """
 
 import argparse
-import fnmatch
 import concurrent.futures
+import fnmatch
 import json
 import os
 import posixpath
 import re
 import shutil
-import sys
 import subprocess
+import sys
 import tomllib
 
 # 兼容 Windows GBK 等非 UTF-8 终端，统一按 UTF-8 输出
@@ -14793,7 +14793,7 @@ def check_user_requirement_guard():
 
     判据本体唯一落点在必加载层 `specs/core/execution.adoc`「指令执行」的那条 bullet；公共入口
     「最高优先级铁律」与维护方不可降级清单 P8 是**登记**（不是第二份定义）。故本道核三处，
-    
+
     **按 bullet 自己的正文核**（不是整节）：本节的相邻条目（「逐字执行用户指令」「歧义先问」
     「每个任务都当尽力、严禁糊弄」）字样相近，按整节核会把被抽走的要点兜住。
 
@@ -14849,6 +14849,45 @@ def check_guess_confirm_guard():
         err(f"缺少文件 {rel_pl}——「猜到的行为先报、待人工确认」的判据本体失去落点"
             "（必加载层只剩底线，报的形态、分工与边界无处可查）", rel_pl)
     run_rule_guard("check_guess_confirm_guard")
+    phase_done()
+
+
+def check_branch_sync_guard():
+    """『动手前先确认当前分支与上游同步』防线（**用户提出**）。
+
+    判据本体唯一落点在通用层 `specs/general/git.adoc`「动手前先确认当前分支与上游同步」——
+    在 git 工作区里**动手之前**（改文件、跑构建/测试、提交，以及据代码现状作判断并据此推进
+    任务）须先确认**当前分支已与它的上游同步**（取值：**当场取远端**、上游一侧为空；本地
+    跟踪引用是上次取回时的值、不取远端时恒为 0，**不构成核对**；本地领先不算未同步）；
+    **未同步则先更新、再动手**；更新**不得以减少本地已有成果为代价**（未提交改动的集合、
+    本地未推送的提交条数都不减少）；**无上游**＝本条不适用、不阻断，**取不到远端**按
+    **尽力而为**（实际尝试、写明未核对到最新、不记通过、不停下）；**按任务核一次、不按动作核**
+    （与执行吞吐同向，否则本条会被读成"每步都取远端"而整条失效）。
+
+    **两处都要钉**：通用层是判据本体，常驻层 `specs/core/CORE.adoc`「底线」是一句话要求 +
+    回指——**每次会话真正读到的只有常驻层**，只钉通用层时那句被删掉照样全绿。
+
+    失效形态：本地一切看起来正常（编译过、用例绿、与记忆里的代码一致），而基点是旧的——
+    改动落在别人已经改过的同一处，冲突与覆盖在动手这一步就已注定。
+
+    只钉「判据是否仍在」——「这次任务算不算已核对过」属运行时事实，交人/子 agent 复核
+    （见 `GUARD_CHECK_LIMITS`）。
+    """
+    phase("分支与上游同步防线检查")
+    rel = "specs/general/git.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——『动手前先确认当前分支与上游同步』失去权威定义落点", rel)
+        phase_done()
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    if not re.search(r"^== 动手前先确认当前分支与上游同步", text, re.M):
+        err(f"{rel} 未找到「动手前先确认当前分支与上游同步」一节——动手前的同步判据无处可查"
+            "（用户提出的口径不得被删除或降级）", rel)
+        phase_done()
+        return
+    run_rule_guard("check_branch_sync_guard")
     phase_done()
 
 
@@ -15076,6 +15115,7 @@ CHECKS = (
     check_validation_entry_guard,
     check_http_contract_guard,
     check_baseline_sync_guard,
+    check_branch_sync_guard,
     check_split_history_ownership_guard,
     check_value_binding_guard,
     check_spec_optimize_guard,
@@ -15224,4 +15264,3 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
