@@ -31413,5 +31413,191 @@ class TestRuleAssemblyConflicts(CheckSpecsTestCase):
             self.assertIn("ADOC_ROOTS = [", fh.read())
 
 
+class TestCheckSpecDrivenGuard(CheckSpecsTestCase):
+    """钉住『规格（spec driven）』防线（**用户提出**：接入 spec 规范）。
+
+    本条两头都要拦：**该写不写**（需求只在对话里、缺口由执行者按自己理解补上）与
+    **不该写硬写**（既含"每件事新开一份"，也含"写成一本说明书"）。故夹具按"哪一类取值
+    被抽走会滑向其中哪一头"逐处做定点改动，而不是只核"这一节在不在"。
+
+    **夹具形态**：五份真文件的逐字副本（判据本体 + 调度器与公开面两处加载面 + 规划层的
+    分工条 + 本仓库自己取哪一档），每个用例做一处改动后落进临时根再跑防线——手抄夹具
+    会与真文档脱节。
+    """
+
+    SPEC = "specs/general/spec.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+    PLANNING = "specs/general/planning.adoc"
+    # 本仓库"规范条目取哪一档"的取值落点（通用条只给判据、取值在维护方自查层）
+    LIFECYCLE = "specs-project-maintainer/spec-lifecycle.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        repo_root = os.path.dirname(HERE)
+        self.base = {}
+        for rel in (self.SPEC, self.COMMON, self.README, self.PLANNING, self.LIFECYCLE):
+            with open(os.path.join(repo_root, *rel.split("/")), encoding="utf-8") as fh:
+                self.base[rel] = fh.read()
+        # `SPEC_SPEC_FILE` 是**导入期**按真 `SPECS_DIR` 算出的常量：基类把 `REPO_ROOT` 指到
+        # 临时根之后它仍指向真仓库，于是防线自带的两处前置判断（文件缺失 / 节缺失）读的是
+        # 临时根里未改动的那一份，那两条反例只核到规则侧报红、核不到它们本来要核的分支。
+        self._orig_spec_file = cm.SPEC_SPEC_FILE
+        cm.SPEC_SPEC_FILE = os.path.join(self.root, *self.SPEC.split("/"))
+
+    def tearDown(self) -> None:
+        cm.SPEC_SPEC_FILE = self._orig_spec_file
+        super().tearDown()
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_spec_driven_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
+        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
+        self.assertIn(removed, self.base[rel])
+        self._write_all_valid()
+        self.write(rel, self.base[rel].replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run()
+        self.assertEqual([], cm.errors)
+
+    def test_file_missing_reports(self):
+        # 反例：判据本体整份被删 -> 「做成什么样」没有任何可判定的落点
+        self._write_all_valid()
+        os.remove(os.path.join(self.root, *self.SPEC.split("/")))
+        self._run()
+        self.assertIn("失去可判定的落点", self.error_texts())
+
+    def test_section_deleted_reports(self):
+        # 反例：写法判据整节被删 -> 规格要么退化成愿望清单、要么滑成设计文档
+        self._write_all_valid()
+        self.write(self.SPEC, "= 规格规范\n\n== 别的节\n* 略。\n")
+        self._run()
+        self.assertIn(f"缺少「{cm.SPEC_SECTION}」一节", self.error_texts())
+
+    def test_acceptance_criteria_clause_removed_reports(self):
+        # 反例：删掉「一条要求一项验收标准」-> 写不出可观察结果的愿望照样进规格
+        self._mutate(self.SPEC, "都要有对应的验收标准")
+        self._run()
+        self.assertIn("都要有对应的验收标准", self.error_texts())
+
+    def test_behavior_only_clause_removed_reports(self):
+        # 反例：删掉「不写实现方案」-> 规格滑成设计文档（方案一改规格就过期）
+        self._mutate(self.SPEC, "不写实现方案")
+        self._run()
+        self.assertIn("不写实现方案", self.error_texts())
+
+    def test_no_copy_clause_removed_reports(self):
+        # 反例：删掉「不复制既有内容」-> 规格把代码与既有文档抄一遍，两处来源各改各的
+        self._mutate(self.SPEC, "只引名称与落点")
+        self._run()
+        self.assertIn("只引名称与落点", self.error_texts())
+
+    def test_tier_clause_removed_reports(self):
+        # 反例：删掉三档之一（免规格）-> 小事也开文档这一头没人拦
+        self._mutate(self.SPEC, "免规格档却新开了规格文件")
+        self._run()
+        self.assertIn("免规格档却新开了规格文件", self.error_texts())
+
+    def test_overwrite_tier_removed_reports(self):
+        # 反例：删掉「缺口由执行者自行推断补上」-> 大事只有一句需求也没人报
+        self._mutate(self.SPEC, "缺口由执行者自行推断补上")
+        self._run()
+        self.assertIn("缺口由执行者自行推断补上", self.error_texts())
+
+    def test_impact_based_tier_removed_reports(self):
+        # 反例：删掉「按行为影响面判档」-> 档位按文件数/行数判（改十处不变行为也要写完整规格）
+        self._mutate(self.SPEC, "对外可观察的行为")
+        self._run()
+        self.assertIn("对外可观察的行为", self.error_texts())
+
+    def test_default_first_clause_removed_reports(self):
+        # 反例：删掉「默认只服务本次任务」-> 默认变成每份规格都长期维护、留下过期的第二份说明书
+        self._mutate(self.SPEC, "不默认留下一份长期维护的规格")
+        self._run()
+        self.assertIn("不默认留下一份长期维护的规格", self.error_texts())
+
+    def test_as_source_clause_removed_reports(self):
+        # 反例：删掉「as-source 默认不做」-> 「代码由规格生成」被当成演进方向直接开做
+        self._mutate(self.SPEC, "两份真源")
+        self._run()
+        self.assertIn("两份真源", self.error_texts())
+
+    def test_disposal_clause_removed_reports(self):
+        # 反例：删掉「收尾时必须有去向」-> 规格写完没人管，任务结束时最容易被留在原地
+        self._mutate(self.SPEC, "谁在维护它")
+        self._run()
+        self.assertIn("谁在维护它", self.error_texts())
+
+    def test_loader_registration_removed_reports(self):
+        # 反例：调度器不再按名登记该文件 -> 该条永远不会被触发加载（规则在、没人读到）
+        self._mutate(self.COMMON, "specs/general/spec.adoc")
+        self._run()
+        self.assertIn("specs/general/spec.adoc", self.error_texts())
+
+    def test_planning_division_removed_reports(self):
+        # 反例：删掉规划层那句分工 -> 只写方案不写验收标准（或反之），两头都漏
+        self._mutate(self.PLANNING, "不得互相顶替")
+        self._run()
+        self.assertIn("不得互相顶替", self.error_texts())
+
+    def test_public_readme_removed_reports(self):
+        # 反例：公开面目录说明不再提这条 -> 读者按 README 学习时无从知道有这条规则
+        self._mutate(self.README, "`spec.adoc`")
+        self._run()
+        self.assertIn("`spec.adoc`", self.error_texts())
+
+    def test_write_thick_clause_removed_reports(self):
+        # 反例：删掉「一条要求一句说完」-> 「写厚」这一头无人拦（该写的都写了、写成一本）
+        self._mutate(self.SPEC, "不许跨段落")
+        self._run()
+        self.assertIn("不许跨段落", self.error_texts())
+
+    def test_spec_grown_into_book_reports(self):
+        # 反例（本轮用户点名的第二个方向）：条目一条不少，规格却长成一本书——
+        # 往写法判据里塞多级小节、表格、代码块与条目后的顶格续写。正向锚点全在，
+        # 只有形态判据能拦住它。
+        self._write_all_valid()
+        book = (self.base[self.SPEC]
+                + "\n=== 附：实现方案（原本该进设计文档）\n\n"
+                + "|===\n| 类名 | 表名\n|===\n\n"
+                + "----\nclass Foo {}\n----\n\n"
+                + "* 一条要求\n** 子条目（这一层本不该有）\n\n"
+                + "这一条要求还有第二段（跨了段落）。\n")
+        self.write(self.SPEC, book)
+        self._run()
+        texts = self.error_texts()
+        for hit in ("多级小节", "表格", "定界块", "子条目", "顶格续写"):
+            self.assertIn(hit, texts)
+
+    def test_entry_continuation_reports(self):
+        # 反例：只多出一处"条目之后的顶格续写"-> 一条要求跨了段落（写厚的机械痕迹）
+        self._write_all_valid()
+        self.write(self.SPEC, self.base[self.SPEC]
+                   + "\n* 一条要求\n\n这一条的后半段另起了一段。\n")
+        self._run()
+        self.assertIn("顶格续写", self.error_texts())
+
+    def test_repo_anchored_choice_removed_reports(self):
+        # 反例：删掉本仓库"规范条目默认不取 anchored"那一节 -> 改规范时会顺手长期带一份
+        # 规格，同一条要求有了两份长期文本（通用条只说"须项目声明"，取值在这份里）
+        self._mutate(self.LIFECYCLE, "规范条目本身就是该行为的长期真源")
+        self._run()
+        self.assertIn("规范条目本身就是该行为的长期真源", self.error_texts())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -281,6 +281,16 @@
 * **须注意的语义差异（同义性，专家与技能）**：上述材料的 progressive disclosure 讲的是**内容的加载粒度**（元数据常驻、正文按需），**未**规定"多步骤任务该按角色切开""主 agent 只编排、不持有子 agent 的读本""每段须有可核对的移交物"——这三条是本集合按现场用量判据化的取舍（见 `library/adoption.adoc`）。
 * **须注意的语义差异（同义性，执行吞吐）**：上述材料给的是**方向**（少读、按需披露、上下文越长越差），**未**规定"互相无依赖的调用必须一次批量发出""构建与校验的输出须一次取到"这类**执行侧判据**，也**未**给出"轮次成本"的量级；本集合按现场实测把"少绕"判据化的取舍与量级见 `library/throughput.adoc`。
 
+== 规格驱动（GitHub Spec Kit / Kiro / OpenSpec / Gherkin）
+
+* 材料（**业界约定与公开文章，非标准**）：
+** **GitHub Spec Kit** 官方 README（`github/spec-kit`，**官方文本已取回**）：以 `constitution → specify → plan → tasks → implement` 为最小流程，规格是"带着走的产物"（"A specification carried through planning, implementation, and convergence"）。
+** **Kiro** 官方文档（**未逐字取回**：该页返回的是 JS 壳、正文不可取）与 **OpenSpec** 官方 README（`Fission-AI/OpenSpec`，**官方文本已取回**）：前者为 `requirements → design → tasks` 三份文档的流程，后者为 `proposal` / `specs` / `design` / `tasks` 一组产物，自称取向是"fluid not rigid、iterative not waterfall、built for brownfield"。
+** **Birgitta Böckeler《Understanding Spec-Driven-Development: Kiro, spec-kit, and Tessl》**（martinfowler.com，2025-10-15，**官方网页已取回**）：把 SDD 的落地程度分为 **spec-first**（先写规格、供本次任务使用）、**spec-anchored**（任务结束后继续作为该功能的维护依据）、**spec-as-source**（规格是唯一手改产物、代码由它生成）；并给出对前两者"用大锤敲钉子"的批评——一个小组件级的 bug 被扩成 4 个 user story、16 条验收条件，评审产出的 markdown 比评审代码更费时，执行者仍会忽略其中一部分说明。
+** **Gherkin**（Cucumber 官方 README，**官方文本已取回**）：`Given` / `When` / `Then` 的验收条件书写形态，是**业内通行的用例描述语言**（"Gherkin is a parser and compiler for the Gherkin language"）。
+* 用途：`specs/general/spec.adoc` 的总依据——"规格只到行为面、按行为影响面分三档、默认只服务本次任务（first）、anchored 须项目声明、as-source 默认不做"。
+* **须注意的语义差异（同义性）**：上述材料给的是**做法与代价**（各家流程、三档深度、以及"重流程用在小改动上是浪费"的实测批评），**未**规定"规格写到哪一步""小改动要不要写规格"，也**未**要求各家流程必须照搬；ISO/IEC/IEEE 29148 只给"需求须单一、无歧义、可验证、可追溯"的下限。**"按规模分档、只到行为面、默认 first"是本集合据上述方向做的判据化取舍**，不是任何一家工具的规定，也不是标准原文。
+
 == The Twelve-Factor App
 
 * 材料：The Twelve-Factor App（十二要素应用方法论）。

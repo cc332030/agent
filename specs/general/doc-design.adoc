@@ -1,6 +1,6 @@
 = 设计文档规范（通用层）
 
-适用于**所有语言、所有项目类型**的文档编写维护——既包括独立的设计文档与测试设计文档，也包括**代码内的文档注释**。内容要求与迁移方式统一见 `specs/general/doc.adoc`；业务系统阶段级文档组织见 `specs/general/doc-lifecycle.adoc`；模块内文档的组织与归属见 `specs/general/doc-module.adoc`。
+适用于**所有语言、所有项目类型**的文档编写维护——既包括独立的设计文档与测试设计文档，也包括**代码内的文档注释**。内容要求与迁移方式统一见 `specs/general/doc.adoc`；业务系统阶段级文档组织见 `specs/general/doc-lifecycle.adoc`；模块内文档的组织与归属见 `specs/general/doc-module.adoc`。**规格（要什么、可判定的验收标准、写不写与写多细）见 `specs/general/spec.adoc`**——本文件管「方案与取舍记在哪一层」，那份管「要做成什么样」。
 
 == 设计文档
 

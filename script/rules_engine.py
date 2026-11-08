@@ -369,6 +369,94 @@ def _step_file_forbidden(rules, step):
         ctx.err(step["message"].replace("{file}", rel).replace("{hit}", str(hit)), rel)
 
 
+# 『写成一本书』那几类**结构性痕迹**：规格本该是一列"一条要求一句"的句子，一旦长出这些
+# 形态，就说明方案、对照表与实现细节搬了进来。判据按**行**匹配，不做语义判断。
+_BANNED_SHAPES = {
+    "subsection": (re.compile(r"^={3,}\s"), "多级小节（`===`）"),
+    "table": (re.compile(r"^\|={3,}$"), "表格（`|===`）"),
+    "code_block": (re.compile(r"^(-{4,}|\.{4,})$"), "定界块（代码/示例块）"),
+    "nested_list": (re.compile(r"^\*\*\s"), "条目下的子条目（`**`）"),
+}
+
+
+def _step_shape_ban(rules, step):
+    """某文件或某节内**不得长出**指定结构性形态（`banned` 取 `_BANNED_SHAPES` 的键）。
+
+    用于"写厚"这一头：`section_groups` / `bullet_tokens` 只能证明"该写的那几句还在"
+    （该写不写），证明不了"没写成一本书"——条目一条不少、篇幅却翻了几倍时，逐条核锚点
+    一路全绿。故把"书"的形态钉成可逐行判定的几类：多级小节、表格、定界块、子条目，以及
+    **条目之后紧跟顶格正文**（本仓库的写法里，条目续写是顶格段落——一条要求跨了段落，
+    这正是"一条要求没说成一句"的机械痕迹）。
+
+    判据只到"这一行是不是这个形态"，"这一段该不该并进设计文档"属语义判断，交人复核。
+    """
+    ctx = rules.ctx
+    rel = step["file"]
+    banned = step.get("banned") or []
+    # 写成字符串（`banned = "table"`）时按字符逐个核，形态名全不认识而一个都不报——
+    # 与本段要防的"拼错名字却报绿"同一种失效，故类型也当场核。
+    if not isinstance(banned, (list, tuple)):
+        raise RulesError(f"{rel} 的 `shape_ban` 的 `banned` 须是数组（一项一个形态名），"
+                         f"实际是 {type(banned).__name__}")
+    unknown = [b for b in banned if b not in _BANNED_SHAPES and b != "entry_continuation"]
+    if unknown:
+        # 拼错名字时那一类形态**一条都不核**，而报绿与"核过且通过"看起来一样。
+        raise RulesError(f"{rel} 的 `shape_ban` 里有引擎不认识的形态名 {unknown}——"
+                         "可用的取值见 `_BANNED_SHAPES` 与 `entry_continuation`")
+    text, _scope = _step_target(rules, step)
+    if text is None:
+        return
+    template = step["message"]
+
+    def _report(lineno, hit):
+        ctx.err(template.replace("{file}", rel).replace("{line}", str(lineno))
+                .replace("{hit}", hit), rel, lineno)
+
+    for key in banned:
+        if key == "entry_continuation":
+            continue
+        pattern, label = _BANNED_SHAPES[key]
+        # 定界类形态（表格、定界块）**开与闭同形**：成对时按块报一次（报开的那一行），
+        # 否则同一处会被报两遍——读者以为有两处书。
+        paired = key in ("table", "code_block")
+        seen = 0
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if not pattern.match(line):
+                continue
+            if paired:
+                seen += 1
+                if seen % 2 == 0:
+                    continue
+            _report(lineno, label)
+    if "entry_continuation" in banned:
+        # **条目之后又起一段顶格正文**：条目本身是列表项，本仓库把"续写"写成顶格段落
+        # （缩进另有 `list_structure` 管），故顶格非列表正文紧跟条目即"这一条跨了段落"。
+        # 空行不打断判定（跨段的典型形态正是空一行再起一段）；标题、块属性与定界块不算。
+        in_entry = False
+        in_block = False       # 定界块内部（代码/示例/表格）：块内各行不是"续写"
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            if _BLOCK_DELIM.match(line.strip()):
+                in_block = not in_block
+                in_entry = False
+                continue
+            if in_block or line.startswith("|"):
+                in_entry = False
+                continue
+            if _HEADING.match(line) or _BLOCK_ATTR.match(line):
+                in_entry = False
+                continue
+            if line[0] in " \t":
+                continue
+            if _LIST_ITEM.match(line):
+                in_entry = True
+                continue
+            if in_entry:
+                _report(lineno, "条目之后的顶格续写（一条要求跨了段落）")
+                in_entry = False
+
+
 def _step_split_block(rules, step):
     """按定界串切出一段（`split_by` 取最后一段，`end_by` 截断）→ 逐组核锚点。
 
@@ -1555,6 +1643,7 @@ KINDS = {
     "manifest_single_owner": _step_manifest_single_owner,
     "table_row_pipe": _step_table_row_pipe,
     "list_structure": _step_list_structure,
+    "shape_ban": _step_shape_ban,
     "prose_mentions_generated": _step_prose_mentions,
     # 不是"核对"：声明一处**登记面**（表长什么样、行正文落在哪个目录）。判据由脚本按它
     # 现算后核（本仓库：`check_guard_order_guard` 装配清单表、`check_guard_manifest` 核条目），
