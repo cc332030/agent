@@ -11,7 +11,7 @@
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
   * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
   * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
-  * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
+  * check_java_test_naming —— Java 测试类命名防线（正：两侧五类后缀判据齐备；反：后缀被删/调度器口径漂移）
   * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes`/`.editorconfig` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
   * check_review_guard   —— 评审备注落点防线（正：判据条 + 两个方向约束 + 两处引用齐备；反：文件被删/判据缺失/引用断开）
   * check_baseline_sync_guard —— 基线同步防线（正：三处落点 + 公开面齐备；反：前置条/判定标准/假绿折衷/根因/两侧核/两档取值/压缩前复核/两个方向/分工句/依据，各落点逐条被删或掏空）
@@ -4977,13 +4977,13 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
 
 
 class TestCheckJavaTestNaming(CheckSpecsTestCase):
-    """钉住 Java 测试类命名契约（四类后缀）在规范与调度器两侧一致。
+    """钉住 Java 测试类命名契约（五类后缀，一律以 `Tests` 结尾）在规范与调度器两侧一致。
 
-    后缀与构建工具的执行边界绑定（`PerfTests`/`IT` 不随常规测试执行），任一处漏掉
-    某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明四类判据。
+    后缀与构建工具的执行边界绑定（`PerfTests`/`IntegrationTests`/`SandboxTests` 不随常规测试执行），任一处漏掉
+    某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明五类判据。
     """
 
-    # 调度器**只给触发特征**（要新建或改动 Java 测试类时即命中）——四类后缀与拆分裁决
+    # 调度器**只给触发特征**（要新建或改动 Java 测试类时即命中）——五类后缀与拆分裁决
     # 是 `java-testing.adoc` 的条目本体，不再要求调度器逐字抄它们（放宽前的口径即第二真源）。
     JAVA_LINE = ("  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ "
                  "link:specs/stack/java.adoc[] + link:specs/stack/java-testing.adoc[]"
@@ -5003,7 +5003,8 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
                    "= Java 测试规范\n\n"
                    "== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n"
+                   "`PerfTests` 性能、`IntegrationTests` 端到端、`SandboxTests` 永不自动执行；"
+                   "后两者独立于常规测试执行。\n"
                    "一个被测类可按需求/分类可拆成多个测试类；分类或属性相同的用例必须"
                    "归入同一个测试类；不得为每个场景一个类而拆，禁止滥拆。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
@@ -5022,14 +5023,14 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_dropped_suffix_reports(self):
         # 反例：规范侧删掉某一类后缀（如 BootTests）
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n后缀：`Tests`、`PerfTests`、`IT`（被测类名 + 后缀、常规）\n")
+                   "= t\n\n== 测试类命名\n后缀：`Tests`、`PerfTests`、`IntegrationTests`（被测类名 + 后缀、常规）\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
         self.assertIn("BootTests", self.error_texts())
 
     def test_dispatcher_missing_trigger_reports(self):
         # 反例：调度器登记了文件、却没有"要新建或改动测试类"这一触发特征 → 永不被加载。
-        # （放宽后**不再**要求调度器逐字抄四类后缀/拆分裁决——那是条目本体、抄了即第二真源）
+        # （放宽后**不再**要求调度器逐字抄五类后缀/拆分裁决——那是条目本体、抄了即第二真源）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
                    "  ** Java 项目 → link:specs/stack/java-testing.adoc[]")
@@ -5039,7 +5040,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_not_registered_in_dispatcher_reports(self):
         # 反例：文件存在但未登记调度器 → 永不被加载
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`（被测类名 + 后缀、常规）")
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`（被测类名 + 后缀、常规）")
         self.write("AGENTS_COMMON.adoc", "= t")
         cm.check_java_test_naming()
         self.assertIn("未在加载调度器登记", self.error_texts())
@@ -5047,7 +5048,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_split_ruling_partial_reports(self):
         # 反例：拆分裁决只剩"合并"那一半（退回"一个被测类一个测试类"）——即本次调整要修掉的口径
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`"
                    "（被测类名 + 后缀、常规）\n批量测试同一被测类不同场景时仍合并为一个测试类。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
@@ -5056,7 +5057,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_split_ruling_only_allow_split_reports(self):
         # 反例：只留"可拆"、不留"同分类须归一类 + 禁止滥拆"（放任每个场景一个类）
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`"
                    "（被测类名 + 后缀、常规）\n一个被测类可按需求/分类可拆成多个测试类。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
@@ -5074,7 +5075,8 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         self.write("specs/stack/java-testing.adoc",
                    "= t\n\n== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IT` 端到端；后者独立于常规测试执行。\n")
+                   "`PerfTests` 性能、`IntegrationTests` 端到端、`SandboxTests` 永不自动执行；"
+                   "后两者独立于常规测试执行。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
         self.assertIn("拆分裁决", self.error_texts())
@@ -5331,7 +5333,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
              "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
              "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）、**自定义不是违规**。\n"
              "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-             "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+             "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
              "**构建配置一侧的取值不变（L1）**。\n")
 
     def test_valid_passes(self):
@@ -5345,7 +5347,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "= Java 测试规范\n\n== 测试类命名（L1 强制）\n"
                    "测试类名一律为「被测类名 + 测试类型后缀」。\n"
                    "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("强制面", self.error_texts())
@@ -5356,7 +5358,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "= Java 测试规范\n\n== 测试类命名（推荐）\n"
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
                    "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
-                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("AI 生成时的默认名字", self.error_texts())
@@ -5367,7 +5369,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "= Java 测试规范\n\n== 测试类命名（推荐）\n"
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**。\n"
                    "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
+                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("类名允许自定义", self.error_texts())
@@ -5379,7 +5381,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
                    "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
                    "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**。\n")
+                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("构建配置一侧的取值不变（L1）", self.error_texts())
 
@@ -5404,22 +5406,23 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "== 其他\n\n测试类名**推荐**用；**推荐、非必须**；**类名允许自定义**"
                    "（`CCacheAspectCacheKeyTests`）；**自定义不是违规**；"
                    "**AI 生成时的默认名字**；AI 新建测试类**用默认名字**；"
-                   "**后缀沿用上表的四类（推荐）**；**这是推荐、不是禁令**；"
+                   "**后缀沿用上表的五类（推荐）**；**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
 
 
 class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
-    """钉住『Java 永不自动执行的实验代码后缀 `Playground`』（用户口径：`src/test/java`
-    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**、
-    **通过名字匹配**避免执行）。
+    """钉住『Java 永不自动执行的实验代码后缀 `SandboxTests`』（用户口径：`src/test/java`
+    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫"手动"**、
+    **不靠名字承担执行边界**）。
 
-    失效形态四类：① 取名口径被删（回到 `Manual*`）；② **名字匹配天然落空**这一机制被删
-    （后缀可能被改成 `*Tests`/`*IT` 一类会进自动集合的形态）；③ 构建配置显式排除被删
-    （默认 includes 落空只挡默认规则，自定义扫描仍会收它）；④ 不得混入其他后缀被删
-    （`XxxPlaygroundTests` 被 surefire 命中）。故按**四条 bullet 各自的正文**核；读错物也要钉
-    通用层口径与调度器/README 登记。
+    失效形态五类：① 取名口径被删（回到 `Manual*`）；② **执行边界不靠名字承担**这一机制被删
+    （名字重新当开关——改个认不出的后缀来"让它不跑"）；③ **三重落点**被删（`@Tag` + 构建配置
+    排除 + `@Disabled` 缺任一层，自定义 includes 一扫就真跑）；④ 不得混入其他后缀被删
+    （`XxxSandboxIntegrationTests` 被读成合规）；⑤ **命名面只取 JUnit/Maven 约定内的名字**
+    被删（五类后缀须一律以 `Tests` 结尾、命中 JUnit 平台默认类名过滤与 surefire 默认 includes）。
+    故按**五条 bullet 各自的正文**核；读错物也要钉通用层口径与调度器/README 登记。
     """
 
     JAVA_TEST = "specs/stack/java-testing.adoc"
@@ -5432,7 +5435,7 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         # 规则引擎是**模块级缓存**（`RULES` 首次用到才构造），
         # 而夹具每个用例都换 `REPO_ROOT`：不作废时，本类跑完后
         # **后续用例**会读到本类夹具（已删）的规则目录，报“规则配置里没有防线 X”
-        # （本轮实测：全量跑时 `Playground` 类把后面的 `GradleGuard` 类全部带红）。
+        # （本轮实测：全量跑时本类把后面的 `GradleGuard` 类全部带红）。
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
 
@@ -5474,28 +5477,35 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
 
     def test_naming_dropped_reports(self):
         # 反例①：取名口径被删（`Manual*` 回流）
-        self._mutate(self.JAVA_TEST, '* **`Playground` 是"永不自动执行"的唯一后缀（L1）**',
+        self._mutate(self.JAVA_TEST, '* **`SandboxTests` 是"永不自动执行"的唯一后缀（L1）**',
                      '* **`ManualTests` 是这类代码的后缀**')
         cm.check_java_test_playground_guard()
-        self.assertIn("`Playground`", self.error_texts())
+        self.assertIn("`SandboxTests`", self.error_texts())
+
+    def test_naming_surface_dropped_reports(self):
+        # 反例①b：命名面改回「自洽就行」——约定内这条被删
+        self._mutate(self.JAVA_TEST, "* **命名面只取 JUnit/Maven 约定内的名字（L1）**",
+                     "* **后缀取值以自洽为准**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("命名面只取", self.error_texts())
 
     def test_name_match_dropped_reports(self):
-        # 反例②：名字匹配天然落空这一机制被删
-        self._mutate(self.JAVA_TEST, "* **`Playground` 靠名字匹配天然落空（L1）**",
+        # 反例②：执行边界不靠名字承担这一机制被删（名字重新背起执行开关）
+        self._mutate(self.JAVA_TEST, "* **执行边界不靠名字承担（L1）**",
                      "* **后缀取值不限**")
         cm.check_java_test_playground_guard()
-        self.assertIn("名字匹配", self.error_texts())
+        self.assertIn("执行边界不靠名字承担", self.error_texts())
 
     def test_config_exclude_dropped_reports(self):
-        # 反例③：构建配置显式排除被删
-        self._mutate(self.JAVA_TEST, "* **执行边界须在构建配置里显式排除（L1）**",
+        # 反例③：三重落点被删
+        self._mutate(self.JAVA_TEST, "* **`SandboxTests` 的执行边界须三重落点（L1）**",
                      "* **只靠后缀即可**")
         cm.check_java_test_playground_guard()
-        self.assertIn("构建配置", self.error_texts())
+        self.assertIn("三重落点", self.error_texts())
 
     def test_mixed_suffix_dropped_reports(self):
         # 反例④：不得混入其他后缀被删
-        self._mutate(self.JAVA_TEST, "* **`Playground` 不得混入其他后缀（L1）**",
+        self._mutate(self.JAVA_TEST, "* **`SandboxTests` 不得混入其他后缀（L1）**",
                      "* **后缀可自由组合**")
         cm.check_java_test_playground_guard()
         self.assertIn("混入其他后缀", self.error_texts())
@@ -5508,14 +5518,16 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         self.assertIn("specs/general/testing.adoc", self.error_texts())
 
     def test_dispatch_trigger_dropped_reports(self):
-        # 反例⑥：调度器识别特征被删（写 `Playground` 类时不加载该文件）
-        self._mutate(self.COMMON, "`PerfTests`/`Playground`/`IT`", "`PerfTests`/`IT`")
+        # 反例⑥：调度器识别特征被删（写 `SandboxTests` 类时不加载该文件）
+        self._mutate(self.COMMON,
+                     "`Tests`/`BootTests`/`PerfTests`/`IntegrationTests`/`SandboxTests`",
+                     "`Tests`/`BootTests`/`PerfTests`")
         cm.check_java_test_playground_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_readme_entry_dropped_reports(self):
         # 反例⑦：README 目录说明未登记该后缀
-        self._mutate(self.README, "、`Playground`（**永不自动执行**的实验代码后缀）", "")
+        self._mutate(self.README, "`SandboxTests`（**永不自动执行**：`@Tag` + 构建配置排除 + `@Disabled` 三重落点）", "")
         cm.check_java_test_playground_guard()
         self.assertIn("README.adoc", self.error_texts())
 
@@ -30414,7 +30426,7 @@ class TestCheckHandoffDurabilityGuard(CheckSpecsTestCase):
 
     def tearDown(self) -> None:
         # 规则引擎是模块级缓存、夹具每个用例都换 `REPO_ROOT`：不作废时后续用例会读到
-        # 本类夹具（已删）的规则目录，报"规则配置里没有防线 X"（与 `Playground` 类同因）。
+        # 本类夹具（已删）的规则目录，报"规则配置里没有防线 X"（与 `Sandbox` 类同因）。
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         super().tearDown()

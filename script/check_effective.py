@@ -147,18 +147,18 @@ MECHANISMS = [
      "check_split_history_ownership_guard", "check_split_history_ownership_guard 钉住三级判据（相似度高者优先 / 相似度相同时集中到一个模块 / 模块取能继承数量最多者且一经选定即固定）、判定标准四条与不可降级清单回指仍在；加载门（AGENTS_COMMON.adoc「git 操作」的识别特征）一并核；『两个模块各算几个能继承的文件』『哪一份相似度更高』"),
     ("测试文件后缀式命名（禁 test_ 前戳）",       "specs/general/testing.adoc",      None,
      "无机械抓手",
-     "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IT），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
-    ("Java 测试类四类后缀命名契约（Tests/BootTests/PerfTests/IT）", "specs/stack/java-testing.adoc", "script/check_specs.py",
-     "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含四类后缀判据"),
+     "无机械抓手：靠遵守；Java 测试类另须与源类同包路径、类名为「被测类名 + 测试类型后缀」（specs/stack/java-testing.adoc「测试类命名」：Tests/BootTests/PerfTests/IntegrationTests/SandboxTests，一律以 `Tests` 结尾），存量为随动迁移、不一次性收敛（specs/core/execution.adoc「规范变更的存量处理」）"),
+    ("Java 测试类五类后缀命名契约（Tests/BootTests/PerfTests/IntegrationTests/SandboxTests，一律以 Tests 结尾）", "specs/stack/java-testing.adoc", "script/check_specs.py",
+     "check_java_test_naming", "check_java_test_naming 钉住规范与 AGENTS_COMMON 调度器登记两侧都含五类后缀判据"),
     ("引用 javadoc 的文档路径基准按引用所在位置（项目根或模块根相对，推荐、不限制文档路径）", "specs/stack/java.adoc + specs/general/doc.adoc", "script/check_specs.py",
      "check_javadoc_path_base_guard", "check_javadoc_path_base_guard 钉住两处同口径（Java 栈「javadoc」的推荐面 + 两条理由 + **英文双引号包裹**；通用层「引用路径」的平台无关那一处），**反向拦「口径被改回强制、或推荐面被收窄成只剩一种」**——"
      "强制面下项目里以仓库根为基准的既有 `@see` 只能靠搬文档处置（本条对应用户提出的真实偏差）；"
      "『某条 `@see` 相对谁、路径层数对不对』属语义判断，交人/子 agent 复核"),
-    ("Java 测试类命名是推荐（允许自定义、AI 生成用默认名字；四类后缀非禁令，构建边界仍强）", "specs/stack/java-testing.adoc", "script/check_specs.py",
-     "check_java_test_naming_hint_guard", "check_java_test_naming_hint_guard 钉住命名口径的**级别与默认名字**（推荐、非必须 / AI 生成用默认名字 / 允许自定义类名且『自定义不是违规』）与后缀面（四类后缀是推荐、不是禁令；**构建配置一侧的取值仍为 L1**）；"
-     "与 `check_java_test_naming` 分工——那道核四类后缀与拆分裁决的判据仍在、本条核级别，**反向拦「强制面复活」**"),
-    ("Java 里「永不自动执行」的实验代码用 `Playground` 后缀（按名字匹配落空 + 构建配置显式排除）", "specs/stack/java-testing.adoc + specs/general/testing.adoc", "script/check_specs.py",
-     "check_java_test_playground_guard", "check_java_test_playground_guard 钉住取名口径（后缀一律 `Playground`、不叫 `Manual*`）、名字匹配天然落空（不以 `Tests`/`Test`/`TestCase`/`IT` 结尾，surefire 与 failsafe 默认 includes 都失中）、构建配置显式排除、不得混入其他后缀四条，"
+    ("Java 测试类命名是推荐（允许自定义、AI 生成用默认名字；五类后缀非禁令，构建边界仍强）", "specs/stack/java-testing.adoc", "script/check_specs.py",
+     "check_java_test_naming_hint_guard", "check_java_test_naming_hint_guard 钉住命名口径的**级别与默认名字**（推荐、非必须 / AI 生成用默认名字 / 允许自定义类名且『自定义不是违规』）与后缀面（五类后缀是推荐、不是禁令；**构建配置一侧的取值仍为 L1**）；"
+     "与 `check_java_test_naming` 分工——那道核五类后缀与拆分裁决的判据仍在、本条核级别，**反向拦「强制面复活」**"),
+    ("Java 里「永不自动执行」的实验代码用 `SandboxTests` 后缀（三重落点：`@Tag` + 构建配置排除 + `@Disabled`）", "specs/stack/java-testing.adoc + specs/general/testing.adoc", "script/check_specs.py",
+     "check_java_test_playground_guard", "check_java_test_playground_guard 钉住取名口径（后缀 `SandboxTests`、不叫 `Manual*`）、命名面只取 JUnit/Maven 约定内的名字（五类后缀一律以 `Tests` 结尾、命中 JUnit 平台默认类名过滤与 surefire 默认 includes）、执行边界不靠名字承担、三重落点、不得混入其他后缀五条，"
      "以及通用层跨语言口径与调度器/README 登记；"
      "『某次构建到底有没有跑到它』属运行时事实（构建日志），交人/子 agent 复核"),
     ("Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）", "specs/stack/java-testing.adoc", "script/check_specs.py",

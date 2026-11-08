@@ -1090,12 +1090,13 @@ SELF_CHECK_FILE = os.path.join(SPECS_DIR, "general", "self-check.adoc")
 # 依据与来源真实性规范（公共内容）：内部引用须指向当前真实存在的目标、外部标准只写
 # 名称/编号且不得编造、数据须有来源。来源一旦不实会污染整条下游引用链，故加机械防线。
 SOURCE_FILE = os.path.join(SPECS_DIR, "general", "source.adoc")
-# Java 测试规范（技术栈层）：其「测试类命名」是**全项目统一的命名契约**（后缀与构建工具的
-# 执行边界绑定：`PerfTests`/`IT` 不得混入常规 test 阶段）。该契约由两处共同承载——调度器的
-# Java 技术栈登记（检测到 Java 项目即加载）与规范正文；任一处漏掉某类后缀，引用方按另一处
-# 学习就会漏掉该类测试。故机械钉住两侧的四类后缀判据。
+# Java 测试规范（技术栈层）：其「测试类命名」是**全项目统一的命名契约**（五类后缀一律以
+# `Tests` 结尾，执行边界由 `@Tag` 与构建配置承担：`PerfTests`/`IntegrationTests`/`SandboxTests`
+# 不得混入常规 test 阶段）。该契约由两处共同承载——调度器的 Java 技术栈登记（检测到 Java 项目
+# 即加载）与规范正文；任一处漏掉某类后缀，引用方按另一处学习就会漏掉该类测试。
+# 故机械钉住两侧的后缀判据。
 JAVA_TEST_FILE = os.path.join(SPECS_DIR, "stack", "java-testing.adoc")
-# 四类测试后缀（全项目统一命名契约，不得自创变体）
+# 五类测试后缀（全项目统一命名契约，不得自创变体；一律以 `Tests` 结尾）
 JAVA_TEST_SUFFIXES = _RULES_TOKENS["JAVA_TEST_SUFFIXES"]
 # 测试类拆分裁决契约（一个被测类可拆多个类，但只按需求/分类拆、不得滥拆）：
 # 规范侧须留的三段判据——可拆声明 / 同分类同属性须归一类 / 禁止滥拆。
@@ -6792,22 +6793,22 @@ def check_line_ending_guard():
 
 
 def check_java_test_naming():
-    """『Java 测试类命名防线』：四类测试后缀与测试类拆分裁决的判据不得在任一处被删或漂移。
+    """『Java 测试类命名防线』：五类测试后缀与测试类拆分裁决的判据不得在任一处被删或漂移。
 
 """
     phase("Java 测试类命名防线检查")
     rel = os.path.relpath(JAVA_TEST_FILE, REPO_ROOT).replace("\\", "/")
     if not os.path.isfile(JAVA_TEST_FILE):
         err(f"缺少 Java 测试规范文件 {rel}——"
-            "测试类命名契约（Tests/BootTests/PerfTests/IT 四类后缀）失去落点", rel)
+            "测试类命名契约（Tests/BootTests/PerfTests/IntegrationTests/SandboxTests 五类后缀）失去落点", rel)
     else:
         with open(JAVA_TEST_FILE, encoding="utf-8") as fh:
             text = fh.read()
         for suffix in JAVA_TEST_SUFFIXES:
             if suffix not in text:
                 err(f"Java 测试类命名防线被破坏：{rel} 缺失测试类型后缀『{suffix}』——"
-                    "四类命名契约不得被删或降级", rel)
-        for key, desc in (("测试类命名", "四类后缀的权威定义节"),
+                    "五类命名契约不得被删或降级", rel)
+        for key, desc in (("测试类命名", "五类后缀的权威定义节"),
                           ("被测类名", "『被测类名 + 测试类型后缀』的命名口径"),
                           ("常规", "类别与执行阶段的绑定口径")):
             if key not in text:
@@ -6831,7 +6832,7 @@ def check_java_test_naming():
             "AGENTS_COMMON.adoc")
     else:
         # 调度器**只须带「什么时候要加载」的触发特征**（要新建或改动 Java 测试类），
-        # 四类后缀与拆分裁决是 `java-testing.adoc` 的**条目本体**——原先要求调度器逐字
+        # 五类后缀与拆分裁决是 `java-testing.adoc` 的**条目本体**——原先要求调度器逐字
         # 抄全后缀名与「多个测试类/不得滥拆」，是把本体复制进调度器（第二真源：
         # `terminology.adoc`「数据字典」的反膨胀、`doc-design.adoc`「信息归属」）。
         # 本体齐备由上面对 `java-testing.adoc` 的核对负责，这里只核「调度器能不能被触发」。
@@ -6910,10 +6911,10 @@ def check_java_test_naming_hint_guard():
     **AI 生成时用默认名字**。按强制面读，项目里已有的分类限定语命名会被当成"不合规"，
     review 会据此提问题；落点改为推荐面后，该形态与默认名**两者都合规**。
 
-    与 `check_java_test_naming` 的分工：那道核**四类后缀与拆分裁决的判据仍在**
+    与 `check_java_test_naming` 的分工：那道核**五类后缀与拆分裁决的判据仍在**
     （`Tests`/`BootTests`/`PerfTests`/`IT` 与"可拆但不得滥拆"），本条核**级别与默认名字**
     （推荐面 / 允许自定义 / AI 生成用默认名字 / 构建边界的 L1 不得一起放宽）——
-    两道不得互相替代：四类后缀判据齐备而口径被改回强制的形态，只有本条报得出。
+    两道不得互相替代：五类后缀判据齐备而口径被改回强制的形态，只有本条报得出。
     """
     phase("Java 测试类命名（推荐面）防线检查")
     if not os.path.isfile(JAVA_TEST_FILE):
@@ -6942,22 +6943,29 @@ def check_java_test_naming_hint_guard():
 
 
 def check_java_test_playground_guard():
-    """『Java 永不自动执行的实验代码后缀 Playground』防线。
+    """『Java 永不自动执行的实验代码后缀 SandboxTests』防线。
 
     用户口径：`src/test/java` 下有一些代码是手动执行的，
-    **任何情况下都不能自动执行**；为这类任务取个名字（**不叫“手动”**）、
-    **通过名字匹配的方式避免执行**。取 `Playground`（试验场）：它不以
-    `Tests`/`Test`/`TestCase`/`IT` 结尾，surefire 与 failsafe 的默认 includes
-    都失中；再在构建配置里显式排除，守住“任何自动阶段都不收它”。
+    **任何情况下都不能自动执行**；为这类任务取个名字（**不叫“手动”**）、且该名字
+    **符合 JUnit 规范**。取 `SandboxTests`（沙盒）：后缀同样以 `Tests` 结尾、
+    命中 JUnit 平台默认类名过滤与 surefire 默认 includes；**执行边界不靠名字**，
+    而由三层同时承担——类级 `@Tag("sandbox")`、surefire/failsafe 的 `excludedGroups`
+    都含 `sandbox`、类级 `@Disabled("原因")`。
+    （沿革：`Playground` → `Sandbox` → `SandboxTests`：前两版都靠“名字认不出”
+    来落空，与“既有可核对依据、又不与命名推荐面互斥”这条要求相冲。）
+
+    命名面只取**约定内**的名字：五类后缀**一律以 `Tests` 结尾**、全部命中
+    `^(Test.*|.+[.$]Test.*|.*Tests?)$`，规范里不出现任何不命中它们的推荐名。
+    故本条另核两条：「命名面只取 JUnit/Maven 约定内的名字」与「执行边界不靠名字承担」。
 
     为什么单立一道（而不并进 `check_java_test_naming`）：那道核的是
-    **四类后缀与拆分裁决的判据仍在**；本条核的是**第五类后缀的存在与执行边界**
-    ——两道不得互相替代：`Playground` 条被整条删掉时，四类后缀判据
+    **五类后缀与拆分裁决的判据仍在**；本条核的是**执行边界的三重落点与命名面规则**
+    ——两道不得互相替代：`SandboxTests` 条被整条删掉时，后缀判据
     一字不少、只有本条报得出。
     """
-    phase("Java `Playground` 防线检查")
+    phase("Java `SandboxTests` 防线检查")
     if not os.path.isfile(JAVA_TEST_FILE):
-        err("缺少 specs/stack/java-testing.adoc——『丸章园后缀』的落点丢失"
+        err("缺少 specs/stack/java-testing.adoc——『永不自动执行后缀』的落点丢失"
             "（名字匹配与执行边界无处承载）", "specs/stack/java-testing.adoc")
     run_rule_guard("check_java_test_playground_guard")
     phase_done()

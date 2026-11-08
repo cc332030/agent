@@ -1401,7 +1401,8 @@ JAVA_TEST_SUFFIXES = [
     "Tests",
     "BootTests",
     "PerfTests",
-    "IT",
+    "IntegrationTests",
+    "SandboxTests",
 ]
 JAVA_VAL_VAR_ANCHORS = [
     [
@@ -1476,6 +1477,7 @@ LIBRARY_QUOTE_ANCHORS = [
     "**/IT*.java",
     "**/*ITCase.java",
     "**/*TestCase.java",
+    "^(Test.*|.+[.$]Test.*|.*Tests?)$",
     "MAJOR version when you make incompatible API changes",
     "In many IETF documents, several words",
     "when they are in all capitals as shown below",
