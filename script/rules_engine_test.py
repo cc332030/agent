@@ -304,6 +304,68 @@ class TestSubsectionGroups(unittest.TestCase):
         self.assertEqual(len(ctx.errors), 1)
 
 
+class TestShapeBan(unittest.TestCase):
+    """`shape_ban`：「写成一本书」的那几类形态按行判定（不写成的照样通过）。
+
+    要治的失效：正向锚点只证明"该写的那几句还在"，证明不了"条目一条不少、篇幅翻了几倍"
+    ——后者恰恰是规格最容易长出来的形态（方案、对照表与实现细节搬进规格），而逐条核锚点
+    一路全绿。
+    """
+
+    FLAT = ("= t\n\n== 节\n\n"
+            "* **一条要求**：前置、动作、预期写在同一句里。\n"
+            "* **另一条要求**：也是一句。\n")
+
+    def _run(self, doc, banned=None, section=None):
+        ctx = FakeCtx({"a.adoc": doc})
+        step = {"kind": "shape_ban", "file": "a.adoc",
+                "banned": banned or ["subsection", "table", "code_block",
+                                     "nested_list", "entry_continuation"],
+                "message": "命中 {hit}（第 {line} 行）"}
+        if section:
+            step["section"] = section
+        _rules({"g": [step]}, ctx).run("g")
+        return ctx
+
+    def test_flat_list_passes(self):
+        self.assertEqual([], self._run(self.FLAT).errors)
+
+    def test_each_shape_reports(self):
+        for name, add in (
+                ("subsection", "\n=== 多级小节\n"),
+                ("table", "\n|===\n| a | b\n|===\n"),
+                ("code_block", "\n----\nx\n----\n"),
+                ("nested_list", "\n** 子条目\n"),
+                ("entry_continuation", "\n* 一条\n\n另起一段的续写。\n")):
+            with self.subTest(shape=name):
+                ctx = self._run(self.FLAT + add)
+                self.assertEqual(1, len(ctx.errors), ctx.texts())
+
+    def test_continuation_outside_entry_passes(self):
+        # 顶格正文**不跟在条目之后**时不算跨段（节引言、说明段都属正当写法）
+        doc = "= t\n\n== 节\n\n先说一段引言。\n\n* **一条要求**：一句。\n"
+        self.assertEqual([], self._run(doc).errors)
+
+    def test_section_scope(self):
+        # 收窄到某节时，节外的形态不参与判定
+        doc = ("= t\n\n== 甲节\n\n* **一条**：一句。\n\n"
+               "== 乙节\n\n|===\n| a | b\n|===\n")
+        ctx = self._run(doc, section="甲节")
+        self.assertEqual([], ctx.errors)
+        ctx = self._run(doc, section="乙节")
+        self.assertEqual(1, len(ctx.errors))
+
+    def test_string_banned_raises(self):
+        # 写成字符串（`banned = "table"`）时按字符逐个核，一项形态都不认识却全绿
+        with self.assertRaises(re_.RulesError):
+            self._run(self.FLAT, banned="table")
+
+    def test_unknown_shape_name_raises(self):
+        # 形态名拼错时那一类**一条都不核**，而报绿与"核过且通过"看起来一样 → 加载/运行即报错
+        with self.assertRaises(re_.RulesError):
+            self._run(self.FLAT, banned=["tabel"])
+
+
 class TestSplitBlock(unittest.TestCase):
     DOC = "前\n// tag::x[]\n要点 A\n// end::x[]\n后 要点 B\n"
 
