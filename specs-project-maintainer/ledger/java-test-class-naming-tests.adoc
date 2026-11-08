@@ -1,0 +1,10 @@
+= 本轮记账：测试类名重设计（五类后缀一律以 `Tests` 结尾，执行边界不靠名字承担）
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（测试类名重设计：不另立防线，只改既有那道） | 同上（`check_java_test_playground_guard` 由「名字匹配天然落空」改写「执行边界不靠名字承担 + 三重落点」，`check_java_test_naming`、`check_java_test_naming_hint_guard` 随五类后缀同步） | 191 → **191**（不另抬：只改**既有一道防线**的判据面，未增删防线） | 用户口径：『java 下，换成符合 junit 规范的名字，不要规范里提到任何不符合规范的名字』。**改动**：① `specs/stack/java-testing.adoc` 的五类后缀（`Tests`/`BootTests`/`PerfTests`/`IntegrationTests`/`SandboxTests`）**一律以 `Tests` 结尾**，全部命中 JUnit 平台默认类名过滤与 surefire 默认 includes——旧口径里 `*IT` 依据 failsafe、`Playground`/`Sandbox` 反过来靠"两个工具都认不出"，同一命名面一半靠"被认出"、一半靠"没被认出"，与用户要求直接冲突；② 立 L1「执行边界不靠名字承担」，把"谁跑它"整块挪到 `@Tag` + `excludedGroups`/`includes` + 类级 `@Disabled` 上，`SandboxTests` 写成三重落点；③ 通用层 `specs/general/testing.adoc` 与 `specs/general/verify.adoc` 的跨语言口径同步（"按名字识别并按名字排除"→"按名字识别、按该语言栈的机制排除"）；④ 调度器、README、图书馆依据（`library/sources.adoc` 补 JUnit 平台默认类名过滤与 `@Disabled`/`@Tag` 的逐字摘）与取向登记（`library/adoption.adoc`）随动。**review 修掉五处**：① 「命名面只取约定内的名字」与「执行边界不靠名字承担」两条的**判定标准**曾把 `*IT`/`*Sandbox`/`*Playground` 当成"违规后缀"举例——它一边禁止一边把名单外的名字写进命名面，判据自己就违反了自己那条 L1；改为判**形态**（"不命中默认类名规则"、"靠换名来换执行阶段"），规则数据锚点同步；② 「后缀沿用上表」条里 `UnitTests`/`CheckTests`/`BenchTests` 的举例同因删除；③ `AGENTS.adoc` 未登记本轮新增的两处落点（本文件与 `specs/general/verify.adoc` 的名字面口径），按"写文件与登记是同一个动作"补登记（为守住常驻层字节上限，一句话写清、细节不回指）；④ 表里 `SandboxTests` 行的三重落点次序与正文章节相反（表里 `@Disabled` 在前），改成与正文同序；⑤ `specs/general/verify.adoc`「尽力而为」条里残留 `IT` 这一旧后缀。**只钉「判据是否仍在」**——"某次构建到底有没有跑到它""某个类的 `@Tag` 与构建配置对不对得上"属运行时事实，交人/子 agent 复核
+|===

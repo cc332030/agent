@@ -80,7 +80,7 @@ message = "公开面 README 未登记『请求服务须有本机断言』{missin
 #      一份都收不到（实取 0），那份"核过且通过"是假的。
 [tokens.local_service_assert]
 scan_prefixes = ["src/"]
-scan_suffixes = ["_test.py", "Test.java", "Tests.java", "IT.java", "Spec.java", "spec.ts", "_test.go"]
+scan_suffixes = ["_test.py", "Test.java", "Tests.java", "IntegrationTests.java", "IT.java", "Spec.java", "spec.ts", "_test.go"]
 guard_prefixes = ["script/"]
 guard_suffixes = ["_test.py"]
 # 判据取**两点的合取**：有请求客户端，且有发起动作。只认前者时，核"别人的用例有没有断言"

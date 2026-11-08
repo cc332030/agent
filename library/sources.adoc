@@ -178,12 +178,16 @@
 * 材料：GNU Make 官方手册（行尾与行/字节严格解析相关的说明）。
 * 用途：`specs/general/encoding.adoc`「易被 CRLF 破坏的文本类格式」——`Makefile` 默认 LF。
 
-== Maven Surefire / Failsafe 插件默认 includes
+== Maven Surefire / Failsafe 插件默认 includes 与 JUnit 平台的默认类名过滤
 
-* 材料：Apache Maven 官方插件文档。
+* 材料：Apache Maven 官方插件文档（Surefire / Failsafe 的 Inclusions and Exclusions 页与 `test`/`integration-test` 目标参数表）、JUnit 官方用户指南与 API 文档（`ClassNameFilter.STANDARD_INCLUDE_PATTERN`、Console Launcher 的 `--include-classname`、Definitions 的 Test Class 定义）。
 * **Surefire 默认 includes 逐字摘**（官方文档已取回）："`**/Test*.java`"、"`**/*Test.java`"、"`**/*Tests.java`"、"`**/*TestCase.java`"。
 * **Failsafe 默认 includes 逐字摘**（官方文档已取回）："`**/IT*.java`"、"`**/*IT.java`"、"`**/*ITCase.java`"。
-* 用途：`specs/stack/java-testing.adoc`「测试类命名」「测试分类与执行边界」——`Tests` 被 surefire 的 `**/*Tests.java` 收进常规 `test` 阶段，而 `IT` **天然被 surefire 排除、由 failsafe 承接**。这两组 includes 是该文件"四类后缀 + 独立执行"契约的**决定性依据**（后缀取错即被误跑或误跳过）。
+* **JUnit 平台默认类名过滤逐字摘**（官方 API 文档已取回）：`STANDARD_INCLUDE_PATTERN` = "`^(Test.*|.+[.$]Test.*|.*Tests?)$`"；Console Launcher 的同义说明逐字为 "the default pattern only includes class names that begin with \"Test\" or end with \"Test\" or \"Tests\""、"Default: ^(Test.*|.+[.$]Test.*|.*Tests?)$"。
+* **JUnit 的 Test Class 定义逐字摘**（官方用户指南 Definitions 页已取回）："any top-level class, static member class, or @Nested class that contains at least one test method, i.e. a container. Test classes must not be abstract and must have a single constructor."；可见性逐字为 "Test classes, test methods, and lifecycle methods are not required to be public, but they must not be private."
+* **`@Disabled` 的效力边界逐字摘**（官方用户指南 Disabling Tests 页已取回）："When @Disabled is applied at the class level, all test methods within that class are automatically disabled as well."、"However, that does not prevent the test class from being instantiated, and it does not prevent the execution of class-level lifecycle callbacks such as @BeforeAll methods, @AfterAll methods, and corresponding extension APIs."
+* **`@Tag` 与按标记过滤逐字摘**（官方用户指南 Tagging and Filtering / Build Support 页已取回）："Test classes and methods can be tagged via the @Tag annotation. Those tags can later be used to filter test discovery and execution."；Gradle 侧为 `test { useJUnitPlatform { includeTags("fast") excludeTags("slow") } }`；Maven 侧为 Surefire/Failsafe 参数 `<excludedGroups>`——"Excluded groups/categories/tags. Any methods/classes/etc with one of the groups/categories/tags specified in this list will specifically not be run."、`<groups>`——"Only classes/methods/etc decorated with one of the groups/categories/tags specified here will be included in test run, if specified."
+* 用途：`specs/stack/java-testing.adoc`「测试类命名」「测试分类与执行边界」——五类后缀**一律以 `Tests` 结尾**，因此**全部命中** surefire 默认 includes（亦即 JUnit 平台默认类名过滤），执行边界只能由 `@Tag` + `excludedGroups`/`includes` + `@Disabled` 承担：`PerfTests`/`IntegrationTests`/`SandboxTests` 由 `excludedGroups` 排除（`IntegrationTests` 再由 failsafe 的 `includes` 显式列入），`SandboxTests` 另加类级 `@Disabled` 兜住"配置被改坏"这一形态。**须注意的语义差异（同义性）**：官方材料只给**机制**（哪一组名字会被默认收走、标记与参数怎么用），**均未规定**"测试类必须用哪个后缀""某类测试必须排除出哪个阶段"——「五类后缀 + 三重落点」是本集合据此做的判据化取舍（取向登记见 `library/adoption.adoc`）。
 
 == 运行时获取与"没有解释器"的处置（Microsoft Learn / Python 官方文档 / POSIX）
 

@@ -13,16 +13,16 @@ min = 4
 token_list = "LOCAL_ONLY_TOKENS"
 
 # Java 落点只给载体（判据本体在通用层）：替代品优先进程内、确实要独立进程时起在本机回环；
-# `IT` 同受约束（它讲的是执行时机、不是"可去连远端"的许可）。
+# `IntegrationTests` 同受约束（它讲的是执行时机、不是"可去连远端"的许可）。
 [[guards.check_local_only_guard]]
 file = "specs/stack/java-testing.adoc"
 tokens = [
     "用例只在本机跑（Java 侧的载体，不构成 Java 专属规则）",
     "specs/general/testing.adoc",
-    "`IT` 同样受此约束",
+    "`IntegrationTests` 同样受此约束",
 ]
 kind = "file_tokens"
-message = "Java 测试规范缺失「用例只在本机跑」的载体 {missing}——缺则写测试时想不到这条，远端地址照旧写进测试配置，且 `IT` 会被读成『可以去连远端环境』的许可"
+message = "Java 测试规范缺失「用例只在本机跑」的载体 {missing}——缺则写测试时想不到这条，远端地址照旧写进测试配置，且 `IntegrationTests` 会被读成『可以去连远端环境』的许可"
 
 # 调度器须能被触发（否则设计用例、决定连不连远端时，这一条永远不会被加载）。
 [[guards.check_local_only_guard]]
