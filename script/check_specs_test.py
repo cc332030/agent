@@ -31882,5 +31882,63 @@ class TestCheckVerdictLedgerGuard(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
 
+class TestCheckFetchProgressSizeGuard(CheckSpecsTestCase):
+    """`check_fetch_progress_guard` 里**体积口径**（`_size`）那一条不得回退成纯字节数。
+
+    本轮实测的失效形态：`fetch-specs.py` 已把体积改走 `_size()`（打出来是 `4.2 KB`），
+    而脚本头部「输出」一节仍写着「字节」——运行时与文档各说一套；而换单位这件事本身
+    只有实现里的一句承诺，抽走 `_size` 时全部检查照旧全绿。本类核三件：
+    那一组换单位的锚点还在不在、明细节措辞是不是「体积」、头部同节是否同口径。
+    """
+
+    SRC = "script/fetch-specs.py"
+    GUARD = "check_fetch_progress_guard"
+    GROUP = "体积按人读单位打"
+    ANCHORS = ("_SIZE_UNITS", "def _size(", "_size(len(")
+
+    def _groups(self):
+        # 按**现场**规则数据核：`_rules_spec()` 在夹具没备规则目录时会回落到现场那一份，
+        # 故这里直接点名现场那一份，不经过夹具判定
+        import rules_engine
+        rules = rules_engine.Rules(
+            rules_engine.load_rule_files(rules_engine.default_rules_spec(
+                os.path.dirname(os.path.abspath(__file__)))),
+            cm.RulesContext())
+        return [g for step in rules.steps(self.GUARD)
+                if step.get("kind") == "file_groups"
+                for g in step.get("groups", [])]
+
+    def test_size_group_anchors_present(self):
+        # 正例的一半：现场规则数据里有这一组，锚点是换单位的执行体（`_SIZE_UNITS` ＋ `_size(`）
+        groups = [g for g in self._groups() if g[0].startswith(self.GROUP)]
+        self.assertEqual(1, len(groups), "体积口径那一条须在规则数据里（且只一处）")
+        for anchor in self.ANCHORS:
+            self.assertIn(anchor, groups[0][1])
+
+    def test_size_group_wording_is_size_not_bytes(self):
+        # 措辞须是「体积」：退回「字节」就是"运行时打 `4.2 KB`、判据说字节"两套口径
+        why = [g for g in self._groups() if g[0].startswith(self.GROUP)][0][2]
+        self.assertIn("体积", why)
+        self.assertNotIn("状态、字节", why)
+
+    def test_head_section_uses_size_wording(self):
+        # 头部「输出」一节同口径：举的例子是 `6.9 KB`，不得再写"字节"
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "fetch-specs.py"), encoding="utf-8") as fh:
+            text = fh.read()
+        head = text[text.index("== 输出（用户口径"):text.index("安全保证：")]
+        self.assertIn("6.9 KB", head)
+        self.assertIn("体积", head)
+
+    def test_size_anchor_missing_reports(self):
+        # 反例：换单位的执行体被抽走 → 体积又回到纯字节数（`4222 B`/`6921 B` 要数位数）
+        self.write(self.SRC, "x")
+        cm._RULES_RUN_THIS_PHASE.clear()  # 同一阶段内同名防线只跑一遍（见 `run_rule_guard`）
+        cm.errors.clear()
+        cm.check_fetch_progress_guard()
+        self.assertTrue([e for e in cm.errors if "_SIZE_UNITS" in e])
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -147,8 +147,10 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - **开跑先交代一轮的规模**：共取几份、来源、落点、并发（一份都还没回来时，这就是唯一的
     "它在干活"的信号）；
   - **每取完一份打一行进度**（`[3/27] 刷新 specs/stack/java.adoc -- 12.3 KB（1.2s）`，
-    见 `_progress`）：份数、状态（新取/刷新/未变/保留/重试/失败）、字节、耗时——**逐份**、不攒到
-    收尾，故卡住时看得见卡在哪一份；
+    见 `_progress`）：份数、状态（新取/刷新/未变/保留/重试/失败）、体积、耗时——**逐份**、不攒到
+    收尾，故卡住时看得见卡在哪一份。体积**超过 1 KB 就换单位**（`_size`：`6921 B` 打成
+    `6.9 KB`）——几十份明细排成一屏时，`4222 B`/`6921 B`/`8980 B` 这种纯字节数要人数位数
+    才比得出大小，换单位后量级一眼看出；1 KB 以下仍打 `B`（`0 B` 正是要看的那一档）；
   - **收尾给总账与明细**：共取几份、用时，以及按状态分组的清单（新取/刷新/内容一致/失败）；
   - **进度与警告走 stderr、结果走 stdout**：stdout 会被调用方重定向，进度混进去就成了噪音；
   - **跑完不关窗口是入口的事、不是本脚本的事**（职责边界见 `specs/general/script.adoc`
@@ -372,11 +374,36 @@ EXIT_USAGE = 2
 
 # 进度行**逐份**打（取完一份打一行）：一份规范只有几 KB 到几百 KB，下载本身没有可插针的
 # 中间态；而"卡住时看得见卡在哪一份"正是要买的东西（用户口径：「显示文件下载进度及其他
-# 明细」）。故不画进度条，只用**已取份数 + 状态 + 字节 + 耗时**这几项事实——它们与本轮
+# 明细」）。故不画进度条，只用**已取份数 + 状态 + 体积 + 耗时**这几项事实——它们与本轮
 # 结果一一对应，人核对明细时不必再认第二套数字。
 _PROGRESS_LOCK = threading.Lock()
 # 本轮已取完的份数（进度行的分子；`main` 每轮开头清零，同一进程内跑两次不接着数）
 _DONE = 0
+
+# 体积的打印档位（`_size`）：**超过 1 KB 就换单位**，故 `4222 B` 打成 `4.2 KB`、`6921 B`
+# 打成 `6.9 KB`——人一眼就知道是"几 K 的东西"还是"几百 K 的大件"，不必自己数位数。
+# 十进制（1 KB = 1000 B）而不是 1024：明细是给人看量级的、不是给容差判定的，且下载体积的
+# 通行写法就是十进制（`ls -h` 那套 1024 换算是另一套口径，同一屏里混两种更难看懂）。
+# `B` 档只在 1 KB 以下出现（`0 B`、`512 B`）——`0 B` 正是"文件被截断成空"那类失效要看的一档。
+_SIZE_UNITS = ("KB", "MB", "GB", "TB")
+
+
+def _size(num_bytes):
+    """把字节数打成**人读的体积**（`4222` → `4.2 KB`，`538` → `538 B`）。
+
+    只留一位小数（`12.3 MB` 这精度对"这份规范多大"够了）：明细行要的是量级，不是逐字节的账；
+    要逐字节核对的场合本来就看落点里的文件本身。
+
+    **升档判据是"进位后仍不到 1000"**：999 999 B 打成 `1000.0 KB` 而不是 `1.0 MB`，
+    免掉"取整后跳档、看着像四舍五入出错"那类别扭读数。
+    """
+    if num_bytes < 1000:
+        return f"{int(num_bytes)} B"
+    size = float(num_bytes)
+    for unit in _SIZE_UNITS:
+        size /= 1000
+        if size < 1000 or unit == _SIZE_UNITS[-1]:
+            return f"{size:.1f} {unit}"
 
 
 def _progress(total, rel, state, detail, seconds, counts=True):
@@ -643,7 +670,7 @@ def refresh_lagging_followups(base):
         except OSError:
             pass
         _make_read_only(dest, is_dir=False)
-        print(f"更新: 附随文件 {rel} 已按远端刷新（{len(data)} B）——"
+        print(f"更新: 附随文件 {rel} 已按远端刷新（{_size(len(data))}）——"
               "索引页与清单同步，按站点找文件不会看到过期目录", file=sys.stderr)
 
 
@@ -702,7 +729,7 @@ def _refresh_self(base, out_dir, cwd):
         except OSError as e:
             failed = e
             continue
-        print(f"更新: 已取到更新的取规范脚本 {os.path.getsize(target)} B（{why}）", file=sys.stderr)
+        print(f"更新: 已取到更新的取规范脚本 {_size(os.path.getsize(target))}（{why}）", file=sys.stderr)
         return _take_over_self(local, target)
     if failed is None:
         print("警告: 最新脚本已取到、但无处落盘——本轮照旧按本地这一份的清单口径取",
@@ -1032,7 +1059,7 @@ def download_one(base, rel, out_dir, keep, total=0):
     # 失败一次即把副本变成 `0 B`，而 `0 B` 的文件在任何 `open()` 里都读得通、不像"没有"）
     before = local_bytes(dest) if os.path.isfile(dest) else None
     if keep and before:
-        _progress(total, rel, "保留", f"{len(before)} B（--keep：不动本地那份）",
+        _progress(total, rel, "保留", f"{_size(len(before))}（--keep：不动本地那份）",
                   time.monotonic() - started)
         return rel, "keep", "已存在（--keep）"
     last_err = None
@@ -1040,9 +1067,9 @@ def download_one(base, rel, out_dir, keep, total=0):
         try:
             data = fetch_text(base, rel).encode("utf-8")
             if before is not None and data == before:
-                _progress(total, rel, "未变", f"{len(data)} B（与远程一致）",
+                _progress(total, rel, "未变", f"{_size(len(data))}（与远程一致）",
                           time.monotonic() - started)
-                return rel, "same", f"{len(data)} B（与远程一致）"
+                return rel, "same", f"{_size(len(data))}（与远程一致）"
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             _ensure_writable(out_dir, dest)
             tmp = f"{dest}.part"
@@ -1050,9 +1077,9 @@ def download_one(base, rel, out_dir, keep, total=0):
                 fh.write(data)
             os.replace(tmp, dest)
             _make_read_only(dest, is_dir=False)
-            _progress(total, rel, "刷新" if before is not None else "新取", f"{len(data)} B",
+            _progress(total, rel, "刷新" if before is not None else "新取", _size(len(data)),
                       time.monotonic() - started)
-            return rel, ("updated" if before is not None else "new"), f"{len(data)} B"
+            return rel, ("updated" if before is not None else "new"), _size(len(data))
         except (OSError, http.client.HTTPException) as e:
             # 网络类错误统一按 OSError 处理；`HTTPException`（IncompleteRead/BadStatusLine）
             # 在下面再兜一次——`fetch_text` 已把网络层归一成 OSError，这里兜的是"别的调用点
