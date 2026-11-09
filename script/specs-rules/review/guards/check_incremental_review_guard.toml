@@ -1,0 +1,40 @@
+# 『增量复核』（`check_incremental_review_guard`）
+#
+# 用户口径：『增量复核（只审上次复核 sha 之后的 diff）要不要做？
+# 做的话动的是平台层与 review 口径』——采用。判据本体落在 `specs/general/review.adoc`
+# 「增量复核」一节，本文件是**本仓库的接线与交付面核对**：通用层那一节不得被抽走、
+# 平台层不得缺"上次审到哪"的落点。
+#
+# 为什么判据不进本文件：它**会被未知项目加载**（review 是通用活动），故判据本体在通用层
+# （`specs/general/coding-runtime.adoc`「取值的唯一来源」：同一件事只有一处完整定义）。
+
+[[guards.check_incremental_review_guard]]
+kind = "file_tokens"
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "specs/general/review.adoc",
+]
+message = "{file} 的加载调度器不再登记 review 规范——『增量复核』只在 review 被加载时才读得到，缺了它本条永不生效"
+
+# 判据本体的逐条锚点只有一处：`_tokens.toml` 的 `INCREMENTAL_REVIEW_ANCHORS`，由
+# `check_incremental_review_guard` 用 `_section_anchor_check` 按节逐条核。此处不再手抄
+# 同一批字面——两处各写一遍时，改一处漏另一处即静默放过（同一事实的第二处来源）。
+
+[[guards.check_incremental_review_guard]]
+kind = "file_tokens"
+file = "specs/general/review.adoc"
+tokens = [
+    "本文件的字典",
+    "term-incremental-review",
+]
+message = "{file}「本文件的字典」缺了『增量复核』的检索键 {missing}——名称未登记时它只能靠「review 被加载后整份找」，等于没有检索面"
+
+[[guards.check_incremental_review_guard]]
+kind = "file_tokens"
+file = "specs/platform/cnb.adoc"
+tokens = [
+    "续接复核的\"上次审到哪\"落在 PR 的结论里",
+    "按首次复核处理",
+    "不另建标签",
+]
+message = "{file}「对象钉定与可追溯」缺了续接复核的平台落点 {missing}——留证不落在 PR 结论里时每条执行都退回首次复核（增量形同不存在），或另造一份平台状态位（同一事实的第二处来源）"

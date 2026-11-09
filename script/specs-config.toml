@@ -59,7 +59,7 @@ timeout_seconds = 30
 workers = 4
 
 [source-management]
-# 本项目取哪一档**源码管理方法**——两档规则本体都在 `specs/general/coding.adoc`「源码管理方法」：
+# 本项目取哪一档**源码管理方法**——两档规则本体都在 `specs/general/coding-source.adoc`「源码管理方法」：
 #   `"conventional"`：常规档（默认档）。单线顺序开发、或由单一执行者按序改动即可照用——
 #                    落点按职责与体量排布，不按份铺开；冲突现场逐处解；派生件允许人工维护
 #                    （但须有可核对的判据）；不要求 `merge=union`、不要求生成器。
@@ -79,7 +79,7 @@ workers = 4
 # `concurrent` 时按 `script/specs-rules/collab-hotspot.toml` 的锚点逐项核并**要求**本仓库
 # 真的分份／配 `merge=union`／上生成器；`conventional` 时只核"那一档的取值还在不在"
 # （判据本体不许连取值一起删）。开关本身**须有判据**：缺 `[source-management].mode`
-# 或取值不是这两档之一即报错、不补默认值（见 `specs/general/coding.adoc`「取值的唯一来源」）。
+# 或取值不是这两档之一即报错、不补默认值（见 `specs/general/coding-runtime.adoc`「取值的唯一来源」）。
 mode = "concurrent"
 
 [temporary]

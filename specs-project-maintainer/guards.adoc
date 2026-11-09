@@ -18,7 +18,7 @@
 
 这张表**不写序号**：次序由 `script/check_specs.py` 的 `CHECKS` 序列表达（它才是唯一来源），本表逐行按它排开、序号由读者顺着行读出来。写着数字就有第二份次序——插入一道防线，其后每一行的数字都得改一遍（`specs/general/coding.adoc`「能由规则现算的，就不要列成清单」判定标准③）。「谁在用」那一格同理：调用关系由函数体现算，复制进表里就是同一份事实的第二处写法。
 
-「钉住什么」那一格是**回指**：它指到这道防线旁边的 `<防线名>.adoc`——那份标记与这道防线的规则数据**同层同名**（判据写在脚本里的防线，则是哨兵 `script/specs-rules/guard-scripts.toml` 旁边那一份），文件名即防线名，读者顺着文件名就能找到它，不必先知道它在表里第几行。于是新增/修订一道防线时，改动方只碰**自己那份**规则数据、旁边那份标记与 `CHECKS` 里自己那一行；表体本身是**生成物**（`python3 script/check_specs.py --write-guards-table` 整段重写），落点由判据从规则数据的加载面现算、不另取目录配置（`specs/general/coding.adoc`「文件的角色」的「并行落点按'份'切」）。
+「钉住什么」那一格是**回指**：它指到这道防线旁边的 `<防线名>.adoc`——那份标记与这道防线的规则数据**同层同名**（判据写在脚本里的防线，则是哨兵 `script/specs-rules/guard-scripts.toml` 旁边那一份），文件名即防线名，读者顺着文件名就能找到它，不必先知道它在表里第几行。于是新增/修订一道防线时，改动方只碰**自己那份**规则数据、旁边那份标记与 `CHECKS` 里自己那一行；表体本身是**生成物**（`python3 script/check_specs.py --write-guards-table` 整段重写），落点由判据从规则数据的加载面现算、不另取目录配置（`specs/general/coding-file-role.adoc`「文件的角色」的「并行落点按'份'切」）。
 
 [cols="2,2,5", options="header"]
 |===
@@ -51,6 +51,9 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_budget_guard` | `script/specs-rules/check_budget_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_core_digest_guard` | `script/specs-rules/check_core_digest_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_file_size_hint` | `script/specs-rules/check_file_size_hint.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_section_ref_landing_guard` | `script/specs-rules/check_section_ref_landing_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_coding_family_guard` | `script/specs-rules/check_coding_family_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_verify_tier_guard` | `script/specs-rules/check_verify_tier_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_delegation_guard` | `script/specs-rules/check_delegation_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_verify_guard` | `script/specs-rules/check_verify_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_lifecycle_guard` | `script/specs-rules/check_lifecycle_guard.adoc`
@@ -147,6 +150,8 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_generation_efficiency_guard` | `script/specs-rules/check_generation_efficiency_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_after_change_review_guard` | `script/specs-rules/check_after_change_review_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_default_review_scope_guard` | `script/specs-rules/check_default_review_scope_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_incremental_review_guard` | `script/specs-rules/review/guards/check_incremental_review_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_verdict_ledger_guard` | `script/specs-rules/review/guards/check_verdict_ledger_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_clean_subagent_review_guard` | `script/specs-rules/verify/guards/check_clean_subagent_review_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_refinement_guard` | `script/specs-rules/check_refinement_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_duplicate_scan_guard` | `script/specs-rules/duplicate/guards/check_duplicate_scan_guard.adoc`
@@ -240,7 +245,7 @@
 
 **为什么它必须生成**：头部那份清单是**连续编号**的，本表逐行抄第二份时，每新增一项都要往中间插一行、其后
 编号整体位移——每次改动都落在这两百多行里，两个并行改动必撞在同一片区域。派生件与本体同一次产出（判据本体见
-`specs/general/coding.adoc`「分发产物的体积与按需加载」的「派生件与本体同处一个构建步骤」条），改动的落点就
+`specs/general/coding-source.adoc`「分发产物的体积与按需加载」的「派生件与本体同处一个构建步骤」条），改动的落点就
 只剩头部那一处。
 
 [cols="1,2", options="header"]

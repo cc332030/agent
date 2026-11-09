@@ -43,7 +43,7 @@ min = 8
 tokens = [
     "工具类不继承工具类（L1，Java 落点）",
     "不得 `extends` 另一个工具类",
-    "`specs/general/coding.adoc`",
+    "`specs/general/coding-shape.adoc`",
     "**本条只给 Java 侧的载体与判据**",
     "**不因它继承了谁而改变性质**",
     "**lombok 的 `@UtilityClass` 自带私有构造器、本身不可被继承**",

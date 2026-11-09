@@ -21,8 +21,8 @@
 
 == 落到了哪
 
-* `specs/general/coding.adoc` 新增一节「源码管理方法」：`取值只有一处`（档位须声明、缺键即报错、一档整体生效）、`常规档`（四条）、`并发档`（八条）、`两档共用`（四条）。
-* `specs/general/coding.adoc`「文件的角色」改判为**并发档的执行细则**（原「适用前提（可选档）」整格换成「本节的归属」）：取常规档的项目不适用本节，但**本节条文仍要留在规范里**——规则可以不用，取值不能不存在。
+* `specs/general/coding-source.adoc` 新增一节「源码管理方法」：`取值只有一处`（档位须声明、缺键即报错、一档整体生效）、`常规档`（四条）、`并发档`（八条）、`两档共用`（四条）。
+* `specs/general/coding-file-role.adoc`「文件的角色」改判为**并发档的执行细则**（原「适用前提（可选档）」整格换成「本节的归属」）：取常规档的项目不适用本节，但**本节条文仍要留在规范里**——规则可以不用，取值不能不存在。
 * 四处派生条改按档回指（不复制条文）：`version-control.adoc`「冲突处理」两条、`git.adoc` 的 `merge=union` 取值。
 * 取值：`script/specs-config.toml` 的 `[file-role].enabled` → `[source-management].mode = "concurrent"`。**不另立"要不要并发档"的布尔**——多一个开关就是给同一件事开第二处取值；`file_role_enabled()` 退化成 `source_management_mode() == "concurrent"`。
 * 检查侧：新增 `check_source_management_guard`（核档位声明 + 两档条目在场），`SOURCE_MANAGEMENT_ANCHORS` 5 组锚点、`anchor_count` 基线 5；`check_file_role_guard` 加「本节的归属」锚点。

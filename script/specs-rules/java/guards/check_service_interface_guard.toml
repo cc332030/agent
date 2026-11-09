@@ -39,7 +39,7 @@ min = 8
 tokens = [
     '没有多态时不为 service 加同方法的父接口（L1，Java 落点）',
     '只有一个实现',
-    '`specs/general/coding.adoc`',
+    '`specs/general/coding-shape.adoc`',
     '此处**不复述**',
     '**Java 侧只给载体**',
     '**注入与声明类型**',

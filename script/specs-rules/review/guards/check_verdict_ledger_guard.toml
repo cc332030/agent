@@ -1,0 +1,36 @@
+# 『结论的记账形态』（`check_verdict_ledger_guard`）
+#
+# 用户口径：『ledger / review 汇报结构化（固定字段：问题/P 级/位置/
+# 一句事实/证据/判断）』『存量按随动迁移、不回改历史行』——采用。判据本体落在
+# `specs/general/review.adoc`「结论的记账形态」一节（review 是通用活动、会被未知项目
+# 加载，故本体在通用层），本文件核**本仓库侧的交付面**：三处「对外说结论」的地方都指向
+# 同一套列，不得各写一份。
+
+[[guards.check_verdict_ledger_guard]]
+kind = "file_tokens"
+file = "prompts/review.adoc"
+tokens = [
+    "specs/general/review.adoc",
+    "三态台账",
+]
+message = "{file} 的汇报步骤不再指向 review 规范的结论形态与三态台账——提示词会被复制到未知项目执行，缺了它那边只按散文写结论"
+
+[[guards.check_verdict_ledger_guard]]
+kind = "file_tokens"
+file = "specs/general/verify.adoc"
+tokens = [
+    "三态台账",
+]
+message = "{file}「验证的效力等级」不再有『三态台账』——结论记账形态的总账那一半失去落点（逐行六列还在，整体验到哪一步却无处记）"
+
+# 六列的**逐列**核对在 `check_verdict_ledger_guard` 里（取 `VERDICT_LEDGER_COLUMNS` 逐列判），
+# 节内要点在 `_tokens.toml` 的 `VERDICT_LEDGER_ANCHORS` 里——此处不再手抄同一批字面。
+
+[[guards.check_verdict_ledger_guard]]
+kind = "file_tokens"
+file = "specs/general/review.adoc"
+tokens = [
+    "本文件的字典",
+    "term-verdict-ledger",
+]
+message = "{file}「本文件的字典」缺了『结论的记账形态』的检索键 {missing}——名称未登记时它只能靠整份找"

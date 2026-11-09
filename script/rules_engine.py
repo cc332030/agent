@@ -106,7 +106,7 @@ DEFAULTS = {
     "anchor_count_message": "规则数据里 `{file}` 的 `* **{bullet}` 一条只剩 {have} 项锚点（基线 {min}）"
                             "——锚点被删时规范正文一字不少、防线却少核一项，"
                             "报绿与「核过且通过」看起来一样；删锚点须与调基线一并发生",
-    "missing_line_message": "缺少 {file} 的对应条目——没有登记行则该条实际失效",
+    "missing_line_message": "缺少 {file} 的对应条目（{missing}）——没有登记行则该条实际失效",
     "missing_block_message": "缺少 {file} 的 `{marker}` 片段——该边界在提示词侧失去落点",
     "file_message": "缺少 {file}——该条的落点无从核对",
     "dup_message": "{a}:{line_a} 与 {b}:{line_b} 逐字重合 {overlap} 字：`{frag}`",
@@ -177,6 +177,34 @@ def _check_groups(err, rel, scope_desc, text, groups, prefix="", template=None):
         err(msg, rel)
 
 
+def _read_file(ctx, rel):
+    """读**这一份文件本身**的文本（逐字比对、语法类步骤用；不做任何族展开）。"""
+    return ctx.read(rel)
+
+
+def _read_target(ctx, rel):
+    """读"按整份/按节核要点"时用的文本：上下文支持 `family_text` 时按族取。
+
+    **为什么要有两个读法**：`specs/general/coding.adoc` 这一族按主题拆成多份，规则数据仍
+    按族入口那一份写（一处登记）；"某条判据还在不在"要按**整族**取，而"两份文档有没有
+    逐字重复"必须按**每一份真实文件**取——前者按族展开、后者绝不能。
+    """
+    getter = getattr(ctx, "family_text", None)
+    return getter(rel) if callable(getter) else ctx.read(rel)
+
+
+def _find_section(ctx, rel, title, subsection=False):
+    """取节：上下文支持 `find_section` 时委托给它（族内逐成员找），否则取本文件。"""
+    finder = getattr(ctx, "find_section", None)
+    if callable(finder):
+        return finder(rel, title, subsection)
+    text = ctx.read(rel)
+    if text is None:
+        return "", rel
+    found = (ctx.subsection(text, title) if subsection else ctx.section(text, title))
+    return found, rel
+
+
 def _step_exists(rules, step):
     """文件/路径须存在（`files` 给出路径列表，`why` 说明缺失为什么会失效）。"""
     ctx = rules.ctx
@@ -189,11 +217,7 @@ def _step_section_groups(rules, step):
     """取某二级节 → 逐组核锚点（取不到节即报错、不退化到全文）。"""
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return
-    section = ctx.section(text, step["section"])
+    section, owner = _find_section(ctx, rel, step["section"])
     if not section:
         # 缺的是**哪一个**节须出现在报错正文里（`_msg` 不认 `{section}` 这类占位符，
         # 直接填节名）——否则读者只看到"某个句子缺了"、定位不到落点。
@@ -220,7 +244,7 @@ def _groups_of(rules, step):
     """
     # `token_list` 与 `groups_source` 同义：两者都指「锚点组来自 `_tokens.toml` 里的同名清单」。
     # 分两个名字是因为后者读起来是"另一份数据里的清单"、前者读起来是"一组词"——同义词只许
-    # 有一处实现（本函数），别处不得各判一遍（见 `specs/general/coding.adoc`「同一件事只有一个来源」）。
+    # 有一处实现（本函数），别处不得各判一遍（见 `specs/general/coding-ui.adoc`「同一件事只有一个来源」）。
     named = step.get("token_list") or step.get("groups_source")
     if not named:
         return step["groups"]
@@ -237,11 +261,7 @@ def _step_subsection_groups(rules, step):
     """取某三级小节 → 逐组核锚点（与 `_step_section_groups` 互补，判据对象是三级节）。"""
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return
-    section = ctx.subsection(text, step["subsection"])
+    section, owner = _find_section(ctx, rel, step["subsection"], subsection=True)
     if not section:
         # 同上：填入 `subsection`，缺的是哪个小节须出现在报错正文里。
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
@@ -268,7 +288,7 @@ def _step_target(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_target(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return None, ""
@@ -276,12 +296,8 @@ def _step_target(rules, step):
     subsection = step.get("subsection")
     if not section and not subsection:
         return text, step.get("scope", "文件")
-    if subsection:
-        found = ctx.subsection(text, subsection)
-        title = subsection
-    else:
-        found = ctx.section(text, section)
-        title = section
+    title = subsection or section
+    found, _owner = _find_section(ctx, rel, title, subsection=bool(subsection))
     if not found:
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", title), rel)
@@ -317,16 +333,36 @@ def _step_line_tokens(rules, step):
     """找**包含 `anchor` 的那一行**，再核该行是否含全部 `tokens`（用于调度器登记这类"条目级"判据）。"""
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_target(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return
-    line = next((ln for ln in text.splitlines()
-                 if all(a in ln for a in step["anchor"])), "")
+    # 给了 `section` 就**尽量收窄到该节**再找行：按整份（族）找行时，别处同形的依据行会把
+    # 被抽走的那一行兜住——那正是本条要拦的形态（族按主题拆开后，同一句依据在几份里
+    # 各出现一次，按整族找行必然先命中不相干的那一条）。
+    # **取不到该节时退回整份**（不报红）：`section` 在 `line_tokens` 上只是"收窄提示"，
+    # 节标题层级写成三级、或节名带可变后缀时取不到属常态，行锚点本身才是判据。
+    if step.get("section"):
+        scoped, _owner = _find_section(ctx, rel, step["section"])
+        if scoped:
+            text = scoped
+    # 候选行可能不止一条（同形依据行在族内多份里各出现一次）：**先看有没有一条同时命中
+    # 全部 tokens**——有即通过（族内换个位置不算丢要点）；都没有时，按"命中 tokens 最多"
+    # 的那一条报缺项——报出来的才是真正要核的那一句，而不是恰好排在前面的一行
+    # （本仓库实测：拆分后「代码复用」的依据行先命中，报的是不相干的缺项）。
+    cands = [ln for ln in text.splitlines() if all(a in ln for a in step["anchor"])]
+    line = ""
+    if cands:
+        tokens = step.get("tokens", [])
+        full = [ln for ln in cands if all(tk in ln for tk in tokens)]
+        line = full[0] if full else max(
+            cands, key=lambda ln: sum(1 for tk in tokens if tk in ln))
     if not line:
-        # `{file}` 与其余步骤同口径：报错须给出**缺的是哪份文件**，否则读者只看到一句
-        # "没有对应条目"、连去哪找都无从知道（`_msg` 返回的默认文案含该占位符）
-        ctx.err(_msg(step, "missing_line_message").replace("{file}", rel), rel)
+        # 报错须同时给出**缺的是哪份文件**与**哪一行**：只说"没有对应条目"时，读者连
+        # 是"整条被删"还是"列表标记被抽"都分不出（两种都表现为匹配不上）。
+        head = (step.get("anchor") or [""])[0]
+        ctx.err(_msg(step, "missing_line_message").replace("{file}", rel)
+                .replace("{missing}", f"缺少 `{head}` 起头的那一行"), rel)
         return
     miss = [t for t in step["tokens"] if t not in line]
     if miss:
@@ -337,11 +373,7 @@ def _step_forbid_section(rules, step):
     """某节内**不得出现**任一禁用锚点（与 `_step_section_groups` 方向相反）。"""
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return
-    section = ctx.section(text, step["section"])
+    section, _owner = _find_section(ctx, rel, step["section"])
     if not section:
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["section"]), rel)
@@ -360,7 +392,7 @@ def _step_file_forbidden(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_target(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return
@@ -464,7 +496,7 @@ def _step_split_block(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_file(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return
@@ -486,7 +518,7 @@ def _step_regex_section(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_target(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return
@@ -517,11 +549,7 @@ def _step_bullet_tokens(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return
-    section = ctx.section(text, step["section"])
+    section, _owner = _find_section(ctx, rel, step["section"])
     if not section:
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["section"]), rel)
@@ -721,11 +749,7 @@ def _step_section_bullets(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return
-    section = ctx.section(text, step["section"])
+    section, _owner = _find_section(ctx, rel, step["section"])
     if not section:
         ctx.err(_msg(step, "missing_section_message").replace("{file}", rel)
                 .replace("{section}", step["section"]), rel)
@@ -773,7 +797,7 @@ def _step_text_block_groups(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = ctx.read(rel)
+    text = _read_target(ctx, rel)
     if text is None:
         ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
         return

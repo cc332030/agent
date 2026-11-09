@@ -70,7 +70,7 @@ section = "工具类使用约定"
 min = 8
 tokens = [
     "判空兜底用默认值工具方法（Java 落点）",
-    "`specs/general/coding.adoc`",
+    "`specs/general/coding-shape.adoc`",
     "此处不复述",
     "**Java 侧只给载体**",
     "`ObjectUtil.defaultIfNull(x, default)`",
