@@ -257,6 +257,19 @@ MECHANISMS = [
      "check_windows_window_guard 钉住「开窗口不得影响正在用这台机器的用户」里『不得把窗口开到用户眼前』（隐藏窗口或后台运行、不从弹窗看结果）与『要画面就按那个目标取、不接管桌面』（不切前台窗口、不动鼠标键盘、被别的窗口盖住也取得到、『隐藏/在后台也能达到目的』为取值边界）、"
      "两类例外（判据就是用户手动操作这条路径本身、隐藏/后台手段实际试过取不到），并核加载门（调度器技术栈层登记 + 识别特征）、提示词公共片段与 README 同步；"
      "「某次启动到底有没有把窗口摆到前台」「隐藏启动在本机这个版本上可不可行」属运行时事实与语义判断"),
+    ("review 增量复核：同一 sha 不重审，只审上次复核 sha 之后那一段", "specs/general/review.adoc + specs/platform/cnb.adoc", "script/check_specs.py",
+     "check_incremental_review_guard",
+     "check_incremental_review_guard 钉两处判据本体：① 通用层「增量复核」一节——**同一个 sha 不重审**（以 commit sha 为对象、不得重打一遍结论）、"
+     "**检查面＝`X..Y` 的那一段**且**两处不可省**（接缝处回到 Y 的完整内容上判、不是省判据）、**上一轮结论不作数的四种情形**（被否／未确证／"
+     "该 sha 已不在分支历史里／换了承载位置，一律按没审过处理）、**记账落在对象上**（上次复核 sha + 结论；没留证按首次复核）与**不新增平台状态位**、"
+     "与「改完即审」的分工（增量不是降档）、存量边界；② 平台层「对象钉定与可追溯」的落点（上次审到哪记在 PR 结论里、查不到按首次复核处理）。"
+     "「这一轮到底有没有真的续接上」「上一轮的结论还成不成立」属运行时事实与语义判断，交人/子 agent 复核"),
+    ("review 结论的记账形态：固定六列、一句事实、不复述判据原文、总账按三态分栏", "specs/general/review.adoc", "script/check_specs.py",
+     "check_verdict_ledger_guard",
+     "check_verdict_ledger_guard 钉**列本体与那句『不做什么』**（不是『有没有一节叫记账形态』）：六列逐列在且次序写明（问题／P 级／位置／一句事实／证据／判断）、"
+     "**证据须是可核对的取值**（『已确认』不算）、**不复述判据原文**（只写引用坐标）、**总账按三态分栏且与逐行不重复**、汇报口径（『本次未发现问题』是完整结论、"
+     "数字须与逐行对得上）、**存量不回改历史行**；另核本仓库三处交付面（提示词 review.adoc、verify.adoc 的三态台账、本条自己的六列）同指一处。"
+     "「某条结论写没写清、证据够不够」属语义判断，交人/子 agent 复核"),
     ("验证须覆盖项目全部既定校验手段、验证对象须钉定 commit sha、按需验证不滥验证", "specs/general/verify.adoc", "script/check_specs.py",
      "check_ci_cd_guard", "check_ci_cd_guard 钉住验证侧『验证须覆盖项目的全部既定校验手段（L1，仅限收尾那一次）』『验证对象须钉定 commit sha』『按需验证、不滥验证』三要点；『按需验证』须含五要素（该不该验/没做完就不验/能合就合/能简化就简化只覆盖改动范围/先信已验过的不重复验）"),
     ("子 agent 复核须自带硬超时、到点视为失联并放弃（防任务永久挂起）", "specs/general/collab.adoc", "script/check_specs.py",
@@ -273,6 +286,12 @@ MECHANISMS = [
      "check_delegation_guard", "check_delegation_guard 钉住『环境能力自评』节仍在（否则环境无清空/无子 agent 时会照抄'已清洁上下文/已委派'）"),
     ("常驻层体积与调度器条目数不得无上限膨胀", "AGENTS_COMMON.adoc", "script/check_specs.py",
      "check_budget_guard", "check_budget_guard 钉住必加载层字节上限与调度器条目数上限"),
+    ("节名引用的落点：`xxx.adoc「某节」` 须指向承载该节的那一份", "全部 .adoc（随规范集合维护的文档）", "script/check_specs.py",
+     "check_section_ref_landing_guard",
+     "check_section_ref_landing_guard 按 `collect_adoc_files` 的**全部 .adoc**逐份核 `文件.adoc「节名」` 形态的引用：被引用的文件存在、但其中没有以该关键词开头的节时，"
+     "先在通用编码规范族内找含该节的那一份——找到即报红并给出正确落点（路径与节名各自都在、只是不在同一份里，读者顺着引用找不到判据），找不到则留给 `check_section_refs`（两处不重复报）。"
+     "本条治的是**按主题拆族之后逐条各自错**：节搬去同族另一份而引用仍写族入口，别的检查一条都发现不了（本仓库实测：一次拆分里 17 处漏改、2700+ 单测全绿）。"
+     "「两条引用是否该合并、节名写得够不够精确」属语义判断，交人/子 agent 复核"),
     ("单个规范文件的软阈值（超线只提醒、不强制拆分）",
      "specs-project-maintainer/spec-lifecycle.adoc「单个规范文件的软阈值」",
      "script/check_specs.py",
@@ -523,7 +542,7 @@ MECHANISMS = [
      "specs/general/planning.adoc「举例不是面」（判据本体，落在规划层、不限界面）+ specs/general/collab.adoc「任务的读懂」的回指 + specs/general/coding.adoc「界面的性能」的回指",
      "script/check_specs.py",
      "check_example_not_surface_guard",
-     "check_example_not_surface_guard 钉住**判据本体**六组要点（识别判据＝例子与问句的对象不是同一个层级／先把面取出来再动手／按维度列而不按场景列／面要落到能被下次加载的载体上／反向不得把面扩成别人的面／三条例外与依据行），并钉住**读任务那一侧的回指**（`specs/general/collab.adoc`「任务的读懂」）与**界面一侧的回指**（`specs/general/coding.adoc`「界面的性能」为什么按维度列）；"
+     "check_example_not_surface_guard 钉住**判据本体**六组要点（识别判据＝例子与问句的对象不是同一个层级／先把面取出来再动手／按维度列而不按场景列／面要落到能被下次加载的载体上／反向不得把面扩成别人的面／三条例外与依据行），并钉住**读任务那一侧的回指**（`specs/general/collab.adoc`「任务的读懂」）与**界面一侧的回指**（`specs/general/coding-ui.adoc`「界面的性能」为什么按维度列）；"
      "**本条只钉要点文本仍在**——「这一问带不带面」「取出的面全不全」属语义判断，交人/子 agent 复核"),
     ("反馈与提示（五类反馈成套、按层产生且语义不走样、错误码与文案同表、通道与打扰预算、通知台账与回执、跨端一致与可访问性）",
      "specs/general/feedback.adoc（判据本体）+ specs/general/ui-feedback.adoc（模板文件：错误码表、通道选择表与五类文案模板，回指判据本体）+ specs/general/ui.adoc「界面上的文字」的回指",
@@ -857,7 +876,7 @@ MECHANISMS = [
      "specs/general/coding.adoc + specs/stack/java.adoc", "script/check_specs.py",
      "check_logical_delete_naming_guard",
      "check_logical_delete_naming_guard 钉住**判据本体**（不是轴名——只核『有没有这一条』属防线空转）："
-     "`specs/general/coding.adoc`「持久化访问（数据库/缓存等）」三级小节里的默认面取值"
+     "`specs/general/coding-objects.adoc`「持久化访问（数据库/缓存等）」三级小节里的默认面取值"
      "（不自动附加＝含已删 / 自动附加＝只取未删）、非默认面须带特征词、可逐条核对的四条判定标准、"
      "理由（删隐面只能从技术配置反推）、默认面的唯一例外（项目自身规范或既有先例、项目内只保留一种）、"
      "边界（只管按实体/表查询的方法名；显式参数形态与特征词等同）、存量随动迁移与依据行；"

@@ -4,7 +4,7 @@
 ----
 同一份取值原先在执行侧、判据侧、文档模板各有一份，谁也不知道以哪份为准；三处各自漂移时
 不会有任何东西报红——脚本换了取值、文档还写着旧的，新开实例照着文档找不到东西，而检查照旧
-全绿。通用判据见 `specs/general/coding.adoc`「取值的唯一来源」。
+全绿。通用判据见 `specs/general/coding-runtime.adoc`「取值的唯一来源」。
 
 本模块把「值」与「用它的地方」分开：**值只在同目录的 TOML 配置里**（改它不用改 `.py`），
 执行侧与判据侧都取值于那一处。判据见 `check_specs.check_paths_single_source_guard`。
@@ -174,7 +174,7 @@ class Config:
     def source_management_mode(self):
         """本项目取的**源码管理档**；取值只此一处（见 `script/specs-config.toml`）。
 
-        两档的规则本体见 `specs/general/coding.adoc`「源码管理方法」。这里不加校验：
+        两档的规则本体见 `specs/general/coding-source.adoc`「源码管理方法」。这里不加校验：
         "取值是不是两档之一"由 `check_specs.source_management_mode()` 判，读取层只负责取值。
         """
         return str(self._get("source-management", "mode"))

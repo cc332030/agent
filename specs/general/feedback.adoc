@@ -4,7 +4,7 @@
 
 本文件把"信息提示、错误提示"扩成**一个完整的反馈面**：**成功、错误、警示、提示、进度**是同一件事的五种取值，判据必须成套给，否则只做了最容易的那一种（成功），最要命的那几种（错误、危险、超时）各端各写一套。
 
-**取值清单（提示通道选择表、错误码与文案模板、打扰预算取值）不写在这里**：它们是模板文件，见 `specs/general/ui-feedback.adoc`。**文案的用词与语气**在 `specs/general/ui-voice.adoc`，**视觉取值**（颜色、对比度、字号、命中区）在 `specs/general/ui.adoc` 与 `specs/general/ui-tokens.adoc`，**接口的错误体与状态码语义**在 `specs/general/coding.adoc`「HTTP 接口语义」——本文件只补**它们之间那一层**：反馈怎么分类、由哪一层产生、跨端怎么一致、什么算打扰、什么地方必须留痕。
+**取值清单（提示通道选择表、错误码与文案模板、打扰预算取值）不写在这里**：它们是模板文件，见 `specs/general/ui-feedback.adoc`。**文案的用词与语气**在 `specs/general/ui-voice.adoc`，**视觉取值**（颜色、对比度、字号、命中区）在 `specs/general/ui.adoc` 与 `specs/general/ui-tokens.adoc`，**接口的错误体与状态码语义**在 `specs/general/coding-runtime.adoc`「HTTP 接口语义」——本文件只补**它们之间那一层**：反馈怎么分类、由哪一层产生、跨端怎么一致、什么算打扰、什么地方必须留痕。
 
 == 本文件的字典（本文件使用的名称，定义写在本文开头）
 
@@ -28,7 +28,7 @@
 
 == 与其他判据的分工（先读，防两套判据并存）
 
-* **接口返回什么结构、用哪个状态码** → `specs/general/coding.adoc`「HTTP 接口语义」（其中"对外错误响应统一结构"那一条给的是下限；本文件给它**上层的分工与可机读要求**）
+* **接口返回什么结构、用哪个状态码** → `specs/general/coding-runtime.adoc`「HTTP 接口语义」（其中"对外错误响应统一结构"那一条给的是下限；本文件给它**上层的分工与可机读要求**）
 * **文案怎么写、语气怎么定、五种状态各写什么** → `specs/general/ui-voice.adoc`（本文件判**这条文案该不该出现、出现在哪个通道、能不能消失**）
 * **提示长什么样、什么颜色、多大、对比度够不够** → `specs/general/ui.adoc` 与 `specs/general/ui-tokens.adoc`
 * **哪些内容不得出现在提示里**（堆栈、SQL、内部路径、口令、个人信息） → `specs/general/security.adoc`「敏感信息」与 `specs/general/desensitize.adoc`

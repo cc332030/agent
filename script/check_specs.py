@@ -270,7 +270,7 @@
      两侧"，另立一条、不得互相替代。由 `check_baseline_sync_guard` 钉住（接线数 114 → 115）；
      "某次压缩前到底并入过没有"属运行时事实（git 记录），交人/子 agent 复核。
  101. 工具类继承防线：判据本体落通用层
-     `specs/general/coding.adoc`「类设计」（条文、理由、公共部分的两条去向（组合／静态导入）、
+     `specs/general/coding-shape.adoc`「类设计」（条文、理由、公共部分的两条去向（组合／静态导入）、
      判定标准、边界（只管工具类之间的继承）、存量边界与依据行），Java 侧载体落
      `specs/stack/java-syntax.adoc`「工具类定义」（认类看命名与用法、`@UtilityClass` 自带
      私有构造器故不可被继承、不新起工具基类，并回指 `specs/stack/java.adoc`「命名」把
@@ -357,7 +357,7 @@
      原生支持字符串模板」属语义判断，交人/子 agent 复核。
 
  109. service 父接口防线（**用户提出**）：用户口径"在没有多态的情况下，禁止为 service 类添加有相同
-     方法的父接口"。判据本体落通用层 `specs/general/coding.adoc`「类设计」——**没有多态**（只有一个
+     方法的父接口"。判据本体落通用层 `specs/general/coding-shape.adoc`「类设计」——**没有多态**（只有一个
      实现类，且**没有任何注入点、参数、返回值或集合以该接口类型声明**）时，**不得**为 service 类
      另建声明了同样方法的父接口；理由（接口不承担替换与解耦、方法清单与类逐条重复、改一处要抄两遍）、
      去向（**直接用该类**，能力面由该类的成员方法表达）、例外三档（存在第二个实现／框架由接口生成
@@ -406,7 +406,7 @@
      `check_local_only_guard` 钉住；「某条用例到底连没连远端」「某个地址算不算本机」属运行时
      事实与语义判断，交人/子 agent 复核。
 
- 114. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding.adoc`「界面与样式」
+ 114. 界面与样式防线（**用户提出**）：判据本体落通用层 `specs/general/coding-ui.adoc`「界面与样式」
      ——框架与开源样式方案优先、同一形态只许一个样式来源、框架默认外观只在一处改、
      **`!important` 是最后一步**（取用次序：提高选择器优先级 → 收进来源那一处 → 覆盖层收在
      一处并写明理由；判定标准三条，其中『判定只在写它的那处算、不看调用点有多少』把「频繁」
@@ -452,7 +452,7 @@
      `check_example_not_surface_guard` 钉住；「这一问带不带面」「取出的面全不全」属语义判断，
      交人/子 agent 复核。
  118. 缓存（统一管理、先缓存后在线）防线（**用户提出**）：判据本体落通用层
-     `specs/general/coding.adoc`「缓存（统一管理、先缓存后在线）」——先分清**两处缓存**
+     `specs/general/coding-runtime.adoc`「缓存（统一管理、先缓存后在线）」——先分清**两处缓存**
      （后端接口缓存与界面缓存各自成立、不得互免，也不许拿一处免掉另一处）；**一份数据只有一处
      缓存入口**（一处读写入口、一把键取值规则，页面不得各存一份）；**后端接口返回哪一份是
      确定的**（一个响应一个结果，不返回先后两份）；
@@ -539,7 +539,7 @@
  125. 并行改动的独占落点：逐行登记表须是生成物（**用户提出**）：同一批内容被**逐行抄成
      第二份**（编号跨越全区的索引表、按主题排列的台账）时，每一轮改动都要往中间插一行、
      其后各行整体位移——这是本仓库剩下最硬的独占落点。判据是**派生件不由人工手作、与本体
-     同一次产出**（`specs/general/coding.adoc`「分发产物的体积与按需加载」的「派生件与本体
+     同一次产出**（`specs/general/coding-source.adoc`「分发产物的体积与按需加载」的「派生件与本体
      同处一个构建步骤」条在**本仓库自身的登记表**上的落地）：那一份整段由生成器
      （`script/gen_derived.py`）按**已经唯一的那一份真源**现算产出，现场与重算结果**逐字节
      一致**；生成物不得成为第二份真源（不许反过来被读去驱动别处）。**判定标准（任一命中即
@@ -610,11 +610,46 @@ class RulesContext:
     """
 
     def read(self, rel):
+        """读一份文件的**真实内容**（不按族展开——逐字重合扫描等按文件比对的步骤要的是这一份）。"""
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         if not os.path.isfile(path):
             return None
         with open(path, encoding="utf-8") as fh:
             return fh.read()
+
+    def family_text(self, rel):
+        """按族取文本：`rel` 是编码规范族入口时给**整族**，否则等同于 `read`。
+
+        规则数据仍按族入口那一份写 `file = "..."`（一处登记），而判据在族内哪一份是
+        **落点问题**、不影响"要点还在不在"这一件核对的事——故按整份文件核的那一类步骤
+        走这个方法。族内成员由目录现算，不在这里列清单（见 `_coding_family`）。
+        """
+        if rel == _coding_rel():
+            return _coding_text()
+        return self.read(rel)
+
+    def find_section(self, rel, title, subsection=False):
+        """取节：先在 `rel` 里取；取不到且 `rel` 是族入口时，**在族内逐个成员**再取。
+
+        返回 `(节正文, 成员相对路径)`；两处都取不到时返回 `("", rel)`——由调用方报红，
+        **"缺节"与"核过"必须分得清**（族是按主题拆开的，绝大多数成员本就不含该节）。
+        """
+        text = self.read(rel)
+        if text is not None:
+            found = (self.subsection(text, title) if subsection
+                     else self.section(text, title))
+            if found:
+                return found, rel
+        if rel == _coding_rel():
+            for path in _coding_family():
+                body = self.read(_rel_of(path))
+                if body is None:
+                    continue
+                found = (self.subsection(body, title) if subsection
+                         else self.section(body, title))
+                if found:
+                    return found, _rel_of(path)
+        return "", rel
 
     def section(self, text, title):
         return _section_text(text, title)
@@ -716,7 +751,7 @@ PATH_CONFIG_REL = pathconfig.CONFIG_REL
 PUBLIC_BASE = _PATHCFG.base_url if _PATHCFG else ""
 
 
-# 『源码管理方法』两档（规则本体都在 `specs/general/coding.adoc`「源码管理方法」）：
+# 『源码管理方法』两档（规则本体都在 `specs/general/coding-source.adoc`「源码管理方法」）：
 #   `conventional` —— 常规档：落点按职责与体量排布、冲突现场解、派生件允许人工维护
 #                    （但须有核对判据）、不要求合并策略与生成器。
 #   `concurrent`   —— 并发档：落点按份切、逐行登记面只留身份、派生件由生成器产出、
@@ -731,9 +766,9 @@ def source_management_mode():
     """本项目取的**源码管理档**：`conventional` / `concurrent`。
 
     取值只有一处：`script/specs-config.toml` 的 `[source-management].mode`。两档是**并列的
-    两套完整规则集**（见 `specs/general/coding.adoc`「源码管理方法」），一个项目只取一档、
+    两套完整规则集**（见 `specs/general/coding-source.adoc`「源码管理方法」），一个项目只取一档、
     整档生效，**不得跨档拼装**。**缺键即报错、不补默认值**：退回一个默认值等于把"取哪一档"
-    变成可选装饰，两份口径又回来了（`specs/general/coding.adoc`「取值的唯一来源」）。
+    变成可选装饰，两份口径又回来了（`specs/general/coding-runtime.adoc`「取值的唯一来源」）。
     读不到或取值不在两档之内时返回 `None`，由 `check_source_management_guard` 报红。
     """
     cfg = _PATHCFG
@@ -747,7 +782,7 @@ def source_management_mode():
 
 
 def file_role_enabled():
-    """本项目是否取**并发档**（`specs/general/coding.adoc`「文件的角色」那一节是否适用）。
+    """本项目是否取**并发档**（`specs/general/coding-file-role.adoc`「文件的角色」那一节是否适用）。
 
     就是 `source_management_mode() == "concurrent"`，不另立第二个开关：多一个"要不要并发档"
     的布尔就等于给同一件事开第二处取值。取常规档（或取值缺失）时返回 `False`——那一节不适用，
@@ -1012,7 +1047,11 @@ RESIDENT_FILES = ("AGENTS_COMMON.adoc",
 # **识别特征 + 落点**、没有把判据正文搬进来（正文分别在 `specs/general/ui.adoc`、
 # `specs/general/ui-patterns.adoc`、`specs/stack/powershell.adoc`），故按实测用量就近抬到
 # 67000、余量约 1.3%。下一次仍应先归位、再考虑抬数。
-RESIDENT_BUDGET = 67000
+# 本轮由 67000 上调为 67500：本次把「验证力度分档」从 `specs/general/verify.adoc` 拆成同族第二份
+# `specs/general/verify-tier.adoc`（该文件 49 KB、超软阈值 30 KB，且与族入口的判据形态不同：入口
+# 答"做不做、做什么"，分份答"做多深"），调度器那一行只改落点链接、未搬正文，但两份路径使必加载层
+# 落到 67034 字节、超原天花板 34 字节。按「抬数须按实测用量就近取值」，抬到 67500、余量约 0.7%。
+RESIDENT_BUDGET = 67500
 # 核心清单「底线」节的**条数下限**：宁少不滥是取向，但少于这个数就说明清单被削过
 # （「底线」是浓缩后的全套底线，不是"挑几条最重要的"）。与 `SOFT_FILE_SIZE_HINT`
 # 同理：它是"拦无声删除"的下限、不是目标。
@@ -1218,7 +1257,102 @@ LINE_ENDING_STACK_FILES = (
 # （依据：Spring Boot 官方文档 Externalized Configuration；Google Java Style Guide 3.4.2
 # 对 POJO 的定义；阿里巴巴 Java 开发手册的 POJO 类约定。）
 CODING_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
-# 弃用类/API 迁移（`specs/general/coding.adoc`「警告与弃用」+ `specs/general/dependency.adoc`
+# 族入口的**仓库根相对路径**：族内取文本/取节一律按 `REPO_ROOT + 本路径` 现场推导。
+# 不直接按 `CODING_FILE` 推——那是模块级的**绝对路径**，单测换 `REPO_ROOT` 时它不会跟着走，
+# 于是夹具里的删除会被真实仓库那一份兜住、反例一律报绿（本仓库实测）。
+CODING_ENTRY_REL = "specs/general/coding.adoc"
+
+
+def _coding_entry_path() -> str:
+    """族入口的**当前**绝对路径（按 `REPO_ROOT` 推导）。"""
+    return os.path.join(REPO_ROOT, *CODING_ENTRY_REL.split("/"))
+
+
+def _coding_rel() -> str:
+    """族入口在报错里的称呼（相对仓库根）。"""
+    return CODING_ENTRY_REL
+
+
+def _coding_family() -> list:
+    """『通用编码规范』一族：入口那一份 + 同目录 `coding-*.adoc`（**按目录现算，不列清单**）。
+
+    为什么是一族而不只是一份：单份越大，「按需加载」越退化成「整份读完」——与
+    `specs-project-maintainer/spec-lifecycle.adoc`「单个规范文件的软阈值」同向。
+    族内成员**不在这里列清单**（列了就是同一份清单的第二处）：目录里有什么就是什么，
+    而"拆出去的份有没有被登记、会不会被加载"由 `check_coding_family_guard` 按调度器核。
+    """
+    entry_path = _coding_entry_path()
+    directory = os.path.dirname(entry_path)
+    entry = os.path.basename(entry_path)
+    prefix = os.path.splitext(entry)[0]
+    out = [entry_path]
+    if os.path.isdir(directory):
+        for name in sorted(os.listdir(directory)):
+            if name == entry or not name.endswith(".adoc"):
+                continue
+            if not name.startswith(prefix + "-"):
+                continue
+            out.append(os.path.join(directory, name))
+    return out
+
+
+def _coding_text_at(root: str) -> str:
+    """按**给定仓库根**取整族文本（单测夹具用：把真实族拼成一份落进临时根）。
+
+    与 `_coding_text` 同一口径，只是根不同——`REPO_ROOT` 在每个用例里被重定向，
+    而夹具要的是**真实仓库**那一份的内容。
+    """
+    directory = os.path.join(root, *os.path.dirname(_coding_rel()).split("/"))
+    base = os.path.basename(_coding_rel())
+    prefix = os.path.splitext(base)[0]
+    names = []
+    if os.path.isdir(directory):
+        names = [n for n in sorted(os.listdir(directory))
+                 if n.endswith(".adoc") and (n == base or n.startswith(prefix + "-"))]
+    out = []
+    for name in names:
+        with open(os.path.join(directory, name), encoding="utf-8") as fh:
+            out.append(fh.read())
+    return "\n".join(out)
+
+
+def _coding_missing() -> list:
+    """族内**缺失**的成员（相对仓库根）。空列表即齐备（入口缺失也算缺）。"""
+    return [os.path.relpath(p, REPO_ROOT).replace("\\", "/")
+            for p in _coding_family() if not os.path.isfile(p)]
+
+
+def _coding_find_section(keyword: str):
+    """在族内**逐个成员**按二级节关键词取节，返回 `(节正文, 该份的相对路径)`。
+
+    取不到时返回 `("", "")`——**缺节与核过要分得清**：由调用方按"族内一处也没有"报红，
+    而不是在第一个不含该节的成员上就报（族是按主题拆开的，绝大多数成员本就不含该节）。
+    """
+    for path in _coding_family():
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        found = _section_text(text, keyword)
+        if found:
+            return found, _rel_of(path)
+    return "", ""
+
+
+def _coding_text() -> str:
+    """取**整族**的正文（按文件顺序拼接）。
+
+    为什么拼而不是各核一份：各道防线核的是"某条判据还在不在"，判据在族内哪一份是
+    **落点问题**（由调度器与族入口说明），不是"在不在"问题；按整族取文本，
+    判据在主题之间搬家时防线不必跟着改（要核"在不在"的那件事没变）。
+    """
+    out = []
+    for path in _coding_family():
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                out.append(fh.read())
+    return "\n".join(out)
+# 弃用类/API 迁移（`specs/general/coding-runtime.adoc`「警告与弃用」+ `specs/general/dependency.adoc`
 # 「升级与废弃」）：不得使用被弃用的类/API、改用替代者（优先升级类/同名新类），**默认不调整依赖、
 # 也不动依赖版本**。两处同向：代码侧给禁止面与替代者取向、依赖侧给「不动依赖面」的落点。
 DEPENDENCY_FILE = os.path.join(SPECS_DIR, "general", "dependency.adoc")
@@ -1817,6 +1951,11 @@ def check_maven_mirror_guard():
 # 三条共同的前提是**不能影响效率和效果**，故每道防线都同时钉住「边界条」（效率/节省不得
 # 越过质量、完整性、验证）——只钉「要不要求」而不钉边界，等于给出一条可被读成「为省而省」的规则。
 QUALITY_SECTION = "代码质量（新产出即高质）"
+# 「编码规范一族」的入口里，登记族内各份**何时加载**的那一节
+CODING_LOAD_SECTION = "本族怎么加载"
+# 「验证力度分档」：本节与它的锚点清单
+VERIFY_TIER_SECTION = "验证力度分档"
+VERIFY_TIER_ANCHORS = _RULES_TOKENS["VERIFY_TIER_ANCHORS"]
 QUALITY_SPEC = "specs/general/coding.adoc"
 GEN_EFF_SECTION = "生成效率（同等质量下最少往返）"
 TOKEN_SECTION = "token 纪律（提高利用率与节省开销）"
@@ -1825,6 +1964,10 @@ AFTER_REVIEW_SECTION = "改完规范必做的五件事（机械手段必跑，�
 CLEAN_SUBAGENT_REVIEW_SECTION = "review 时的干净子 agent 复核（强制）"
 CHANGE_REVIEW_SECTION = "改动后的 review（每次改完都得复核一次）"
 VERIFY_SPEC = "specs/general/verify.adoc"
+# 「验证力度分档」的**载体**是验证一族的第二份（族入口只给"做不做/做什么"，分档给"做多深"）：
+# 分档定义与族入口的判据形态不同（判档 vs 做事清单），故单列一份；族入口「改完规范必做的
+# 五件事」须指回这份的落点——两处各读各的时，执行者会按"五件都不能少"顶格做。
+VERIFY_TIER_SPEC = "specs/general/verify-tier.adoc"
 REVIEW_SPEC = "specs/general/review.adoc"
 QUALITY_LIBRARY = "library/quality.adoc"
 
@@ -1863,6 +2006,24 @@ REFERENCE_COORD_TOKENS = _RULES_TOKENS["REFERENCE_COORD_TOKENS"]
 # ① 三类问题清单 + 存量默认不查不报；② 存量随动迁移与"不得据此提出问题"；
 # ③ 唯一例外是主动声明（仅当次生效、不得泛化）。另核两处**既有单项豁免**已改为回指全局
 # 口径（java 数据对象模板、成员与方法次序）——防单项豁免被删后真源丢失、也防它以旧措辞复活。
+# 『增量复核』防线：判据本体落 `specs/general/review.adoc`「增量复核」，平台落点落
+# `specs/platform/cnb.adoc`「对象钉定与可追溯」。**为什么它是 C 档判据**：它改的是 review
+# 的**检查面**（这一轮该读哪一段），一旦被抽成"尽量别重复读"，就会退化成整份重看一遍，
+# 或者反过来——假设上一轮审过、其实没审（本仓库已实证：跨轮次接续时"上次审到哪"没人记）。
+INCREMENTAL_REVIEW_SPEC = "specs/general/review.adoc"
+INCREMENTAL_REVIEW_SECTION = _RULES_TOKENS["INCREMENTAL_REVIEW_SECTION"]
+INCREMENTAL_REVIEW_ANCHORS = _RULES_TOKENS["INCREMENTAL_REVIEW_ANCHORS"]
+# 平台落点：续接复核"上次审到哪"落在 PR 的 conclusions 里、不新增平台状态位
+CNB_LEDGER_LANDING_TOKENS = (
+    "续接复核的\"上次审到哪\"落在 PR 的结论里",
+    "按首次复核处理",
+    "不另建标签",
+)
+# 『结论的记账形态』防线：固定六列 + 一句事实 + 不复述判据原文。
+VERDICT_LEDGER_SPEC = "specs/general/review.adoc"
+VERDICT_LEDGER_SECTION = _RULES_TOKENS["VERDICT_LEDGER_SECTION"]
+VERDICT_LEDGER_COLUMNS = _RULES_TOKENS["VERDICT_LEDGER_COLUMNS"]
+VERDICT_LEDGER_ANCHORS = _RULES_TOKENS["VERDICT_LEDGER_ANCHORS"]
 DEFAULT_REVIEW_SCOPE_SECTION = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_SECTION"]
 DEFAULT_REVIEW_SCOPE_ANCHORS = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_ANCHORS"]
 # `delivery` 片段里"重复面的处理"须在的要点（两个提示词共用同一片段，改一处即两处生效）
@@ -2047,8 +2208,18 @@ def _section_anchor_check(rel, section_title, anchors, *, subsection=False):
         text = fh.read()
     if subsection:
         section = _subsection_text(text, section_title)
+        if not section and rel == _coding_rel():
+            for member in _coding_family():
+                if not os.path.isfile(member):
+                    continue
+                with open(member, encoding="utf-8") as fh:
+                    section = _subsection_text(fh.read(), section_title)
+                if section:
+                    break
     else:
         section = _section_text(text, section_title)
+        if not section and rel == _coding_rel():
+            section, _owner = _coding_find_section(section_title)
     level = "小节" if subsection else "节"
     if not section:
         err(f"{rel} 缺少「{section_title}」{level}——该条失去落点"
@@ -2058,6 +2229,71 @@ def _section_anchor_check(rel, section_title, anchors, *, subsection=False):
         for token in tokens:
             if token not in section:
                 err(f"「{section_title}」{level}缺少要点：{name}（应含 `{token}`）——{why}", rel)
+    return True
+
+
+def _family_find_section(rel, title, subsection=False):
+    """取某"族"里的节：`rel` 是本文件时按本文件取，族入口时**在族内逐个成员**再取。
+
+    与 `RulesContext.find_section` 同口径（一处实现、一处正则）：`review.adoc` 与
+    `verify.adoc` 都已按问句拆成一份一族，节搬去同族另一份时，按入口取会取到空节——
+    报出来的是"缺这一节"（核对方式错位），而不是规范本身缺要点。
+    返回 `(节正文, 承载它的那一份的相对路径)`；族内一处也没有时返回 `("", rel)`。
+    """
+    text = _read_spec_text(rel)  # 读不到返回空串（缺失由各自的文件存在性检查报）
+    take = _subsection_text if subsection else _section_text
+    found = take(text, title)
+    if found:
+        return found, rel
+    for path in _sibling_family(rel):
+        body = _read_spec_text(_rel_of(path))
+        found = take(body, title)
+        if found:
+            return found, _rel_of(path)
+    return "", rel
+
+
+def _sibling_family(rel):
+    """`rel` 所在的"族"：本份 + 同目录同前缀的 `*<前缀>-*.adoc`（**按目录现算、不列清单**）。
+
+    与 `_coding_family` 同一判据、同一实现：族成员由目录里有什么决定，不在脚本里再列一份
+    （列了就是同一份清单的第二处）。
+    """
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    directory = os.path.dirname(path)
+    base = os.path.basename(path)
+    prefix = os.path.splitext(base)[0]
+    out = [path]
+    if os.path.isdir(directory):
+        for name in sorted(os.listdir(directory)):
+            if name == base or not name.endswith(".adoc"):
+                continue
+            if not name.startswith(prefix + "-"):
+                continue
+            out.append(os.path.join(directory, name))
+    return out
+
+
+def _family_section_anchor_check(rel, section_title, anchors, *, subsection=False):
+    """`_section_anchor_check` 的族内版本：取节时先在本份找，再在**同族各份**找。
+
+    `_section_anchor_check` 只在 `rel` 是通用编码规范族入口时才展开族——那对已按问句
+    拆分的 `review.adoc` / `verify.adoc` 不成立：它们的节搬去 `verify-tier.adoc` 或
+    同族另一份后，按入口取一律取空、报的是"缺整节"（核对口径错位）。
+    要点核不到时**落点一并报出**：只说"缺要点"时，读者分不清是该补在这一份、
+    还是它本来就该在族内另一份里。
+    """
+    section, owner = _family_find_section(rel, section_title, subsection=subsection)
+    level = "小节" if subsection else "节"
+    if not section:
+        err(f"{rel} 缺少「{section_title}」{level}——该条失去落点"
+            "（缺条目时执行者按「能跑就行 / 能省则省」收敛）", rel)
+        return False
+    for name, tokens, why in _normalize_anchors(anchors):
+        for token in tokens:
+            if token not in section:
+                err(f"「{section_title}」{level}缺少要点：{name}（应含 `{token}`）——{why}"
+                    f"（核的面：{owner}）", owner)
     return True
 
 
@@ -2071,14 +2307,17 @@ def check_quality_guard():
     # 原先要求调度器行里出现 `代码质量（新产出即高质）` 这一**节标题**（条目本体），
     # 属把本体的名抄进调度器（`terminology.adoc`「数据字典」的反膨胀）；已改为按
     # 「写/改代码 + 评审」这类可判读的触发特征定位该行。
+    # 识别特征只取**写代码那一侧**（"要写新代码"）：评审不是这一族的生效面
+    # （评审的默认检查面见 `specs/general/review.adoc`「review 的默认检查面」），
+    # 把它当本族的触发特征，等于每次评审都把整族拉进上下文。
     disp = next((ln for ln in generic.splitlines()
                  if "specs/general/coding.adoc" in ln
-                 and "新代码" in ln and "代码评审" in ln), "")
+                 and "新代码" in ln), "")
     if not disp:
         err(f"加载调度器缺少「{QUALITY_SECTION}」的加载项与识别特征——"
             "缺则改代码时永远不会被触发加载、判据实际失效", "AGENTS_COMMON.adoc")
     else:
-        for token in ("新代码", "代码评审"):
+        for token in ("新代码",):
             if token not in disp:
                 err(f"加载调度器代码质量条目缺少识别特征 `{token}`——"
                     "触发特征不全时，执行者会「没想到要按质量下限自查」", "AGENTS_COMMON.adoc")
@@ -2152,6 +2391,71 @@ def check_after_change_review_guard():
     phase_done()
 
 
+def check_incremental_review_guard():
+    """『增量复核』防线：同一个 sha 不重审、只审上次复核 sha 之后的那一段。
+
+    钉两处：① 通用层 `specs/general/review.adoc`「增量复核」一节的**判据本体**（检查面
+    取值、两处不可省、上一轮结论不作数的四种情形、记账落在对象上、与"改完即审"的分工、
+    存量边界）；② 平台层 `specs/platform/cnb.adoc`「对象钉定与可追溯」的**落点**——续接
+    复核靠 PR 结论里的复核 sha、不新增平台状态位。
+
+    为什么两处都要钉：只钉通用层时，"上次审到哪"在本平台上无处可查，增量复核落地即成
+    空转（每条执行都是首次复核）；只钉平台层时，通用口径一被抽走，剩下的只是一句
+    "查 PR 结论"。**本次到底有没有真的续接上**属运行时事实（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("增量复核防线检查")
+    _family_section_anchor_check(INCREMENTAL_REVIEW_SPEC, INCREMENTAL_REVIEW_SECTION,
+                                 INCREMENTAL_REVIEW_ANCHORS)
+    # 字典须登记名称（名称是检索键；未登记的节等于"读到了才知道它存在"）
+    text = _read_spec_text(INCREMENTAL_REVIEW_SPEC)
+    if "term-incremental-review" not in text:
+        err(f"{INCREMENTAL_REVIEW_SPEC}「本文件的字典」未登记『增量复核』——"
+            "该名称失去检索键，别处只能整份文件找它", INCREMENTAL_REVIEW_SPEC)
+    rel = "specs/platform/cnb.adoc"
+    cnb = _read_spec_text(rel)
+    if not cnb:
+        err(f"缺少 {rel}——『增量复核』在平台上的落点（上次复核 sha 记在哪）无处承载", rel)
+    else:
+        for token in CNB_LEDGER_LANDING_TOKENS:
+            if token not in cnb:
+                err(f"{rel}「对象钉定与可追溯」缺少 {token}——续接复核的账无处可查："
+                    "留证不落在 PR 结论里时，每条执行都会退回首次复核（增量形同不存在），"
+                    "或反过来另造一份平台状态位（同一事实的第二处来源）", rel)
+    run_rule_guard("check_incremental_review_guard")
+    phase_done()
+
+
+def check_verdict_ledger_guard():
+    """『结论的记账形态』防线：固定六列、一句事实、不复述判据原文。
+
+    钉的是**列本体与那句"不做什么"**（不是"有没有一节叫记账形态"）：六列逐列都在且次序
+    写明、证据须可核对、不复述判据原文、总账三态分栏且与逐行不重复、汇报口径、存量不回改。
+    少任一列或抽掉"不复述原文"，台账都退回散文——读者要判这条结论成不成立，只能回去把
+    规则原文再读一遍，那正是本条要消的成本。
+    """
+    phase("结论记账形态防线检查")
+    _family_section_anchor_check(VERDICT_LEDGER_SPEC, VERDICT_LEDGER_SECTION,
+                                 VERDICT_LEDGER_ANCHORS)
+    text = _read_spec_text(VERDICT_LEDGER_SPEC)
+    if "term-verdict-ledger" not in text:
+        err(f"{VERDICT_LEDGER_SPEC}「本文件的字典」未登记『结论的记账形态』——"
+            "该名称失去检索键", VERDICT_LEDGER_SPEC)
+    # 六列逐列核（按序）：锚点核的是"有一句写着六列"，这里核的是"六列本身没少"
+    # 取节与锚点核同源（族内逐成员找）：本节搬去同族另一份时，按入口取会取到空节、
+    # 于是六列"一列都不在"——报的是核对方式错位，不是规范本身缺列
+    section, _owner = _family_find_section(VERDICT_LEDGER_SPEC, VERDICT_LEDGER_SECTION)
+    for index, column in enumerate(VERDICT_LEDGER_COLUMNS, 1):
+        # 核的是**强调写法**（`**① 问题**`），不是裸名：列名本身在正文别处也出现
+        # （"问题""证据"是常用词），只核裸名时"删掉列、保留别处那个词"照样全绿
+        if f"**{column}**" not in section:
+            err(f"{VERDICT_LEDGER_SPEC}「{VERDICT_LEDGER_SECTION}」缺少第 {index} 列"
+                f"『{column}』——六列缺一列时读者判不了这条结论成不成立，只能回原始材料"
+                "再读一遍", VERDICT_LEDGER_SPEC)
+    run_rule_guard("check_verdict_ledger_guard")
+    phase_done()
+
+
 def check_clean_subagent_review_guard():
     """『review 时的干净子 agent 复核』防线：判据本体落
     `specs/general/review.adoc`「review 时的干净子 agent 复核（强制）」——**核对对象是该节
@@ -2212,7 +2516,8 @@ def check_default_review_scope_guard():
         if not os.path.isfile(path):
             err(f"缺少 {rel}——{where}无从核对", rel)
             continue
-        body = open(path, encoding="utf-8").read()
+        # 编码规范是**一族**（按主题拆分）：族入口按整族取文本，否则要点搬去邻居那份即假红
+        body = _coding_text() if rel == _coding_rel() else open(path, encoding="utf-8").read()
         missing = [t for t in must_have if t not in body]
         if missing:
             err(f"review 默认检查面防线被破坏：{rel} 的{where}缺失 {missing}——"
@@ -2837,7 +3142,7 @@ def check_ui_style_guard():
     不另开防线：判据本体在该节的「`!important` 是最后一步」一条（取用次序 + 三条判定标准，
     其中「判定只在写它的那处算、不看调用点有多少」正是「频繁」的可核对取值）。
 
-    判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」（任何语言、任何端）。
+    判据本体唯一落点在通用层 `specs/general/coding-ui.adoc`「界面与样式」（任何语言、任何端）。
     故本道核**四处**：
       * 真源：该节的要点（规则数据 `script/specs-rules/ui/` + `_tokens.toml`）；
       * **技术栈层 `specs/stack/web.adoc`「界面（载体）」**：只给前端载体（取用入口、唯一落点、
@@ -2910,7 +3215,7 @@ def check_cache_guard():
     **来源与时间可辨识**。
 
     钉四处：
-      * 真源：通用层 `specs/general/coding.adoc`「缓存（统一管理、先缓存后在线）」的六组要点
+      * 真源：通用层 `specs/general/coding-runtime.adoc`「缓存（统一管理、先缓存后在线）」的六组要点
         + 依据行（规则数据 `script/specs-rules/cache.toml` + `_tokens.toml`）；
       * **技术栈层 `specs/stack/web.adoc`「缓存（载体）」**：只给前端载体并回指唯一真源——
         缺则前端那一半只剩口号，或栈层变成第二处真源；
@@ -2947,7 +3252,7 @@ def check_ui_performance_guard():
     `specs/general/collab.adoc`「任务的读懂」留一条回指。
 
     钉五处：
-      * 真源：通用层 `specs/general/coding.adoc`「界面的性能」的要点 + 依据行；
+      * 真源：通用层 `specs/general/coding-ui.adoc`「界面的性能」的要点 + 依据行；
       * **方法论**：`specs/general/planning.adoc`「举例不是面」的要点 + 界面一侧的回指
         ——缺则判据又被读成"清单里那几个场景"，下一处同类形态只能等用户再提一遍；
       * **测试触发特征**：`specs/general/testing.adoc`「性能测试」的「何时需要」须含界面
@@ -3003,7 +3308,7 @@ def check_ui_spec_guard():
     触摸屏又该怎么搞」；「每个端的设计风格也不一样，需要涉及到，还一些可以参考的软件」。
 
     本条与既有三道界面防线**不重叠、不合并**：
-      * `check_ui_style_guard`（`specs/general/coding.adoc`「界面与样式」）管**取哪套现成方案、
+      * `check_ui_style_guard`（`specs/general/coding-ui.adoc`「界面与样式」）管**取哪套现成方案、
         同一形态放哪一处、`!important` 的次序**——本条管**取什么颜色、字号、间距、控件高度**；
       * `check_ui_performance_guard` 管**数据长起来会不会卡**——本条管**看得清不清、点得动点不动**；
       * `check_same_thing_one_source_guard` 管**两处算不算同一件事**——本条在视觉层的形态是
@@ -3051,7 +3356,7 @@ def check_same_thing_one_source_guard():
     看得出来），先治；功能、工具类、配置、契约那一档**不一致会自己冒出来**（结果不同、甚至
     报错）——但**能查出来不等于会收敛**，没人替它做决定时底层仍各自为政。
 
-    判据本体唯一落点在通用层 `specs/general/coding.adoc`「界面与样式」的「同一件事只有一个
+    判据本体唯一落点在通用层 `specs/general/coding-ui.adoc`「界面与样式」的「同一件事只有一个
     来源（不限界面，任何语言）」。本道核**四处**：
       * 真源：该小节要点（规则数据 `script/specs-rules/ui/` + `_tokens.toml`）；
       * 上一节须指向这一档（处置次序：先界面、再其余），否则两条各自成篇；
@@ -3103,17 +3408,15 @@ def check_java_serial_guard():
             if token not in java_text:
                 err(f"{JAVA_SPEC}「编码」缺少要点：{name}（应含 `{token}`）——{why}", JAVA_SPEC)
 
-    coding_path = os.path.join(REPO_ROOT, *CODING_SPEC.split("/"))
-    if not os.path.isfile(coding_path):
-        err(f"缺少 {CODING_SPEC}——「链式调用一律换行」的判据无处承载", CODING_SPEC)
+    if _coding_missing():
+        err(f"缺少 {_coding_rel()}——「链式调用一律换行」的判据无处承载", _coding_rel())
     else:
-        with open(coding_path, encoding="utf-8") as fh:
-            coding_text = fh.read()
+        coding_text = _coding_text()
         for name, tokens, why in CHAIN_CALL_ANCHORS:
             for token in tokens:
                 if token not in coding_text:
-                    err(f"{CODING_SPEC}「表达式与调用写法」缺少要点：{name}"
-                        f"（应含 `{token}`）——{why}", CODING_SPEC)
+                    err(f"{_coding_rel()}「表达式与调用写法」缺少要点：{name}"
+                        f"（应含 `{token}`）——{why}", _coding_rel())
 
     # 调度器：三条都必须能被触发加载（缺识别特征＝永不加载、规则实际失效）
     rel_common = "AGENTS_COMMON.adoc"
@@ -3787,6 +4090,13 @@ def check_dispatcher_registry():
     phase("调度器登记完整性检查")
     with open(GENERIC_FILE, encoding="utf-8") as fh:
         registered = set(extract_specs_refs(fh.read(), ""))
+    # 『通用编码规范』是**一族**（按主题拆分）：调度器只登记族入口一处，族内分份由**入口
+    # 自己**登记（「本族怎么加载」一节）——那同样是"写文件与登记是同一个动作"，只是登记处
+    # 从调度器下沉到族入口。故把族入口登记的分份也算进已登记集合：
+    # 不这么做时，每拆一份都要往常驻层再写一行路径，常驻层随拆分线性膨胀。
+    if "specs/general/coding.adoc" in registered:
+        registered |= set(extract_specs_refs(_read_spec_text("specs/general/coding.adoc"),
+                                             "specs/general"))
     referenced = set()
     for rel in collect_adoc_files():
         # 只统计**公共规范内容**（`AGENTS_COMMON.adoc` + `specs/`）内部文件的引用：
@@ -4712,7 +5022,7 @@ def check_paths_single_source_guard():
     # 本函数只保留**取值接线**（哪几处常量必须从配置算、正文不许复述、读取层就近优先）——
     # 那几件事的原语在引擎里（`prose_mentions` 等），措辞在 `values.toml`。
     # ① 配置在、必填项齐（缺项时执行侧与判据侧的同名常量会各自退回自己的默认值）
-    # **判据本体那一节**（`specs/general/coding.adoc`「取值的唯一来源」）由规则数据核——
+    # **判据本体那一节**（`specs/general/coding-runtime.adoc`「取值的唯一来源」）由规则数据核——
     # 但规则数据按**现场仓库根**取文件：把规则步骤放在本函数最前面时，单测换到夹具根后
     # 拿真实仓库的规则去核夹具、报红与"核过且通过"就分不清了；故先核本函数自己那几件
     # 可机械核对的事实，再跑规则步骤（它认的根与本节其余各段一致）。
@@ -7255,6 +7565,154 @@ def check_core_digest_guard():
     phase_done()
 
 
+SECTION_REF_RE = re.compile(r"`((?:[A-Za-z0-9_.\-]+/)*[A-Za-z0-9_.\-]+\.adoc)`「([^」]+)」")
+
+
+def _section_titles(rel):
+    """取某份 .adoc 的**全部标题行文本**（任意层级）；文件不存在时返回 `None`。
+
+    只取标题行、不解析文档树：本函数只回答"这份文件里有没有一个以该关键词开头的节"，
+    层级的取舍（二级/三级）由引用方自己写明，这里不判。
+    """
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    return [ln.lstrip("=").strip() for ln in text.split("\n") if re.match(r"^==+\s+\S", ln)]
+
+
+def _member_by_section(title):
+    """在**编码规范族内**找含该节的成员（相对仓库根）；族内一处也没有时返回 `None`。
+
+    族内哪一份承载哪一节是**主题划分**的结果（由族入口的「本族怎么加载」一节声明），
+    不在这里列清单——故一律按目录现算。
+    """
+    for path in _coding_family():
+        rel = _rel_of(path)
+        titles = _section_titles(rel) or []
+        if any(t.startswith(title) for t in titles):
+            return rel
+    return None
+
+
+def check_section_ref_landing_guard():
+    """『节名引用落在承载它的那一份上』防线：`xxx.adoc「某节」` 不许指向一份不含该节的文件。
+
+    为什么需要它：编码规范按主题**拆成多份**之后，节名引用从"一改全库都错"变成
+    "**逐条各自错**"——正文搬去邻居那一份，而别处的引用仍写着族入口的路径。这类失效
+    不会自己冒出来：路径在、文件在、节名也在，只是**不在同一份里**，读者顺着它跳过去
+    找不到那一条（判据落点实际失效，而一切看起来正常）。本仓库实测：同一次拆分里
+    `library/adoption.adoc` 14 处、`specs/general/coding-runtime.adoc` 2 处、
+    `AGENTS_COMMON.adoc` 1 处全部漏改，`check_specs.py` 与 2700+ 单测全绿。
+
+    核对面：`collect_adoc_files()` 收的**全部 .adoc**（与链接检查同一范围）。判据一条：
+    被引用的文件存在、但其中没有以该关键词开头的节时，先看"含该节的是不是同族另一份"——
+    是则报红并给出正确落点（**这正是拆分之后要逐条改写的那种**）；不是则交给
+    `check_section_refs`（它管节名在整个仓库里存不存在，两处不重复报）。
+
+    「某条引用指向的节该不该合并、节名写得够不够精确」属语义判断（见
+    `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("节名引用的落点检查（引用须落在承载该节的那一份上）")
+    for rel in collect_adoc_files():
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for m in SECTION_REF_RE.finditer(text):
+            target, title = m.group(1), m.group(2).strip()
+            if target.startswith("http"):
+                continue
+            titles = _section_titles(target)
+            if titles is None:
+                continue  # 文件不存在：由 check_refs_exist 报
+            if any(t.startswith(title) for t in titles):
+                continue
+            owner = _member_by_section(title)
+            if owner and owner != target:
+                err(f"{rel} 指向 `{target}「{title}」`——该文件没有这一节，它在 `{owner}` 里："
+                    "按主题拆分之后，节搬走了而引用没跟着搬，读者顺着这条引用找不到判据"
+                    f"（路径与节名各自都在、只是不在同一份里）", rel)
+    phase_done()
+
+
+def check_coding_family_guard():
+    """『编码规范一族』防线：族内每一份都**登记在族入口**、且入口写了**何时加载**。
+
+    为什么需要它：把一份巨文件按主题拆开后，最危险的形态不再是"内容被删"，而是
+    **拆出去的那一份没人登记**——它仍在磁盘上、`grep` 也搜得到，但加载路径上没有任何
+    一处指向它，**其中的规则在引用方那里实际失效**；而且这种失效**看起来一切正常**：
+    引用存在性检查查的是"被引用的文件在不在"，查不到"该被引用的文件有没有被引用"。
+
+    判据（可机械核对，全部按**目录现算**、不列清单）：
+      * 族入口存在，且**每一份**都出现在入口正文里（相对路径点名即可，写法不限）；
+      * 入口的「本族怎么加载」一节在，且其中**每一份**都被点到（触发面按份给）；
+      * 族内每一份都**不是空壳**（有二级节、有正文）——拆出去只剩标题的那种，加载了也不承载任何判据。
+
+    语义判断（"某个主题到底该归族内哪一份""这条判据放这里对不对"）见 `GUARD_CHECK_LIMITS`。
+    """
+    phase("编码规范一族防线检查（族内分份须被登记、且写明何时加载）")
+    entry = _coding_rel()
+    family = _coding_family()
+    if not os.path.isfile(_coding_entry_path()):
+        err(f"缺少 {entry}——通用编码规范族的入口不在，族内分份无从登记", entry)
+        phase_done()
+        return
+    if len(family) < 2:
+        err(f"{entry} 所在的族只有一份——「按主题分份」未落地时，单份体量没有任何上限，"
+            "按需加载必然退化成整份读完（判据见 "
+            "`specs-project-maintainer/spec-lifecycle.adoc`「单个规范文件的软阈值」）", entry)
+        phase_done()
+        return
+    entry_text = _read_spec_text(entry)
+    load_section = _section_text(entry_text, CODING_LOAD_SECTION)
+    if not load_section:
+        err(f"{entry} 缺少「{CODING_LOAD_SECTION}」一节——族内各份**何时加载**没有落点，"
+            "读者只能整族读完或凭猜", entry)
+    for path in family:
+        rel = _rel_of(path)
+        if rel == entry:
+            continue
+        if rel not in entry_text:
+            err(f"族内成员 {rel} 未登记在族入口（{entry}）——它不会被加载，"
+                "其中的规则在引用方那里实际失效；登记与写文件是同一个动作", entry)
+            continue
+        if load_section and rel not in load_section:
+            err(f"族内成员 {rel} 未在入口的「{CODING_LOAD_SECTION}」一节里给出加载时机——"
+                "没有触发面的份等于『永远不加载』", entry)
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        if not _split_adoc_sections(body):
+            err(f"族内成员 {rel} 没有任何二级节——空壳分份（拆了但没承载判据）", rel)
+    phase_done()
+
+
+def check_verify_tier_guard():
+    """『验证力度分档』防线：三档的定义、每档做哪几件、判不准取更严，都须仍在。
+
+    为什么需要它：分档一旦被抽成"通常都要做全套"或"看情况"，两种结局都会回来——
+    要么每档都按最贵的方式付（成本与收益不匹配，久了只剩形式），要么整条要求被跳过。
+    故钉三档的**判档条件**（按改动性质，不按文件数量）与每档**免做哪些**（免做必须有判据）。
+    """
+    phase("验证力度分档防线检查")
+    _section_anchor_check(VERIFY_TIER_SPEC, VERIFY_TIER_SECTION, VERIFY_TIER_ANCHORS)
+    # 分档须与「五件事」互指：只有分档、没有"哪几件照做"的接口时，两处会各读各的
+    text = _read_spec_text(VERIFY_SPEC)
+    five = _section_text(text, AFTER_REVIEW_SECTION)
+    if "验证力度分档" not in five:
+        err(f"{VERIFY_SPEC}「{AFTER_REVIEW_SECTION}」未指回「{VERIFY_TIER_SECTION}」——"
+            "分档与五件事各读各的时，执行者会按『五件都不能少』顶格做，分档形同虚设",
+            VERIFY_SPEC)
+    # 族入口须登记这一份：未登记的分份永不加载，规则实际失效而一切看起来正常
+    entry = _read_spec_text(VERIFY_SPEC)
+    if VERIFY_TIER_SPEC not in entry:
+        err(f"{VERIFY_SPEC} 未登记 {VERIFY_TIER_SPEC}——『{VERIFY_TIER_SECTION}』的载体"
+            "在加载路径上没有入口，规则实际失效", VERIFY_SPEC)
+    phase_done()
+
+
 def check_file_size_hint():
     """『单个规范文件的软阈值』：超线只提醒、不报错、不阻断（**刻意不用 err()**）。
 
@@ -9363,7 +9821,7 @@ def _guards_numbering_table_nums():
 
     取**那一节**（`== 检查项编号`）里的表行，不按整份文件取：同一份 `guards.adoc` 里
     还有一张防线清单表，它的行不写号（次序由行在表里的位置表达，见
-    `specs/general/coding.adoc`「文件的角色」的「编号：能靠结构表达的，不写进内容」）——
+    `specs/general/coding-file-role.adoc`「文件的角色」的「编号：能靠结构表达的，不写进内容」）——
     两张表的行形态不同，按整份文件取会把别的表一起收进来，"两套编号"永远对得上、判据失效。
     节或表缺失时返回 `None`（缺失由 `check_guard_order_guard` 对本表另行报红）。
     """
@@ -9510,7 +9968,7 @@ def check_ledger_table_generated_guard():
     插一行、其后各行整体位移，而每次改动都落在那两百多行里，两个并行改动必撞。台账
     `script/check_effective.py` 的 `MECHANISMS` 是同一个成因的另一处。
 
-    判据是**派生件不得由人工手作**（`specs/general/coding.adoc`「分发产物的体积与按需加载」
+    判据是**派生件不得由人工手作**（`specs/general/coding-source.adoc`「分发产物的体积与按需加载」
     的「派生件与本体同处一个构建步骤」条在本仓库自身登记表上的落地）：整段由
     `script/gen_derived.py` 按**已经唯一的那一份真源**现算产出、现场与重算结果逐字节一致。
 
@@ -10718,6 +11176,8 @@ COMMIT_MESSAGE_KEYS = (
 # 两类语义失效（前者会被爬虫/预取在无人操作时触发副作用，后者让重试、缓存、监控与网关
 # 策略全部失效）。补入后须与图书馆依据（RFC 9110 / RFC 9457）对得上，且**级别如实**：
 # 安全方法不得产生状态变更是 L1（不可豁免、可判定），幂等/状态码是 L2，Problem Details 是 L3。
+# HTTP 接口语义的判据落在通用编码规范族内（该条跨语言）；族内哪一份由主题划分决定，
+# 故只登记**族入口**，取文本按整族（见 `_coding_text`）。
 HTTP_SEMANTICS_FILE = os.path.join(SPECS_DIR, "general", "coding.adoc")
 HTTP_SEMANTICS_KEYS = (
     (("== HTTP 接口语义",),
@@ -10787,11 +11247,10 @@ def check_http_semantics_guard():
 
 """
     phase("HTTP 接口语义防线检查")
-    rel = os.path.relpath(HTTP_SEMANTICS_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(HTTP_SEMANTICS_FILE):
+    rel = _coding_rel()
+    if _coding_missing():
         err(f"缺少 {rel}——HTTP 接口语义（方法安全/幂等、状态码）无处承载", rel)
     else:
-        text = open(HTTP_SEMANTICS_FILE, encoding="utf-8").read()
         run_rule_guard("check_http_semantics_guard")
     phase_done()
 
@@ -11370,12 +11829,12 @@ def check_abstraction_adoption_guard():
 
 """
     phase("抽象与接入成本防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——『抽象与接入成本』的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         section = ""
         m = re.search(r"^== " + re.escape(ABSTRACTION_ADOPTION_SECTION) + r"\b.*?(?=^== |\Z)",
                       text, re.S | re.M)
@@ -11408,12 +11867,12 @@ def check_config_class_guard():
 """
     phase("配置类不写逻辑防线检查")
     # (a)(b) 通用层条文 + 判定标准
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——『配置类不写逻辑』的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_config_class_guard")
     # (c) 技术栈识别特征：Java / Spring 两侧
     for path, keys, desc in (
@@ -11451,12 +11910,12 @@ def check_external_script_guard():
 
 """
     phase("跨语言执行脚本的落点防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——『跨语言执行脚本的落点』的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         section = ""
         # 节名以全角"）"结尾，不能用 `\b`（`\b` 要求前/后是单词字符，全角括号两侧
         # 都不构成边界，会让匹配恒为空）——用"行尾或空白"收尾
@@ -11817,12 +12276,11 @@ def check_script_selfdoc_guard():
     run_rule_guard("check_script_selfdoc_name_guard")
 
     # 通用编码侧：注释定位条须带脚本例外并指回本节
-    coding = os.path.join(SPECS_DIR, "general", "coding.adoc")
-    rel_coding = os.path.relpath(coding, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(coding):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少 {rel_coding}——『注释』的注释定位条无从核对", rel_coding)
     else:
-        body = open(coding, encoding="utf-8").read()
+        body = _coding_text()
         missing = [k for k in ("脚本的落点与粒度", "单打独斗", "多行普通/块注释")
                    if k not in body]
         if missing:
@@ -12018,12 +12476,12 @@ def check_reuse_precedent_guard():
 
 """
     phase("既有实现与先例优先防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——『既有实现与先例优先』的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_reuse_precedent_guard")
     # Java 栈：优先级顺序与现成 API
     rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
@@ -12292,9 +12750,9 @@ def check_java_interface_accessor_guard():
                     "不得把判定面放大到类上", rel_java)
     # 通用层不得另立第二真源：该条的判据只在技术栈层说得清（`interface`/lombok 都是 Java 专名），
     # 通用层若也写一份，两处必各自漂移（读者按通用层学到的与栈层不一致）。
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if os.path.isfile(CODING_FILE):
-        ctext = open(CODING_FILE, encoding="utf-8").read()
+    rel_coding = _coding_rel()
+    if not _coding_missing():
+        ctext = _coding_text()
         if "@Accessors" in ctext:
             err(f"字段接口访问器防线被破坏：{rel_coding} 出现框架专名 `@Accessors`——"
                 "该条是 Java 栈专属，通用层再写一份即第二真源（替换主语测试）", rel_coding)
@@ -12376,8 +12834,8 @@ def check_java_enum_valueof_catch_guard():
             "（`Enum.valueOf` 与自写枚举工具都是 Java 侧概念，须落在技术栈层）", rel_java)
     else:
         run_rule_guard("check_java_enum_valueof_catch_guard")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——『显式处理失败与边界』的通用层落点丢失"
             "（条件例外的准入判据跨语言，须收在通用编码规范）", rel_coding)
     else:
@@ -12461,12 +12919,12 @@ def check_conversion_guard():
 
 """
     phase("对象转换（多层嵌套对象优先声明式映射）防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「对象转换（多层嵌套对象的转换）」的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_conversion_guard")
         # 建议层口径：条文与判据不得被写成强制面（用户明确要求不做强制性限制）
         for token in ("不允许手写转换代码", "不得手写转换代码", "一律用既有转换库"):
@@ -12587,7 +13045,7 @@ def check_entity_dto_guard():
     语义判断（某次实际接口参数是不是实体类、某接口算不算"对外"）见 `GUARD_CHECK_LIMITS`。
     """
     phase("数据契约的载体防线检查（数据库实体类不进对外契约）")
-    rel_coding = _rel_of(CODING_FILE)
+    rel_coding = _coding_rel()
 
     def _sections_of(path, missing_msg):
         if not os.path.isfile(path):
@@ -12604,12 +13062,14 @@ def check_entity_dto_guard():
             "（要点散在别处时，读者按节找规则找不到，等于规则不在）", rel)
         return ""
 
-    coding_sections = _sections_of(
-        CODING_FILE,
-        f"缺少文件 {rel_coding}——「数据契约的载体（数据库实体类不进对外契约）」"
-        "的通用层落点丢失（该条跨语言，须收在通用编码规范而非某一技术栈）")
-    body = _section_by(coding_sections, ENTITY_CONTRACT_SECTION, rel_coding,
-                       ENTITY_CONTRACT_SECTION)
+    # 族内按**每个成员**找节（该节落在族内哪一份由主题划分决定，不在这里列清单）
+    body, rel_coding = _coding_find_section(ENTITY_CONTRACT_SECTION)
+    if not body:
+        err(f"「数据契约的载体（数据库实体类不进对外契约）」节在通用编码规范族内**一处也找不到**"
+            "——该条判据失去落点（要点散在别处时，读者按节找规则找不到，等于规则不在）",
+            _coding_rel())
+        phase_done()
+        return
     for keys, desc in (
         (("不得作为对外契约的请求参数与响应值（L1）",),
          "条文：须有该条并标 L1（防被降级成建议、退回「实体类最省事」）——"
@@ -12771,8 +13231,8 @@ def check_logical_delete_naming_guard():
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("方法名与逻辑删除的对应防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「方法名与逻辑删除的对应」的判据无处承载"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     run_rule_guard("check_logical_delete_naming_guard")
@@ -12791,12 +13251,12 @@ def check_deprecated_api_guard():
     「某个类算不算被弃用」「替代者是否等价」属语义判断，交人/子 agent 复核。
     """
     phase("弃用类/API 防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    rel_coding = _coding_rel()
     rel_dep = os.path.relpath(DEPENDENCY_FILE, REPO_ROOT).replace("\\", "/")
     # 两处落点各自只做"文件在不在"的核对；规则（两处落点的判据本体）**跑一次**
     # ——`run_rule_guard` 按阶段去重，分开调用只会让第二次成为死代码，且任一侧文件
     # 缺失时会连另一侧的判据一起跳过（规则步骤自带"文件缺失"的报错，无需在调用侧再判）。
-    if not os.path.isfile(CODING_FILE):
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「警告与弃用」的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     if not os.path.isfile(DEPENDENCY_FILE):
@@ -12805,8 +13265,8 @@ def check_deprecated_api_guard():
     run_rule_guard("check_deprecated_api_guard")
     # 防误读（替换主语测试的邻接）：存量条（内部弃用不迁移）与新代码禁止面同处一节，
     # 后条极易被读成覆盖前条——若存量条没有「不构成对新代码的豁免」这一句即报红。
-    if os.path.isfile(CODING_FILE):
-        ctext = open(CODING_FILE, encoding="utf-8").read()
+    if not _coding_missing():
+        ctext = _coding_text()
         section = _section_text(ctext, "警告与弃用")
         if section:
             if "不构成" not in section or "豁免" not in section:
@@ -12829,8 +13289,8 @@ def check_source_file_scale_guard():
     「这个文件到底该不该拆、拆到哪一步」属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("源码文件的规模防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「源码文件的规模」的判据无处承载"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
@@ -12852,9 +13312,9 @@ def check_compat_preference_guard():
     「某两个入口算不算等价」「效果有没有差异」属语义判断，交人/子 agent 复核。
     """
     phase("取兼容性更好的那一个防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
+    rel_coding = _coding_rel()
     rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「取兼容性更好的那一个」的通用层落点丢失"
             "（该条跨语言、不限编程，须收在通用编码规范而非某一技术栈）", rel_coding)
     if not os.path.isfile(SPRING_STACK_FILE):
@@ -12898,7 +13358,7 @@ def check_readonly_landing_guard():
 def check_method_placement_guard():
     """『成员与方法次序』防线：判据本体不得被删、不得降级、不得被读成「一律追加到末尾」。
 
-        落点：判据跨语言，故判据本体唯一落点在 `specs/general/coding.adoc`「命名与代码质量」；
+        落点：判据跨语言，故判据本体唯一落点在 `specs/general/coding-shape.adoc`「命名与代码质量」；
     Java 的成员载体（字段/方法/重载）落在 `specs/stack/java.adoc`「编码」并回指本体。
 
     本函数**钉判据本体、不钉轴名**（与 `check_criteria_not_axis_guard` 同口径）：只核
@@ -12908,8 +13368,8 @@ def check_method_placement_guard():
     改动算不算新增"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("成员与方法次序防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「成员与方法次序」的判据无处承载"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
@@ -12924,7 +13384,7 @@ def check_chain_assignment_order_guard():
     """『链式赋值顺序随字段顺序』防线：判据本体不得被删、不得降级、不得自成第二真源。
 
         落点：判据跨语言（链式 setter、builder 链、具名参数都属"赋值环节"），故判据本体唯一
-    落点在 `specs/general/coding.adoc`「命名与代码质量」；Java 的赋值载体（`@Accessors
+    落点在 `specs/general/coding-shape.adoc`「命名与代码质量」；Java 的赋值载体（`@Accessors
     (chain = true)` 的链式 setter、`@SuperBuilder` 的 builder 链）与模板文件的照抄约定
     各自落点。
 
@@ -12935,8 +13395,8 @@ def check_chain_assignment_order_guard():
     的先后算不算语义相关"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("链式赋值顺序防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「链式赋值顺序随字段顺序」的判据无处承载"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
@@ -12951,7 +13411,7 @@ def check_object_init_guard():
     """『对象初始化（手动创建对象时的写法）』防线（**用户提出**）：链式优先、严禁有参构造。
 
         落点：判据**跨语言**（链式 setter、builder、具名参数都属"链式初始化"），故判据本体唯一
-    落点在 `specs/general/coding.adoc`「对象初始化」；Java 的**内部分档**（builder > 链式
+    落点在 `specs/general/coding-objects.adoc`「对象初始化」；Java 的**内部分档**（builder > 链式
     setter）与载体落 `specs/stack/java.adoc`「编码」，模板文件的照抄约定落
     `specs/stack/java-object.adoc`，调度器识别特征与 README 同步各一处，图书馆登记本集合取舍。
 
@@ -12962,8 +13422,8 @@ def check_object_init_guard():
     类型有没有可用的链式形态"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("对象初始化防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「对象初始化」的判据无处承载"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
@@ -12979,12 +13439,12 @@ def check_persistence_access_guard():
 
 """
     phase("持久化访问（类型安全查询构造）防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「持久化访问（数据库/缓存等）」的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_persistence_access_guard")
         # 通用层不得出现具体框架专名（替换主语测试：本文件适用于所有编程语言）
         for token, desc in (
@@ -13055,12 +13515,12 @@ def check_api_contract_reuse_guard():
 
 """
     phase("请求/响应类复用与接口路径中划线防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「请求/响应类优先移动复用」的通用层落点丢失"
             "（该条跨语言，须收在通用编码规范而非某一技术栈）", rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_api_contract_reuse_guard")
     # 技术栈层：HTTP 接口路径优先中划线（唯一落点）
     rel_spring = os.path.relpath(SPRING_STACK_FILE, REPO_ROOT).replace("\\", "/")
@@ -13071,8 +13531,8 @@ def check_api_contract_reuse_guard():
         stext = open(SPRING_STACK_FILE, encoding="utf-8").read()
         run_rule_guard("check_api_contract_reuse_guard")
     # 通用层不得出现路径命名专条（归属：HTTP 路径只在 Web 框架语境下有定义）
-    if os.path.isfile(CODING_FILE):
-        ctext = open(CODING_FILE, encoding="utf-8").read()
+    if not _coding_missing():
+        ctext = _coding_text()
         if "接口路径优先用中划线" in ctext or "接口路径优先使用中划线" in ctext:
             err(f"接口路径防线被破坏：{rel_coding} 出现「HTTP 接口路径」专条——"
                 "该条的判据只在 Web 框架/HTTP 语境下有定义，归技术栈层；通用层写具体协议专名会"
@@ -13119,12 +13579,12 @@ def check_api_naming_guard():
 
 """
     phase("Feign 接口命名带所属域前缀防线检查")
-    rel_coding = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel_coding = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel_coding}——「Feign 接口命名带所属域/项目前缀」的通用层落点丢失",
             rel_coding)
     else:
-        text = open(CODING_FILE, encoding="utf-8").read()
+        text = _coding_text()
         run_rule_guard("check_api_naming_guard")
         for wide in ("对外提供或跨服务/跨项目调用的接口", "RPC/服务契约接口"):
             if wide in text:
@@ -14080,7 +14540,7 @@ def check_file_role_guard():
     于是**两个任务并行时结构性撞车**。上一轮把三处拆开只是治了症状；缺的是**判据**：
     一份落点属于哪一类、能不能并行改，此前没有一句可核对的取值。
 
-    本条只核**判据与它的取值是否仍在**（`specs/general/coding.adoc`「文件的角色」的三档角色、
+    本条只核**判据与它的取值是否仍在**（`specs/general/coding-file-role.adoc`「文件的角色」的三档角色、
     五条 L1 与两条边界，以及「归属」那一格的取值）；"这份文件该不该拆、拆在哪一处"属
     语义判断，交人/子 agent 复核。
 
@@ -14109,7 +14569,7 @@ def check_source_management_guard():
     if mode is None:
         err(f"`{rel}` 缺少 `[source-management].mode`，或取值不在 "
             f"{list(SOURCE_MANAGEMENT_MODES)} 之内——两档源码管理方法取哪一档必须有唯一一处"
-            "声明，不补默认值（见 `specs/general/coding.adoc`「源码管理方法」的「取值只有一处」）",
+            "声明，不补默认值（见 `specs/general/coding-source.adoc`「源码管理方法」的「取值只有一处」）",
             rel)
     else:
         log(f"  本项目取源码管理档：{mode}")
@@ -14239,8 +14699,8 @@ def check_param_carrier_guard():
     （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("参数载体（不得以键值容器承载方法参数）防线检查")
-    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel}——『方法参数不得以键值容器承载』的落点丢失"
             "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
     else:
@@ -14257,7 +14717,7 @@ def check_tool_class_inheritance_guard():
     去向是**组合**（调用另一个工具类）或静态导入，不是"工具基类"；工具类本身**无状态、无多态**，
     不需要被按父类型使用。
 
-    本条**跨语言**，故判据本体落通用层 `specs/general/coding.adoc`「类设计」；Java 侧载体
+    本条**跨语言**，故判据本体落通用层 `specs/general/coding-shape.adoc`「类设计」；Java 侧载体
     （认类看命名与用法、`@UtilityClass` 不可被继承、`java.adoc`「命名」已把 JDK 扩展类/
     补齐类排除在工具类之外）落 `specs/stack/java-syntax.adoc`「工具类定义」。两处都按**条目
     自己的正文**核（相邻条目含「工具类」字样，按整节核会被兜住）。只核"判据本体在不在"——
@@ -14265,8 +14725,8 @@ def check_tool_class_inheritance_guard():
     交人/子 agent 复核。
     """
     phase("工具类不继承工具类防线检查")
-    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel}——『工具类不得继承工具类』的落点丢失"
             "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
     rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
@@ -14292,8 +14752,8 @@ def check_ternary_extraction_guard():
     只做条件取值""某处是否已有先例"属语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
     """
     phase("条件取值方法（不得新增只做三元取值的方法）防线检查")
-    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel}——『不得新增只做条件取值的方法』的落点丢失"
             "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
     rel_syntax = os.path.relpath(JAVA_SYNTAX_FILE, REPO_ROOT).replace("\\", "/")
@@ -14314,7 +14774,7 @@ def check_service_interface_guard():
     两处。**没有多态时的去向是直接用该类**。
 
     本条**跨语言**（用户口径"在没有多态的情况下"），故判据本体落通用层
-    `specs/general/coding.adoc`「类设计」；Java 落点（`java.adoc`「编码」）只给载体——认类看
+    `specs/general/coding-shape.adoc`「类设计」；Java 落点（`java.adoc`「编码」）只给载体——认类看
     `XxxService`/`XxxServiceImpl` 成对与方法逐个 `@Override`、多态成不成立看注入与声明类型、
     框架由接口生成实现的契约（`Mapper`/Feign/Spring Data 仓储）不在核对面。两处都按**条目
     自己的正文**核（本节相邻条目含大量「接口」「实现」字样，按整节核会被兜住）。只核"判据本体
@@ -14322,8 +14782,8 @@ def check_service_interface_guard():
     交人/子 agent 复核。
     """
     phase("service 父接口（没有多态时不得加同方法父接口）防线检查")
-    rel = os.path.relpath(CODING_FILE, REPO_ROOT).replace("\\", "/")
-    if not os.path.isfile(CODING_FILE):
+    rel = _coding_rel()
+    if _coding_missing():
         err(f"缺少文件 {rel}——『没有多态时不得为 service 类加有相同方法的父接口』的落点丢失"
             "（该条跨语言、不点名框架专名，须落在通用编码规范）", rel)
     rel_java = os.path.relpath(JAVA_STACK_FILE, REPO_ROOT).replace("\\", "/")
@@ -15059,6 +15519,9 @@ CHECKS = (
     check_budget_guard,
     check_core_digest_guard,
     check_file_size_hint,
+    check_section_ref_landing_guard,
+    check_coding_family_guard,
+    check_verify_tier_guard,
     check_delegation_guard,
     check_verify_guard,
     check_lifecycle_guard,
@@ -15155,6 +15618,8 @@ CHECKS = (
     check_generation_efficiency_guard,
     check_after_change_review_guard,
     check_default_review_scope_guard,
+    check_incremental_review_guard,
+    check_verdict_ledger_guard,
     check_clean_subagent_review_guard,
     check_refinement_guard,
     check_duplicate_scan_guard,
@@ -15255,7 +15720,7 @@ def _write_guards_table() -> int:
     文件里插时，两条并行的改动只要都在中段加一道防线，改的就是**同一处**（后一行插在前
     一行面前，位置就是冲突对象）——那不是合并策略能解的形态，只能靠"谁都不手写这段"来消：
     表体由生成器整段写入，人手只碰自己那一份行正文、以及 `CHECKS` 序列里的那一行
-    （`specs/general/coding.adoc`「文件的角色」）。
+    （`specs/general/coding-file-role.adoc`「文件的角色」）。
     """
     global RULES
     RULES = rules_engine.Rules(rules_engine.load_rule_files(_rules_spec()), RulesContext())

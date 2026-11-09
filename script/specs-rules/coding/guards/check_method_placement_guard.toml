@@ -61,7 +61,7 @@ message = "成员与方法次序（Java 落点）防线被破坏：{file} 的「
 section = "编码"
 min = 8
 tokens = [
-    "按 `specs/general/coding.adoc`",
+    "按 `specs/general/coding-shape.adoc`",
     "判据本体、判定标准、例外与存量口径见该处",
     "此处**不复述**",
     "**只给 Java 侧的载体**",

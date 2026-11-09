@@ -75,7 +75,7 @@ groups = [
         "持久化访问（MyBatis-Plus / JPA 等）",
         [
             "持久化访问（MyBatis-Plus / JPA 等）",
-            "coding.adoc",
+            "coding-objects.adoc",
         ],
         "Java 栈须有该节并指向通用层规则本体（只让通用层有、栈文件没有，Java 执行者按栈文件学仍会随手 new）",
     ],

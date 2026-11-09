@@ -24,7 +24,7 @@
 
 == 落到了哪
 
-* 判据本体与取值：`specs/general/coding.adoc`「文件的角色」的「适用前提」——四档角色与五条 L1 之外单列一格，写明"两档并列、由项目声明取哪一档"、取值在哪、未声明时按原口径办、判定标准三条（① 没声明却按它要求别人；② 声明了却仍按原口径办；③ 把"本项目不启用"读成"这一套错了"）。
+* 判据本体与取值：`specs/general/coding-file-role.adoc`「文件的角色」的「适用前提」——四档角色与五条 L1 之外单列一格，写明"两档并列、由项目声明取哪一档"、取值在哪、未声明时按原口径办、判定标准三条（① 没声明却按它要求别人；② 声明了却仍按原口径办；③ 把"本项目不启用"读成"这一套错了"）。
 * 四处派生条各加一句回指（不复制取值）：`specs/general/version-control.adoc`「冲突处理」的「只增不改的落点按路径声明合并策略」「逐行登记的派生件不由人工手作」，`specs/general/git.adoc` 的 `merge=union` 取值。
 * 检查侧：`script/check_specs.py` 的 `file_role_enabled()` 是唯一判别式；`check_git_attributes_merge_guard` 与 `check_ledger_table_generated_guard` 按它决定"要求/不要求"，`check_file_role_guard` 两档都核（核的是取值，不是本仓库有没有铺开）。
 * 反例用例：未声明时不配 `merge=union`、不建生成器都放行；而"没声明却把判据取值删了"照样报红——"没启用"与"删掉这条规则"必须分得清。

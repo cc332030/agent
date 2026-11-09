@@ -4,7 +4,7 @@
 # 而规则数据文件本身也是按主题切的一份一份（见该节正文"并行落点按份切"）——本文件即按该节
 # 自己的口径落在本主题名下，新增别的主题不往这里追加。
 #
-# 判据本体在通用层 `specs/general/coding.adoc`「源码管理方法」（两档规则集，本文件只放锚点
+# 判据本体在通用层 `specs/general/coding-source.adoc`「源码管理方法」（两档规则集，本文件只放锚点
 # 与报错文案）。两档**各写成一份完整规则集**，别的项目可整份取用其一；档位取值只有一处
 # （`[source-management].mode`），本仓库取并发档。
 [[guards.check_source_management_guard]]
@@ -29,7 +29,7 @@ label = "文件的角色"
 pattern = "^== 文件的角色.*?(?=^== |\\Z)"
 # 锚点**不在这里**：清单只有一处（`script/specs-rules/_tokens.toml` 的
 # `FILE_ROLE_ANCHORS`），这里按名引用——两处各写一份时，改一处必漏另一处（见
-# `specs/general/coding.adoc`「取值的唯一来源」）。本文件只留"核哪一节、用哪份清单"。
+# `specs/general/coding-runtime.adoc`「取值的唯一来源」）。本文件只留"核哪一节、用哪份清单"。
 token_list = "FILE_ROLE_ANCHORS"
 
 # 入场核：核**锚点清单自己的条数**——清单删项时规范正文一字未动、上面那步一次都不报错

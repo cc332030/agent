@@ -120,7 +120,7 @@
 
 * OWASP Top 10：Web 应用安全风险分类（现行版本为 **OWASP Top 10:2021**；2025 版已于 2025-11 发布）。用途：`specs/general/security.adoc` 总依据。
 * OWASP ASVS（Application Security Verification Standard）：应用安全验证要求清单；现行主线为 **ASVS 5.0**（2025）。用途：同上。
-* **OWASP API Security Top 10:2023**：API 安全风险分类（版本号**逐字取回官方目录页**）。被点名条目：**API3:2023 Broken Object Property Level Authorization**（条目名**逐字**，与官方目录页一致）——其失效形态即"对象属性级的授权/暴露面失守"（批量赋值与过度暴露：把内部数据面直接当成对外契约面）。用途：`specs/general/coding.adoc`「数据契约的载体（数据库实体类不进对外契约）」的依据行——把数据库实体类当接口请求/响应参数，正是"外部可观测到不应外露的属性"这一失效形态。**取样状态（如实标注）**：条目名与版本**已取回官方目录页核对**（`https://owasp.org/API-Security/editions/2023/en/0x11-t10/`，HTTP 200）；**该条目的正文未逐字取回**，故本条只引条目名、不引其正文措辞。**同义性差异**：该条目讲的是"属性级授权与暴露面"，**未**规定"数据库实体类不得作接口参数"——本条规则与例外清单是本集合据其方向做的判据化取舍。
+* **OWASP API Security Top 10:2023**：API 安全风险分类（版本号**逐字取回官方目录页**）。被点名条目：**API3:2023 Broken Object Property Level Authorization**（条目名**逐字**，与官方目录页一致）——其失效形态即"对象属性级的授权/暴露面失守"（批量赋值与过度暴露：把内部数据面直接当成对外契约面）。用途：`specs/general/coding-objects.adoc`「数据契约的载体（数据库实体类不进对外契约）」的依据行——把数据库实体类当接口请求/响应参数，正是"外部可观测到不应外露的属性"这一失效形态。**取样状态（如实标注）**：条目名与版本**已取回官方目录页核对**（`https://owasp.org/API-Security/editions/2023/en/0x11-t10/`，HTTP 200）；**该条目的正文未逐字取回**，故本条只引条目名、不引其正文措辞。**同义性差异**：该条目讲的是"属性级授权与暴露面"，**未**规定"数据库实体类不得作接口参数"——本条规则与例外清单是本集合据其方向做的判据化取舍。
 * CWE（Common Weakness Enumeration）：软件弱点编号体系。被点名编号：**CWE-502**（Deserialization of Untrusted Data）、**CWE-208**（Observable Timing Discrepancy）、**CWE-209**（Generation of Error Message Containing Sensitive Information）、**CWE-489**（Active Debug Code）。用途：`specs/general/security.adoc` 各条末尾的编号标注——编号即"这条要求针对哪一类已知弱点"的锚点。
 
 == Semantic Versioning 2.0.0
@@ -153,7 +153,7 @@
 
 * 出处：Jakarta Bean Validation 2.0.2 的官方 javadoc（`javax` 命名空间那一版）的 Deprecated List 页（`https://jakarta.ee/specifications/bean-validation/2.0/apidocs/deprecated-list.html`）。**逐字摘**（正文）："Deprecated Methods"一栏只列四项，全部是 `javax.validation.ConstraintValidatorContext.ConstraintViolationBuilder` 及其三个内层上下文的 `addNode(String)`（"since 1.1 - replaced by ... addPropertyNode(String) ... addBeanNode() ... addParameterNode(int)"）。
 * **已实测取回**：该页的 Deprecated 列表里**没有**任何约束注解（`@NotNull`、`@NotBlank`、`@Valid` 等均不在列）；`jakarta.validation.constraints.NotNull`（现行 3.x 源码）本身也**没有** `@Deprecated`。故"`javax.validation` 已被标记弃用""`javax` 的 `@Valid` 已弃用"这类说法**不成立**——准确的说法是**标准在 3.0 换到了 `jakarta` 命名空间**（包名变更属破坏性变更），以及**标准方的自述是"2.0 只是把 `javax` 改成 `jakarta` 的重新发布"**（一句可核对的定性）。**未确证**：标准方没有发布过一份"`javax.validation` 自某版本起弃用"的声明（本条只说"未确证到"，不作"标准方否认"的断言）。
-* 用途：`specs/general/coding.adoc`「警告与弃用」的「取兼容性更好的那一个」（**按"标准已是上一代命名空间"落条，不按"`javax` 被弃用"落条**）与 `specs/stack/spring.adoc`「参数校验」（本栈取用方向、以及"不得把旧命名空间说成被弃用"这一处实证失效形态）。
+* 用途：`specs/general/coding-runtime.adoc`「警告与弃用」的「取兼容性更好的那一个」（**按"标准已是上一代命名空间"落条，不按"`javax` 被弃用"落条**）与 `specs/stack/spring.adoc`「参数校验」（本栈取用方向、以及"不得把旧命名空间说成被弃用"这一处实证失效形态）。
 * 与本条相反的**已确证事实**（同一处核对里的另一半）：`org.springframework.validation.annotation.Validated`（Spring Framework 现行源码）**没有** `@Deprecated`、其 javadoc 自述为 "Variant of JSR-303's {@link jakarta.validation.Valid}, supporting the specification of validation groups"——故 `@Validated` 与 `@Valid` 的取舍**不在"弃用 vs 未弃用"这一层上**，而在"候选之间谁兼容性更好"（本条）与"哪个能指定分组"（`specs/stack/spring.adoc`「参数校验」）这两条判据上。
 
 == PEP 8 / PEP 20 / PEP 257（Python 风格）
@@ -316,7 +316,7 @@
 * 材料：**Google Java Style Guide 3.4.2「Ordering of class contents」**（Google 官方，官方文本已取回：`curl -s https://raw.githubusercontent.com/google/styleguide/gh-pages/javaguide.html`，可复取）；《阿里巴巴 Java 开发手册》（作为"下限"，据其现有引用面）。
 * **逐字摘录（3.4.2 节，官方文本已取回）**："The order you choose for the members and initializers of your class can have a great effect on learnability. However, **there's no single correct recipe for how to do it**; different classes may order their contents in different ways. What is important is that each class uses **some logical order**, which its maintainer could explain if asked. For example, new methods are not just habitually added to the end of the class, as that would yield 'chronological by date added' ordering, which is not a logical ordering."
 * **须注意的语义差异（同义性）**：该节**只要求"存在某种逻辑次序、且维护者能解释"**，**明确否认存在唯一正确配方**，并**点名禁止**一种形态——"new methods are not just habitually added to the end of the class"（新方法不得习惯性追加到类末尾，那属"按加入日期排序"）；但**未**规定成员落点该按什么次序（**未**规定"新增的可插在前面或中间"、**未**规定"重载须相邻"、**未**规定"数据转换方法跟在查询方法之后"），**也未**规定"静态字段在最前"、"实体类按表列序"、"注解按名长排"、"数据库注解排最下"。《阿里巴巴 Java 开发手册》中亦**未**见此数项明文。
-* **本集合的取舍（如实标注）**：`specs/general/coding.adoc`「命名与代码质量」的「静态字段排在类最前」「实体类字段按数据库顺序」「注解/装饰器排序（重要性优先——数据库/持久化映射注解排在最下；同重要性再按名长升序）」「成员与方法次序（成员落点按流程次序，字段/方法**新增**时可插前面或中间、重载相邻、数据转换方法跟在查询接口之后，且只对新增成员生效）」四条是**本集合在 Google 上述"须为逻辑次序"下限之上自定的更严取值**，**不是**某标准的明文规定，理由是"整类共享状态集中可见""与表结构逐列对照""数据库关注点收尾扫读"；按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。Java 落点见 `specs/stack/java.adoc`「编码」。
+* **本集合的取舍（如实标注）**：`specs/general/coding-shape.adoc`「命名与代码质量」的「静态字段排在类最前」「实体类字段按数据库顺序」「注解/装饰器排序（重要性优先——数据库/持久化映射注解排在最下；同重要性再按名长升序）」「成员与方法次序（成员落点按流程次序，字段/方法**新增**时可插前面或中间、重载相邻、数据转换方法跟在查询接口之后，且只对新增成员生效）」四条是**本集合在 Google 上述"须为逻辑次序"下限之上自定的更严取值**，**不是**某标准的明文规定，理由是"整类共享状态集中可见""与表结构逐列对照""数据库关注点收尾扫读"；按 `specs/core/execution.adoc`「规范变更的存量处理」**随动迁移**。Java 落点见 `specs/stack/java.adoc`「编码」。
 
 == Google Shell Style Guide 与 ShellCheck
 
@@ -328,12 +328,12 @@
 
 * 材料：**Spring Boot 官方文档**「Externalized Configuration」（`@ConfigurationProperties` 的定位：把外部配置**绑定**到类型安全的对象上）、**Spring Framework 官方文档**「Java-based Container Configuration」（`@Configuration`/`@Bean` 的定位：**声明** Bean 的定义与装配方式）；**Google Java Style Guide 3.4.2（Class member ordering）**对 POJO 的说明——"A POJO **only** has behavior that **acts on its own fields**"；《阿里巴巴 Java 开发手册》对 POJO 类的约定（只针对属性与访问器）。
 * 依据要点（**要点转述、非逐字摘录**）：配置类在**框架设计上本就被定义为配置项的数据持有者**——绑定由容器完成，逻辑**不在**它的职责内；这与"纯数据类不写逻辑"是同一条约定的两个用例。
-* **须注意的语义差异（同义性）**：上述材料给出的是**职责定位与风格建议**，**未**规定"配置类中任何逻辑一律禁止"；本集合据此推出的是**本项目自身的硬性约定**——**任何情况都不允许，无例外**（`specs/general/coding.adoc`「类设计」）；**不得**把本节读成"Spring 文档禁止在配置类里写逻辑"。
+* **须注意的语义差异（同义性）**：上述材料给出的是**职责定位与风格建议**，**未**规定"配置类中任何逻辑一律禁止"；本集合据此推出的是**本项目自身的硬性约定**——**任何情况都不允许，无例外**（`specs/general/coding-shape.adoc`「类设计」）；**不得**把本节读成"Spring 文档禁止在配置类里写逻辑"。
 * 实证反例（**本项目真实记载**）：配置类里做取值兜底/条件判断/派生值拼装时，配置项的**实际行为分散在配置类中**（看不见、测不到），与配置类应承担的"声明配置项"职责混淆。
 
 == 跨语言执行脚本（SQL / Lua 写资源文件，不写字符串拼接）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「跨语言执行脚本的落点」，技术栈落点 `specs/stack/java.adoc`「跨语言执行脚本」）**：
+* **材料与用途（支持 `specs/general/coding-runtime.adoc`「跨语言执行脚本的落点」，技术栈落点 `specs/stack/java.adoc`「跨语言执行脚本」）**：
 ** **OWASP**「SQL Injection Prevention Cheat Sheet」与「Query Parameterization Cheat Sheet」（表名逐字；**官方页面已取回、要点转述**）：SQL 注入的**主防线是参数化查询（prepared statements）**——语句**先被固定为语句**、参数经**绑定**传入，从而**不把输入当作 SQL 文本解析**；反例形态正是"用字符串拼接/格式化把值拼进语句文本"。本集合据此把 SQL 写成**独立文件**（语句本体不在宿主语言字符串里）、由预编译语句绑定参数。
 ** **MyBatis 官方文档**「Dynamic SQL」：映射文件（`*.xml`）用 `#{}` 生成**预编译参数**（`?`）、用 `${}` 做**字符串替换**；官方明确 `${}` 不防注入。这为"SQL 的合法承载形式是框架支持的 `.xml` 文件"给出**框架侧依据**；本集合据此把 MyBatis 项目列为已知例外（SQL 写 `.xml`），并要求 `${}` 仅用于不由用户输入决定的场景 + 白名单校验。
 ** **Redis 官方文档**「EVAL」（URL **https://redis.io/docs/latest/commands/eval/**，条目名为逐字；**官方页面已取回、要点转述**）与「Redis Lua API reference」：`EVAL` 以**脚本文本**作为参数执行（`EVAL script numkeys key [key ...] [arg ...]` 形态），官方推荐用 `SCRIPT LOAD` + `EVALSHA` 加载与复用；客户端相应地按 `RedisScript` **从资源加载 `.lua` 文件**。本集合据此要求 Lua 写成 `.lua` 资源文件、按资源加载执行，不内联成宿主语言字符串。
@@ -400,13 +400,13 @@
 * 材料：**Java Object Serialization Specification**（Oracle/OpenJDK 官方规范，`docs.oracle.com/javase/8/docs/platform/serialization/spec/serialTOC.html` 一类官方页；**本次未逐字取回**，按句读其「Class Versioning」章与 `@serial` 一节）、**Java 官方 API 文档**（`java.io.Serial`，JDK 14 引入的注解；**本次未逐字取回**）。
 * 依据要点（**要点转述，非逐字摘录**）：① 可序列化类的 **UID** 在**未显式声明**时**由类结构推导**（字段、方法签名、修饰符、实现的接口等）；② 推导值随结构变化 ⇒ **同一逻辑版本的不同编译产物之间会互不兼容**（反序列化抛 `InvalidClassException`）；③ **显式声明** `serialVersionUID` 使该值由**作者掌握**；④ `@Serial` 让该成员的**拼写与放置错误在编译期报出**。
 * 用途：`specs/stack/java.adoc`「序列化（`Serializable`）」——「已实现 `Serializable` 的类型须显式声明 `serialVersionUID`」与「`@Serial` 标注」两条。
-* **须注意的语义差异（同义性）**：官方规范给的是**版本化机制**（不声明会怎样、声明后由谁掌握），**未**规定「必须显式声明」「未实现 `Serializable` 的类型不得加该字段」「不得用抑制代替声明」，**也**没有规定「默认值取 `1L`」——`1L` 是本集合定下的缺省起点，**不得**读成标准要求。「以显式声明代替 `@SuppressWarnings`」是本集合对 `specs/general/coding.adoc`「警告与弃用」的处置口径。
+* **须注意的语义差异（同义性）**：官方规范给的是**版本化机制**（不声明会怎样、声明后由谁掌握），**未**规定「必须显式声明」「未实现 `Serializable` 的类型不得加该字段」「不得用抑制代替声明」，**也**没有规定「默认值取 `1L`」——`1L` 是本集合定下的缺省起点，**不得**读成标准要求。「以显式声明代替 `@SuppressWarnings`」是本集合对 `specs/general/coding-runtime.adoc`「警告与弃用」的处置口径。
 
 == 局部变量类型推断与链式调用换行（Google Java Style Guide）
 
 * 材料：**Google Java Style Guide**（Google 官方；**本次未逐字取回**，按其公开章节定位）——4.8 节 “Local Variable Type Inference”（`var` 的使用边界：初始化表达式须能表达出类型、可读性优先于省字）与 4.5 节 “Line Wrapping” / 4.5.1 “Where to break”（**按行宽决定是否换行**、换行后在运算符处断开）；**Project Lombok 官方文档**（`val` / `var`：仅用于局部变量、类型由初始化表达式推断）；**《阿里巴巴 Java 开发手册》**（链式调用与换行的风格约定）。
 * 依据要点（**要点转述**）：① 语言与风格指南对**要不要写显式类型**给出的判据是「可读性」（推断结果不清时写显式类型）；② **换行与否的通用判据是行宽**，不是「链有多长」；③ lombok 的 `val`/`var` 是**局部变量作用域**的类型推断。
-* 用途：`specs/stack/java.adoc`「编码」的「局部变量优先 `val`、可变才用 `var`」、`specs/general/coding.adoc`「表达式与调用写法」的「链式调用一律换行」。
+* 用途：`specs/stack/java.adoc`「编码」的「局部变量优先 `val`、可变才用 `var`」、`specs/general/coding-shape.adoc`「表达式与调用写法」的「链式调用一律换行」。
 * **须注意的语义差异（同义性，L1）**：**没有任何材料规定「局部变量必须用 `val`/`var`」或「链式调用哪怕很短也必须换行」**——风格指南给的是**可读性判据与行宽判据**，本集合取的是**更严的单一形态**（免去「多短算短」「哪种更可读」的临场裁量）；同理「优先 `val`、确实可变才 `var`」也是本集合对 lombok 的判据化取值，**不得**读成标准规定。
 
 == 字段接口的访问器与 lombok 链式风格（Project Lombok 官方文档 /《阿里巴巴 Java 开发手册》）
@@ -436,7 +436,7 @@
 
 * 材料：**Effective Java**（Joshua Bloch）「Item 2: Consider a builder when faced with many constructor parameters」——要点转述：**位置参数（telescoping constructor）一多，调用点就读不出哪个值对应哪个参数**、字段增删或重排时调用点不会报错；builder 把"**拼装中的对象**"与"**可用的对象**"分开（`build()` 之前拿不到实例）；**本次未逐字取回**，按该书条目标题与公开摘要定位。**《重构：改善既有代码的设计》**（Martin Fowler）——**Long Parameter List** 属典型坏味道，取向是引入**参数对象**或把参数**具名化**；**本次未逐字取回**。**ISO/IEC 25010**（可维护性、可分析性）与 **ISO/IEC/IEEE 29148**（判定须单一、无歧义、可验证）——说明"赋值语义须在调用点可见""规则须可核对"；**本次未逐字取回**。**Project Lombok 官方文档**（`@Accessors(chain = true)` 生成的 setter 返回实现类型本身、`@SuperBuilder`/`@Builder` 的职责、`@AllArgsConstructor` 生成全参构造）。
 * 依据要点（**要点转述，非逐字摘录**）：① **有参构造的失效面在"位置"**——调用点只能按参数顺序对应字段，加字段/换顺序时不报错、错值在运行期才现形；② **builder 的机制优势**是"拼装与可用分离"，链式 setter 返回的仍是半成品对象本身；③ 具名环节（builder 的 `.xxx(...)`、链式 setter 的 `.setXxx(...)`）把"哪个值给哪个字段"写在**名字**上。
-* 用途：`specs/general/coding.adoc`「对象初始化」（判据本体，跨语言）与 `specs/stack/java.adoc`「编码」的「对象初始化一律链式」条（Java 落点）。
+* 用途：`specs/general/coding-objects.adoc`「对象初始化」（判据本体，跨语言）与 `specs/stack/java.adoc`「编码」的「对象初始化一律链式」条（Java 落点）。
 * **须注意的语义差异（同义性，L1）**：上述材料给的是**方向与下限**——"参数多时考虑用 builder""长参数列表是坏味道"，**未**规定「手动创建对象一律必须链式初始化」「没有链式才用 `set`」「**Java 内还得分 builder > 链式 setter**」——**这三处连同"严禁有参构造初始化"都是本集合自己的判据化取舍**（逐条论证见 `library/adoption.adoc`「同义性差异与覆盖点」）。材料**也**没有给出"对象内构造方法调用构造方法"这一例外（该例外由用户点名，理由是本条要防的"外部调用点凭位置猜字段"在类内构造转发上不存在）。**不得**把本条读成 Effective Java 或 Lombok 的官方要求。
 * 实证反例（**本项目真实记录**）：用户原文口径为「对象手动初始化时，优先使用链式初始化（java 下 builder > set chain），适用于所有语言，没有链式再用 set，严禁有参构造方法初始化（对象内构造方法调用构造方法除外）」。
 
@@ -461,7 +461,7 @@
 
 == 多层嵌套对象转换用声明式映射（MapStruct）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「对象转换」与 `specs/stack/java.adoc`「对象转换（MapStruct）」（**L2 建议**））**：**MapStruct 官方文档**（生成式映射框架：在**编译期**为映射接口生成实现，字段/类型对不上时报编译错误；支持嵌套映射方法自动调用、集合映射方法）；另两类通用标准（可维护性、判定须可验证）**同本文件「字段接口的访问器与 lombok 链式风格」主题的材料行**，编号不在此重列。
+* **材料与用途（支持 `specs/general/coding-objects.adoc`「对象转换」与 `specs/stack/java.adoc`「对象转换（MapStruct）」（**L2 建议**））**：**MapStruct 官方文档**（生成式映射框架：在**编译期**为映射接口生成实现，字段/类型对不上时报编译错误；支持嵌套映射方法自动调用、集合映射方法）；另两类通用标准（可维护性、判定须可验证）**同本文件「字段接口的访问器与 lombok 链式风格」主题的材料行**，编号不在此重列。
 * 依据要点（**要点转述，未逐字取回**）：① **手写逐字段搬运没有编译期保障**——模型新增字段后既不报错也不提示，只在运行期表现为"某个字段一直是空"；② **声明式映射的失效是编译期的**；③ **嵌套与集合是一等公民**。
 * **须注意的语义差异（同义性）**：上述材料给的是**该库能做什么、以及为什么生成式映射比手写更可靠**，**未**规定"多层嵌套对象转换必须用某库"、"禁止手写转换代码"，也**未**规定"哪种技术栈必须用哪个库"；本集合据此给出的是**自己的取向（建议、非强制）**。**本条不设强制面**——等价路径同样合规。
 * 实证反例（**本项目真实记载**）：用户报告的失效形态——多层嵌套对象之间的转换由执行者**手写逐字段搬运代码**；用户口径为"**多层嵌套对象转换时，优先使用 mapstruct（jvm下），不允许手动写转换代码——不是强制，但是建议**"。
@@ -478,12 +478,12 @@
 
 == HTTP 接口语义与错误响应（RFC 9110 / RFC 9457）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「HTTP 接口语义」的四条）**：**RFC 9110**（*HTTP Semantics*，**STD 97**，2022-06）与 **RFC 9457**（*Problem Details for HTTP APIs*，Standards Track，2023-07，**Obsoletes RFC 7807**）——**两份官方文本均已取回**。
+* **材料与用途（支持 `specs/general/coding-runtime.adoc`「HTTP 接口语义」的四条）**：**RFC 9110**（*HTTP Semantics*，**STD 97**，2022-06）与 **RFC 9457**（*Problem Details for HTTP APIs*，Standards Track，2023-07，**Obsoletes RFC 7807**）——**两份官方文本均已取回**。
 * **逐字（RFC 9110，9.2.1 Safe Methods）**："Request methods are considered "safe" if their defined semantics are essentially read-only; i.e., the client does not request, and does not expect, any state change on the origin server as a result of applying a safe method to a target resource."；"Of the request methods defined by this specification, the GET, HEAD, OPTIONS, and TRACE methods are defined to be safe."；同节的反例与要求："it is common for Web-based content editing software to use actions within query parameters, such as "page?do=delete". If the purpose of such a resource is to perform an unsafe action, then the resource owner **MUST** disable or disallow that action when it is accessed using a safe request method. Failure to do so will result in unfortunate side effects when automated processes perform a GET on every URI reference for the sake of link maintenance, pre-fetching, building a search index, etc."
 * **逐字（RFC 9110，9.2.2 Idempotent Methods）**："A request method is considered "idempotent" if the intended effect on the server of multiple identical requests with that method is the same as the effect for a single such request. Of the request methods defined by this specification, PUT, DELETE, and safe request methods are idempotent."；"A client **SHOULD NOT** automatically retry a request with a non-idempotent method unless it has some means to know that the request semantics are actually idempotent, regardless of the method, or some means to detect that the original request was never applied."
 * **逐字（RFC 9110，15 Status Codes）**："The status code of a response is a three-digit integer code that describes the result of the request and the semantics of the response, including whether the request was successful and what content is enclosed (if any)."；五类首位的语义（"1xx (Informational)"…"5xx (Server Error)"）。
 * **逐字（RFC 9457，Abstract 与 3.1 成员）**："This document defines a "problem detail" to carry machine-readable details of errors in HTTP response content to avoid the need to define new error response formats for HTTP APIs."；成员 `type`（"a JSON string containing a URI reference"）、`status`（"a JSON number indicating the HTTP status code"，且 "Generators **MUST** use the same status code in the actual HTTP response"）、`title`、`detail`、`instance`；媒体类型 **`application/problem+json`**。
-* **它支撑什么**：`specs/general/coding.adoc`「HTTP 接口语义」的四条——安全方法不得产生状态变更（L1）、幂等语义与重试对齐（L2）、状态码按语义使用（L2）、对外错误响应统一结构（L3，可选）。
+* **它支撑什么**：`specs/general/coding-runtime.adoc`「HTTP 接口语义」的四条——安全方法不得产生状态变更（L1）、幂等语义与重试对齐（L2）、状态码按语义使用（L2）、对外错误响应统一结构（L3，可选）。
 * **须注意的同义性差异（L1，逐条如实标注）**：
 ** **标准给的是协议语义，不是"项目必须怎么写"**：RFC 9110 规定的是方法与状态码的**协议语义**，**未**规定项目不许把错误包成 `200`、**未**规定客户端必须用哪种方法——"不得用 `200` 包错误""非幂等请求不得配自动重试"是**本集合按语义推出的判据化取值**。
 ** **"安全方法不得产生状态变更"这一条**：标准在此处的要求是**资源所有者须在安全方法被访问时禁用该动作**（`MUST disable or disallow`）——与本条同义，属**同一要求的两种写法**。
@@ -507,14 +507,14 @@
 
 == 方法名与逻辑删除的对应（MyBatis-Plus 官方文档 /《阿里巴巴 Java 开发手册》）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「持久化访问（数据库/缓存等）」的「方法名与逻辑删除的对应（查询方法名即删隐面）」与 `specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」的 Java 落点）**：**MyBatis-Plus 官方文档**（`@TableLogic` 声明逻辑删除字段、框架据此为查询附加删除标志条件；另有"查全部/绕过该条件"的形态；**本次未逐字取回**，按公开文档的能力面定位）；**《阿里巴巴 Java 开发手册》**（方法名须**望文生义、避免歧义与同义混用**）。
+* **材料与用途（支持 `specs/general/coding-objects.adoc`「持久化访问（数据库/缓存等）」的「方法名与逻辑删除的对应（查询方法名即删隐面）」与 `specs/stack/java.adoc`「持久化访问（MyBatis-Plus / JPA 等）」的 Java 落点）**：**MyBatis-Plus 官方文档**（`@TableLogic` 声明逻辑删除字段、框架据此为查询附加删除标志条件；另有"查全部/绕过该条件"的形态；**本次未逐字取回**，按公开文档的能力面定位）；**《阿里巴巴 Java 开发手册》**（方法名须**望文生义、避免歧义与同义混用**）。
 * 依据要点（**要点转述**）：① 逻辑删除是**框架侧能力**——由注解声明字段，查询时自动附加条件；② 该附加是**默认生效**的，且**可按实体各自配置**（同一项目里两种配置可能并存）；③ 手册给的是**命名须表意**这一下限，**未**规定"不带特征的名字默认查哪一面"。
 * **须注意的语义差异（同义性，L1）**：官方材料只给**能力面**，**未**规定方法名的命名口径、也**未**规定"默认面是含已删还是只取未删"；"**默认面随该技术是否自动附加删除标志条件而变、非默认面须带特征词、同一删隐面只许一个名字**"是本集合自己的判据化取舍（逐条论证见 `library/adoption.adoc`「同义性差异与覆盖点」）。**不得**把本条读成 MyBatis-Plus 或手册的要求。**边界**：① 框架自带的方法名按其自身契约生效、不要求改名；② 非查询方法名、局部变量与参数名、非实体的数据结构名不在本条范围内。
 * 实证反例（**本项目真实记载**）：用户原文口径为"**未使用 mybatis plus 逻辑删除时，没有前缀后缀的方法名默认查询且不带删除标志，如果要查询已删除/未删除（带了删除标志的条件）的数据时，要带特征；使用 mybatis plus 逻辑删除时（因为会默认带删除标志），没有前缀后缀的方法名默认查询逻辑删除数据，如果要查询已删除和忽略删除标志的数据时，要带特征。不仅限 mybatis plus，其他类似的也生效（自己实现的逻辑删除逻辑和框架也算），适用所有语言**"。
 
 == 弃用类/API 的迁移与不动依赖面（Java 官方 API 文档 / Semantic Versioning）
 
-* **材料与用途（支持 `specs/general/coding.adoc`「警告与弃用」的「不得使用被弃用的类/API，改用替代者」与 `specs/general/dependency.adoc`「升级与废弃」的「弃用类/API 的迁移默认不动依赖面」）**：**Java 官方 API 文档 / `@Deprecated` 注解规范**（被标注弃用的成员「不应再被使用」，且官方在 `@deprecated` 标签与文档中给出**替代者**；**本次未逐字取回**，按公开 API 文档与注解规范定位）；**Semantic Versioning 2.0.0**（弃用属**次版本**内的兼容扩展——新形态以次版本引入、旧形态保留至某个大版本移除，故"用新形态"不必然要求升大版本；**本次未逐字取回**）；**ISO/IEC 25010**（可维护性：同一能力并存旧新两条路径即两条真源）、**ISO/IEC/IEEE 29148**（判定须单一、可验证）。
+* **材料与用途（支持 `specs/general/coding-runtime.adoc`「警告与弃用」的「不得使用被弃用的类/API，改用替代者」与 `specs/general/dependency.adoc`「升级与废弃」的「弃用类/API 的迁移默认不动依赖面」）**：**Java 官方 API 文档 / `@Deprecated` 注解规范**（被标注弃用的成员「不应再被使用」，且官方在 `@deprecated` 标签与文档中给出**替代者**；**本次未逐字取回**，按公开 API 文档与注解规范定位）；**Semantic Versioning 2.0.0**（弃用属**次版本**内的兼容扩展——新形态以次版本引入、旧形态保留至某个大版本移除，故"用新形态"不必然要求升大版本；**本次未逐字取回**）；**ISO/IEC 25010**（可维护性：同一能力并存旧新两条路径即两条真源）、**ISO/IEC/IEEE 29148**（判定须单一、可验证）。
 * 依据要点（**要点转述**）：① 弃用是**给使用者的迁移信号**——被弃用成员本不该再进新代码，官方通常会指出**替代者**；② 弃用的替代者**常在同一依赖版本内**已可用（次版本内引入新 API、旧 API 保留），故迁移**不必**改依赖版本；③ 是否升级依赖是**另一件事**（须读变更说明、评估破坏性变更、跑全量验证）。
 * **须注意的语义差异（同义性，L1）**：官方材料只给出「某成员已弃用、有替代者」，**未**规定「必须迁移」，也**未**规定「迁移的范围不得波及依赖面」；「新代码不得使用被弃用者、替代者**优先取升级类/同名新类**，且**默认不调整依赖、也不动依赖版本**」是**本集合自己的判据化取舍**（逐条论证见 `library/adoption.adoc`「同义性差异与覆盖点」）。**不得**把本条读成 JDK 或 SemVer 的要求。
 * 实证反例（**本项目真实记录**）：用户原文口径为「调整规范：不用被弃用的类，使用其他类代替（升级类/同名新类最好），默认不调整依赖，也不动依赖版本」。

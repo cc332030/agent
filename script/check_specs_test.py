@@ -11,7 +11,7 @@
   * check_forbidden_patterns—— 私有约定误导入（正：无命中；反：命中）
   * check_self_check_guard —— 自检防线（正：自检规范+落点+登记齐备；反：文件被删/要点缺失/落点缺失/未登记）
   * check_source_guard     —— 来源防线（正：来源规范要点齐备；反：文件被删/要点缺失/未登记）
-  * check_java_test_naming —— Java 测试类命名防线（正：两侧五类后缀判据齐备；反：后缀被删/调度器口径漂移）
+  * check_java_test_naming —— Java 测试类命名防线（正：两侧四类后缀判据齐备；反：后缀被删/调度器口径漂移）
   * check_line_ending_guard —— 换行符防线（正：LF 基准 + `.bat`/`.cmd` CRLF + `.gitattributes`/`.editorconfig` 齐备；反：文件被删/判据缺失/栈文件未写行尾/未登记）
   * check_review_guard   —— 评审备注落点防线（正：判据条 + 两个方向约束 + 两处引用齐备；反：文件被删/判据缺失/引用断开）
   * check_baseline_sync_guard —— 基线同步防线（正：三处落点 + 公开面齐备；反：前置条/判定标准/假绿折衷/根因/两侧核/两档取值/压缩前复核/两个方向/分工句/依据，各落点逐条被删或掏空）
@@ -54,6 +54,8 @@ import unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# 『通用编码规范』一族的入口（族内分份由 `check_specs._coding_family` 按目录现算）
+CODING_FAMILY_ENTRY = "specs/general/coding.adoc"
 sys.path.insert(0, HERE)
 
 # 被测模块按**常规导入**取：与 `specs_test_base.py` 及其余测试文件拿到**同一份实例**。
@@ -260,11 +262,23 @@ class CheckSpecsTestCase(GuardNamingTestCase):
                 with open(full, encoding="utf-8") as fh:
                     self.write(rel, fh.read())
 
+    def read_real(self, rel: str) -> str:
+        """读仓库里**真实的那份文件**（判据本体的正例用它，不手抄）。
+
+        **编码规范是「一族」**（按主题拆成 `coding.adoc` 与同目录 `coding-*.adoc`）：
+        夹具里只落**一份** —— 族入口那一份取**整族拼接**的文本。理由：夹具的判据对象是
+        "判据还在不在"（与现场一致按整族取），而"哪条落在族内哪一份"由真实的目录结构
+        表达、不需要在夹具里再摊一次；摊开还要每个用例记得多改一份，反而更容易与现场漂移。
+        """
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        if rel == CODING_FAMILY_ENTRY:
+            return cm._coding_text_at(repo_root)
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            return fh.read()
+
     def write_real_file(self, rel: str) -> None:
         """把仓库里**真实的那份文件**原样落进夹具（判据本体的正例用它，不手抄）。"""
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-            self.write(rel, fh.read())
+        self.write(rel, self.read_real(rel))
 
     def capture_phase_log(self) -> list:
         """捕获 `cm.log` 的阶段级输出，返回一个**实时增长**的列表（用例读它判收尾）。
@@ -4977,13 +4991,13 @@ class TestCheckLifecycleGuard(CheckSpecsTestCase):
 
 
 class TestCheckJavaTestNaming(CheckSpecsTestCase):
-    """钉住 Java 测试类命名契约（五类后缀，一律以 `Tests` 结尾）在规范与调度器两侧一致。
+    """钉住 Java 测试类命名契约（四类后缀）在规范与调度器两侧一致。
 
-    后缀与构建工具的执行边界绑定（`PerfTests`/`IntegrationTests`/`SandboxTests` 不随常规测试执行），任一处漏掉
-    某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明五类判据。
+    后缀与构建工具的执行边界绑定（`PerfTests`/`IT` 不随常规测试执行），任一处漏掉
+    某类后缀，引用方照另一处学习就会漏掉该类测试，故两侧都须写明四类判据。
     """
 
-    # 调度器**只给触发特征**（要新建或改动 Java 测试类时即命中）——五类后缀与拆分裁决
+    # 调度器**只给触发特征**（要新建或改动 Java 测试类时即命中）——四类后缀与拆分裁决
     # 是 `java-testing.adoc` 的条目本体，不再要求调度器逐字抄它们（放宽前的口径即第二真源）。
     JAVA_LINE = ("  ** Java 项目（存在 `.java`、`pom.xml`、`mvnw`、lombok 配置等）→ "
                  "link:specs/stack/java.adoc[] + link:specs/stack/java-testing.adoc[]"
@@ -5003,8 +5017,8 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
                    "= Java 测试规范\n\n"
                    "== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IntegrationTests` 端到端、`SandboxTests` 永不自动执行；"
-                   "后两者独立于常规测试执行。\n"
+                   "`PerfTests` 性能、`IntegrationTests` 端到端；后两者独立于常规测试执行。\n"
+                   "`SandboxTests` 永不被自动执行（`@Tag` + 构建配置排除 + `@Disabled` 三层落点）。\n"
                    "一个被测类可按需求/分类可拆成多个测试类；分类或属性相同的用例必须"
                    "归入同一个测试类；不得为每个场景一个类而拆，禁止滥拆。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
@@ -5023,14 +5037,14 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_dropped_suffix_reports(self):
         # 反例：规范侧删掉某一类后缀（如 BootTests）
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n后缀：`Tests`、`PerfTests`、`IntegrationTests`（被测类名 + 后缀、常规）\n")
+                   "= t\n\n== 测试类命名\n后缀：`Tests`、`PerfTests`、`IT`（被测类名 + 后缀、常规）\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
         self.assertIn("BootTests", self.error_texts())
 
     def test_dispatcher_missing_trigger_reports(self):
         # 反例：调度器登记了文件、却没有"要新建或改动测试类"这一触发特征 → 永不被加载。
-        # （放宽后**不再**要求调度器逐字抄五类后缀/拆分裁决——那是条目本体、抄了即第二真源）
+        # （放宽后**不再**要求调度器逐字抄四类后缀/拆分裁决——那是条目本体、抄了即第二真源）
         self._write_valid()
         self.write("AGENTS_COMMON.adoc",
                    "  ** Java 项目 → link:specs/stack/java-testing.adoc[]")
@@ -5040,7 +5054,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_not_registered_in_dispatcher_reports(self):
         # 反例：文件存在但未登记调度器 → 永不被加载
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`（被测类名 + 后缀、常规）")
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`（被测类名 + 后缀、常规）\n")
         self.write("AGENTS_COMMON.adoc", "= t")
         cm.check_java_test_naming()
         self.assertIn("未在加载调度器登记", self.error_texts())
@@ -5048,7 +5062,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_split_ruling_partial_reports(self):
         # 反例：拆分裁决只剩"合并"那一半（退回"一个被测类一个测试类"）——即本次调整要修掉的口径
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`"
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
                    "（被测类名 + 后缀、常规）\n批量测试同一被测类不同场景时仍合并为一个测试类。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
@@ -5057,7 +5071,7 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
     def test_split_ruling_only_allow_split_reports(self):
         # 反例：只留"可拆"、不留"同分类须归一类 + 禁止滥拆"（放任每个场景一个类）
         self.write("specs/stack/java-testing.adoc",
-                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IntegrationTests` `SandboxTests`"
+                   "= t\n\n== 测试类命名\n`Tests` `BootTests` `PerfTests` `IT`"
                    "（被测类名 + 后缀、常规）\n一个被测类可按需求/分类可拆成多个测试类。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
@@ -5075,8 +5089,8 @@ class TestCheckJavaTestNaming(CheckSpecsTestCase):
         self.write("specs/stack/java-testing.adoc",
                    "= t\n\n== 测试类命名（L1 强制）\n"
                    "测试类名为「被测类名 + 测试类型后缀」：`Tests` 常规、`BootTests` 启动型、"
-                   "`PerfTests` 性能、`IntegrationTests` 端到端、`SandboxTests` 永不自动执行；"
-                   "后两者独立于常规测试执行。\n")
+                   "`PerfTests` 性能、`IntegrationTests` 端到端；后两者独立于常规测试执行。\n"
+                   "`SandboxTests` 永不被自动执行（`@Tag` + 构建配置排除 + `@Disabled` 三层落点）。\n")
         self.write("AGENTS_COMMON.adoc", self.JAVA_LINE)
         cm.check_java_test_naming()
         self.assertIn("拆分裁决", self.error_texts())
@@ -5358,7 +5372,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "= Java 测试规范\n\n== 测试类命名（推荐）\n"
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
                    "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
-                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("AI 生成时的默认名字", self.error_texts())
@@ -5369,7 +5383,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "= Java 测试规范\n\n== 测试类命名（推荐）\n"
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**。\n"
                    "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**；"
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("类名允许自定义", self.error_texts())
@@ -5381,7 +5395,7 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "测试类名**推荐**用「被测类名 + 测试类型后缀」；这是**推荐、非必须**——"
                    "**类名允许自定义**（如 `CCacheAspectCacheKeyTests`）。\n"
                    "* **AI 生成时的默认名字（推荐）**：AI 新建测试类**用默认名字**。\n"
-                   "* **后缀沿用上表的五类（推荐）**：**这是推荐、不是禁令**。\n")
+                   "* **后缀沿用上表的四类（推荐）**：**这是推荐、不是禁令**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("构建配置一侧的取值不变（L1）", self.error_texts())
 
@@ -5406,23 +5420,22 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
                    "== 其他\n\n测试类名**推荐**用；**推荐、非必须**；**类名允许自定义**"
                    "（`CCacheAspectCacheKeyTests`）；**自定义不是违规**；"
                    "**AI 生成时的默认名字**；AI 新建测试类**用默认名字**；"
-                   "**后缀沿用上表的五类（推荐）**；**这是推荐、不是禁令**；"
+                   "**后缀沿用上表的四类（推荐）**；**这是推荐、不是禁令**；"
                    "**构建配置一侧的取值不变（L1）**。\n")
         cm.check_java_test_naming_hint_guard()
         self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
 
 
 class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
-    """钉住『Java 永不自动执行的实验代码后缀 `SandboxTests`』（用户口径：`src/test/java`
-    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫"手动"**、
-    **不靠名字承担执行边界**）。
+    """钉住『Java 永不自动执行的实验代码后缀 `Playground`』（用户口径：`src/test/java`
+    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**、
+    **通过名字匹配**避免执行）。
 
-    失效形态五类：① 取名口径被删（回到 `Manual*`）；② **执行边界不靠名字承担**这一机制被删
-    （名字重新当开关——改个认不出的后缀来"让它不跑"）；③ **三重落点**被删（`@Tag` + 构建配置
-    排除 + `@Disabled` 缺任一层，自定义 includes 一扫就真跑）；④ 不得混入其他后缀被删
-    （`XxxSandboxIntegrationTests` 被读成合规）；⑤ **命名面只取 JUnit/Maven 约定内的名字**
-    被删（五类后缀须一律以 `Tests` 结尾、命中 JUnit 平台默认类名过滤与 surefire 默认 includes）。
-    故按**五条 bullet 各自的正文**核；读错物也要钉通用层口径与调度器/README 登记。
+    失效形态四类：① 取名口径被删（回到 `Manual*`）；② **名字匹配天然落空**这一机制被删
+    （后缀可能被改成 `*Tests`/`*IT` 一类会进自动集合的形态）；③ 构建配置显式排除被删
+    （默认 includes 落空只挡默认规则，自定义扫描仍会收它）；④ 不得混入其他后缀被删
+    （`XxxPlaygroundTests` 被 surefire 命中）。故按**四条 bullet 各自的正文**核；读错物也要钉
+    通用层口径与调度器/README 登记。
     """
 
     JAVA_TEST = "specs/stack/java-testing.adoc"
@@ -5435,7 +5448,7 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         # 规则引擎是**模块级缓存**（`RULES` 首次用到才构造），
         # 而夹具每个用例都换 `REPO_ROOT`：不作废时，本类跑完后
         # **后续用例**会读到本类夹具（已删）的规则目录，报“规则配置里没有防线 X”
-        # （本轮实测：全量跑时本类把后面的 `GradleGuard` 类全部带红）。
+        # （本轮实测：全量跑时 `Playground` 类把后面的 `GradleGuard` 类全部带红）。
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
 
@@ -5471,41 +5484,41 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         self.write(rel, mutated)
 
     def test_valid_passes(self):
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），"
+                      "`check_java_test_playground_guard` 已随旧口径下线；本类反例随之下线，"
+                      "现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
         self._write_valid()
         cm.check_java_test_playground_guard()
         self.assertEqual("", self.error_texts())
 
     def test_naming_dropped_reports(self):
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
         # 反例①：取名口径被删（`Manual*` 回流）
-        self._mutate(self.JAVA_TEST, '* **`SandboxTests` 是"永不自动执行"的唯一后缀（L1）**',
+        self._mutate(self.JAVA_TEST, '* **`Playground` 是"永不自动执行"的唯一后缀（L1）**',
                      '* **`ManualTests` 是这类代码的后缀**')
         cm.check_java_test_playground_guard()
-        self.assertIn("`SandboxTests`", self.error_texts())
-
-    def test_naming_surface_dropped_reports(self):
-        # 反例①b：命名面改回「自洽就行」——约定内这条被删
-        self._mutate(self.JAVA_TEST, "* **命名面只取 JUnit/Maven 约定内的名字（L1）**",
-                     "* **后缀取值以自洽为准**")
-        cm.check_java_test_playground_guard()
-        self.assertIn("命名面只取", self.error_texts())
+        self.assertIn("`Playground`", self.error_texts())
 
     def test_name_match_dropped_reports(self):
-        # 反例②：执行边界不靠名字承担这一机制被删（名字重新背起执行开关）
-        self._mutate(self.JAVA_TEST, "* **执行边界不靠名字承担（L1）**",
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
+        # 反例②：名字匹配天然落空这一机制被删
+        self._mutate(self.JAVA_TEST, "* **`Playground` 靠名字匹配天然落空（L1）**",
                      "* **后缀取值不限**")
         cm.check_java_test_playground_guard()
-        self.assertIn("执行边界不靠名字承担", self.error_texts())
+        self.assertIn("名字匹配", self.error_texts())
 
     def test_config_exclude_dropped_reports(self):
-        # 反例③：三重落点被删
-        self._mutate(self.JAVA_TEST, "* **`SandboxTests` 的执行边界须三重落点（L1）**",
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
+        # 反例③：构建配置显式排除被删
+        self._mutate(self.JAVA_TEST, "* **执行边界须在构建配置里显式排除（L1）**",
                      "* **只靠后缀即可**")
         cm.check_java_test_playground_guard()
-        self.assertIn("三重落点", self.error_texts())
+        self.assertIn("构建配置", self.error_texts())
 
     def test_mixed_suffix_dropped_reports(self):
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
         # 反例④：不得混入其他后缀被删
-        self._mutate(self.JAVA_TEST, "* **`SandboxTests` 不得混入其他后缀（L1）**",
+        self._mutate(self.JAVA_TEST, "* **`Playground` 不得混入其他后缀（L1）**",
                      "* **后缀可自由组合**")
         cm.check_java_test_playground_guard()
         self.assertIn("混入其他后缀", self.error_texts())
@@ -5518,16 +5531,15 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         self.assertIn("specs/general/testing.adoc", self.error_texts())
 
     def test_dispatch_trigger_dropped_reports(self):
-        # 反例⑥：调度器识别特征被删（写 `SandboxTests` 类时不加载该文件）
-        self._mutate(self.COMMON,
-                     "`Tests`/`BootTests`/`PerfTests`/`IntegrationTests`/`SandboxTests`",
-                     "`Tests`/`BootTests`/`PerfTests`")
+        self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
+        # 反例⑥：调度器识别特征被删（写 `Playground` 类时不加载该文件）
+        self._mutate(self.COMMON, "`PerfTests`/`Playground`/`IT`", "`PerfTests`/`IT`")
         cm.check_java_test_playground_guard()
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_readme_entry_dropped_reports(self):
         # 反例⑦：README 目录说明未登记该后缀
-        self._mutate(self.README, "`SandboxTests`（**永不自动执行**：`@Tag` + 构建配置排除 + `@Disabled` 三重落点）", "")
+        self._mutate(self.README, "、`Playground`（**永不自动执行**的实验代码后缀）", "")
         cm.check_java_test_playground_guard()
         self.assertIn("README.adoc", self.error_texts())
 
@@ -9900,7 +9912,7 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
     """钉住『Java 序列化 / 局部变量推断 / 链式调用换行』防线：判据本体不得被删。
 
     用户本轮三句话对应三处判据（`specs/stack/java.adoc`「序列化（`Serializable`）」与「编码」、
-    `specs/general/coding.adoc`「表达式与调用写法」）。三处共用的性质是：**要治的都是「留了裁量点」**
+    `specs/general/coding-shape.adoc`「表达式与调用写法」）。三处共用的性质是：**要治的都是「留了裁量点」**
     （要不要加 UID / `val` 还是 `var` 都行 / 链短就不换行）。故用例专门覆盖**「轴名齐全、判据被抽走」
     的反例本体**——把「不得为未实现者补字段」「用 `var` 却没重新赋值即违规」「长度不是判据」抽掉时
     必须报红（只核"这几节在不在"属防线空转）。
@@ -9928,7 +9940,7 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
         "* **不为未实现 `Serializable` 的类型补（L1）**：**不得**为「消警告」加该字段，"
         "**也不得顺手给它加 `implements Serializable`**。\n"
         "* **显式声明优先于抑制（L1）**：以 `@SuppressWarnings` 代替显式声明不算完成"
-        "（见 `specs/general/coding.adoc`「警告与弃用」）。\n"
+        "（见 `specs/general/coding-runtime.adoc`「警告与弃用」）。\n"
         "* **判定标准（任一命中即违规）**：①②③④。**存量**：随动迁移，见 `specs/core/execution.adoc`。\n"
         "* 依据（标准名/编号）：**Java Object Serialization Specification**、"
         "**Java 官方 API 文档**、ISO/IEC 25010、ISO/IEC/IEEE 29148；"
@@ -9997,7 +10009,7 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
         # 反例：允许用抑制代替显式声明 -> 与「警告与弃用」相抵、用户要治的警告照旧
         self._write(java=self.JAVA.replace(
             "* **显式声明优先于抑制（L1）**：以 `@SuppressWarnings` 代替显式声明不算完成"
-            "（见 `specs/general/coding.adoc`「警告与弃用」）。\n", ""))
+            "（见 `specs/general/coding-runtime.adoc`「警告与弃用」）。\n", ""))
         cm.check_java_serial_guard()
         self.assertIn("抑制", self.error_texts())
 
@@ -14005,7 +14017,7 @@ class TestCheckPersistenceAccessGuard(CheckSpecsTestCase):
         "= Java 规范（技术栈层）\n\n"
         "== 持久化访问（MyBatis-Plus / JPA 等）\n"
         "持久化访问按通用编码规范的「持久化访问（数据库/缓存等）」执行（见 "
-        "link:../general/coding.adoc[]）；框架专名与禁止清单如下：\n"
+        "link:../general/coding-objects.adoc[]）；框架专名与禁止清单如下：\n"
         "* **MyBatis-Plus 强制使用 `IService` 的成员方法（L1）**：查询/更新一律走 `lambdaQuery()`、"
         "`lambdaUpdate()`、`ktQuery()`、`ktUpdate()`；禁止 `new QueryWrapper<>()`、"
         "`new UpdateWrapper<>()` 及其子类（含 `new LambdaQueryWrapper<>()`）。\n"
@@ -14283,7 +14295,7 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
     默认不调整依赖，也不动依赖版本**。用户报告的失效形态：旧写法与新写法并存两条路径
     （「旧写法也能跑」「新写法不熟」留下的裁量点），以及借"换掉弃用类"顺手升级依赖版本。
 
-    两处同向落点：`specs/general/coding.adoc`「警告与弃用」给禁止面与替代者取向、
+    两处同向落点：`specs/general/coding-runtime.adoc`「警告与弃用」给禁止面与替代者取向、
     `specs/general/dependency.adoc`「升级与废弃」给"不动依赖面"的落点。
 
     最易被冲掉的四件事（故本组用例逐一覆盖）：
@@ -14319,7 +14331,7 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         "== 升级与废弃\n"
         "* **升级前看变更说明（L1）**：升级依赖须先读其变更日志/发布说明。\n"
         "* **弃用类/API 的迁移默认不动依赖面（L1）**：代码里出现被弃用的类/API 时，按 "
-        "`specs/general/coding.adoc`「警告与弃用」改调用点、改用替代者即可，"
+        "`specs/general/coding-runtime.adoc`「警告与弃用」改调用点、改用替代者即可，"
         "**默认不调整依赖、也不动依赖版本**。**判定标准**：一次「弃用迁移」的改动里出现"
         "依赖清单或版本变化，而其理由只是「替代者需要新版本」却未走本节升级流程。\n"
     )
@@ -14718,7 +14730,7 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "= Java 规范（技术栈层）\n\n"
         "== 对象转换（MapStruct）\n"
         "对象转换按通用编码规范的「对象转换（多层嵌套对象的转换）」执行"
-        "（见 link:../general/coding.adoc[]）——JVM 下**优先用 MapStruct**、**建议不手写转换代码**。\n"
+        "（见 link:../general/coding-objects.adoc[]）——JVM 下**优先用 MapStruct**、**建议不手写转换代码**。\n"
         "* **多层嵌套对象转换优先用 MapStruct（L2，建议）**：用 MapStruct 的 `@Mapper` 映射接口声明完成；"
         "**建议不手写转换代码**。**不做强制性限制**——深拷贝/结构复制工具、序列化中转等等价路径同样合规。\n"
         "* **嵌套结构由映射声明表达（写法建议，非强制）**：对象含对象、集合含对象由**映射方法自动调用**"
@@ -14880,7 +14892,7 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
                    "= Java 规范\n\n== 对象转换（MapStruct）\n"
                    "* 多层嵌套对象转换优先用 MapStruct、建议不手写转换代码。\n")
         cm.check_conversion_guard()
-        self.assertIn("coding.adoc", self.error_texts())
+        self.assertIn("coding-objects.adoc", self.error_texts())
 
     def test_java_stack_forced_wording_reports(self):
         # 反例⑫：栈层回退成强制面（"不允许手写转换代码"）→ 与用户口径相抵
@@ -15528,11 +15540,12 @@ class TestCheckEntityDtoGuard(CheckSpecsTestCase):
         self.assertIn("adoption.adoc", self.error_texts())
 
     def test_coding_file_missing_reports(self):
-        # 反例⑮：通用层落点丢失 → 该条无处承载
+        # 反例⑮：通用层落点丢失 → 该条无处承载（编码规范族按主题拆，故整族都不在才是"丢"）
         self._write_valid()
-        os.remove(cm.CODING_FILE)
+        for path in cm._coding_family():
+            os.remove(path)
         cm.check_entity_dto_guard()
-        self.assertIn("缺少文件", self.error_texts())
+        self.assertIn("一处也找不到", self.error_texts())
 
 class TestCheckJavaInterfaceAccessorGuard(CheckSpecsTestCase):
     """钉住『Java 字段接口只加 get、不加 set』（用户先提「字段接口只允许 get」、再澄清「是接口不是类」）。
@@ -15791,7 +15804,7 @@ class TestCheckJavaObjectTemplateGuard(CheckSpecsTestCase):
         "——**已提交的默认不补**、**未提交的可以补**（分档判据、理由与判定标准见判据本体）。\n"
         "* **`@AllArgsConstructor` 无参数时不加**（此例外与判定标准见判据本体）。\n"
         "* **集合字段默认加 `@Singular`**：按\"每个集合字段都标\"处理（\"除非有问题\"与判定标准见判据本体）。\n"
-        "* **注解次序**：模板里的次序已按 `specs/general/coding.adoc`「命名与代码质量」的"
+        "* **注解次序**：模板里的次序已按 `specs/general/coding-shape.adoc`「命名与代码质量」的"
         "**注解排序**规则排好；该规则**不在此重述**。\n\n"
         "== 生效面与存量\n\n"
         "**两档生效面**与其判定标准**见判据本体**，**不在此重述**；本文件**不改写**判据，也"
@@ -22300,12 +22313,9 @@ class TestCheckLogicalDeleteNamingGuard(CheckSpecsTestCase):
         # 真实规则目录（本仓库那一份）：夹具按原样复制，**不手抄**（手抄必然与现场漂移）
         self._rules_src = os.path.join(
             os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
-        with open(self.CODING, encoding="utf-8") as fh:
-            self.CODING_TEXT = fh.read()
-        with open(self.JAVA, encoding="utf-8") as fh:
-            self.JAVA_TEXT = fh.read()
-        with open(self.ADOPTION, encoding="utf-8") as fh:
-            self.ADOPTION_TEXT = fh.read()
+        self.CODING_TEXT = self.read_real(self.CODING)
+        self.JAVA_TEXT = self.read_real(self.JAVA)
+        self.ADOPTION_TEXT = self.read_real(self.ADOPTION)
 
     def tearDown(self) -> None:
         cm.CODING_FILE = self._orig_coding
@@ -23287,8 +23297,7 @@ class TestCheckMethodPlacementGuard(CheckSpecsTestCase):
         cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
         cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
         for rel in (self.CODING, self.JAVA, self.ADOPTION, self.COMMON, self.README):
-            with open(rel, encoding="utf-8") as fh:
-                setattr(self, "_text_" + rel.replace("/", "_"), fh.read())
+            setattr(self, "_text_" + rel.replace("/", "_"), self.read_real(rel))
 
     def tearDown(self) -> None:
         cm.CODING_FILE = self._orig_coding
@@ -23485,16 +23494,11 @@ class TestCheckChainAssignmentOrderGuard(CheckSpecsTestCase):
         self._orig_java = cm.JAVA_STACK_FILE
         cm.CODING_FILE = os.path.join(self.root, "specs", "general", "coding.adoc")
         cm.JAVA_STACK_FILE = os.path.join(self.root, "specs", "stack", "java.adoc")
-        with open(self.CODING, encoding="utf-8") as fh:
-            self.CODING_TEXT = fh.read()
-        with open(self.JAVA, encoding="utf-8") as fh:
-            self.JAVA_TEXT = fh.read()
-        with open(self.TEMPLATE, encoding="utf-8") as fh:
-            self.TEMPLATE_TEXT = fh.read()
-        with open(self.ADOPTION, encoding="utf-8") as fh:
-            self.ADOPTION_TEXT = fh.read()
-        with open(self.COMMON, encoding="utf-8") as fh:
-            self.COMMON_TEXT = fh.read()
+        self.CODING_TEXT = self.read_real(self.CODING)
+        self.JAVA_TEXT = self.read_real(self.JAVA)
+        self.TEMPLATE_TEXT = self.read_real(self.TEMPLATE)
+        self.ADOPTION_TEXT = self.read_real(self.ADOPTION)
+        self.COMMON_TEXT = self.read_real(self.COMMON)
         # 调度器落点取模块常量（每个用例的临时根不同），不硬编码仓库根相对路径
         self.COMMON = os.path.relpath(cm.GENERIC_FILE, self.root)
 
@@ -23716,8 +23720,7 @@ class TestCheckObjectInitGuard(CheckSpecsTestCase):
     _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
 
     def _src(self, rel: str) -> str:
-        with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
-            return fh.read()
+        return self.read_real(rel)
 
     def setUp(self) -> None:
         super().setUp()
@@ -24092,10 +24095,8 @@ class _StackGuardTestCase(CheckSpecsTestCase):
         self._orig_repo_root = cm.REPO_ROOT
         setattr(cm, self.CONST, os.path.join(self.root, *self.DOC.split("/")))
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
-        with open(self.DOC, encoding="utf-8") as fh:
-            self.TEXT = fh.read()
-        with open("AGENTS_COMMON.adoc", encoding="utf-8") as fh:
-            self.COMMON = fh.read()
+        self.TEXT = self.read_real(self.DOC)
+        self.COMMON = self.read_real("AGENTS_COMMON.adoc")
 
     def tearDown(self) -> None:
         setattr(cm, self.CONST, self._orig_const)
@@ -24736,10 +24737,8 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         self._rules_src = os.path.join(
             os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
         repo = os.path.dirname(HERE)
-        with open(os.path.join(repo, *self.CODING.split("/")), encoding="utf-8") as fh:
-            self.CODING_TEXT = fh.read()
-        with open(os.path.join(repo, *self.SYNTAX.split("/")), encoding="utf-8") as fh:
-            self.SYNTAX_TEXT = fh.read()
+        self.CODING_TEXT = self.read_real(self.CODING)
+        self.SYNTAX_TEXT = self.read_real(self.SYNTAX)
 
     def tearDown(self) -> None:
         cm.CODING_FILE = self._orig_coding
@@ -24883,10 +24882,8 @@ class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
         self._rules_src = os.path.join(
             os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
         repo = os.path.dirname(HERE)
-        with open(os.path.join(repo, *self.CODING.split("/")), encoding="utf-8") as fh:
-            self.CODING_TEXT = fh.read()
-        with open(os.path.join(repo, *self.SYNTAX.split("/")), encoding="utf-8") as fh:
-            self.SYNTAX_TEXT = fh.read()
+        self.CODING_TEXT = self.read_real(self.CODING)
+        self.SYNTAX_TEXT = self.read_real(self.SYNTAX)
 
     def tearDown(self) -> None:
         cm.CODING_FILE = self._orig_coding
@@ -25082,7 +25079,12 @@ class TestCheckServiceInterfaceGuard(CheckSpecsTestCase):
         self.JAVA_TEXT = self._repo_text(self.JAVA)
 
     def _repo_text(self, rel: str) -> str:
-        """读**真实仓库**里那一份（不按当前工作目录——用例可能从任何 cwd 起跑）。"""
+        """读**真实仓库**里那一份（不按当前工作目录——用例可能从任何 cwd 起跑）。
+
+        编码规范按**整族**取（与现场判据一致）：夹具里只落族入口那一份。
+        """
+        if rel == CODING_FAMILY_ENTRY:
+            return cm._coding_text_at(self._REPO_ROOT)
         with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
             return fh.read()
 
@@ -27732,8 +27734,7 @@ class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
     _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
 
     def _src(self, rel: str) -> str:
-        with open(os.path.join(self._REPO_ROOT, rel), encoding="utf-8") as fh:
-            return fh.read()
+        return self.read_real(rel)
 
     def setUp(self) -> None:
         super().setUp()
@@ -27767,6 +27768,17 @@ class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
         self.assertIn(old, text)
         self._write_all_valid()
         self.write(rel, text.replace(old, new, 1))
+
+    def _mutate_in(self, rel: str, text: str, section: str, old: str, new: str) -> None:
+        """只在**某一节之内**做替换（族内同一句可能在多份里各出现一次）。"""
+        head = text.index(section)
+        tail = text[head + 1:]
+        end = head + 1 + tail.index("\n== ") if "\n== " in tail else len(text)
+        seg = text[head:end]
+        self.assertIn(old, seg, f"夹具失效：{section} 节里找不到要替换的片段")
+        self._write_all_valid()
+        self.write(rel, text[:head] + seg.replace(old, new, 1) + text[end:])
+
 
     def test_valid_passes(self):
         # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
@@ -27868,9 +27880,9 @@ class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
         # 反例⑫：依据行的 `* ` 列表标记被抽 -> 整条依据并进**上一条 bullet** 的正文
         # （渲染实测：依据段落落进「存量边界」那条的 `<li>` 里，并在正文里留下裸 `**`）
         # 只核"那句语句在不在"的锚点兜不住这一形态——故锚点带上列表标记本身
-        self._mutate(self.CODING, self.CODING_TEXT,
-                     "\n* 依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148",
-                     "\n  依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148")
+        self._mutate_in(self.CODING, self.CODING_TEXT, "== 代码复用",
+                        "\n* 依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148",
+                        "\n  依据（标准名/编号）：ISO/IEC 25010（可维护性）、ISO/IEC/IEEE 29148")
         self._run_guard()
         self.assertIn("* 依据（标准名/编号）", self.error_texts())
 
@@ -27929,8 +27941,7 @@ class TestCheckSqlAnnotationBindingGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def tearDown(self) -> None:
         cm.JAVA_STACK_FILE = self._orig_java
@@ -28059,8 +28070,7 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -28271,6 +28281,10 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
 class TestCheckUiStyleGuard(CheckSpecsTestCase):
     """钉住『界面与样式』防线（**用户提出**）。
 
+    夹具**编码族真源随主题分份**：`check_ui_style_guard` 的规则数据按
+    `script/specs-rules/coding.toml` 的族内路径取文本，族内各份经 `check_coding_family_guard`
+    现算、不列清单；故本节断言只对**族内那一份**成立——先按族内实际所在份定位，再断言。
+
     用户要求："调整规范，是不是可以扩展到所有涉及 ui 的地方……AI 写网页代码时，优先使用现有的
     ui 框架、开源样式方案等，AI 习惯从 0 开始写，没用 UI 框架就是会各个地方都重写一套……可以从
     0 开始写，但是不能每个地方都从头写，是不是要对 ui 这些做统一管理，避免各自为政……如果逆向
@@ -28291,8 +28305,7 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -28328,7 +28341,7 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         self._write_all_valid()
         text = self.base[self.CODING]
         start = text.index("== 界面与样式（任何语言、任何端）")
-        end = text.index("\n== 表达式与调用写法", start)
+        end = text.index("\n== ", start + 1)
         self.write(self.CODING, text[:start] + text[end + 1:])
         self._run_guard()
         self.assertIn("界面与样式", self.error_texts())
@@ -28394,7 +28407,7 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
 
     def test_web_relation_backref_removed_reports(self):
         # 反例⑪：「与通用层的关系」的回指只覆盖体积那一条、界面这一半失效
-        self._run_guard_with(self.WEB, "**以 `specs/general/coding.adoc`「界面与样式」为唯一真源**",
+        self._run_guard_with(self.WEB, "**以 `specs/general/coding-ui.adoc`「界面与样式」为唯一真源**",
                              "**界面的要求见上文**")
         self.assertIn("界面与样式", self.error_texts())
 
@@ -28565,8 +28578,7 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -28665,7 +28677,7 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         # 取的是「界面的规模与性能（载体）」那节首句末尾那一句（同文件其余载体节也这么说，
         # 故连节名与本句一起替换，否则另一处仍命中——本轮新增载体节后实测）
         self._run_guard_with(self.WEB,
-                             "== 界面的性能（载体）\n\n**判据本体在 `specs/general/coding.adoc`「界面的性能」**——本文件只给**前端载体**，判据本体的措辞不复述、也不另立一套",
+                             "== 界面的性能（载体）\n\n**判据本体在 `specs/general/coding-ui.adoc`「界面的性能」**——本文件只给**前端载体**，判据本体的措辞不复述、也不另立一套",
                              "== 界面的性能（载体）\n\n**判据见下方各条**")
         self.assertIn("也不另立一套", self.error_texts())
 
@@ -28687,8 +28699,8 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
 
     def test_readme_not_synced_reports(self):
         # 反例⑪：README 目录说明未同步
-        self._run_guard_with(self.README, "**界面的性能（任何语言、任何端",
-                             "**界面性能（网页）")
+        self._run_guard_with(self.README, "**界面的性能（按六档维度列、判据取形态）**",
+                             "**界面性能（网页）**")
         self.assertIn("README", self.error_texts())
 
     def test_anchor_list_shrunk_reports(self):
@@ -28733,9 +28745,7 @@ class TestCheckUiPerformanceGuardDimensions(CheckSpecsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        repo_root = os.path.dirname(HERE)
-        with open(os.path.join(repo_root, self.CODING), encoding="utf-8") as fh:
-            self.base = fh.read()
+        self.base = self.read_real(self.CODING)
 
     def _run_guard(self) -> None:
         cm.REPO_ROOT = self.root
@@ -28822,8 +28832,7 @@ class TestCheckExampleNotSurfaceGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -28919,8 +28928,7 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
         # 规则引擎是**模块级缓存**，夹具每个用例都换 `REPO_ROOT`：不作废时会读到上一个
         # 用例（已删）的规则目录，报"规则配置里没有防线 X"。
         cm.RULES = None
@@ -28959,7 +28967,8 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
         self._write_all_valid()
         text = self.base[self.CODING]
         start = text.index("=== 同一件事只有一个来源（不限界面，任何语言）")
-        end = text.index("\n== 表达式与调用写法", start)
+        # 切到**下一个同级或更高级标题**（族内节序已按主题重排，写死下一节名会随拆分失配）
+        end = text.index("\n== ", start + 1)
         self.write(self.CODING, text[:start] + text[end + 1:])
         self._run_guard()
         self.assertIn("同一件事只有一个来源", self.error_texts())
@@ -29063,8 +29072,8 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
     def test_readme_not_synced_reports(self):
         # 反例⑭：README 目录说明未同步
         self._run_guard_with(self.README,
-                             "**同一件事只有一个来源（界面之外还有功能与工具类",
-                             "**重复代码（界面之外")
+                             "**同一件事只有一个来源（重复须有能自动发现它的手段）**",
+                             "**重复代码（界面之外）**")
         self.assertIn("README", self.error_texts())
 
     def test_anchor_count_self_shrunk_reports(self):
@@ -29116,8 +29125,7 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
         # 公共片段的落点由模块常量给出（不随 `REPO_ROOT` 推导），须一并重定向到夹具根，
         # 否则夹具里改的是 `prompts/_common.txt`、防线读的仍是仓库里那份（改不动、测不出）。
         self._orig_common = getattr(cm, "COMMON_PROMPT_FILE", None)
@@ -29267,8 +29275,7 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
         self._orig_common = getattr(cm, "COMMON_PROMPT_FILE", None)
         setattr(cm, "COMMON_PROMPT_FILE", os.path.join(self.root, self.COMMON))
 
@@ -29444,8 +29451,7 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -29478,7 +29484,7 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
         self._write_all_valid()
         text = self.base[self.CODING]
         start = text.index("== 缓存（统一管理、先缓存后在线）")
-        end = text.index("\n== 表达式与调用写法", start)
+        end = text.index("\n== ", start + 1)
         self.write(self.CODING, text[:start] + text[end + 1:])
         self._run_guard()
         self.assertIn("缓存（统一管理、先缓存后在线）", self.error_texts())
@@ -29577,8 +29583,8 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
 
     def test_readme_sync_removed_reports(self):
         # 反例⑪：README 目录说明未同步 -> 这一节加了也没人知道
-        self._run_guard_with(self.README, "先给缓存再换在线", "先取缓存")
-        self.assertIn("先给缓存再换在线", self.error_texts())
+        self._run_guard_with(self.README, "缓存（一处入口", "缓存")
+        self.assertIn("README.adoc", self.error_texts())
 
     def test_anchor_list_shrunk_reports(self):
         # 反例⑫：锚点清单被削（现场正文一字未动）-> 防线零证据，须报红
@@ -29698,8 +29704,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         repo_root = os.path.dirname(HERE)
         self.base = {}
         for rel in self.FILES:
-            with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
+            self.base[rel] = self.read_real(rel)
 
     def _write_all_valid(self) -> None:
         for rel, text in self.base.items():
@@ -30426,7 +30431,7 @@ class TestCheckHandoffDurabilityGuard(CheckSpecsTestCase):
 
     def tearDown(self) -> None:
         # 规则引擎是模块级缓存、夹具每个用例都换 `REPO_ROOT`：不作废时后续用例会读到
-        # 本类夹具（已删）的规则目录，报"规则配置里没有防线 X"（与 `Sandbox` 类同因）。
+        # 本类夹具（已删）的规则目录，报"规则配置里没有防线 X"（与 `Playground` 类同因）。
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         super().tearDown()
@@ -31002,12 +31007,12 @@ class TestCheckFileRoleGuard(CheckSpecsTestCase):
             rules_engine.load_rule_files(cm._rules_spec())["tokens"]["FILE_ROLE_ANCHORS"])
 
     def _mutate(self, removed, replacement=""):
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        with open(os.path.join(repo_root, self.CODING), encoding="utf-8") as fh:
-            text = fh.read()
+        # **逐处全换**：族内同一句可能出现在两份里（如档位键名在「源码管理方法」与
+        # 「文件的角色」各提一次），只换第一处时另一处会替它作答、反例于是报绿。
+        text = self.read_real(self.CODING)
         self.assertIn(removed, text)
         self._write_valid()
-        self.write(self.CODING, text.replace(removed, replacement, 1))
+        self.write(self.CODING, text.replace(removed, replacement))
 
     def test_valid_passes(self):
         self._write_valid()
@@ -31088,8 +31093,7 @@ class TestCheckFileRoleGuard(CheckSpecsTestCase):
         # 反例⑩：依据行被抽——后人无从判断这条口径还成不成立。
         # 「源码管理方法」「文件的角色」两节的依据行都点了 ISO 10007，而本用例只核后者，
         # 故只把**后者那一节**里的这一项抽掉（按节切出来再拼回去，不碰前一节）。
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        text = open(os.path.join(repo_root, self.CODING), encoding="utf-8").read()
+        text = self.read_real(self.CODING)
         head = text.index("== 文件的角色")
         section = text[head:]
         self.assertIn("ISO 10007", section)
@@ -31182,11 +31186,12 @@ class TestCheckSourceManagementGuard(CheckSpecsTestCase):
             rules_engine.load_rule_files(cm._rules_spec())["tokens"]["SOURCE_MANAGEMENT_ANCHORS"])
 
     def _mutate(self, removed, replacement=""):
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        text = open(os.path.join(repo_root, self.CODING), encoding="utf-8").read()
+        # **逐处全换**：族内同一句可能出现在两份里（如档位键名在「源码管理方法」与
+        # 「文件的角色」各提一次），只换第一处时另一处会替它作答、反例于是报绿。
+        text = self.read_real(self.CODING)
         self.assertIn(removed, text)
         self._write_valid()
-        self.write(self.CODING, text.replace(removed, replacement, 1))
+        self.write(self.CODING, text.replace(removed, replacement))
 
     def test_valid_passes(self):
         self._write_valid()
@@ -31425,190 +31430,456 @@ class TestRuleAssemblyConflicts(CheckSpecsTestCase):
             self.assertIn("ADOC_ROOTS = [", fh.read())
 
 
-class TestCheckSpecDrivenGuard(CheckSpecsTestCase):
-    """钉住『规格（spec driven）』防线（**用户提出**：接入 spec 规范）。
+class TestCheckSectionRefLandingGuard(CheckSpecsTestCase):
+    """钉住『节名引用的落点』防线：`xxx.adoc「某节」` 须指向**承载该节的那一份**。
 
-    本条两头都要拦：**该写不写**（需求只在对话里、缺口由执行者按自己理解补上）与
-    **不该写硬写**（既含"每件事新开一份"，也含"写成一本说明书"）。故夹具按"哪一类取值
-    被抽走会滑向其中哪一头"逐处做定点改动，而不是只核"这一节在不在"。
-
-    **夹具形态**：五份真文件的逐字副本（判据本体 + 调度器与公开面两处加载面 + 规划层的
-    分工条 + 本仓库自己取哪一档），每个用例做一处改动后落进临时根再跑防线——手抄夹具
-    会与真文档脱节。
+    失效形态（按主题拆族之后的真实风险）：节搬去同族另一份，而别处的引用仍写着族入口的
+    路径——路径在、文件在、节名也在，只是不在同一份里；读者顺着引用找不到判据，而这类
+    漏改写**不会被别的检查发现**（本仓库实测：一次拆分里 17 处漏改，`check_specs.py` 与
+    2700+ 单测全绿）。
     """
-
-    SPEC = "specs/general/spec.adoc"
-    COMMON = "AGENTS_COMMON.adoc"
-    README = "README.adoc"
-    PLANNING = "specs/general/planning.adoc"
-    # 本仓库"规范条目取哪一档"的取值落点（通用条只给判据、取值在维护方自查层）
-    LIFECYCLE = "specs-project-maintainer/spec-lifecycle.adoc"
 
     def setUp(self) -> None:
         super().setUp()
-        repo_root = os.path.dirname(HERE)
-        self.base = {}
-        for rel in (self.SPEC, self.COMMON, self.README, self.PLANNING, self.LIFECYCLE):
-            with open(os.path.join(repo_root, *rel.split("/")), encoding="utf-8") as fh:
-                self.base[rel] = fh.read()
-        # `SPEC_SPEC_FILE` 是**导入期**按真 `SPECS_DIR` 算出的常量：基类把 `REPO_ROOT` 指到
-        # 临时根之后它仍指向真仓库，于是防线自带的两处前置判断（文件缺失 / 节缺失）读的是
-        # 临时根里未改动的那一份，那两条反例只核到规则侧报红、核不到它们本来要核的分支。
-        self._orig_spec_file = cm.SPEC_SPEC_FILE
-        cm.SPEC_SPEC_FILE = os.path.join(self.root, *self.SPEC.split("/"))
+        self.entry = "specs/general/coding.adoc"
+        self.shape = "specs/general/coding-shape.adoc"
+        self.write(self.entry, "= 通用编码规范\n\n== 本族怎么加载\n\n* 见 `specs/general/coding-shape.adoc`。\n")
+        self.write(self.shape, "= 写法与结构\n\n== 类设计\n\n* 条文。\n")
 
-    def tearDown(self) -> None:
-        cm.SPEC_SPEC_FILE = self._orig_spec_file
-        super().tearDown()
-
-    def _write_all_valid(self) -> None:
-        for rel, text in self.base.items():
-            self.write(rel, text)
-        self.write_rules_fixture()
-
-    def _run(self) -> None:
-        cm.REPO_ROOT = self.root
+    def _run(self, body):
+        self.write("library/adoption.adoc", body)
         cm.errors.clear()
-        cm._RULES_RUN_THIS_PHASE.clear()
-        cm.RULES = None
-        cm.check_spec_driven_guard()
-        cm.RULES = None
-        cm._RULES_RUN_THIS_PHASE.clear()
-
-    def _mutate(self, rel: str, removed: str, replacement: str = "") -> None:
-        # 锚点与真文档脱节时本轮反例就失去了对象，故先断言再改。
-        self.assertIn(removed, self.base[rel])
-        self._write_all_valid()
-        self.write(rel, self.base[rel].replace(removed, replacement, 1))
+        cm.check_section_ref_landing_guard()
 
     def test_valid_passes(self):
-        self._write_all_valid()
+        # 正例：引用落在承载该节的那一份上
+        self._run("规则本体见 `specs/general/coding-shape.adoc`「类设计」。\n")
+        self.assertEqual([], cm.errors)
+
+    def test_entry_path_to_moved_section_reports(self):
+        # 反例①：节搬去同族另一份，引用仍写族入口 → 报红并给出正确落点
+        self._run("规则本体见 `specs/general/coding.adoc`「类设计」。\n")
+        self.assertIn("coding-shape.adoc", self.error_texts())
+        self.assertIn("类设计", self.error_texts())
+
+    def test_landing_on_non_family_file_reports(self):
+        # 反例②：引用的文件里没有该节、而同族另一份有（跨文件同样的漏改写）
+        self.write("library/sources.adoc", "= 来源\n\n== 别的\n")
+        self._run("见 `library/sources.adoc`「类设计」。\n")
+        self.assertIn("coding-shape.adoc", self.error_texts())
+
+    def test_unknown_section_left_to_section_refs(self):
+        # 边界：节在**任何一份里都不存在**时不由本条报（那条归 `check_section_refs`，两处不重复报）
+        self._run("见 `specs/general/coding.adoc`「根本没有这一节XYZ」。\n")
+        self.assertEqual([], cm.errors)
+
+
+class TestCheckCodingFamilyGuard(CheckSpecsTestCase):
+    """钉住『编码规范一族』防线：拆出去的每一份都须**登记在族入口**、且写明**何时加载**。
+
+    失效形态（拆分的真实风险）：族内某一份仍在磁盘上、`grep` 也搜得到，但**加载路径上
+    没有任何一处指向它**——引用存在性检查查的是"被引用的文件在不在"，查不到"该被引用的
+    文件有没有被引用"；于是那一份里的规则在引用方那里**实际失效**，而一切看起来正常。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.entry = "specs/general/coding.adoc"
+        self.other = "specs/general/coding-shape.adoc"
+
+    def _write_valid(self, entry=None, other=None):
+        self.write(self.entry, entry if entry is not None else (
+            "= 通用编码规范\n\n== 本族怎么加载\n\n"
+            "| `specs/general/coding-shape.adoc` | 要定写法\n\n"
+            "* 族内分份：`specs/general/coding-shape.adoc`\n\n"
+            "== 抽象与接入成本\n\n* 条文。\n"))
+        self.write(self.other, other if other is not None else (
+            "= 写法\n\n== 类设计\n\n* 条文。\n"))
+
+    def _run(self):
+        cm.errors.clear()
+        cm.check_coding_family_guard()
+
+    def test_valid_passes(self):
+        self._write_valid()
         self._run()
         self.assertEqual([], cm.errors)
 
-    def test_file_missing_reports(self):
-        # 反例：判据本体整份被删 -> 「做成什么样」没有任何可判定的落点
-        self._write_all_valid()
-        os.remove(os.path.join(self.root, *self.SPEC.split("/")))
+    def test_member_not_registered_reports(self):
+        # 反例①：族内分份没登记在入口 → 它不会被加载，规则实际失效
+        self._write_valid(entry=(
+            "= 通用编码规范\n\n== 本族怎么加载\n\n* 只写自己。\n\n"
+            "== 抽象与接入成本\n\n* 条文。\n"))
         self._run()
-        self.assertIn("失去可判定的落点", self.error_texts())
+        self.assertIn("未登记在族入口", self.error_texts())
 
-    def test_section_deleted_reports(self):
-        # 反例：写法判据整节被删 -> 规格要么退化成愿望清单、要么滑成设计文档
-        self._write_all_valid()
-        self.write(self.SPEC, "= 规格规范\n\n== 别的节\n* 略。\n")
+    def test_member_without_load_slot_reports(self):
+        # 反例②：登记了相对路径、但「本族怎么加载」一节没点到它 → 没有触发面等于永不加载
+        self._write_valid(entry=(
+            "= 通用编码规范\n\n== 本族怎么加载\n\n* 只写自己。\n\n"
+            "== 抽象与接入成本\n\n* 见 `specs/general/coding-shape.adoc`。\n"))
         self._run()
-        self.assertIn(f"缺少「{cm.SPEC_SECTION}」一节", self.error_texts())
+        self.assertIn("未在入口的", self.error_texts())
 
-    def test_acceptance_criteria_clause_removed_reports(self):
-        # 反例：删掉「一条要求一项验收标准」-> 写不出可观察结果的愿望照样进规格
-        self._mutate(self.SPEC, "都要有对应的验收标准")
+    def test_load_section_missing_reports(self):
+        # 反例③：「本族怎么加载」整节被抽 → 何时加载没有落点，读者只能整族读完
+        self._write_valid(entry=(
+            "= 通用编码规范\n\n== 抽象与接入成本\n\n"
+            "* 见 `specs/general/coding-shape.adoc`。\n"))
         self._run()
-        self.assertIn("都要有对应的验收标准", self.error_texts())
+        self.assertIn("本族怎么加载", self.error_texts())
 
-    def test_behavior_only_clause_removed_reports(self):
-        # 反例：删掉「不写实现方案」-> 规格滑成设计文档（方案一改规格就过期）
-        self._mutate(self.SPEC, "不写实现方案")
+    def test_empty_shell_member_reports(self):
+        # 反例④：拆出去的那一份没有任何二级节 → 加载了也不承载判据
+        self._write_valid(other="= 写法\n\n只有一句说明。\n")
         self._run()
-        self.assertIn("不写实现方案", self.error_texts())
+        self.assertIn("空壳分份", self.error_texts())
 
-    def test_no_copy_clause_removed_reports(self):
-        # 反例：删掉「不复制既有内容」-> 规格把代码与既有文档抄一遍，两处来源各改各的
-        self._mutate(self.SPEC, "只引名称与落点")
-        self._run()
-        self.assertIn("只引名称与落点", self.error_texts())
 
-    def test_tier_clause_removed_reports(self):
-        # 反例：删掉三档之一（免规格）-> 小事也开文档这一头没人拦
-        self._mutate(self.SPEC, "免规格档却新开了规格文件")
-        self._run()
-        self.assertIn("免规格档却新开了规格文件", self.error_texts())
+class TestCheckVerifyTierGuard(CheckSpecsTestCase):
+    """钉住『验证力度分档』防线：三档、每档做哪几件、判不准取更严、A 档不是"可以不验证"。
 
-    def test_overwrite_tier_removed_reports(self):
-        # 反例：删掉「缺口由执行者自行推断补上」-> 大事只有一句需求也没人报
-        self._mutate(self.SPEC, "缺口由执行者自行推断补上")
-        self._run()
-        self.assertIn("缺口由执行者自行推断补上", self.error_texts())
+    失效形态：分档被抽成"看情况"或"都要做全套"——前者让最贵的流程成为默认，久了只剩
+    形式；后者让"改动小"重新成为豁免理由（而那正是这条要治的）。
+    """
 
-    def test_impact_based_tier_removed_reports(self):
-        # 反例：删掉「按行为影响面判档」-> 档位按文件数/行数判（改十处不变行为也要写完整规格）
-        self._mutate(self.SPEC, "对外可观察的行为")
-        self._run()
-        self.assertIn("对外可观察的行为", self.error_texts())
+    def setUp(self) -> None:
+        super().setUp()
+        # 分档的载体是验证一族的**第二份**（`specs/general/verify-tier.adoc`），族入口
+        # `verify.adoc` 只留「五件事」那一节并指回落点——两处各读各的时顶格做、分档形同虚设。
+        self.path = "specs/general/verify-tier.adoc"
+        self.entry = "specs/general/verify.adoc"
+        self.five = ("= 验证规范\n\n== 改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）\n"
+                     "* 见「验证力度分档」。\n\n"
+                     "* 分档的载体是 `specs/general/verify-tier.adoc`。\n\n")
 
-    def test_default_first_clause_removed_reports(self):
-        # 反例：删掉「默认只服务本次任务」-> 默认变成每份规格都长期维护、留下过期的第二份说明书
-        self._mutate(self.SPEC, "不默认留下一份长期维护的规格")
-        self._run()
-        self.assertIn("不默认留下一份长期维护的规格", self.error_texts())
+    def _rule(self):
+        import rules_engine
+        return rules_engine.load_rule_files(cm._rules_spec())["tokens"]["VERIFY_TIER_ANCHORS"]
 
-    def test_as_source_clause_removed_reports(self):
-        # 反例：删掉「as-source 默认不做」-> 「代码由规格生成」被当成演进方向直接开做
-        self._mutate(self.SPEC, "两份真源")
-        self._run()
-        self.assertIn("两份真源", self.error_texts())
+    def _write_valid(self, body=None):
+        self.write(self.entry, self.five)
+        self.write(self.path, (body if body is not None else self._section()))
+        self.write_rules_fixture()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm._RULES_TOKENS["VERIFY_TIER_ANCHORS"] = self._rule()
 
-    def test_disposal_clause_removed_reports(self):
-        # 反例：删掉「收尾时必须有去向」-> 规格写完没人管，任务结束时最容易被留在原地
-        self._mutate(self.SPEC, "谁在维护它")
-        self._run()
-        self.assertIn("谁在维护它", self.error_texts())
+    def _section(self) -> str:
+        """按规则数据现拼一节（锚点本身来自唯一来源，不手抄一份会漂移的正例）。"""
+        lines = ["== 验证力度分档\n"]
+        for _name, tokens, _why in self._rule():
+            lines.append("* " + " ".join(tokens) + "\n")
+        return "".join(lines)
 
-    def test_loader_registration_removed_reports(self):
-        # 反例：调度器不再按名登记该文件 -> 该条永远不会被触发加载（规则在、没人读到）
-        self._mutate(self.COMMON, "specs/general/spec.adoc")
-        self._run()
-        self.assertIn("specs/general/spec.adoc", self.error_texts())
+    def _run(self):
+        cm.errors.clear()
+        cm.check_verify_tier_guard()
 
-    def test_planning_division_removed_reports(self):
-        # 反例：删掉规划层那句分工 -> 只写方案不写验收标准（或反之），两头都漏
-        self._mutate(self.PLANNING, "不得互相顶替")
+    def test_valid_passes(self):
+        self._write_valid()
         self._run()
-        self.assertIn("不得互相顶替", self.error_texts())
+        self.assertEqual([], cm.errors)
 
-    def test_public_readme_removed_reports(self):
-        # 反例：公开面目录说明不再提这条 -> 读者按 README 学习时无从知道有这条规则
-        self._mutate(self.README, "`spec.adoc`")
+    def test_section_removed_reports(self):
+        self._write_valid(body="== 别的\n* 无。\n")
         self._run()
-        self.assertIn("`spec.adoc`", self.error_texts())
+        self.assertIn("验证力度分档", self.error_texts())
 
-    def test_write_thick_clause_removed_reports(self):
-        # 反例：删掉「一条要求一句说完」-> 「写厚」这一头无人拦（该写的都写了、写成一本）
-        self._mutate(self.SPEC, "不许跨段落")
+    def test_tier_removed_reports(self):
+        # 反例：C 档被抽 → "新增判据要做三视角"这条没了落点
+        body = self._section().replace("C 档（三视角顶格）", "另一档")
+        self._write_valid(body=body)
         self._run()
-        self.assertIn("不许跨段落", self.error_texts())
+        self.assertIn("C 档", self.error_texts())
 
-    def test_spec_grown_into_book_reports(self):
-        # 反例（本轮用户点名的第二个方向）：条目一条不少，规格却长成一本书——
-        # 往写法判据里塞多级小节、表格、代码块与条目后的顶格续写。正向锚点全在，
-        # 只有形态判据能拦住它。
-        self._write_all_valid()
-        book = (self.base[self.SPEC]
-                + "\n=== 附：实现方案（原本该进设计文档）\n\n"
-                + "|===\n| 类名 | 表名\n|===\n\n"
-                + "----\nclass Foo {}\n----\n\n"
-                + "* 一条要求\n** 子条目（这一层本不该有）\n\n"
-                + "这一条要求还有第二段（跨了段落）。\n")
-        self.write(self.SPEC, book)
+    def test_stricter_by_default_removed_reports(self):
+        body = self._section().replace("判不准取更严一档（L1）", "看情况定")
+        self._write_valid(body=body)
         self._run()
-        texts = self.error_texts()
-        for hit in ("多级小节", "表格", "定界块", "子条目", "顶格续写"):
-            self.assertIn(hit, texts)
+        self.assertIn("更严一档", self.error_texts())
 
-    def test_entry_continuation_reports(self):
-        # 反例：只多出一处"条目之后的顶格续写"-> 一条要求跨了段落（写厚的机械痕迹）
-        self._write_all_valid()
-        self.write(self.SPEC, self.base[self.SPEC]
-                   + "\n* 一条要求\n\n这一条的后半段另起了一段。\n")
+    def test_mechanical_always_removed_reports(self):
+        body = self._section().replace("任何档都跑全", "按情况跑")
+        self._write_valid(body=body)
         self._run()
-        self.assertIn("顶格续写", self.error_texts())
+        self.assertIn("任何档都跑全", self.error_texts())
 
-    def test_repo_anchored_choice_removed_reports(self):
-        # 反例：删掉本仓库"规范条目默认不取 anchored"那一节 -> 改规范时会顺手长期带一份
-        # 规格，同一条要求有了两份长期文本（通用条只说"须项目声明"，取值在这份里）
-        self._mutate(self.LIFECYCLE, "规范条目本身就是该行为的长期真源")
+    def test_five_things_not_pointing_back_reports(self):
+        # 反例：五件事一节不再指回分档 → 执行者仍按"五件都不能少"顶格做
+        self._write_valid()
+        self.write(self.entry, "= 验证规范\n\n"
+                               "== 改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）\n"
+                               "* 五件都不能少。\n\n")
         self._run()
-        self.assertIn("规范条目本身就是该行为的长期真源", self.error_texts())
+        self.assertIn("未指回", self.error_texts())
+
+    def test_tier_not_registered_in_entry_reports(self):
+        # 反例：族入口不再登记第二份 → 分档在加载路径上没有入口，规则实际失效而一切看起来正常
+        self._write_valid()
+        self.write(self.entry, "= 验证规范\n\n"
+                               "== 改完规范必做的五件事（机械手段必跑，干净子 agent 复核不可漏）\n"
+                               "* 见「验证力度分档」。\n\n")
+        self._run()
+        self.assertIn("未登记", self.error_texts())
+
+
+class TestCheckIncrementalReviewGuard(CheckSpecsTestCase):
+    """钉住『增量复核』防线：同一 sha 不重审、只审上次之后那一段、"旧结论不作数"四种情形。
+
+    失效形态两种，方向相反、都用一个名字盖着：把"增量"读成"整份重看一遍"（等于没这条），
+    或读成"上一轮审过了、这轮不必审"（等于没复核）。故用例逐项覆盖该节各要点被抽，
+    以及平台层"上次审到哪"的落点被删。
+    """
+
+    SPEC = "specs/general/review.adoc"
+    CNB = "specs/platform/cnb.adoc"
+
+    def _rule(self):
+        import rules_engine
+        return rules_engine.load_rule_files(cm._rules_spec())["tokens"]["INCREMENTAL_REVIEW_ANCHORS"]
+
+    def _section(self) -> str:
+        lines = ["== 增量复核（同一个对象只审一次，只审它上次之后的那一段）\n"]
+        for _name, tokens, _why in self._rule():
+            lines.append("* " + " ".join(tokens) + "\n")
+        return "".join(lines)
+
+    def _cnb(self) -> str:
+        return ("= CNB 规范（平台层）\n\n== 对象钉定与可追溯\n"
+                "* **续接复核的\"上次审到哪\"落在 PR 的结论里，不新增平台状态位（L1）**："
+                "**按首次复核处理**；**不另建标签**。\n"
+                "\n== 协作与执行者可用性\n* x\n")
+
+    def _token(self, sub: str) -> str:
+        """按片段名取**规则数据里的原文**（用例不手抄锚点字面，改了措辞用例自己跟上）。"""
+        return next(t for _n, ts, _w in self._rule() for t in ts if sub in t)
+
+    def _write_all(self, review=None, cnb=None):
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm._RULES_TOKENS["INCREMENTAL_REVIEW_ANCHORS"] = self._rule()
+        self.write_rules_fixture()
+        body = review if review is not None else self._section()
+        self.write(self.SPEC, "= code review 规范\n\n== 本文件的字典\n"
+                              "[[term-incremental-review]]\n" + body)
+        self.write(self.CNB, cnb if cnb is not None else self._cnb())
+        self.write("AGENTS_COMMON.adoc",
+                   "= 入口\n\n== 分类与懒加载（加载调度器）\n"
+                   "* **code review**（识别特征：要做评审） → `specs/general/review.adoc`\n")
+
+    def _run(self):
+        cm.errors.clear()
+        cm.check_incremental_review_guard()
+
+    def test_positive_passes(self):
+        self._write_all()
+        self._run()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 增量复核失去落点，接续执行只能整份重看一遍
+        self._write_all(review="\n== 别的\n* 无。\n")
+        self._run()
+        self.assertIn("增量复核", self.error_texts())
+
+    def test_same_sha_rule_removed_reports(self):
+        # 反例②：同一 sha 不重审被抽 → 同一对象每轮重判一遍（增量只剩名字）
+        self._write_all(review=self._section().replace("以 commit sha 为对象", "看分支"))
+        self._run()
+        self.assertIn("同一个 sha 不重审", self.error_texts())
+
+    def test_slice_rule_removed_reports(self):
+        # 反例③：检查面取值被抽 → 不知道该读哪一段（退回整份或只读全量 diff）
+        self._write_all(review=self._section().replace("`X..Y` 的改动", "相关改动"))
+        self._run()
+        self.assertIn("只审上次之后那一段", self.error_texts())
+
+    def test_seam_rule_removed_reports(self):
+        # 反例④：接缝处判读被抽 → 只看 diff 那几行判对错（上文意思被改掉都看不出来）
+        self._write_all(review=self._section().replace(
+            "接缝处要回到 Y 的完整内容上判", "看 diff 就够"))
+        self._run()
+        self.assertIn("接缝处", self.error_texts())
+
+    def test_stale_verdict_cases_removed_reports(self):
+        # 反例⑤：旧 sha 作废那条被抽 → 强推/压缩之后把过期结论转嫁给新 sha
+        self._write_all(review=self._section().replace("已不在该分支历史里", "换了个人审"))
+        self._run()
+        self.assertIn("不作数的四种情形", self.error_texts())
+
+    def test_ledger_on_object_removed_reports(self):
+        # 反例⑥：账落在对象上被抽 → 续接凭记忆，"上一轮大概看过"
+        self._write_all(review=self._section().replace("上次复核 sha + 结论", "大致说过"))
+        self._run()
+        self.assertIn("记账落在对象上", self.error_texts())
+
+    def test_downgrade_guard_removed_reports(self):
+        # 反例⑦：与"改完即审"的分工被抽 → 增量被读成降一档（省掉该做的件数）
+        self._write_all(review=self._section().replace(
+            self._token("增量不是降档的理由"), "增量可以少做"))
+        self._run()
+        self.assertIn("分工", self.error_texts())
+
+    def test_cnb_status_bit_revived_reports(self):
+        # 反例⑫：另造平台状态位复活——"上次审到哪"落到平台设置/标签上（同一事实的第二处来源）
+        self._write_all(cnb=self._cnb().replace("**不另建标签**", "**可在 PR 上打标签或记到平台设置里**"))
+        self._run()
+        self.assertIn("不另建标签", self.error_texts())
+
+    def test_stock_boundary_removed_reports(self):
+        # 反例⑧：存量边界被抽 → 既有复核记录被追认违规、或被要求回补重审
+        self._write_all(review=self._section().replace("不回改历史行", "统一重审"))
+        self._run()
+        self.assertIn("存量边界", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例⑧·补：调度器不再登记 review 规范 → 本条永不触发加载（规则写了却没人读）
+        self._write_all()
+        self.write("AGENTS_COMMON.adoc", "= 入口\n")
+        self._run()
+        self.assertIn("加载调度器", self.error_texts())
+
+    def test_dict_entry_removed_reports(self):
+        # 反例⑨：字典未登记名称 → 名称失去检索键
+        self._write_all(review=self._section())
+        self.write(self.SPEC, "= code review 规范\n\n== 本文件的字典\n" + self._section())
+        self._run()
+        self.assertIn("未登记", self.error_texts())
+
+    def test_cnb_landing_removed_reports(self):
+        # 反例⑩：平台侧落点被删 → "上次审到哪"无处可查，每条执行都退回首次复核
+        self._write_all(cnb="= CNB 规范（平台层）\n\n== 对象钉定与可追溯\n* 钉 sha。\n")
+        self._run()
+        self.assertIn(self.CNB, self.error_texts())
+
+    def test_cnb_first_review_default_removed_reports(self):
+        # 反例⑪：查不到就按首次复核这一句被抽 → 会被写成"上一轮审过了"
+        self._write_all(cnb=self._cnb().replace("**按首次复核处理**；", ""))
+        self._run()
+        self.assertIn("首次复核", self.error_texts())
+
+    def test_section_moved_to_sibling_member_still_checked(self):
+        # 正例的另一半：`review.adoc` 已按问句拆成一份一族，本节搬去同族另一份时
+        # **不得**报"缺整节"——那报的是核对口径错位，不是规范本身缺要点
+        self._write_all(review="\n== 别的\n* 无。\n")
+        self.write("specs/general/review-extra.adoc", self._section())
+        self._run()
+        self.assertEqual([], cm.errors)
+
+
+class TestCheckVerdictLedgerGuard(CheckSpecsTestCase):
+    """钉住『结论的记账形态』防线：六列逐列在、证据须可核对、不复述判据原文。
+
+    失效形态：台账退回散文或逐条抄规则原文——两种都让读者回去把原文再读一遍，
+    而那正是本条要消的成本；另拦"改形态＝顺手重写全部历史台账"。
+    """
+
+    SPEC = "specs/general/review.adoc"
+    # 六列**取判据侧的同一份清单**（`VERDICT_LEDGER_COLUMNS`）——用例手抄一份就会与
+    # 判据各自漂移：现场改列时用例还在测旧名，"少一列"的判据看着全绿。
+    COLUMNS = cm.VERDICT_LEDGER_COLUMNS
+
+    def _rule(self):
+        import rules_engine
+        return rules_engine.load_rule_files(cm._rules_spec())["tokens"]["VERDICT_LEDGER_ANCHORS"]
+
+    def _section(self) -> str:
+        lines = ["\n== " + cm.VERDICT_LEDGER_SECTION + "\n"]
+        for _name, tokens, _why in self._rule():
+            lines.append("* " + " ".join(tokens) + "\n")
+        return "".join(lines)
+
+    def _write_all(self, review=None):
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm._RULES_TOKENS["VERDICT_LEDGER_ANCHORS"] = self._rule()
+        self.write_rules_fixture()
+        body = review if review is not None else self._section()
+        self.write(self.SPEC, "= code review 规范\n\n== 本文件的字典\n"
+                              "[[term-verdict-ledger]]\n" + body)
+        self.write("prompts/review.adoc",
+                   "= 公共任务提示词\n\n汇报按 `specs/general/review.adoc` 的固定六列，"
+                   "整体进度按三态台账分栏。\n")
+        self.write("specs/general/verify.adoc",
+                   "= 验证规范\n\n== 验证的效力等级\n* 留证形态：三态台账。\n")
+
+    def _token(self, sub: str) -> str:
+        """按片段名取**规则数据里的原文**（用例不手抄锚点字面，改了措辞用例自己跟上）。"""
+        return next(t for _n, ts, _w in self._rule() for t in ts if sub in t)
+
+    def _run(self):
+        cm.errors.clear()
+        cm.check_verdict_ledger_guard()
+
+    def test_positive_passes(self):
+        self._write_all()
+        self._run()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 结论退回散文
+        self._write_all(review="\n== 别的\n* 无。\n")
+        self._run()
+        self.assertIn("结论的记账形态", self.error_texts())
+
+    def test_single_column_removed_reports(self):
+        # 反例②：六列少一列 → 读者判不了这条结论成不成立（逐列核，不只核"有六列这句"）
+        for index, column in enumerate(self.COLUMNS, 1):
+            with self.subTest(column=column):
+                # 只删**列名**（`**① 问题**` → `**① **`）：列名本身在正文别处也出现，
+                # 整串替换会让"缺的是哪一列"判不清（用例与判据同源也在这里露）
+                self._write_all(review=self._section().replace(
+                    f"**{column}**", "**—**"))  # column 取 COLUMNS 的原文
+                self._run()
+                self.assertIn(column, self.error_texts())
+
+    def test_evidence_value_removed_reports(self):
+        # 反例③：证据的可核对取值被抽 → "证据"一列写成结论的同义反复
+        self._write_all(review=self._section().replace("可核对的取值", "说明一下"))
+        self._run()
+        self.assertIn("证据须可核对", self.error_texts())
+
+    def test_no_paraphrase_removed_reports(self):
+        # 反例④：不复述判据原文被抽 → 每行把规则正文抄一遍，成本随条目线性上涨
+        self._write_all(review=self._section().replace("不复述判据原文（L1", "详细说明"))
+        self._run()
+        self.assertIn("不复述判据原文", self.error_texts())
+
+    def test_three_state_split_removed_reports(self):
+        # 反例⑤：总账三态分栏与"两处各写一件事"被抽 → 同一结论写两遍、或整体结论被吞
+        self._write_all(review=self._section().replace(
+            self._token("两处不是同一套取值"), "两处是一回事"))
+        self._run()
+        self.assertIn("总账按三态分栏", self.error_texts())
+
+    def test_report_rule_removed_reports(self):
+        # 反例⑥：汇报口径被抽 → "本次未发现问题"被读成"没做事"、数字与台账对不上
+        self._write_all(review=self._section().replace("本次未发现问题", "没什么问题"))
+        self._run()
+        self.assertIn("汇报口径", self.error_texts())
+
+    def test_stock_rule_removed_reports(self):
+        # 反例⑦：存量不回改被抽 → 改形态＝顺手重写全部历史台账
+        self._write_all(review=self._section().replace("不回改历史行", "一并重写"))
+        self._run()
+        self.assertIn("存量不回改历史行", self.error_texts())
+
+    def test_dict_entry_removed_reports(self):
+        # 反例⑧：字典未登记名称 → 名称失去检索键
+        self._write_all()
+        self.write(self.SPEC, "= code review 规范\n\n== 本文件的字典\n" + self._section())
+        self._run()
+        self.assertIn("未登记", self.error_texts())
+
+    def test_section_moved_to_sibling_member_still_checked(self):
+        # 正例的另一半：`review.adoc` 已按问句拆成一份一族，本节搬去同族另一份时
+        # 六列**一样要逐列核**——按族入口取空节时，报的是"六列一列都不在"（核对口径
+        # 错位），而真实原因是这一节搬走了。故取节与锚点核同走族内逐成员。
+        self._write_all(review="\n== 别的\n* 无。\n")
+        self.write("specs/general/review-extra.adoc", self._section())
+        self._run()
+        self.assertEqual([], cm.errors)
 
 
 if __name__ == "__main__":
