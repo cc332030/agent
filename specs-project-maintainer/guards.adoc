@@ -159,6 +159,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_info_density_guard` | `script/specs-rules/check_info_density_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_java_serial_guard` | `script/specs-rules/check_java_serial_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ternary_extraction_guard` | `script/specs-rules/coding/guards/check_ternary_extraction_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_refactor_style_guard` | `script/specs-rules/coding/guards/check_refactor_style_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_tool_class_inheritance_guard` | `script/specs-rules/coding/guards/check_tool_class_inheritance_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_service_interface_guard` | `script/specs-rules/java/guards/check_service_interface_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_maven_parallel_guard` | `script/specs-rules/check_maven_parallel_guard.adoc`
