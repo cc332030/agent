@@ -24856,6 +24856,170 @@ class TestCheckTernaryExtractionGuard(CheckSpecsTestCase):
         self.assertIn("java-syntax.adoc", self.error_texts())
 
 
+class TestCheckRefactorStyleGuard(CheckSpecsTestCase):
+    """钉住『重构时也不许用三段式』（**用户提出**）。
+
+    用户原话：「重构时也不允许三段式，我记得规范里写了，但是偶尔还是会使用」。要治的失效：
+    **「写新代码」与「重写代码」被当成两套规则**——重构时只盯行为不变，同一句三段式被原样
+    搬进新结构，规则对本次写的代码等于不成立。最易被四件事冲掉：判据本体被抽（L1 标注与
+    「绝不用三段式」一起没了）、**「重构也照此办」被抽**（重构重新成为豁免口子）、例外面被抽
+    （确实换不动的原样搬动被误判成违规）、存量边界被抽（等于要求立刻清全库三段式）。
+
+    判据本体在通用编码规范**族**里，故夹具要备两样：族入口 `coding.adoc`（登记族成员）
+    与本条真正的落点 `coding-shape.adoc`。**两样都得备**——规则数据的 `file` 若指向族入口，
+    取节会兜到族内成员上、现场一字不缺，规则全程不报（本仓库实测：把落点写成
+    `specs/general/coding.adoc` 时下面 13 条反例一条都不红）；只备族入口则正例当场报红。
+    故本类的正例兼「落点写在族入口」这个形态的哨兵。
+    """
+
+    CODING = "specs/general/coding.adoc"
+    SHAPE = "specs/general/coding-shape.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_coding = cm.CODING_FILE
+        cm.CODING_FILE = os.path.join(self.root, *self.CODING.split("/"))
+        self._rules_src = os.path.join(
+            os.path.dirname(os.path.abspath(cm.__file__)), "specs-rules")
+        self.CODING_TEXT = self.read_real(self.CODING)
+        self.SHAPE_TEXT = self.read_real(self.SHAPE)
+
+    def tearDown(self) -> None:
+        cm.CODING_FILE = self._orig_coding
+        super().tearDown()
+
+    def _write_valid(self) -> None:
+        self.write(self.CODING, self.CODING_TEXT)
+        self.write(self.SHAPE, self.SHAPE_TEXT)
+        for rel in self._rule_files():
+            self.write(rel, self._rule_text(rel))
+        self._prime_rules()
+
+    def _rule_files(self) -> list:
+        """规则目录下全部 `*.toml`（相对仓库根的路径；引擎按目录递归扫描加载）。"""
+        repo = os.path.dirname(self._rules_src)
+        out = []
+        for dirpath, _dirnames, filenames in os.walk(self._rules_src):
+            for name in sorted(filenames):
+                if name.endswith(".toml"):
+                    rel = os.path.relpath(os.path.join(dirpath, name), repo)
+                    out.append(rel.replace(os.sep, "/"))
+        return out
+
+    def _rule_text(self, rel: str) -> str:
+        repo = os.path.dirname(self._rules_src)
+        with open(os.path.join(repo, *rel.split("/")), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _prime_rules(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_coding_mutated(self, removed: str, replacement: str = "") -> None:
+        # 变异写在**条目自己的落点**上：改族入口那一份的话，条目根本不在里面
+        self.assertIn(removed, self.SHAPE_TEXT)
+        self._write_valid()
+        self.write(self.SHAPE, self.SHAPE_TEXT.replace(removed, replacement))
+
+    def test_valid_passes(self):
+        # 正例兼锚点自检：真文档逐字进夹具时防线必须报绿
+        self._write_valid()
+        cm.check_refactor_style_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_rule_removed_reports(self):
+        # 反例①：整条被摘掉 -> 三段式连"最低优先级"这层约束都没了
+        self._write_coding_mutated("* **三元表达式为最低优先级（L1）**",
+                                   "* **三元表达式随便用**")
+        cm.check_refactor_style_guard()
+        self.assertIn("三元表达式为最低优先级", self.error_texts())
+
+    def test_takeaway_direction_removed_reports(self):
+        # 反例②：兜底判据被抽（绝不用三段式）-> 只剩"优先"，三段式随时可用
+        self._write_coding_mutated("就**绝不用三段式**")
+        cm.check_refactor_style_guard()
+        self.assertIn("绝不用三段式", self.error_texts())
+
+    def test_refactor_face_removed_reports(self):
+        # 反例③：**「重构也照此办」被抽** -> 重构重新成为豁免口子，同一句三段式被原样搬过去
+        self._write_coding_mutated("**重构也照此办（L1）**")
+        cm.check_refactor_style_guard()
+        self.assertIn("重构也照此办", self.error_texts())
+
+    def test_refactor_scope_removed_reports(self):
+        # 反例④：适用面被抽（不区分写新代码与重写既有代码）-> 读者又按"两套规则"理解
+        self._write_coding_mutated("**不区分「写新代码」与「重写既有代码」**")
+        cm.check_refactor_style_guard()
+        self.assertIn("不区分「写新代码」与「重写既有代码」", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例⑤：判定标准被抽 -> 本条自身不可判定，只剩一句口号
+        self._write_coding_mutated("**判定标准（任一命中即违规）**")
+        cm.check_refactor_style_guard()
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_exception_face_removed_reports(self):
+        # 反例⑥：例外面被抽 -> 确实换不动的原样搬动被误判成违规，规则变成"搬动也得改"
+        self._write_coding_mutated("原样搬动**，这是本节的正当例外")
+        cm.check_refactor_style_guard()
+        self.assertIn("原样搬动", self.error_texts())
+
+    def test_migration_boundary_removed_reports(self):
+        # 反例⑦：存量边界被抽 -> 等于要求立刻清全库三段式
+        self._write_coding_mutated("**未触达的存量**")
+        cm.check_refactor_style_guard()
+        self.assertIn("未触达的存量", self.error_texts())
+
+    def test_reason_removed_reports(self):
+        # 反例⑧：理由被抽 -> 读者不知道"当初为什么要在重构这条路上再写一句"
+        self._write_coding_mutated("**理由**")
+        cm.check_refactor_style_guard()
+        self.assertIn("理由", self.error_texts())
+
+    def test_takeaway_nature_removed_reports(self):
+        # 反例⑨：定性（本集合取舍）被删 -> 读者按"标准规定"理解，标准没写时自行放宽
+        self._write_coding_mutated("是本集合的判据化取值")
+        cm.check_refactor_style_guard()
+        self.assertIn("本集合的判据化取值", self.error_texts())
+
+    def test_coding_file_missing_reports(self):
+        # 反例⑩：条目自己的落点整份缺失 -> 该条失去落点
+        self._write_valid()
+        os.remove(os.path.join(self.root, *self.SHAPE.split("/")))
+        cm.check_refactor_style_guard()
+        self.assertIn("coding-shape.adoc", self.error_texts())
+
+    def test_simple_ternary_only_removed_reports(self):
+        # 反例⑫：简单三元的适用范围被抽 -> 带运算、带函数调用的三段式又变得"允许"
+        self._write_coding_mutated("**只允许简单三元**")
+        cm.check_refactor_style_guard()
+        self.assertIn("只允许简单三元", self.error_texts())
+
+    def test_no_operation_no_call_removed_reports(self):
+        # 反例⑬：三个位置的判据被抽 -> 读者不知道"简单"指的是什么，带运算/调用照样写
+        self._write_coding_mutated("**三个位置都不带任何运算、不带任何函数调用**")
+        cm.check_refactor_style_guard()
+        self.assertIn("不带任何运算", self.error_texts())
+
+    def test_simple_criteria_removed_reports(self):
+        # 反例⑭：「怎么判简单」被抽 -> 只剩一句"只允许简单三元"，不可判定
+        self._write_coding_mutated("**怎么判「简单」（任一命中即不是简单三元）**")
+        cm.check_refactor_style_guard()
+        self.assertIn("怎么判「简单」", self.error_texts())
+
+    def test_rules_data_anchor_removed_reports(self):
+        # 反例⑪：规则数据里锚点被删（**规范正文一字未动**）-> 防线须报红
+        # （"核过且通过"与"没核"在文本上无从区分，全靠这一步）
+        self._write_valid()
+        rel = _find_rule_file("[[guards.check_refactor_style_guard]]")
+        rel = rel[len("script/"):]
+        text = self._rule_text(rel).replace(
+            '    "**重构也照此办（L1）**",\n', "", 1)
+        self.write(f"script/{rel}", text)
+        cm.check_refactor_style_guard()
+        self.assertIn("锚点", self.error_texts())
+
+
 class TestCheckToolClassInheritanceGuard(CheckSpecsTestCase):
     """钉住『工具类不继承另一个工具类』（**用户提出**）。
 
