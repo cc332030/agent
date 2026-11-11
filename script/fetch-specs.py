@@ -235,8 +235,8 @@ import stat
 import sys
 import threading
 import time
-import urllib.parse
 import tomllib
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -664,7 +664,18 @@ def manifest_targets(base):
     返回 (清单, 缺失的可选文件)；入口文件本身必然在清单里。
     """
     global _PROMPTS_INDEX, _PROMPTS_INDEX_TEXT
-    text = fetch_text(base, MANIFEST_FILE)
+    # 入口这一次取**没有 download_one 那层重试**，而它一失败整轮就停（清单一出不来，
+    # 后面所有份都无从谈起）。偶发抖动（IncompleteRead：对端在 Content-Length 之外
+    # 提前断连）不该有这个杀伤力，故与 download_one 同一口径：失败重试一次。
+    last_err = None
+    for _attempt in (1, 2):         # 失败重试一次，避免偶发抖动让整轮失败
+        try:
+            text = fetch_text(base, MANIFEST_FILE)
+            break
+        except (OSError, http.client.HTTPException) as e:
+            last_err = e
+    else:
+        raise last_err
     specs = sorted(set(SPECS_REF_RE.findall(text)))
     if not specs:
         raise OSError(f"未能在 {MANIFEST_FILE} 中解析出任何 specs/ 清单")
@@ -1659,7 +1670,7 @@ def download_one(base, rel, out_dir, keep, total=0):
 
     `total` 只用于进度行的分母（0＝未知，不印分母）；进度行是本函数唯一的对外输出，
     不另返回一份"人看的文本"——同一件事两个来源必然漂移。
-    
+
 
     状态取值：`new`（本地没有，新落盘）/ `updated`（远端内容不同，已刷新）/ `same`
     （内容一致，不动）/ `keep`（`--keep` 下本地已有非空，未核内容）/ `fail`。

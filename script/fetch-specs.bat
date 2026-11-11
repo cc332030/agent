@@ -25,10 +25,12 @@ rem what order" stay readable, and the caller's %* is never re-parsed by a block
 rem body -- it is passed through below unchanged.
 setlocal
 set "FETCH_SPECS_RUNTIME="
-rem %%~R is the candidate itself: py, python3 or python, in this order.
+rem %%~R is the candidate itself: py, python3 or python, in this order -- with
+rem an explicit .exe, because the $PATH lookup in :take matches exact file
+rem names only (it does not try PATHEXT), so a bare "py" never matches py.exe.
 rem One line per candidate, so "which one was asked" and "in what order" stay
 rem readable.
-for %%R in (py python3 python) do if not defined FETCH_SPECS_RUNTIME call :take %%~R
+for %%R in (py.exe python3.exe python.exe) do if not defined FETCH_SPECS_RUNTIME call :take %%~R
 if not defined FETCH_SPECS_RUNTIME (
   echo Error: no python interpreter found in PATH ^(tried py, python3, python^) 1>&2
   exit /b 127
@@ -36,28 +38,37 @@ if not defined FETCH_SPECS_RUNTIME (
 goto run
 
 :take
-rem %%~1 is the candidate: take it if PATH has it, and only that one.
-rem %%~$PATH:1 is "where PATH resolves %%~1 to", empty when it is not there.
-rem `if` is `if defined` rather than another parenthesis block: a block body is
-rem parsed whole before it runs, so the answer of *this* round would be lost
-rem (same cmd rule that made the old probe skip a working candidate).
+rem %~1 is the candidate (py.exe, python3.exe, python.exe): take it if PATH has
+rem it, and only that one. %~$PATH:1 is "where PATH resolves %~1 to", empty when
+rem it is not there -- an exact-name search, hence the .exe in the candidates.
+rem `if` is a plain comparison rather than another parenthesis block: a block
+rem body is parsed whole before it runs, so the answer of *this* round would be
+rem lost (same cmd rule that made the old probe skip a working candidate).
+rem Single % here: this is a subroutine, not a for body -- %% would collapse to
+rem a literal % and the check would never see the resolved path (that bug made
+rem every candidate look missing and the entry reported "no python" on machines
+rem that have it).
 rem `where` is no better here: its "not found" is -1, and comparing that to 0
 rem needs a parenthesis block again.
-if not defined %%~$PATH:1 exit /b 0
-set "FETCH_SPECS_RUNTIME=%~1"
+if "%~$PATH:1"=="" exit /b 0
+set "FETCH_SPECS_RUNTIME=%~$PATH:1"
 exit /b 0
 
 :run
 rem Run the logic code, then hold the window open: a dot-double-click gives us
-rem a console window of our own, and it vanishes the moment this script exits --
-rem progress lines and the failure list would fly by unread (user's words: do
-rem not close the window when the download finishes).
+rem a console window of our own (this .bat is already running inside it), and
+rem it vanishes the moment this script exits -- progress lines and the failure
+rem list would fly by unread (user's words: do not close the window when the
+rem download finishes).
 rem
-rem Hold ONLY when we own the window. cmd /c gives us a console window of our
-rem own when no console is attached (dot-double-click, shortcut) and adds the
-rem prompt; launched from an existing console, a pipe or CI it just runs and
-rem returns -- prompting there would look like a hung command and eat the next
-rem keystroke (specs/stack/windows.adoc: do not disturb the user's session).
-cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"
+rem Capture the status BEFORE the pause, and in THIS cmd instance. The old
+rem nested form `cmd /c "python ... & pause"` could never pass the logic code's
+rem exit code through: `cmd /c` returns the errorlevel of the LAST command on
+rem the line, which is pause -- always 0 -- so a real failure (exit code 2,
+rem missing config group) came back as 0. Running the interpreter directly in
+rem this cmd keeps %errorlevel% pointing at the logic code when the `set` line
+rem runs; pause then holds the window, and `exit /b` returns the saved status.
+"%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %*
 set "FETCH_SPECS_STATUS=%errorlevel%"
+pause
 exit /b %FETCH_SPECS_STATUS%
