@@ -487,8 +487,11 @@
      一节即并存两套说法），提示词侧落在 `prompts/_common.txt` 的 `delivery` 片段（提示词会被复制
      到未知项目执行）。边界两句一起写：本条**只限定承载位置**、不构成「不动手」的许可；**原 PR 已
      关闭**时另开属**承继、不属私开**。规则数据在 `script/specs-rules/cnb/`。由
-     `check_pr_scope_guard` 钉住；「哪个 PR 才算承载该 issue」「用户有没有真的允许」属语义判断与
-     运行时事实，交人/子 agent 复核。
+     `check_pr_scope_guard` 钉住；**动作侧**由 `check_branch_reuse_guard` 补另一半——文本侧只证
+     「规则写着」、证不了「动作没做」（本仓库实证：两条规则都在、三道文本防线全绿，执行者仍另开
+     分支与 PR）；它核的是**环境已经给出承载分支**（`CNB_PULL_REQUEST_BRANCH` / 非默认分支的
+     `CNB_BRANCH`）时，本分支上不得冒出分叉自当前 HEAD 的新远端分支。「哪个 PR 才算承载该 issue」
+     「用户有没有真的允许」属语义判断与运行时事实，交人/子 agent 复核。
 
  121. 请求服务须有本机断言防线（**用户提出：不在口头上限制**）：`specs/general/testing.adoc`
      「环境与兼容」须有那一条——用例**凡发出真实请求**就须有一条**会失败的断言**把落点限在本机；
@@ -854,6 +857,12 @@ def _table_keys_conflicts(raw: bytes):
     names, dup = set(), []
     for m in re.finditer(r"(?m)^\s*\[([^\[\]]+)\]\s*$", raw.decode("utf-8", "replace")):
         name = m.group(1).strip()
+        # **数组表头不算**：`[[guards.<防线名>]]` 是"这一道防线的又一张表"，TOML 允许
+        # 它反复出现、解析成同一个列表；规矩只是"一张表（`[x]`）只能定义一次"。
+        # 混在一起判时，一条防线写满几组之后要另起一段（另开一张表头）就报红，
+        # 只剩"把不相干的判据塞进同一组"或"删掉一组"两条路。
+        if name.startswith("[") and name.endswith("]"):
+            continue
         if name in names and name not in dup:
             dup.append(name)
         names.add(name)
@@ -914,6 +923,12 @@ def _assembly_conflicts(spec):
         # ③ `tokens` 段里同名清单在两份**同目录**文件里各写一份：后一个静默覆盖前一个
         for table in _RULE_TABLE_KEYS:
             for name in (data.get(table) or {}):
+                # **空数组的 `guards` 项不算一处落点**：判据写在脚本里的那些防线，靠
+                # `guard-scripts.toml` 里一个空数组占位（见其表头）。它与"这一道另有真判据"
+                # 是两件不同的事，按"同名即冲突"判的话，那条占位与被占位的那道防线
+                # （如 `check_prompts_fetch_guard`）永远没法共存。
+                if table == "guards" and not data[table][name]:
+                    continue
                 owner = seen.setdefault((table, name), os.path.basename(path))
                 if owner != os.path.basename(path):
                     problems.append(f"`[{table}.{name}]` 在 {owner} 与 {os.path.basename(path)} "
@@ -3218,6 +3233,161 @@ def check_pr_scope_guard():
     phase_done()
 
 
+def check_branch_reuse_guard():
+    """『环境已给出承载分支时不得另建分支/另开 PR』防线（**动作侧**；用户点名：『这一步就
+    是为什么那么多新分支新 pr 的根本原因』『我记得写过不允许私自建新分支和PR的，为什么没有
+    限制住？需要处理』）。
+
+    判据本体写在函数体里（`_carrier_branches` / `_branch_forked_from_head`），**措辞与
+    执行接线在规则数据** `script/specs-rules/cnb/guards/check_branch_reuse_guard.toml`
+    （本函数只开阶段与接线，改判据措辞不必动脚本）。
+
+    **失效形态（本仓库实证，两次）**：`specs/platform/cnb.adoc`「分支与合并请求统一」与
+    `prompts/_common.txt` 的 `delivery` 片段**都写着**「一个 issue 一个 PR、不得另建分支」，
+    而执行者仍另开了分支与 PR——因为那两条的许可句同时也是出口：**「须用户显式允许」**
+    默认「没有显式允许就不许开」，而执行者读成「用户在评论里说了这件事 ＝ 默许」，于是
+    「把这条也处理了」就够给自己开一个分支。文本侧三道防线（要点、提示词片段、入口登记）
+    当时**全部报 OK**：文本侧只证「规则写着」、证不了「动作没做」（同 `check_npc_merge_guard`
+    的边界）。故须由动作侧补另一半，且这一半**不依赖执行者的判断**。
+
+    **判据（机械可核，取值来自执行环境而非执行者）**：本次唤起所在的仓库里
+    **环境已经给出承载分支**时——平台侧的 `CNB_PULL_REQUEST_BRANCH`（正在某条 PR 的源分支
+    上被唤起），或平台 checkout 好的 `CNB_BRANCH` 不是默认分支——那么本仓库的 `refs/heads`
+    里**不得冒出新的分支**：除承载分支之外，凡**分叉自当前 HEAD**（分叉点＝HEAD，或分叉点
+    在 HEAD 历史里而该分支另有提交）的本地分支，都算「另建」。反面（不误伤）：承载分支、
+    默认分支、`refs/pull/*` 一律不看；别人的既有分支（与 HEAD 无分叉关系）也不算。
+    **只看 `refs/heads`、不看远端跟踪引用**：平台的一次性工作区会把所有分支都取回来，
+    `refs/remotes/origin/<x>` 里当然有别的任务的分支——按它判是"别人早就建过"，而推送由
+    执行者自己做，看本地分支才拦得住"这一步"。
+
+    **效力边界**：平台先把承载分支换掉、或分叉点取不到（浅克隆）时看不到——那一半只能
+    靠平台侧收紧执行环境的建分支/建 PR 权限，故本条是**第二道**。语义判断（"这个分支该不该
+    建、用户到底有没有允许）不在此列，见 `GUARD_CHECK_LIMITS`。
+    """
+    phase("环境已给分支时不得另建分支防线检查（动作侧）")
+    repo_root = _merge_state_guard_repo_root()
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        phase_done()
+        return
+
+    def _git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo_root,
+                                 capture_output=True, text=True, timeout=30,
+                                 encoding="utf-8", errors="replace")
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout if out.returncode == 0 else None
+
+    carrier = _carrier_branches()
+    if not carrier:
+        phase_done()
+        return
+    head = (_git("rev-parse", "HEAD") or "").strip()
+    if not head:
+        phase_done()
+        return
+    # 默认分支名与 `_carrier_branches` **同一取值**（`CNB_DEFAULT_BRANCH`，缺省 `main`）：两处
+    # 各写一份时，环境只给了 `CNB_BRANCH` 而它与默认分支同名的那一轮，两处会得出相反的判断
+    # （取值侧判它是承载分支、核对侧判它是默认分支），报出来的话就自相矛盾。
+    default = _default_branch()
+    # **只看 `refs/heads`，不看远端跟踪引用**（`refs/remotes/origin/<x>`）：平台的一次性工作区
+    # 会把**所有分支**都取回来，远端跟踪引用里当然有别的任务的分支；真正"另建了分支"要落到
+    # 本仓库的分支上才算——而推送由执行者自己做，失败时一个字节都没离开过本机。
+    # 只看远端那些，拦住的是"别人早就建过"，漏掉的恰是本条要治的那一步。
+    refs = _git("for-each-ref", "--format=%(refname:short)", "refs/heads")
+    if refs is None:
+        phase_done()
+        return
+    stray = []
+    for name in refs.splitlines():
+        name = name.strip()
+        if not name or "/pull/" in name:
+            continue
+        if name in carrier or name == default:
+            continue
+        if _branch_forked_from_head(repo_root, name, head):
+            stray.append(name)
+    if stray:
+        shown = "、".join(f"`{n}`" for n in dict.fromkeys(stray))
+        err(f"本次唤起所在的环境已经给出承载分支（{'、'.join(f'`{n}`' for n in carrier)}），"
+            f"而本分支上又冒出了新分支 {shown}——`specs/platform/cnb.adoc`"
+            "「分支与合并请求统一」与 `delivery` 片段都要求：**已有承载分支时，改动一律提交"
+            "并推送到那一个分支，不得另建分支、不得另开 PR**；开新分支属派发者的动作，"
+            "须用户在本次任务里**点名**授权（用户说『把这件事也处理了』不构成授权）。"
+            "核对命令：`git for-each-ref --format='%(refname:short)' refs/heads`（只认"
+            "与当前 HEAD 有分叉关系的那些）", "git 分支")
+    phase_done()
+
+
+def check_branch_reuse_rules():
+    """『环境已给分支时不得另建分支』的**判据措辞侧**（规则数据 `check_branch_reuse_guard`）。
+
+    **为什么与动作侧分成两道**：动作侧（`check_branch_reuse_guard`）读的是**本次执行所在
+    的仓库里有几条分支**，它只在真仓库里成立；把规则数据的核对放进它里面，夹具一换根就
+    连带报"落点无处承载"，用例于是分不清"判据被删"与"夹具没备脚本"。规则数据那一步只核
+    `script/check_specs.py` 里的要点，与仓库状态无关，故独立成道。
+    """
+    phase("环境已给分支时不得另建分支防线检查（规则数据侧）")
+    run_rule_guard("check_branch_reuse_rules")
+    phase_done()
+
+
+def _default_branch() -> str:
+    """默认分支名（`CNB_DEFAULT_BRANCH`，缺省 `main`）——**取值只有这一处**。
+
+    两个消费方（`_carrier_branches` 判"这个分支算不算承载分支"、`check_branch_reuse_guard`
+    判"这个分支算不算本任务的）必须用同一个数：各写一份时，环境只给了 `CNB_BRANCH` 且它等于
+    默认分支的那一轮，两处会得出相反判断，报错文案与判据自相矛盾。
+    """
+    return (os.environ.get("CNB_DEFAULT_BRANCH") or "main").strip() or "main"
+
+
+def _carrier_branches() -> list:
+    """本次唤起**环境已经给出**的承载分支名（取不到即空——空即本条不发声、不猜）。
+
+    两个来源都只认"环境给的"，不认执行者自述：正在某个 PR 的源分支上被唤起
+    （`CNB_PULL_REQUEST_BRANCH` 的 `refs/heads/` 形态），或平台 checkout 的分支本身
+    不是默认分支（`CNB_BRANCH`）。
+    """
+    out = []
+    pr_branch = (os.environ.get("CNB_PULL_REQUEST_BRANCH") or "").strip()
+    if pr_branch:
+        out.append(pr_branch[len("refs/heads/"):] if pr_branch.startswith("refs/heads/") else pr_branch)
+    branch = (os.environ.get("CNB_BRANCH") or "").strip()
+    if branch and branch != _default_branch():
+        out.append(branch)
+    return [n for n in dict.fromkeys(out) if n]
+
+
+def _branch_forked_from_head(repo_root: str, ref: str, head: str) -> bool:
+    """该分支是不是**从当前 HEAD 走出来的**（分叉点＝HEAD 本身，或分叉点在 HEAD 历史里但
+    该分支有自己的新提交）。
+
+    「另建分支」的可核形态就是这一条：新建的分支以当时的 HEAD 为起点。**与 HEAD 无分叉关系
+    的既有分支不算**——那是别人的/别的任务的分支，本条不管。取不到分叉点（不在本地、
+    浅克隆）时返回 False：核不出来就不报，免得把"没取回的对象"读成违规。
+    """
+    def _git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo_root,
+                                 capture_output=True, text=True, timeout=30,
+                                 encoding="utf-8", errors="replace")
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout if out.returncode == 0 else None
+
+    base = _git("merge-base", ref, head)
+    if not base or not base.strip():
+        return False
+    base = base.strip()
+    if base == head:
+        return True
+    # 分叉点在 HEAD 的历史里、且该分支比它多出提交 → 它是从这条线上分出去的
+    ahead = _git("rev-list", "--count", f"{base}..{ref}")
+    return ahead is not None and ahead.strip() not in ("", "0")
+
+
 def check_cache_guard():
     """『缓存（统一管理、先缓存后在线）』防线（**用户提出**）。
 
@@ -5121,7 +5291,8 @@ PATH_CONFIG_KEYS = (
 PATH_CONFIG_WIRING = (
     ("script/fetch-specs.py", "_PATHCONFIG",
      ("DEFAULT_BASE", "CACHE_HOME_DIR", "CACHE_APP_DIR", "MANIFEST_FILE",
-      "INSTALL_SCRIPTS", "TIMEOUT_SECONDS", "DEFAULT_WORKERS", "SELF_TMP_DIR")),
+      "INSTALL_SCRIPTS", "TIMEOUT_SECONDS", "DEFAULT_WORKERS", "SELF_TMP_DIR",
+      "PROMPT_COMMAND_NAME", "PROMPT_COMMAND_USAGE", "PROMPT_COMMAND_DIRS")),
     ("script/check_specs.py", "_PATHCFG",
      ("LANDING_NAME", "PUBLIC_BASE")),
 )
@@ -5693,7 +5864,7 @@ def check_fetch_self_update_guard():
              "继续试下一处）——写位是估的、与真实可写性不总一致，只试第一处时兜底那几处"
              "（落点根下、`tmp/`）等于没试，本轮自更新**静默落空**"),
             (("FOLLOWUP_FILES = (", "def refresh_lagging_followups(",
-              "    refresh_lagging_followups(base)\n\n"),
+              "        refresh_lagging_followups(base)"),
              "**清单以外的那一份（索引页）须每轮另核一遍**：`FOLLOWUP_FILES` ＋ 消费它的执行体"
              "＋ `main` 里真叫了它，三缺一都等于没做——自更新只在**脚本自己变了**时才动手，"
              "脚本没变的那一轮一个字节都不写，索引页就停在上一次脚本变动的那一版"
@@ -14624,6 +14795,24 @@ _PROMPTS_INDEX_ENTRIES = (
 _PROMPTS_INDEX_POINTERS = ("不复述正文", "正文只写在", "一处维护、两处生效")
 
 
+def check_prompts_fetch_guard():
+    """『提示词随规范一并取到本地』防线（**用户提出**）：一键使用只有一个入口。
+
+    用户原话：「那三个提示词属于skill吗？我希望一键使用，那就要进 agent_common.adoc吧，
+    要怎么使用比较好呢，所以下载规范的脚本也需要下载提示词相关」。
+
+    两件事**分开核、互不替代**：① 脚本侧——清单从**登记处**解析（不按目录扫）、公共片段随
+    附随件走、收尾按清单逐个核并报出缺的名字（提示词与规范互不引用，少一份不会有任何东西
+    报错）；② 文档侧——入口、提示词登记处与维护方入口都得让读者知道"提示词也在取回清单里"。
+
+    判据本体在 `script/specs-rules/prompts/guards/check_prompts_fetch_guard.toml`；
+    "某次运行到底取到了几份"属运行时事实，交人/子 agent 复核。
+    """
+    phase("提示词随规范一并取到本地防线检查")
+    run_rule_guard("check_prompts_fetch_guard")
+    phase_done()
+
+
 def check_prompts_index_guard():
     """『登记处索引形态防线』：`PROMPTS.adoc` 的公共约定可以只做索引，但**每条边界必须可达**。
 
@@ -15784,6 +15973,7 @@ CHECKS = (
     check_rule_instance_separation_guard,
     check_prompt_delivery_surface_guard,
     check_prompts_index_guard,
+    check_prompts_fetch_guard,
     check_api_contract_reuse_guard,
     check_api_naming_guard,
     check_java_enum_valueof_catch_guard,
@@ -15876,6 +16066,8 @@ CHECKS = (
     check_example_not_surface_guard,
     check_ui_spec_guard,
     check_pr_scope_guard,
+    check_branch_reuse_rules,
+    check_branch_reuse_guard,
     check_changelog_timing_prompt_guard,
     check_guess_confirm_guard,
     check_cache_guard,
