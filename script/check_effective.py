@@ -941,6 +941,8 @@ MECHANISMS = [
      "check_api_contract_reuse_guard", "check_api_contract_reuse_guard 钉住**唯一落点**（技术栈层 `spring.adoc`）的条文与 L1、禁止下划线与驼峰、两处照旧（服务路由/网关前缀、已发布且外部依赖的对外路径）、判定标准（出现 `_` / 路径片段用驼峰或大写 / 同一接口内混用）、存量随动迁移，以及**通用层不得出现「HTTP 接口路径」专条**（该判据只在 Web 框架语境下有定义）与调度器 Spring 条目的识别特征；『某个接口路径该怎么写、是否属两处照旧』"),
     ("索引页只在目录已承载实质文档时要求，空目录不建、索引只做导航", "specs/general/doc.adoc", "script/check_specs.py",
      "check_index_page_guard", "check_index_page_guard 钉住「索引页的触发判据」（已承载实质文档才建 / 空目录与仅有索引页自己的不建 / 索引只做导航不得复制上一级内容 / 模块级导航由模块 README 承担）与 specs/general/doc-module.adoc 的「按需」口径（doc/ 下有实质文档才放 README、无则不建）；实证失效：AI 把「每级目录须有索引页」读宽成「每个模块都建 doc/README.adoc」，批量生成 48 个同构空壳索引）"),
+    ("项目须有按功能组织的功能全览（每项能定位到实现与反证、行为变了同一提交内改它），需求事件流不承担这一职责", "specs/general/doc-lifecycle.adoc", "script/check_specs.py",
+     "check_feature_overview_guard", "check_feature_overview_guard 钉住「功能全览（项目现有行为的唯一视图）」五组要点（按功能组织而不是按需求事件流、每项须给实现落点与反证判据并回指 spec/testing 的真源、细节按信息归属分写不得出现逐方法参数表、增删改同一提交内同步且移除须显式处置、落点按全局与模块分界且分份只按功能边界），并核台账登记行、加载调度器入口与公开面目录说明三处登记同口径；用户口径（Issue）：『我的目的是需要有个项目的功能全览（包括细节），不是用户的需求流水账』。失效形态是**写成了事件流**——一份按时间/编号排的清单同样满足『要有一份全览』，却正好承担不了『项目现有行为』这一职责；「这一项到底算不算一个功能、边界画在哪」属语义判断，交人/子 agent 复核"),
     ("评论唤起新实例：评论即一次派发（要求须写清、可要求用干净上下文）", "specs/platform/cnb.adoc + specs/general/collab.adoc", "script/check_specs.py",
      "check_comment_dispatch_guard", "check_comment_dispatch_guard 钉住四处要点（平台层「评论唤起新实例（平台侧的派发入口）」节：入口形态/不放宽任何派发约束/一次评论=一次派发/干净上下文须显式要求且不是保证/仅点名不构成派发；通用层「派发入口」节同口径；AGENTS_COMMON.adoc 两处识别特征；README 目录说明同步），**重点拦『把该入口写成可放宽派发判据或可点名外部 Agent』与『把干净上下文写成默认』两种降级**"),
     ("改动范围边界：只改当前工作空间/当前项目，未声明即拒绝越界改动（引用 ≠ 授权）", "specs/general/scope.adoc + specs/platform/cnb.adoc", "script/check_specs.py",

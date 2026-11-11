@@ -2659,6 +2659,112 @@ class TestCheckInstallCodeblock(CheckSpecsTestCase):
 
 # --------------------------------------------------------------------------- #
 
+class TestCheckFeatureOverviewGuard(CheckSpecsTestCase):
+    """『功能全览』防线：全览须按功能组织，而不是需求事件流。
+
+    用户口径（Issue）：『我的目的是需要有个项目的功能全览（包括细节），不是用户的需求流水账』。
+    故反例都取"看起来写了一整份文档、却正好承担不了这件事"的形态。
+    """
+
+    SECTION = (
+        "= 业务系统全生命周期文档规范\n\n"
+        "== 功能全览（项目现有行为的唯一视图）\n\n"
+        "* **产物＝按功能组织的全览，不是需求事件流（L1）**：项目须有一份**功能全览**，"
+        "以**功能**为条目（不是以需求、Issue、时间或提交为条目）——每项写它**现在的样子**。"
+        "**需求事件流（发布说明、变更日志、逐轮记账）不承担这一职责，也不得被当作全览**。\n"
+        "* **每项须能定位到实现与反证（L1）**：全览的每一项都要给出**代码或配置的落点**与"
+        "**能反证它还在的判据**；判据本体不在此处，见 `specs/general/spec.adoc` 与 "
+        "`specs/general/testing.adoc`。\n"
+        "* **细节按归属分写，全览只做入口（L1）**：类与方法级细节按 "
+        "`specs/general/doc-design.adoc`「信息归属」写在代码文档注释里；出现**逐方法的参数表**即越界。\n"
+        "* **行为变了就**同一提交内改全览**（L1）**：增删改功能**同一提交内**改全览；"
+        "**移除功能须在全览里显式处置**。**全览过期比没有更坏**。\n"
+        "* **落点与形态（L1）**：按 `specs/general/doc-module.adoc`"
+        "「全局文档与模块文档的分界」取值；**分份须按功能边界分**。\n"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        self._orig_lifecycle = cm.LIFECYCLE_FILE
+        cm.LIFECYCLE_FILE = os.path.join(self.root, "specs", "general", "doc-lifecycle.adoc")
+
+    def tearDown(self) -> None:
+        cm.LIFECYCLE_FILE = self._orig_lifecycle
+        super().tearDown()
+
+    def _write_valid(self, body: str = None) -> None:
+        self.write("specs/general/doc-lifecycle.adoc", body if body is not None else self.SECTION)
+        self.write("script/check_effective.py",
+                   '("项目须有按功能组织的功能全览", "x", "y",\n'
+                   ' "check_feature_overview_guard", "check_feature_overview_guard 钉住功能全览"),\n')
+        self.write("AGENTS_COMMON.adoc",
+                   "* **文档的组织形态**（`doc/` 下有阶段目录 → `specs/general/doc-lifecycle.adoc`）；"
+                   "**功能全览的形态**（要一份\"项目现在有哪些功能\"的现状视图）同属该条。\n* 别的行\n")
+        self.write("README.adoc",
+                   "** `specs/general/` — 通用层：文档生命周期（`doc-lifecycle.adoc`；"
+                   "含**功能全览（项目现有行为的唯一视图）**）\n")
+
+    def test_valid_overview_passes(self):
+        self._write_valid()
+        cm.check_feature_overview_guard()
+        self.assertEqual(cm.errors, [])
+
+    def test_missing_file_reports(self):
+        self._write_valid()
+        os.remove(os.path.join(self.root, "specs", "general", "doc-lifecycle.adoc"))
+        cm.check_feature_overview_guard()
+        self.assertIn("缺少文件", self.error_texts())
+
+    def test_section_renamed_reports(self):
+        # 节被改名 → 判据无处落，不得静默跳过（"核不到"与"核过且通过"必须分得清）
+        self._write_valid(self.SECTION.replace("功能全览（项目现有行为的唯一视图）", "功能清单"))
+        cm.check_feature_overview_guard()
+        self.assertIn("功能全览", self.error_texts())
+
+    def test_event_stream_ban_removed_reports(self):
+        # 只剩"要有一份全览"时，按时间排的清单同样满足它——正是本条要拦的形态
+        self._write_valid(self.SECTION.replace(
+            "**需求事件流（发布说明、变更日志、逐轮记账）不承担这一职责，也不得被当作全览**。", ""))
+        cm.check_feature_overview_guard()
+        self.assertIn("需求事件流", self.error_texts())
+
+    def test_anchor_removed_reports(self):
+        # 判据被抽掉时，条目读起来仍然成立（"要有一份全览"照旧）——它就不再可被反证
+        self._write_valid(self.SECTION.replace("**能反证它还在的判据**", "说明"))
+        cm.check_feature_overview_guard()
+        self.assertIn("能反证它还在的判据", self.error_texts())
+
+    def test_true_source_reference_removed_reports(self):
+        # 回指被删 = 这一条自己长成了第二份来源（判据本体在 spec / testing）
+        self._write_valid(self.SECTION.replace(
+            "见 `specs/general/spec.adoc` 与 `specs/general/testing.adoc`", "见验收标准"))
+        cm.check_feature_overview_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
+    def test_ledger_row_missing_reports(self):
+        # 台账不登记 → 用户在"定义了但没人跑"的清单里看不见它
+        self._write_valid()
+        self.write("script/check_effective.py", "# 什么都没登记\n")
+        cm.check_feature_overview_guard()
+        self.assertIn("check_feature_overview_guard", self.error_texts())
+
+    def test_dispatcher_entry_missing_reports(self):
+        # 调度器上没有入口 → 判据写得再全，需要它的那一刻也不会被想起来
+        self._write_valid()
+        self.write("AGENTS_COMMON.adoc", "* **文档的组织形态**（`doc/` 下有阶段目录）\n")
+        cm.check_feature_overview_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_public_surface_missing_reports(self):
+        # 公开面漏登记 → 这份判据在引用方看得见的目录说明里不存在
+        self._write_valid()
+        self.write("README.adoc", "** `specs/general/` — 通用层：文档生命周期（`doc-lifecycle.adoc`）\n")
+        cm.check_feature_overview_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+
 class TestCheckIndexPageGuard(CheckSpecsTestCase):
     def setUp(self) -> None:
         super().setUp()

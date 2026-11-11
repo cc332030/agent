@@ -87,6 +87,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_quote_line_guard` | `script/specs-rules/check_quote_line_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_dependency_view_guard` | `script/specs-rules/check_dependency_view_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_index_page_guard` | `script/specs-rules/doc/guards/check_index_page_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_feature_overview_guard` | `script/specs-rules/doc/guards/check_feature_overview_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_data_dictionary_guard` | `script/specs-rules/check_data_dictionary_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_public_content_coverage` | `script/specs-rules/check_public_content_coverage.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_prompts_primary` | `script/specs-rules/check_prompts_primary.adoc`
