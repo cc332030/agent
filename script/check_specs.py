@@ -2598,6 +2598,9 @@ def check_cross_module_feature_guard():
     不一定会加载到 review 一节；只钉规范时，跨模块这条在真实任务里根本不会被执行。
     """
     phase("一个功能的实现跨模块防线检查")
+    # 规则数据里登记了本防线的步骤与报错文案（`specs-rules/review/guards/`）：只开阶段、
+    # 不接线时规则写了却没人执行（`rules_engine_test` 会报「规则文件里的防线没被脚本接线」）。
+    run_rule_guard("check_cross_module_feature_guard")
     _section_anchor_check(REVIEW_SPEC, DEFAULT_REVIEW_SCOPE_SECTION,
                           CROSS_MODULE_FEATURE_ANCHORS)
     text = _read_spec_text(REVIEW_SPEC)
@@ -4841,42 +4844,28 @@ INTERPRETER_FALLBACK_LINE_SPECS = (
      # 写反的清单里两个名字仍在同一行、位置全部相同，"先探谁"根本判不出来（本仓库实测漏报）。
      (("command -v python3 ", ">/dev/null"), ("command -v python ", ">/dev/null"))),
     ("script/fetch-specs.bat", "Windows 入口", "rem",
-     # **"在 PATH 上"不等于"跑得起来"**（用户实测：报的是 `'py -3' is not recognized…`）：
-     # `where` 命中的可能是个只剩提示的垫片、或 `py` 启动器的默认 python 3 压根不在。故候选
-     # 须**试跑一次**（`--probe`）才算数——只探到"有这个名字"就往下跑，等于把解释器的报错
-     # 当成自己入口的报错抛给用户（用户看到的是"找不到命令"，没有任何一句说"这台机器没有
-     # 可用的 python"）。
-     #
-     # 本条的键取**一行一候选**那一条（`call :probe %%~R`）：被试跑的那个候选必须与枚举出来的
-     # 那一个**同一个**（`%%~R` 经 `:probe` 的 `%~1` 传下去）——分开写时，用户实测的形态正是
-     # "探的是 py、跑的却是 python3"。
-     (("须**逐候选试跑**（`--probe` 跑一次逻辑代码、**以退出码 0 为判据**）才认它："
-       "试跑用的须是**枚举出来的那一个候选**（`%%~R` 经 `:probe` 的 `%~1` 传下去）——"
-       "分开写时，用户实测的形态正是「探的是 py、跑的却是 python3」",
-       # `call :probe %%~R` 里没有逻辑代码的名字：试跑在 `:probe` 那一段
-       # （`call "%~1" "%~dp0fetch-specs.py" --probe`，候选经参数传进去）。键只取
-       # "一行一候选"，其余由 `:probe` 里那条 `if errorlevel 1` 兜住。
-       (("%%~R", "call :probe"),)),
-      ("试跑跑不起来时须**换下一个候选**（不是「跑过就算」）：判据是退出码 0，"
-       "故代码里须有 `errorlevel` 判据、且以 0 为界——写成「只要不是 127 就算跑得起来」时，"
-       "WinGet/Store 的 py 启动器（没有 python 3 时以 49 退出、什么都没跑）会被当成可用解释器；"
-       "**试跑要 `call`**：`.cmd`/`.bat` 不加 `call` 就跑不回来，子过程剩下的行一句都不执行，"
-       "退出码还是候选留下的那个——于是能跑的候选全被判成「没通过」",
-       (("call \"%~1\"", "%~dp0fetch-specs.py", "--probe"), ("if errorlevel 1",))),
+     # **入口按 PATH 取第一个、不试跑**（用户口径：「你哪怕不检测，直接走 path 呢」）：
+     # 试跑的判据只该是"这个解释器跑不跑得起来"，而它跑的是**逻辑代码**——配置不在旁边
+     # （新落点、刚 checkout 的仓库）时逻辑代码自己就以 2 退出，于是每个候选都像"坏了"，
+     # 机器上明明有 python 却报 `no working python interpreter found`。故这一侧只核
+     # "按 PATH 判定 + 一行一候选"：`if not defined %%~$PATH:1`（PATH 里有没有它）与
+     # `call :take %%~R`（判的是枚举出来的那一个）。
+     (("须**按 PATH 判定候选在不在**（`if not defined %%~$PATH:1`）"
+       "——`where` 的「没找到」是 -1、要按符号判就得再引一层括号块，而 `if defined` 一句话就够；"
+       "**不得先用 `--probe` 试跑**：试跑跑的是逻辑代码，配置不在旁边时它自己就以 2 退出，"
+       "于是每个候选都被判成「跑不起来」，机器上明明有 python 却报没有可用解释器"
+       "（用户口径：「你哪怕不检测，直接走 path 呢」）",
+       (("%%~R", "call :take"), ("%%~$PATH:1", "exit /b 0"))),
       ("须**用探测到的那个解释器**调用同目录的逻辑代码并原样透传参数",
        (("cmd /c", "%FETCH_SPECS_RUNTIME%", "%~dp0fetch-specs.py", "%*"),)),
       ("都没有时须**报错并退出非 0**（不静默继续）",
        (("exit /b 127",),))),
      # 降级次序的判别键取**逐候选枚举**那一行（`for %%R in (py python3 python)`）：取值形态正是
      # "一份名单按次序试"，顺序写反时后面的候选被前面那个不存在的永久遮住。
-     #
-     # 候选的试跑在 `:probe` 子过程里（块体设的变量出来就没了，故答案经 `FETCH_SPECS_FOUND`
-     # 带出来），故上一条只核"一行一候选"、这一条只管次序——两个键分别落在各自真正出现的那一行。
-     # 三个候选名各一级，位置取**同一个枚举行里的列号**（`_order_violation` 的位置已改成
+     # 三个候选名各一级，位置取**同一个枚举行里的列号**（`_order_violation` 的位置是
      # 「行号 + 行内列号」）：只比行号时三级同处一行、位置永远相等，把清单写反、
-     # 漏掉候选全都报绿，这条防线等于空转（本 PR 实测）。
+     # 漏掉候选全都报绿，这条防线等于空转（本仓库实测）。
      # 片段各带一侧括号/空白作界，三者**互不重叠**，列号天然就是先后：
-     # `(py ` 不会命中 `(python`，`python3 ` 不会命中 `python)`。
      (("(py ",), ("python3 ",), ("python)",))),
 )
 

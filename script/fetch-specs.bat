@@ -3,65 +3,48 @@ rem fetch-specs - Windows entry (thin shell: locate the logic code, pass
 rem arguments through unchanged, return its exit code unchanged)
 rem
 rem Interpreter lookup, in order: the "py" launcher, then a "python3" on PATH,
-rem then a "python" on PATH. Use the first one that actually runs.
+rem then a "python" on PATH. Use the first one found -- no probe.
 rem
-rem "found on PATH" is NOT "runs": the py launcher is installed on machines
-rem where its default python 3 is absent (the Store shim registers it and then
-rem dies with "Python was not found"), and a Store shim named python.exe tells
-rem you to install Python from the Store instead of running.
+rem Do NOT "probe" a candidate before using it. Running the logic code once to
+rem ask "does this interpreter work" is the wrong test on the machines this
+rem entry exists for: that run imports the config and stops with exit code 2
+rem when the config file next to this script is missing (a fresh landing dir, a
+rem repo checkout), and a batch `for` body cannot see why a candidate failed.
+rem Every candidate then looks broken and the user is told "no working python
+rem interpreter found" on a machine that has python right there in PATH
+rem (user's words: stop detecting, just take it from PATH). So: pick by PATH,
+rem run the logic code for real, and let the logic code speak for itself --
+rem it already reports what is missing (config, pathconfig, network) with a
+rem readable message and exit code 2.
 rem
-rem So a candidate is used only after it passed the probe: --probe runs the
-rem logic code and stops right after it parsed its own arguments (no download,
-rem no write, no self-update, no restart). The judge is exit code 0 and nothing
-rem else -- the probe exits 0 only when the logic code really ran to that point,
-rem which is what separates "runs" from "does not run". Any other code means
-rem the candidate did start and our logic code itself refused (bad arguments,
-rem no home dir, network down); reporting that as "no python" would tell the
-rem user their machine is broken when it is not.
-rem
-rem The probe keeps its output to nul: it describes a candidate still being
-rem tried, and printing it makes a healthy machine look broken.
-rem
-rem Exit non-zero with a message when none of them runs -- do not run on
+rem Exit non-zero with a message when none of them is on PATH -- do not run on
 rem silently (.bat must be pure ASCII, so this stays English).
 rem
 rem One line per candidate, in the order above: "which one was asked" and "in
 rem what order" stay readable, and the caller's %* is never re-parsed by a block
 rem body -- it is passed through below unchanged.
 setlocal
-set "FETCH_SPECS_FOUND="
+set "FETCH_SPECS_RUNTIME="
 rem %%~R is the candidate itself: py, python3 or python, in this order.
 rem One line per candidate, so "which one was asked" and "in what order" stay
-rem readable. The call is a line of its own and NOT inside the for body: a
-rem parenthesised body is parsed whole before it runs, so %%~R in it is not the
-rem candidate of *this* round, and a variable the sub sets inside one is gone
-rem once the block ends. :probe runs in the file scope instead, its answer
-rem travels out in FETCH_SPECS_FOUND, and only a candidate whose probe exited
-rem 0 sets it.
-for %%R in (py python3 python) do if not defined FETCH_SPECS_FOUND call :probe %%~R
-if not defined FETCH_SPECS_FOUND (
-  echo Error: no working python interpreter found ^(tried py, python3, python^) 1>&2
+rem readable.
+for %%R in (py python3 python) do if not defined FETCH_SPECS_RUNTIME call :take %%~R
+if not defined FETCH_SPECS_RUNTIME (
+  echo Error: no python interpreter found in PATH ^(tried py, python3, python^) 1>&2
   exit /b 127
 )
-set "FETCH_SPECS_RUNTIME=%FETCH_SPECS_FOUND%"
 goto run
 
-:probe
-rem %%~1 is the candidate: probe that one, and only that one.
-rem The probe is `call`-ed on purpose. A .cmd/.bat started without `call` does
-rem not come back: the rest of this sub never runs and the exit code is
-rem whatever the candidate left behind, so a plain "%~1" here turns every
-rem working candidate into "did not pass" on a machine that has python.
-rem
-rem No `where` first: running it once IS the answer to "does this one run".
-rem The probe's 0 is the only code that accepts a candidate: 2 is argparse'
-rem complaint on a python that rejects --probe, 49 is a launcher with no python
-rem 3 behind it, and anything else is the logic code's own verdict. None of
-rem them means "this machine has no python", so the next candidate is simply
-rem tried. Output stays in nul -- it describes a candidate still being tried.
-call "%~1" "%~dp0fetch-specs.py" --probe >nul 2>nul
-if errorlevel 1 exit /b 0
-set "FETCH_SPECS_FOUND=%~1"
+:take
+rem %%~1 is the candidate: take it if PATH has it, and only that one.
+rem %%~$PATH:1 is "where PATH resolves %%~1 to", empty when it is not there.
+rem `if` is `if defined` rather than another parenthesis block: a block body is
+rem parsed whole before it runs, so the answer of *this* round would be lost
+rem (same cmd rule that made the old probe skip a working candidate).
+rem `where` is no better here: its "not found" is -1, and comparing that to 0
+rem needs a parenthesis block again.
+if not defined %%~$PATH:1 exit /b 0
+set "FETCH_SPECS_RUNTIME=%~1"
 exit /b 0
 
 :run

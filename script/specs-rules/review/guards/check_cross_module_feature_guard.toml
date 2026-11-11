@@ -12,15 +12,10 @@
 # 判据本体的逐条锚点只有一处：`_tokens.toml` 的 `CROSS_MODULE_FEATURE_ANCHORS`，由
 # `check_cross_module_feature_guard` 用 `_section_anchor_check` 按节逐条核。此处不再手抄
 # 同一批字面——两处各写一遍时，改一处漏另一处即静默放过。
-
-[[guards.check_cross_module_feature_guard]]
-kind = "file_tokens"
-file = "specs/general/review.adoc"
-tokens = [
-    "本文件的字典",
-    "term-cross-module-feature",
-]
-message = "{file}「本文件的字典」缺了『一个功能的实现跨模块』的检索键 {missing}——名称未登记时它只能靠「review 被加载后整份找」，等于没有检索面"
+#
+# 同理，名称的检索键也不在这里再写一份：它由同一函数（与上一条锚点同一个入口）核。
+# 先前这里手抄了一条 `file_tokens`（`本文件的字典` + `term-cross-module-feature`），而
+# 脚本一侧从未接线——这条规则写了却没人执行，`rules_engine_test` 随即报红。
 
 [[guards.check_cross_module_feature_guard]]
 kind = "file_tokens"
