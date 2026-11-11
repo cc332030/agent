@@ -152,6 +152,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_generation_efficiency_guard` | `script/specs-rules/check_generation_efficiency_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_after_change_review_guard` | `script/specs-rules/check_after_change_review_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_default_review_scope_guard` | `script/specs-rules/check_default_review_scope_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cross_module_feature_guard` | `script/specs-rules/review/guards/check_cross_module_feature_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_incremental_review_guard` | `script/specs-rules/review/guards/check_incremental_review_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_verdict_ledger_guard` | `script/specs-rules/review/guards/check_verdict_ledger_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_clean_subagent_review_guard` | `script/specs-rules/verify/guards/check_clean_subagent_review_guard.adoc`

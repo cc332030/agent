@@ -1,0 +1,31 @@
+# 『一个功能的实现跨模块』（`check_cross_module_feature_guard`）
+#
+# 用户口径：「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构需要
+# 处理这种情况」——采用。它是**代码问题**（同一功能的多个来源、接缝处判不出），不是取向性
+# 写法，故 review 默认检查面的「存量不动」不覆盖它：存量里已经跨模块的功能同样要报。
+#
+# 判据本体落在 `specs/general/review.adoc`「review 的默认检查面」的『一个功能的实现跨模块属
+# 代码问题（必查）』一节（review 是通用活动、会被未知项目加载，故本体在通用层）。本文件只核
+# **本仓库侧的交付面**：名称的检索键，以及两个提示词的动作面——提示词会被复制到未知项目执行，
+# 那边不一定会加载到 review 那一节；两处各指向同一份判据，不复述其条文。
+#
+# 判据本体的逐条锚点只有一处：`_tokens.toml` 的 `CROSS_MODULE_FEATURE_ANCHORS`，由
+# `check_cross_module_feature_guard` 用 `_section_anchor_check` 按节逐条核。此处不再手抄
+# 同一批字面——两处各写一遍时，改一处漏另一处即静默放过。
+
+[[guards.check_cross_module_feature_guard]]
+kind = "file_tokens"
+file = "specs/general/review.adoc"
+tokens = [
+    "本文件的字典",
+    "term-cross-module-feature",
+]
+message = "{file}「本文件的字典」缺了『一个功能的实现跨模块』的检索键 {missing}——名称未登记时它只能靠「review 被加载后整份找」，等于没有检索面"
+
+[[guards.check_cross_module_feature_guard]]
+kind = "file_tokens"
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "specs/general/review.adoc",
+]
+message = "{file} 的加载调度器不再登记 review 规范——『一个功能的实现跨模块』只在 review 被加载时才读得到，缺了它本条永不生效"
