@@ -254,9 +254,23 @@ CONFIG_IN_SCRIPTS_DIR = "script/specs-config.toml"
 PATHCONFIG_MODULE = "pathconfig.py"
 
 
+def _this_file():
+    """**本轮这份逻辑代码自己的路径**：`__file__` 不给时退到 `sys.argv[0]`（见下）。
+
+    `__file__` 不是每个跑法都有——被 `exec(compile(...))` 跑起来时（`python3 - < x.py`、
+    调用方自己读出来再执行这一类）整个模块里没有 `__file__`，一读就 `NameError`。
+    而那正是一条**运行期**报错：它出现在离真正要说的事很远的一行（本机实测的第 395 行正是
+    这么炸的，真正的成因在更早、被同一句 `NameError` 盖住了）。故这一层给一次兜底：
+    `__file__` 在就用它，不在就用 `sys.argv[0]`——那正是"调用方手里这一份"。两样都没有时
+    返回空串（下面的路径拼接与 `isfile` 对此都按"没有"处理，后续报错自己会说清缺什么）。
+    """
+    here = globals().get("__file__") or (sys.argv[0] if sys.argv else "")
+    return os.path.abspath(here) if here else ""
+
+
 def _config_candidates():
     """配置的两处可能落点：**本脚本旁边**优先，其次仓库的 `script/` 下（相对入口层两级）。"""
-    here = os.path.dirname(os.path.abspath(__file__))
+    here = os.path.dirname(_this_file())
     return (os.path.join(here, CONFIG_BESIDE_SCRIPT),
             os.path.join(os.path.dirname(here), *CONFIG_IN_SCRIPTS_DIR.split("/")))
 
@@ -273,6 +287,12 @@ def _import_pathconfig(module_path):
     为什么按文件路径加载而不是 `import`：本脚本从落点跑时，读取层就躺在它旁边，
     那里没有 `script/` 这一层、也不在 `sys.path` 上。`sys.modules` 先登记再执行——
     模块互相 import 时不会重复执行。
+
+    **加载期间不写字节码缓存**（`sys.dont_write_bytecode`）：这一处发生在 **import 期**，
+    而 `--probe` 的判据是"这个解释器跑不跑得起来"——它必须**不写盘**（入口每探一个候选
+    就跑一次，探一遍不能顺手把落点改一遍）。默认开着的 `__pycache__` 会让每次 `--probe`
+    都在落点根下留一份目录：落点收尾把整棵树收紧成只读之后，这一步还会静默失败
+    （`OSError` 被解释器自己吞掉），"落点是只读的"从此多出一条看不见的例外。
     """
     name = os.path.splitext(PATHCONFIG_MODULE)[0]
     spec = importlib.util.spec_from_file_location(f"_{name}", module_path)
@@ -280,7 +300,12 @@ def _import_pathconfig(module_path):
         return None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    saved = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = saved
     return module
 
 
@@ -292,6 +317,26 @@ def _find_pathconfig():
             if module:
                 return module
     return None
+
+
+def _announce_install_group_missing():
+    """缺"读取层/配置"时的**出路那几句**：说清缺的是整组，以及**哪一行**能把它取回来。
+
+    为什么单列：读取层与配置是一整组分发出去的（`INSTALL_SCRIPTS`），故任何一样缺，实际
+    要做的都是"把这一组取到落点根下"——而**取它这一步恰好不需要它们**（`fetch-specs.py`
+    自己就能跑）。只说"缺配置"时，人要么去翻文档、要么手工造一份配置，两条都不通。
+    本机实测：`fetch-specs.bat` 走到这一处报 config 找不到，读者手里那份脚本其实好好的、
+    跑一次 `--no-scripts` 之外的正常取文件即可把它补回来——故这里的路必须写明。
+
+    名字带前导下划线：本脚本里只在本模块内用的辅助函数一律是这个形状，`print_` 开头的
+    公开名在这里会读成"给调用方用的输出接口"。文案是终端输出，不写 markdown 记号：
+    两个星号在终端里就是两个星号，人读到的是一行带星号的句子。
+    """
+    print("说明: 读取层与配置是一整组随安装脚本分发的——缺任何一样，"
+          "本脚本都会停在这一步。它是与它们同批取回的，故补齐的办法不是在落点里手工造一份，"
+          f"而是取一次安装脚本：在本脚本所在的仓库里跑 {os.path.basename(_this_file())}，"
+          "或按公共入口「安装与更新」那一节把整组重新取一遍。",
+          file=sys.stderr)
 
 
 def _load_pathconfig():
@@ -306,10 +351,11 @@ def _load_pathconfig():
     """
     module_path = _find_pathconfig()
     if module_path is None:
+        # 报"缺读取层"而不提配置，等于让人只补一样：两者只要缺一样，本脚本都跑不起来，
+        # 且它们本来就在同一份分发名单里（本机实测：本轮连 config 与 pathconfig 一起齐了才通）。
         print(f"错误: 找不到运行期配置的读取层 {PATHCONFIG_MODULE}——路径与运行期取值只有"
-              f" {CONFIG_IN_SCRIPTS_DIR} 这一处来源，读取层须与它同处", file=sys.stderr)
-        print("说明: 从仓库或落点取回读取层后再跑本脚本（它与本脚本、配置一并分发）。",
-              file=sys.stderr)
+              f" {CONFIG_BESIDE_SCRIPT} 这一处来源（读取层须与它同处）", file=sys.stderr)
+        _announce_install_group_missing()
         raise SystemExit(2)
     pathconfig = _import_pathconfig(module_path)
     if pathconfig is None:
@@ -317,12 +363,10 @@ def _load_pathconfig():
         raise SystemExit(2)
     # 配置的落点由读取层定位（就近优先：本脚本旁边 → 仓库 `script/` 下）——定位只有一处实现
     config_path = (pathconfig.config_beside_module()
-                   or pathconfig.config_path(os.path.dirname(os.path.dirname(
-                       os.path.abspath(__file__)))))
+                   or pathconfig.config_path(os.path.dirname(os.path.dirname(_this_file()))))
     if not os.path.isfile(config_path):
-        print(f"错误: 找不到运行期配置 {CONFIG_BESIDE_SCRIPT}——路径与运行期取值只有这一处来源，"
-              f"本脚本旁边与 {CONFIG_IN_SCRIPTS_DIR} 都没有它", file=sys.stderr)
-        print("说明: 从仓库或落点取回该配置后再跑本脚本（它与本脚本一并分发）。", file=sys.stderr)
+        print(f"错误: {pathconfig.missing_config_message(CONFIG_BESIDE_SCRIPT)}", file=sys.stderr)
+        _announce_install_group_missing()
         raise SystemExit(2)
     try:
         return pathconfig.load_file(config_path)
@@ -1247,7 +1291,7 @@ def _refresh_self(base, out_dir, cwd):
     由**下一轮运行**消费——那时"下一轮"是唯一可行的路，且警告里如实说明。此时**也不覆盖
     真身**（写不进去）；落点根下那份（"下次的真身"）已换成功。
     """
-    local = os.path.abspath(__file__)
+    local = _this_file()
     try:
         data = fetch_text(base, INSTALL_SCRIPTS[0]).encode("utf-8")
     except (OSError, http.client.HTTPException) as e:
@@ -1311,6 +1355,15 @@ def _take_over_self(local, target):
         print(f"警告: 已取到更新的取规范脚本，但真身是 {real}（本轮这份是壳另起的临时副本）"
               "——不在脚本里代它重启；重跑一次即由真身接上", file=sys.stderr)
     else:
+        # 换之前先确认"这一份读得成一整份"（判据在 `_readable_as_script`）：`_real_script` 认的
+        # 是"`sys.argv[0]` 指向一个存在的文件"，而"存在"不等于"写完过"——同一目录里正有一份
+        # 写到一半的同名文件时，拷过去即把 `exec` 的目标换成半份源码（本机实测：报出来的是
+        # 源码中间那一行的 `AttributeError`、路径还是这份脚本，看着像配置读错了）。
+        if not _readable_as_script(target):
+            print(f"警告: 已取到更新的取规范脚本({target})，但它读不成一份完整的脚本"
+                  "（多半还在写、或已被截断）——本轮不换、按本地这一份继续；"
+                  "重跑一次即可", file=sys.stderr)
+            return None
         try:
             # 真身在落点里、带着收尾收紧留下的只读位（main 收尾把安装脚本自己也收紧了）：
             # 不补写位直接 copyfile 会被只读位拒掉（Windows 上即 [Errno 13]，且**每轮复发**
@@ -1336,6 +1389,32 @@ def _take_over_self(local, target):
     _discard_handoff_note(f"{local}{SELF_HANDOFF_SUFFIX}")
     _leave_handoff_note(target)
     return None
+
+
+def _readable_as_script(path):
+    """`path` 是否读得成**一整份**`.py`（能编译即算；读不到也按"读不成"处理）。
+
+    只判这一层：本函数不是语法评审——"这一份写得对不对"由测试与判据管，这里要挡的是
+    "换上去的那份其实还没写完/被截断"。原文读出来再编译（不用 `compile(open(...).read())`
+    一行写完：那样出错时连报的是哪一份都拼不出来）。
+
+    判的是**要被拷过去的那一份**（`target`），不是本轮正在跑的这份：换完还要 `shutil.copyfile`
+    读它一遍，这里多读一次换来"读的时候它是完整的、拷的时候还是它"这句话。
+
+    **按字节读、再交给 `compile`**：文本模式下 `utf-8` 不认 BOM（带 BOM 的 `.py` 会
+    `UnicodeDecodeError`），换行也会被就地转成平台那一套——而 `execv` 重启后解释器读的是
+    盘上原样的字节。读写两边按同一种形态判，才不会"这里说读得成、那里跑不起来"。
+    """
+    try:
+        with open(path, "rb") as fh:
+            source = fh.read()
+    except OSError:
+        return False
+    try:
+        compile(source, path, "exec")
+    except (SyntaxError, ValueError):
+        return False
+    return True
 
 
 def _real_script():
@@ -1377,7 +1456,7 @@ def _leave_handoff_note(target):
     自己就换得动，`_take_over_self` 已就地换成、并当场重启）；真身读不到/不是本轮这份文件、
     或真身只读换不动时，新版本也只能落在别处（落点根下、`tmp/`），才需要下一轮来接这一棒。
     """
-    note = f"{os.path.abspath(__file__)}{SELF_HANDOFF_SUFFIX}"
+    note = f"{_this_file()}{SELF_HANDOFF_SUFFIX}"
     try:
         _ensure_writable(os.path.dirname(note), note)
         with open(note, "w", encoding="utf-8") as fh:
@@ -1423,10 +1502,16 @@ def _self_update_candidates(out_dir, cwd):
     if real:
         candidates.append((os.path.dirname(os.path.abspath(real)), os.path.basename(real), True,
                            "真身所在目录"))
-    candidates.append((install_scripts_dir(), os.path.basename(INSTALL_SCRIPTS[0]), real is None,
-                       "落点根下"))
-    candidates.append((os.path.join(cwd, SELF_TMP_DIR), os.path.basename(INSTALL_SCRIPTS[0]), False,
-                       "工作目录 tmp/ 下"))
+    # **读不到真身时落点根下那份就是真身**（见 `_real_script`），故 `is_real` 跟着它走：
+    # 标错成"不是真身"时，落下去的名字是**原样文件名**（不带 `.update` 尾巴）、下面那句
+    # 待换标记写不写得进也没有人去核——落点根的上一级（家目录下的那一层）可写而落点根
+    # 不可写时，标记写不进去、原样文件名又把**正在跑的这份脚本**原地覆盖掉：`exec` 读到的
+    # 是一个还没写完的文件（本机实测：`AttributeError` 指向源码中间那一行、路径还是落点里
+    # 那份）。而它标对成"真身"时，落下去的是中转名、标记也是下面那句"写不进去就明说"。
+    candidates.append((install_scripts_dir(), os.path.basename(INSTALL_SCRIPTS[0]),
+                       real is None, "落点根下"))
+    candidates.append((os.path.join(cwd, SELF_TMP_DIR), os.path.basename(INSTALL_SCRIPTS[0]),
+                       False, "工作目录 tmp/ 下"))
     for on_dir, name, is_real, kind in candidates:
         # 判据是**这一处自己**写不写得进去，而**落盘仍落在本来的位置**——借祖先的写位把文件
         # 落到祖先里，等于把"下一次会读到的那份"放到一个谁也不会去读的地方。
@@ -1477,7 +1562,7 @@ def hand_off_self():
     判据是 `os.replace`/拷贝换得动：换不动（只读挂载、非属主）就**如实警告并继续**，守住既有口径
     ——"文件已取到"与"权限改不动"是两件事，不得把一个可自愈的情形报成失败（同 `_make_read_only`）。
     """
-    note = f"{os.path.abspath(__file__)}{SELF_HANDOFF_SUFFIX}"
+    note = f"{_this_file()}{SELF_HANDOFF_SUFFIX}"
     if not os.path.isfile(note):
         return
     try:
@@ -1493,19 +1578,26 @@ def hand_off_self():
         # 重启过来的这一轮：文件已经换过，剩下的"新版本路径"记一笔提示即可
         _discard_handoff_note(note)
         return
-    if _real_script() != os.path.abspath(__file__):
+    if _real_script() != _this_file():
         # 真身不是本轮这个文件：**不在脚本里代它重启**——那会把调用方的排布改掉
         # （见 `_take_over_self`）。标记留着，真身下次跑起来自然接上。
         print(f"说明: 新版本({fresh})等真身下次跑起来时自己接上——本轮这一份不是它在用的那一份，"
               "不在脚本里代它重启", file=sys.stderr)
         return
+    # 与 `_take_over_self` 同一条前提：**要拷过去的那份读得成一整份才换**。标记指向的
+    # 新版本同样可能是写到一半/被截断的那一份（落盘那一步自己也可能被打断），换上去即把
+    # `exec` 的目标换成半份源码——兜底路径与常规路径必须是同一道闸。
+    if not _readable_as_script(fresh):
+        print(f"警告: 上一轮留下的新版本({fresh})读不成一份完整的脚本（多半还在写、或已被截断）"
+              "——本轮不换、按本地这一份继续；重跑一次即可", file=sys.stderr)
+        return
     try:
         # 同 `_take_over_self`：真身多半带着收尾收紧留下的只读位，先补写位再换（补位只为
         # 换这一步，重启后的那一轮收尾收回）——不补位时只读位把它拒掉、标记永远消费不掉，
         # "重跑一次即用上"就成了每轮复发的死循环（本仓库实测：Windows 上每轮 [Errno 13]）。
-        _chmod_report(os.path.abspath(__file__), _WRITABLE_FILE_MODE)
-        shutil.copyfile(fresh, os.path.abspath(__file__))
-        os.chmod(os.path.abspath(__file__), os.stat(os.path.abspath(__file__)).st_mode | stat.S_IXUSR)
+        _chmod_report(_this_file(), _WRITABLE_FILE_MODE)
+        shutil.copyfile(fresh, _this_file())
+        os.chmod(_this_file(), os.stat(_this_file()).st_mode | stat.S_IXUSR)
     except OSError as e:
         print(f"警告: 已取到更新的取规范脚本({fresh})，但换不上去({e})——本轮按本地这一份继续；"
               f"重跑一次、或手工把它换过来即用上（见 specs/general/script.adoc「跨环境脚本」）",
@@ -1513,7 +1605,7 @@ def hand_off_self():
         return
     _discard_handoff_note(note)
     print("更新: 已换成上一轮取到的新版取规范脚本，本轮按它的清单口径取全", file=sys.stderr)
-    _restart_with(os.path.abspath(__file__), "--self-updated")
+    _restart_with(_this_file(), "--self-updated")
 
 
 def _discard_handoff_note(note):
