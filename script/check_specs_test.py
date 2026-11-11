@@ -1265,6 +1265,93 @@ class TestRefKindPredicates(unittest.TestCase):
         self.assertFalse(cm._is_placeholder_ref("script/check_specs.py"))
 
 
+class TestCheckCiShardingGuard(CheckSpecsTestCase):
+    """钉住『CI 的测试分片不得退成串行』：跑测试那一步的**实际命令**须并行分片。
+
+    要治的失效：测试套件涨到分钟量级后，一句 `discover` 串行跑全量就占掉流水线大半，
+    而它一直是绿的——没有任何判据会发现「慢」。故判据只看命令（不看步骤名与注释）：
+    后台并发（行尾 `&` + `wait`）、按片时限、日志落文件。
+    """
+
+    WF = ".github/workflows/check-specs.yml"
+
+    def _steps(self, body: str):
+        """把一段 run 正文包成一步（缩进由调用方给，便于把整步挂到 job 下）。"""
+        return ["- name: Run spec-check unit tests", "  run: |"] \
+            + ["    " + line for line in body.split("\n")]
+
+    def _write(self, body: str):
+        self.write(self.WF, "name: check\njobs:\n  lint-specs:\n"
+                            + "\n".join("    " + line for line in self._steps(body)) + "\n")
+
+    def _run(self):
+        cm.errors.clear()
+        cm.check_ci_sharding_guard()
+
+    def _valid_body(self) -> str:
+        return ("mapfile -t files < <(ls script/*_test.py)\n"
+                "for f in \"${files[@]}\"; do\n"
+                "  ( log=\"/tmp/$(basename \"$f\").log\"\n"
+                "    python3 script/guard/run_with_timeout.py --timeout 600 --stdout \"$log\" \\\n"
+                "        --quiet -- python3 -m unittest \"$f\" > /dev/null 2>&1 || exit 1 ) &\n"
+                "done\n"
+                "wait")
+
+    def test_positive_passes(self):
+        self._write(self._valid_body())
+        self._run()
+        self.assertEqual([], cm.errors)
+
+    def test_serial_discover_reports(self):
+        # 反例①：退回一句 `discover` 串行跑全量（本道要拦的那一天）
+        self._write("python3 -m unittest discover -s script -p '*_test.py' -v")
+        self._run()
+        self.assertIn("没有并行分片", self.error_texts())
+        self.assertIn("没有按片设时限", self.error_texts())
+
+    def test_ampersand_in_redirection_is_not_parallel(self):
+        # 反例②：只有 `2>&1` 里的 `&`（不是丢后台）→ 不算分片，不得被放过
+        self._write("for f in script/*_test.py; do\n"
+                    "  run_with_timeout.py --timeout 60 python3 -m unittest \"$f\" > \"/tmp/$f.log\" 2>&1\n"
+                    "done")
+        self._run()
+        self.assertIn("没有并行分片", self.error_texts())
+
+    def test_timeout_in_comment_or_output_is_not_a_limit(self):
+        # 反例③：命令里只是**打印**了「timeout 1500」、并没有据此设时限 → 不得算作已设时限
+        # （本道要拦的假绿形态：出现 `timeout` + 数字就算过）
+        body = self._valid_body().replace(
+            "python3 script/guard/run_with_timeout.py --timeout 600 --stdout \"$log\" \\\n"
+            "        --quiet -- python3 -m unittest \"$f\" > /dev/null 2>&1",
+            "python3 -m unittest \"$f\" > /dev/null 2>&1; echo \"timeout 1500 是写法示例\"")
+        self._write(body)
+        self._run()
+        self.assertIn("没有按片设时限", self.error_texts())
+
+    def test_full_output_into_log_reports(self):
+        # 反例④：分片跑起来了，但全量输出直接灌进 CI 日志（没有落进各自的日志文件）
+        self._write(self._valid_body().replace(' --stdout "$log"', ""))
+        self._run()
+        self.assertIn("把分片的输出直接灌进 CI 日志", self.error_texts())
+
+    def test_slice_limit_not_shorter_than_job_limit_reports(self):
+        # 反例⑤：单片 1500 秒、job 只有 15 分钟（900 秒）→ 外层时限先盖住内层，
+        # 分片还没到点整步就被取消（实测两个构建分别空等 54 分钟与 21 分钟）
+        body = self._valid_body().replace("--timeout 600", "--timeout 1500")
+        self.write(self.WF, "name: check\njobs:\n  lint-specs:\n    timeout-minutes: 15\n"
+                            "    steps:\n" + "\n".join(
+                                "      " + line for line in self._steps(body)) + "\n")
+        self._run()
+        self.assertIn("不短于 job 级", self.error_texts())
+
+    def test_no_test_step_reports(self):
+        # 反例⑥：工作流里根本没有跑测试的步骤 → 判据认不出对象，须报红而不是静默空转
+        self.write(self.WF, "name: check\njobs:\n  lint-specs:\n    steps:\n"
+                            "      - name: nothing\n        run: echo hi\n")
+        self._run()
+        self.assertIn("找不到执行 `unittest` 的步骤", self.error_texts())
+
+
 class TestAdocCompileCmd(unittest.TestCase):
     """钉住『RubyInstaller 的 gem 入口是 `.bat`/`.cmd` 外壳，须经 `cmd /c` 调用』。
 
@@ -11799,7 +11886,8 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
         self.write("specs/general/ci-cd.adoc",
                    "= CI/CD 规范（通用层）\n\n"
                    "* 校验链完整：流水线须跑全既定校验；只跑主校验脚本 属验证不完整；"
-                   "测试文件须能被测试框架自动发现。\n"
+                   "测试文件须能被测试框架自动发现；跑得快也是校验链的一部分；"
+                   "按文件并行分片；单片自成时限；只报结论、不留全量输出。\n"
                    "* 触发路径须覆盖校验对象。\n"
                    "* 上游依赖须先确认实际可用。\n"
                    "* 每次执行须有可判定的超时。\n"
@@ -11844,6 +11932,15 @@ class TestCheckCiCdGuard(CheckSpecsTestCase):
         self.write(p, t.replace("每次执行须有可判定的超时", "超时另说"))
         cm.check_ci_cd_guard()
         self.assertIn("可判定的超时", self.error_texts())
+
+    def test_missing_shard_rules_reports(self):
+        # 反例：把「跑得快」那条整段抽掉 → 串行跑全量测试重新变成"跑到了就算"
+        self._write_valid()
+        p = "specs/general/ci-cd.adoc"
+        t = open(os.path.join(self.root, p), encoding="utf-8").read()
+        self.write(p, t.replace("跑得快也是校验链的一部分", "别的"))
+        cm.check_ci_cd_guard()
+        self.assertIn("跑得快也是校验链的一部分", self.error_texts())
 
     def test_missing_cnb_sha_pin_reports(self):
         # 反例：钉定 commit sha 的要点被抽掉、仅保留 NPC 禁合并节（按分支名取到过期对象、复核错位）。

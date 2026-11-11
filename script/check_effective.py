@@ -200,13 +200,21 @@ MECHANISMS = [
     ("校验手段依赖的工具须在本地实际装齐、不得因缺工具而静默跳过（声明的校验手段不得『从未执行却报绿』）",
      "specs/general/ci-cd.adoc", "script/check_specs.py",
      "check_toolchain_present_guard",
-     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、**只装到降级实现（Python 版 `asciidoc`，无 `--failure-level`、拦不住 WARNING）时同样报错、不得记作通过**（条文的『降级实现不算通过』一句由锚点组钉住、函数体须按 `ASCIIDOC_REQUIRED_PROCESSOR` 判定合格实现是否就位）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；只装 Python 版时该段打一句告警就照常绿、告警级问题（含多余 `|` 造成的表格不完整）长期未被拦下（本轮实装 `asciidoctor` 后即报出并据以修复）；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 116→117（有抓手 114、无机械抓手 3，均含上游本轮删除 `check_orm_boundary_guard` 后的口径）。"
+     "check_toolchain_present_guard 钉住三处落点同口径（公共条文 `specs/general/ci-cd.adoc`「校验链完整（定义未执行防线）」的条文本体/L1/判定标准/降级路径/安装方式 + 本仓库落点 `AGENTS.adoc` 点名 `check_asciidoctor_syntax`、缺工具即报错与安装命令 + CI 的安装步骤**与同一步骤内的装后校验**——按「登记处只留一层」的口径，处理器次序与效力边界只由公共条文承载、本仓库落点不复述，CI 判据按**每步实际执行的命令**取值、不看步骤名与注释），并钉住 `check_asciidoctor_syntax` **缺处理器即报错**（不再走『跳过』分支）、**只装到降级实现（Python 版 `asciidoc`，无 `--failure-level`、拦不住 WARNING）时同样报错、不得记作通过**（条文的『降级实现不算通过』一句由锚点组钉住、函数体须按 `ASCIIDOC_REQUIRED_PROCESSOR` 判定合格实现是否就位）、覆盖范围与 `collect_adoc_files` 同源（`_collect_adoc_files` 单一实现、根由 `ADOC_ROOTS` 给定）与 `--failure-level=WARN` 的效力边界；**本仓库实证**：脚本里写着 AsciiDoc 语法段、环境长期没有处理器、该段走跳过分支而 `check_specs.py` 始终报 OK；只装 Python 版时该段打一句告警就照常绿、告警级问题（含多余 `|` 造成的表格不完整）长期未被拦下（本轮实装 `asciidoctor` 后即报出并据以修复）；『某次是否真的装了工具、某台机器上装没装成』属运行时事实，交人/子 agent 实跑复核；本条为**新增**，台账条数 117→118（有抓手 115、无机械抓手 3）。"
      "**本仓库实证补第二道**：`check_asciidoctor_stub_guard` 钉住『语法段不得只剩壳』"
      "——上面这道钉的是探测代码与 CI 安装步骤的**文本**，而『真的编了每一份 .adoc』本身"
      "没有 CI 级断言：实测把 `check_asciidoctor_syntax` 的函数体换成 `phase(...); "
      "phase_done(); return 0` 后脚本仍报 OK、本道照样全绿（探测代码不在那个函数里）。"
      "新道把『函数体真的探测 + 缺工具即 `err(` + 按 `ADOC_ROOTS` 逐个 `_adoc_compile_cmd`』"
      "与『CI 有一步真的执行 `check_specs.py`』变成可核对的；『某次 CI 里那几份 .adoc 是否真的都被编译了』属运行时事实"),
+    ("测试跑得快也是校验链的一部分（按文件并行分片、单片自成时限、只报结论不留全量输出）",
+     "specs/general/ci-cd.adoc", "script/check_specs.py",
+     "check_ci_sharding_guard",
+     "check_ci_sharding_guard 钉住两件事：① 公共条文（`specs/general/ci-cd.adoc`「校验链完整」的"
+     "『跑得快也是校验链的一部分』那一条，含 L1、三条判定标准与失效形态）；② CI 里跑测试的那一步"
+     "**实际执行的命令**须有后台并发（`&` + `wait`）、按片时限与『日志落文件』形态"
+     "（`_workflow_runs` 取命令、不看步骤名与注释）；"
+     "『这次 CI 到底并行跑了几片、省了多少时间』属运行时事实，交人/子 agent 实跑复核"),
     ("配置文件的字符串取值须加双引号（防被隐式类型推断转义：数字/英文/特殊符号组成的字符串被读成浮点/布尔/空值/日期一类）",
      "specs/general/encoding.adoc", "script/check_specs.py",
      "check_yaml_string_quote_guard",

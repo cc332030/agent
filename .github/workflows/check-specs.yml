@@ -59,15 +59,49 @@ jobs:
       # （实测：`You don't have write permissions for the /var/lib/gems/3.2.0 directory`）。
       # 故此处带 `sudo`（runner 上免密）；装出的可执行文件落在 `/usr/local/bin`（已在
       # PATH 上），下面 `command -v asciidoctor` 与 `asciidoctor --version` 仍能就地校验。
+      # 安装命令自带墙钟时限：gem 源不可达时会挂满 job 的 `timeout-minutes`，
+      # 一整轮只换来一句"被取消"（挂住与缓慢在日志里分不开）。超时即整步失败、不静默跳过。
+      # 时限走 `script/guard/run_with_timeout.py`（本仓库既有的跨平台运行件，纯 stdlib）：
+      # 它到点会把**已产出的输出**一并带出，"卡在哪一步"不必再看第二遍日志；也不必假定
+      # 执行镜像里一定有 GNU `timeout`（macOS 一类环境默认没有）。
       - name: Install and verify asciidoctor
         run: |
-          sudo gem install asciidoctor --no-document
+          python3 script/guard/run_with_timeout.py --timeout 300 -- sudo gem install asciidoctor --no-document
           command -v asciidoctor
           asciidoctor --version
       - name: Run deterministic spec checks (incl. AsciiDoc syntax)
-        run: python3 script/check_specs.py
+        run: python3 script/guard/run_with_timeout.py --timeout 600 -- python3 script/check_specs.py
+      # 测试按**文件**分片并行：整份跑下来是分钟量级、占流水线大半，而它一直是绿的、
+      # 只是慢（慢是绿着发生的，没人会发现）。分片单位取测试文件：同一进程内的用例共享
+      # 模块全局，按用例切片会让夹具互相污染；按文件切则每一片本就是独立运行的那一份。
+      # 每一片自带 wall-clock 时限，任一片失败（含被时限掐断）即整步失败——不等到外围
+      # 超时才发红，也不让"某一片根本没跑"混进绿色里。
+      # 单片时限**必须短于 job 级 `timeout-minutes`**：外层时限按「最近生效」盖住内层，
+      # 单片时限更长时整步会先被取消，日志里只留下一句"被取消"、看不出是哪一片卡住
+      # （实测：两个构建分别空等 54 分钟与 21 分钟）。本 job 是 15 分钟 = 900 秒，
+      # 故单片取 600 秒；单文件最慢的一轮实测约 8 分钟。
+      # 时限一律经 `script/guard/run_with_timeout.py` 施加（与上一步同一件事、同一个工具）。
       - name: Run spec-check unit tests
-        run: python3 -m unittest discover -s script -p '*_test.py' -v
+        run: |
+          mapfile -t files < <(ls script/*_test.py)
+          if [ "${#files[@]}" -eq 0 ]; then echo "没有找到任何 script/*_test.py"; exit 1; fi
+          status=0
+          for f in "${files[@]}"; do
+            (
+              log="/tmp/$(basename "$f").log"
+              if python3 script/guard/run_with_timeout.py --timeout 600 --stdout "$log" \
+                  --quiet -- python3 -m unittest "$f" > /dev/null 2>&1; then
+                echo "PASS $f"
+              else
+                echo "FAIL $f (exit $?)"; tail -60 "$log"; exit 1
+              fi
+            ) &
+          done
+          wait || status=1
+          for f in "${files[@]}"; do
+            [ -f "/tmp/$(basename "$f").log" ] || { echo "MISSING $f 没有产出日志——分片没有真的跑起来"; status=1; }
+          done
+          exit "$status"
       # 本仓库自己也要满足「每一步都须能查到时限」——本步骤就地核本工作流的每一个
       # 执行单位（本仓库实证：此前 job/step 都没有时限，一条挂住的步骤即整轮停住）。
       # 守卫自己也核本文件：缺时限时本步骤失败（不是"跳过"）。
