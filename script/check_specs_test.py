@@ -18080,6 +18080,123 @@ class TestCheckDefaultReviewScopeGuard(CheckSpecsTestCase):
         self.assertIn("旧单项措辞", self.error_texts())
 
 
+class TestCheckCrossModuleFeatureGuard(CheckSpecsTestCase):
+    """钉住『一个功能的实现跨模块』防线（用户点名）。
+
+    用户口径：「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构
+    需要处理这种情况」。故用例覆盖三处：① 判据本体被抽（接缝处判不出）；② 与「存量不动」
+    的边界被抽（存量里的跨模块全被放过）；③「重构须处理这一形态」被抽（只记不做）；以及
+    两个提示词的动作面与字典检索键——提示词会被复制到未知项目执行，缺了那边一条都不报。
+    """
+
+    SECTION = (
+        "== review 的默认检查面（只查问题，不动存量）\n\n"
+        "review **默认只查问题**。\n\n"
+        "* **存量不动、随动迁移（L1）**：存量不合取向性规范不构成问题；"
+        "review 不得据此提出问题。\n"
+        "* **一个功能的实现跨模块属代码问题（L1，必查）**：**同一件事（同一行为、同一份取值、"
+        "同一条流程）的实现分散在两处及以上**、且**不在同一个模块**时，"
+        "**算代码问题、须查出来并报**。**判定标准（任一命中即报）**：① **调用方要按顺序"
+        "各调一遍**；② 同一份契约在两个模块里**各有一份完整定义**；③ 一个模块**依赖另一个"
+        "模块的内部细节**；④ 拆开的理由是体量而非职责（见「拆要按职责切、不按体量切」）。"
+        "**与「存量不动」的边界（L1）**：**存量里已经跨模块的功能同样要报**，"
+        "**不得以\"存量\"为由放过**。**与范围控制的边界（L1）**：**报出不等于在本轮把它全量"
+        "重排**，**报出与处置分开**，**不得静默放过、也不得擅自发动全库改造**。"
+        "**重构须处理这一形态（L1）**：**必须进重构清单并落地**，"
+        "**不得只记为\"已发现\"就收尾**。\n")
+
+    def _write(self, review=None, prompt_review=None, prompt_refactor=None,
+               generic=None) -> None:
+        self.write("specs/general/review.adoc",
+                   review if review is not None else
+                   "[[term-cross-module-feature]]\n" + self.SECTION)
+        self.write("prompts/review.adoc",
+                   prompt_review if prompt_review is not None else
+                   "1. 检查\n2. 检查面另含『一个功能的实现跨模块』（L1）：见 "
+                   "`specs/general/review.adoc`。\n")
+        self.write("prompts/refactor.adoc",
+                   prompt_refactor if prompt_refactor is not None else
+                   "2. 先按『一个功能的实现跨模块』查一遍；命中处**必须进重构清单并落地**。\n")
+        self.write("AGENTS_COMMON.adoc",
+                   generic if generic is not None else
+                   "= 入口\n* `specs/general/review.adoc`\n")
+
+    def test_valid_passes(self):
+        self._write()
+        cm.check_cross_module_feature_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整条判据被删 → 跨模块退回成"写法偏好"，一条也报不出来
+        self._write(review="== 问题记录\n\n* 记一笔。\n")
+        cm.check_cross_module_feature_guard()
+        self.assertIn("review 的默认检查面", self.error_texts())
+
+    def test_splice_criteria_removed_reports(self):
+        # 反例②：四条判定标准被抽 → 接缝处（谁调谁、第二份定义、依赖内部细节）判不出来
+        self._write(review=self.SECTION.replace(
+            "① **调用方要按顺序各调一遍**；", ""))
+        cm.check_cross_module_feature_guard()
+        self.assertIn("四条判定标准", self.error_texts())
+
+    def test_stock_boundary_removed_reports(self):
+        # 反例③：存量边界被抽 → 按上一条「存量不动」把存量里的跨模块整批放过
+        self._write(review=self.SECTION.replace(
+            "**存量里已经跨模块的功能同样要报**，", ""))
+        cm.check_cross_module_feature_guard()
+        self.assertIn("存量", self.error_texts())
+
+    def test_scope_boundary_removed_reports(self):
+        # 反例④：范围边界被抽 → 以"必须查出来"为由发动全库重排
+        self._write(review=self.SECTION.replace(
+            "**报出不等于在本轮把它全量重排**，", ""))
+        cm.check_cross_module_feature_guard()
+        self.assertIn("范围", self.error_texts())
+
+    def test_refactor_must_land_removed_reports(self):
+        # 反例⑤：重构须处理被抽 → 命中处只被记成"已发现"、结构一字未动
+        self._write(review=self.SECTION.replace(
+            "**必须进重构清单并落地**，", "可记入清单留待以后。"))
+        cm.check_cross_module_feature_guard()
+        self.assertIn("重构", self.error_texts())
+
+    def test_dictionary_term_removed_reports(self):
+        # 反例⑥：名称检索键被删 → 别处只能整份文件找它
+        self._write(review=self.SECTION)
+        cm.check_cross_module_feature_guard()
+        self.assertIn("字典", self.error_texts())
+
+    def test_review_prompt_landing_removed_reports(self):
+        # 反例⑦：检查修复提示词的检查面丢了这条 → 那边只按三类问题扫，跨模块一条不报
+        self._write(prompt_review="1. 检查\n2. 逐模块检查。\n")
+        cm.check_cross_module_feature_guard()
+        self.assertIn("prompts/review.adoc", self.error_texts())
+
+    def test_refactor_prompt_landing_removed_reports(self):
+        # 反例⑧：重构提示词不再要求落地 → 检查做了、结构没动（与主侧重相抵）
+        self._write(prompt_refactor="2. 先查一遍，记入清单。\n")
+        cm.check_cross_module_feature_guard()
+        self.assertIn("prompts/refactor.adoc", self.error_texts())
+
+    def test_rule_data_dispatcher_entry_removed_reports(self):
+        # 反例⑨：调度器不再登记 review 规范 → 本条永不加载、规则实际失效
+        # （这一处由规则数据 `review/guards/check_cross_module_feature_guard.toml` 核，
+        #  故这里直接跑规则数据那一段，断言的是它报出的调度器登记缺失）
+        self._write()
+        self.write("AGENTS_COMMON.adoc", "= 入口\n* `specs/general/doc.adoc`\n")
+        self.write_rules_fixture()
+        # 规则目录的取法随全局缓存（首个用例定下即复用）：夹具的根每个用例都换，
+        # 不重取时会跑到上一个用例的目录里、读不到规则数据而整段空转。
+        cm.RULES = None
+        # 同一阶段内同名防线只跑一遍：前面几个用例跑过 `check_cross_module_feature_guard`，
+        # 不新开阶段时这次调用直接返回、什么也不核。
+        cm.phase("一个功能的实现跨模块防线检查")
+        cm.run_rule_guard("check_cross_module_feature_guard")
+        # 按这条规则自己的落点判：`error_texts()` 是整串拼接，按"串里出现过"断言时，
+        # 别的步骤报出的文案带同一个文件名就算过（本用例此前就是这么过的）
+        assert any(e.startswith("[不规范] AGENTS_COMMON.adoc:") for e in cm.errors), cm.errors
+
+
 class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
     """钉住「改动后复核」防线：五件事、干净子 agent、三态台账与维护方登记。
 

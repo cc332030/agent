@@ -2057,6 +2057,25 @@ VERDICT_LEDGER_COLUMNS = _RULES_TOKENS["VERDICT_LEDGER_COLUMNS"]
 VERDICT_LEDGER_ANCHORS = _RULES_TOKENS["VERDICT_LEDGER_ANCHORS"]
 DEFAULT_REVIEW_SCOPE_SECTION = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_SECTION"]
 DEFAULT_REVIEW_SCOPE_ANCHORS = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_ANCHORS"]
+# 『一个功能的实现跨模块』（`check_cross_module_feature_guard`）：用户提出
+# 「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构需要处理这种情况」。
+# 判据本体在 `specs/general/review.adoc`「review 的默认检查面」的『一个功能的实现跨模块属
+# 代码问题（必查）』——它是**代码问题**（不是取向性写法），故存量同样要报；四条判定标准、
+# 与「存量不动」「范围控制」的两条边界、以及"重构须处理这一形态"都不许被抽走
+# （抽走任一条，本条就退回成一句口号：接缝处判不出、存量被放过、或重构只记不做）。
+CROSS_MODULE_FEATURE_ANCHORS = _RULES_TOKENS["CROSS_MODULE_FEATURE_ANCHORS"]
+# 动作落点：两个提示词的检查面与重构清单都须指向同一处判据（提示词会被复制到未知项目执行，
+# 规范本体在那边不一定会被加载到 review 一节）。
+CROSS_MODULE_PROMPT_LANDINGS = (
+    ("prompts/review.adoc",
+     ("一个功能的实现跨模块", "specs/general/review.adoc"),
+     "检查修复提示词的检查面不再含『一个功能的实现跨模块』——它是用户点名的必查项，"
+     "缺了它那边只按「三类问题」扫，跨模块的实现分散一条都报不出来"),
+    ("prompts/refactor.adoc",
+     ("一个功能的实现跨模块", "必须进重构清单并落地"),
+     "重构提示词不再要求处理『一个功能的实现跨模块』——命中处只被记成「已发现」，"
+     "结构一字未动（与「重构的产出必须是结构改动」相抵）"),
+)
 # `delivery` 片段里"重复面的处理"须在的要点（两个提示词共用同一片段，改一处即两处生效）
 REFINEMENT_DELIVERY_ANCHORS = (
     ("重复面的处理（L1",
@@ -2560,6 +2579,41 @@ def check_default_review_scope_guard():
             err(f"review 默认检查面防线被破坏：{rel} 出现已收敛的旧单项措辞 {revived}——"
                 "判定标准只在全局真源（review.adoc「review 的默认检查面」）写一份，"
                 "单项处再写即第二真源（两处各自漂移）", rel)
+    phase_done()
+
+
+def check_cross_module_feature_guard():
+    """『一个功能的实现跨模块』防线：算代码问题、须查出来；重构须处理。
+
+    用户口径：「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构
+    需要处理这种情况」。判据本体在 `specs/general/review.adoc`「review 的默认检查面」的
+    『一个功能的实现跨模块属代码问题（必查）』一节——本函数钉**判据本体**（不是节名）：
+    四条判定标准、与「存量不动」「范围控制」的两条边界、以及"重构须处理这一形态"；另钉
+    三处落点：字典登记（名称是检索键）、两个提示词的动作面（review 的检查面、refactor 的
+    重构清单）。
+
+    **为什么存量边界要单独钉**：本条与「存量不动、随动迁移」是**同节内的两条 L1**，读法
+    只有一处说清——抽走"存量里已经跨模块的功能同样要报"，读者会按前一条把它的存量放过，
+    而存量正是最常见的形态。**为什么提示词也要钉**：提示词会被复制到未知项目执行，那边
+    不一定会加载到 review 一节；只钉规范时，跨模块这条在真实任务里根本不会被执行。
+    """
+    phase("一个功能的实现跨模块防线检查")
+    _section_anchor_check(REVIEW_SPEC, DEFAULT_REVIEW_SCOPE_SECTION,
+                          CROSS_MODULE_FEATURE_ANCHORS)
+    text = _read_spec_text(REVIEW_SPEC)
+    if "term-cross-module-feature" not in text:
+        err(f"{REVIEW_SPEC}「本文件的字典」未登记『一个功能的实现跨模块』——"
+            "该名称失去检索键，别处只能整份文件找它", REVIEW_SPEC)
+    for rel, tokens, why in CROSS_MODULE_PROMPT_LANDINGS:
+        path = os.path.join(REPO_ROOT, *rel.split("/"))
+        if not os.path.isfile(path):
+            err(f"缺少 {rel}——{why}", rel)
+            continue
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        missing = [t for t in tokens if t not in body]
+        if missing:
+            err(f"{why}（缺 {missing}）", rel)
     phase_done()
 
 
@@ -16037,6 +16091,7 @@ CHECKS = (
     check_generation_efficiency_guard,
     check_after_change_review_guard,
     check_default_review_scope_guard,
+    check_cross_module_feature_guard,
     check_incremental_review_guard,
     check_verdict_ledger_guard,
     check_clean_subagent_review_guard,
