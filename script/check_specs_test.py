@@ -23580,6 +23580,43 @@ class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
             shutil.rmtree(home, ignore_errors=True)
 
 
+class TestFetchSpecsMissingInstallGroup(CheckSpecsTestCase):
+    """端到端实测：**全新机器上落点根下一份都没有时，脚本须说清缺的是哪一组、怎么补回来**。
+
+    失效形态（本会话实测）：薄壳探完解释器、把逻辑代码真跑起来，第一件事就是读运行期配置；
+    而配置与读取层是**一整组**随安装脚本分发的——全新机器上落点根下一份都没有，于是
+    `fetch-specs.py` 在 `import` 阶段就 `SystemExit(2)`，壳按"退出码非 0"从第一个候选试到
+    最后一个，最后报出一句 **`no working python interpreter found`**：机器上明明有 python，
+    报的却是"没有可用的解释器"——查的方向整条都错了。
+
+    本条按**用户会遇到的那条路**实测（真脚本、子进程、不复制一份实现）：
+      * 落点根下只有 `fetch-specs.py`（配置与读取层都没有）；
+      * 输出里须**明说**缺的是整组、且给出补齐的办法（不是一句"缺配置"了事）；
+      * 退出码仍是约定的 `EXIT_USAGE`（"参数或前置条件错误"），不是 traceback。
+    """
+
+    def test_missing_config_reports_whole_group(self):
+        root = tempfile.mkdtemp(prefix="missing-group-")
+        try:
+            real_root = os.path.dirname(os.path.abspath(__file__))
+            shutil.copyfile(os.path.join(os.path.dirname(real_root), "script", "fetch-specs.py"),
+                            os.path.join(root, "fetch-specs.py"))
+            home = os.path.join(root, "home")
+            os.makedirs(home)
+            proc = subprocess.run([sys.executable, os.path.join(root, "fetch-specs.py")],
+                                  cwd=root, capture_output=True, text=True, timeout=120,
+                                  env=dict(os.environ, HOME=home, USERPROFILE=home))
+            output = proc.stdout + proc.stderr
+            self.assertEqual(2, proc.returncode, f"退出码应是 EXIT_USAGE:\n{output}")
+            self.assertNotIn("Traceback", output, output)
+            # 说清缺的是哪一组（读取层与配置一起），而不是只报一个文件名
+            self.assertIn("一整组", output, output)
+            # 并给出补齐的办法：取一次安装脚本即可，不必在落点里手工造一份
+            self.assertIn("取一次安装脚本", output, output)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 class TestFetchSpecsCleanSelfTmp(CheckSpecsTestCase):
     """钉住 `_clean_self_tmp` 的删除边界（自己删，不借外部清理脚本）。
 
@@ -28491,6 +28528,88 @@ class TestFetchSpecsSwapOnReadOnlyRealScript(CheckSpecsTestCase):
             restart.assert_called_once()
         finally:
             os.chmod(real, 0o644)
+
+class TestFetchSpecsHalfWrittenCandidate(CheckSpecsTestCase):
+    """端到端实测：**候选文件还没写完/被截断时，不得把它换到正在跑的这份身上**。
+
+    失效形态（本会话实测，用户报的那条 `AttributeError` 的成因）：落点根的**上一级**可写、
+    落点根不可写（目录被别的进程占着、或上一轮还没收紧完）时，自更新只能落在落点根下的
+    `tmp/` 兜底，并写下待换标记；此刻那一处若正有一份**写到一半的同名文件**——`_real_script`
+    认的是"`sys.argv[0]` 指向一个存在的文件"，**存在不等于写完**——换上去之后 `exec` 读到的是
+    半份源码，报出来的是源码中间某一行上的 `AttributeError`，而它看起来像"配置读错了"。
+    本条钉住判据：要拷过去的那份**读得成一整份 `.py`** 才换；读不成即如实警告、不换。
+    """
+
+    def _load(self):
+        repo_root = os.path.dirname(HERE)
+        path = os.path.join(repo_root, "script", "fetch-specs.py")
+        spec = importlib.util.spec_from_file_location("fetch_specs_half_written", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_half_written_candidate_is_not_taken_over(self):
+        mod = self._load()
+        root = tempfile.mkdtemp(prefix="half-written-")
+        real = os.path.join(root, "fetch-specs.py")
+        half = os.path.join(root, ".fetch-specs.py.1.update")
+        try:
+            with open(real, "w", encoding="utf-8") as fh:
+                fh.write("OLD = 1\n")
+            with open(half, "w", encoding="utf-8") as fh:
+                fh.write("NEW = 2\n_X = (\n")   # 写到一半：括号没闭合
+            with mock.patch.object(mod, "_real_script", return_value=os.path.abspath(real)), \
+                    mock.patch.object(mod, "_restart_with") as restart:
+                mod._take_over_self(os.path.abspath(real), half)
+            with open(real, encoding="utf-8") as fh:
+                self.assertEqual("OLD = 1\n", fh.read(), "半份源码被换到了真身上")
+            restart.assert_not_called()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_complete_candidate_is_taken_over(self):
+        # 正例：读得成的一整份照旧换上去（本条不得把自更新一并挡死）
+        mod = self._load()
+        root = tempfile.mkdtemp(prefix="complete-candidate-")
+        real = os.path.join(root, "fetch-specs.py")
+        fresh = os.path.join(root, ".fetch-specs.py.2.update")
+        try:
+            for path, text in ((real, "OLD = 1\n"), (fresh, "NEW = 2\n")):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+            with mock.patch.object(mod, "_real_script", return_value=os.path.abspath(real)), \
+                    mock.patch.object(mod, "_restart_with") as restart:
+                mod._take_over_self(os.path.abspath(real), fresh)
+            with open(real, encoding="utf-8") as fh:
+                self.assertEqual("NEW = 2\n", fh.read())
+            restart.assert_called_once()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_exec_without_dunder_file_does_not_crash(self):
+        """`exec(compile(...))` 跑起来时没有 `__file__`：**不得**在取路径时 `NameError`。
+
+        失效形态（本会话实测）：整个模块被 `exec` 起来时 `__file__` 不存在，`_config_candidates`
+        一读就 `NameError`——而它出现在离真正要说的事很远的一行（报出来是一行 `AttributeError`
+        式的假象，真正的成因被盖住了）。判据：这一行必须有一个不依赖 `__file__` 的兜底。
+        """
+        mod = self._load()
+        with mock.patch.object(sys, "argv", [os.path.abspath(mod.__file__)]):
+            self.assertTrue(mod._this_file().endswith("fetch-specs.py"))
+        with open(mod.__file__, encoding="utf-8") as fh:
+            self.assertIn('globals().get("__file__")', fh.read())
+
+    def test_missing_config_message_mentions_whole_group(self):
+        """"配置不在"的那一句须**同时**说清：缺的是整组、且读取层与它同批分发。
+
+        两处（读取层与执行侧）原先各写一句文案，读者得对着两句各自猜缺的是哪一层；
+        现在文案只有一处实现（`pathconfig.missing_config_message`），故这里按**实现**核，
+        而不是按某一处调用的输出核——文案改了要跟着改的只有这一处与这一条。
+        """
+        text = pathconfig.missing_config_message("/x/specs-config.toml")
+        self.assertIn("/x/specs-config.toml", text)
+        self.assertIn("第二份来源", text)
+
 
 class TestCheckRepeatCallPassthroughGuard(CheckSpecsTestCase):
     """钉住『长方法的反复调用点：在本处加透传』防线（**用户提出**）。

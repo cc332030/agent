@@ -222,6 +222,18 @@ def config_beside_module():
     return path if os.path.isfile(path) else None
 
 
+def missing_config_message(path):
+    """"配置不在"的那一句：**每一处报配置缺失的地方都打这一句**（不各写一份文案）。
+
+    为什么单列一句：同一件事的报错原先散在读取层与执行侧两处，各写各的——两句话都在，
+    读者却得对着两句各自猜"到底缺的是哪一层"。文案只有这一处，改口径不必追着各处跑。
+    """
+    return (f"缺少运行期配置 {path}——路径与运行期取值只有这一处来源，文件不在时"
+            "执行侧与判据侧无从取值（不得退回各自写死的默认值，那就是第二份来源）；"
+            f"它与读取层 {os.path.basename(__file__)}、安装脚本一并分发，"
+            "取一次规范即到落点根下")
+
+
 def load_file(path):
     """读**指定的那一份**配置；文件不在、TOML 非法、必填项缺失一律抛 `ConfigError`。
 
@@ -229,9 +241,7 @@ def load_file(path):
     与本模块所在目录无关，故由调用方给出路径、本模块只管读。
     """
     if not os.path.isfile(path):
-        raise ConfigError(
-            f"缺少运行期配置 {path}——路径与运行期取值只有这一处来源，"
-            "文件不在时执行侧与判据侧无从取值（不得退回各自写死的默认值，那就是第二份来源）")
+        raise ConfigError(missing_config_message(path))
     try:
         with open(path, "rb") as fh:
             data = tomllib.load(fh)
