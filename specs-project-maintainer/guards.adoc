@@ -168,6 +168,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_template_separation_guard` | `script/specs-rules/check_template_separation_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_asciidoctor_stub_guard` | `script/specs-rules/check_asciidoctor_stub_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_asciidoctor_syntax` | `script/specs-rules/check_asciidoctor_syntax.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ci_sharding_guard` | `script/specs-rules/check_ci_sharding_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_table_row_pipe_guard` | `script/specs-rules/check_table_row_pipe_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_list_structure_guard` | `script/specs-rules/check_list_structure_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_script_selfdoc_name_guard` | `script/specs-rules/script/guards/check_script_selfdoc_name_guard.adoc`

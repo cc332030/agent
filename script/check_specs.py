@@ -3786,6 +3786,157 @@ def check_asciidoctor_stub_guard():
     phase_done()
 
 
+def _has_background_form(line: str) -> bool:
+    """这一行是不是**把一个命令丢到后台**（行尾的 `&`，含 `) &` 收尾的块）。
+
+    按行尾判、不按"命中某个字符"判：`2>&1`、`&&` 里的 `&` 与并发毫无关系，
+    按出现即算等于给判据留了一条"写出两个字符就算分片"的漏洞（本仓库实测过同类）。
+    """
+    return bool(re.search(r"&\s*$", line)) and not line.strip().endswith("&&")
+
+
+def _starts_with(line: str, word: str) -> bool:
+    """这一行是不是以 `word` 开头（`wait`/`wait || …` 一类都算）。"""
+    return line.strip() == word or line.strip().startswith(word + " ")
+
+
+def _lines_of(step):
+    """`_workflow_runs` 的一步 → 逐行命令（行尾续行符已由取值侧去掉）。"""
+    return [line for line in step if line.strip()]
+
+
+def _shell_timeout_limit(line: str):
+    """这一行**就地**施加的墙钟时限（秒）；没有则 `None`。
+
+    取两种可判定形态：`timeout <秒> …`（GNU coreutils）与
+    `run_with_timeout.py --timeout <秒> …`（本仓库跨平台的同一件事，到点会把已产出的输出
+    一并带出）。**按命令头取值**——`printf 'timeout 300'`、注释里的 `timeout-minutes: 15`
+    都不算这一行设了时限。
+    """
+    fields = line.split()
+    if fields[:1] == ["timeout"] and len(fields) > 1 and fields[1].isdigit():
+        return int(fields[1])
+    if "run_with_timeout.py" in line:
+        for idx, field in enumerate(fields):
+            if field == "--timeout" and idx + 1 < len(fields) and fields[idx + 1].isdigit():
+                return int(fields[idx + 1])
+    return None
+
+
+def _step_timeouts(step):
+    """这一步里**每一处**施加的时限（秒）。逐步骤核：给 A 步骤设的时限不算给 B 步骤设过。"""
+    return [limit for limit in (_shell_timeout_limit(line) for line in _lines_of(step))
+            if limit is not None]
+
+
+def _redirects_to_var(line: str) -> bool:
+    """这一行是否把输出重定向到**变量指向的文件**（`> "$log"`、`>> "${f}.log"`）。
+
+    按位置取值、不用正则：定位 `>`，跳过空白与引号，紧跟的字符是 `$` 即算。**`2>&1` 与
+    `> /dev/null` 不算**——前者不是重定向到文件，后者把输出丢掉了，两者都与"落进日志文件"
+    相反（本仓库实测：按"出现过 `>` 加变量"判时，把 `2>&1` 里的 `>` 也算进去）。
+    """
+    for idx, char in enumerate(line):
+        if char != ">":
+            continue
+        if idx + 1 < len(line) and line[idx + 1] in "&|":   # `2>&1`、`>&2`
+            continue
+        window = line[idx + 1:idx + 40]                    # 这一段里出现变量即算
+        if re.search(r"\$(?:\{?\w+|\()", window):
+            return True
+    # `--stdout "$log"` 一类：把日志文件作为参数交给命令，同样是"产出落进那个文件"
+    return bool(re.search(r"--(?:stdout|log|out|output)[ =]\"?\$\{?\w+", line))
+
+
+def _has_log_file_form(step) -> bool:
+    """分片的产出是否**落进各自的日志文件**：有一步把那个文件的重定向**写进了命令行**。
+
+    认"指向变量的重定向"而不是某个变量名：日志文件名通常由循环变量拼出来（`> "$log"`、
+    `> "$f.log"`、`--stdout "$log"`），钉住 `$log` 会在换名时读成"没落文件"。
+    """
+    return any(_redirects_to_var(line) for line in _lines_of(step))
+
+
+def _job_timeout_minutes(text):
+    """承载测试那一步的 job 的 `timeout-minutes`（秒）；认不出则 `None`。
+
+    只认**与测试步骤同缩进**的那一行：同文件里别的 job 的时限与这一步无关（跨 job 取最小值
+    更是把不相干的两条绑在一起）。外层时限会盖住内层（最近生效、取更严者），故分片的时限
+    须**短于**它。
+    """
+    lines = text.split("\n")
+    for idx, raw in enumerate(lines):
+        m = re.match(r"^(\s*)timeout-minutes:\s*['\"]?(\d+)['\"]?\s*$", raw)
+        if not m:
+            continue
+        indent, seconds = m.group(1), int(m.group(2)) * 60
+        # 同缩进的 `- ` 是同一层级的下一个 job：测试步骤不在它里面
+        for line in lines[idx + 1:]:
+            if re.match(r"^" + indent + r"-\s+", line):
+                break
+            if "unittest" in line:
+                return seconds
+    return None
+
+
+def check_ci_sharding_guard():
+    """『CI 的测试分片不得退成串行』：流水线里跑测试的那一步须**真的并行分片**。
+
+    要治的失效：测试套件涨到八分钟量级后，`python3 -m unittest discover -s script` 一句
+    就能占掉整条流水线的大半，而**没有任何判据会发现这件事**——它一直是绿的，只是慢。
+    等有人在 CI 里盯着它跑过一遍之后，"慢"才从一个感受变成一个可核对的事实。
+
+    钉两件事（都只看 CI 配置里那一步**实际执行的命令**，不看步骤名与注释）：
+      ① 跑测试的那一步里有**后台并发**形态（`&` + `wait`）；
+      ② 同一处**按片设了时限**、且**只报结论、不往日志里灌全量输出**（分片日志落文件、
+         失败时只回放尾巴）——否则并行跑出来的东西既看不出哪片红、又把日志撑爆。
+    分片自身的时限还须**严于 job 级 `timeout-minutes`**：后者按"最近生效"盖住前者，
+    分片时限更长时整步会先被取消，日志里只留下一句"被取消"。
+
+    力所不及（如实记下、交人/子 agent）：**这次 CI 到底并行跑了几片、省了多少时间**
+    属运行时事实，本仓库不可见。
+    """
+    phase("CI 测试分片不得退成串行检查")
+    rel_wf = ".github/workflows/check-specs.yml"
+    wf_path = os.path.join(REPO_ROOT, *rel_wf.split("/"))
+    if not os.path.isfile(wf_path):
+        err(f"缺少 {rel_wf}——CI 侧的分片形态无从核对", rel_wf)
+        phase_done()
+        return
+    with open(wf_path, encoding="utf-8") as fh:
+        text = fh.read()
+    steps = _workflow_runs(text)
+    test_steps = [cmd for cmd in steps if any("unittest" in line for line in cmd)]
+    if not test_steps:
+        err(f"{rel_wf} 里找不到执行 `unittest` 的步骤——测试在多处被跑，判据却认不出"
+            "「跑测试的那一步」时，分片与否无从判定（本道不得静默空转）", rel_wf)
+        phase_done()
+        return
+    if not all(any(_has_background_form(line) for line in _lines_of(cmd))
+               and any(_starts_with(line, "wait") for line in _lines_of(cmd))
+               for cmd in test_steps):
+        err(f"{rel_wf} 里跑测试的那一步**没有并行分片**（认不出 `&` + `wait`）——"
+            "整份测试串行跑时，套件涨一分就慢一分，而流水线一直是绿的、没有任何判据会发现",
+            rel_wf)
+    if not all(_step_timeouts(cmd) for cmd in test_steps):
+        err(f"{rel_wf} 里跑测试的那一步**没有按片设时限**（`timeout <秒>` 或 "
+            "`run_with_timeout.py --timeout <秒>`）——并行之后单片挂住等于整步挂住，"
+            "「在跑」与「卡住」分辨不出来", rel_wf)
+    job_limit = _job_timeout_minutes(text)
+    per_slice = [limit for cmd in test_steps for limit in _step_timeouts(cmd)]
+    if job_limit is not None and any(limit >= job_limit for limit in per_slice):
+        err(f"{rel_wf} 里分片的时限（{max(per_slice)} 秒）**不短于 job 级 `timeout-minutes`"
+            f"（{job_limit} 秒）**——外层时限按「最近生效」盖住内层，分片还没到点整步就先被取消，"
+            "日志里只剩一句『被取消』、看不出是哪一片卡住（实测两个构建分别空等 54 分钟与 21 分钟）",
+            rel_wf)
+    if not all(_has_log_file_form(cmd) for cmd in test_steps):
+        err(f"{rel_wf} 里跑测试的那一步**把分片的输出直接灌进 CI 日志**（认不出后台分片里的 "
+            "`> \"$log\"` 重定向）——分片产出应落进各自的日志文件、失败时只回放尾巴，"
+            "否则并行跑出来的日志既拼不出哪片红、又撑爆阅读者的上下文"
+            "（读取范围按最小必要，见 `specs/general/context.adoc`）", rel_wf)
+    phase_done()
+
+
 def check_asciidoctor_syntax():
     """AsciiDoc 语法编译验证：**环境缺工具即报错，不得跳过**。
 
@@ -8292,6 +8443,10 @@ def check_ci_cd_guard():
                 ("校验链完整", "流水线须跑全既定校验（含配套测试），防‘定义未执行’"),
                 ("只跑主校验脚本", "把‘只跑主脚本’显式判为验证不完整"),
                 ("须能被测试框架自动发现", "测试文件命名/位置须落在框架发现规则内"),
+                ("跑得快也是校验链的一部分", "串行跑全量测试不算『跑到了』——慢是绿着发生的"),
+                ("按文件并行分片", "分片单位取测试文件：进程内共享模块全局，按用例切片会互相污染"),
+                ("单片自成时限", "并行之后单片挂住等于整步挂住，『在跑』与『卡住』要分辨得出"),
+                ("只报结论、不留全量输出", "分片日志落文件、失败回放尾巴，日志量不随套件增长"),
                 ("触发路径须覆盖校验对象", "改了却不跑＝漏检"),
                 ("须先确认实际可用", "上游镜像/制品/工具须实测可用，不得凭名称假设"),
                 ("须有可判定的超时", "不得让流水线无限挂在 pending"),
@@ -15681,6 +15836,7 @@ CHECKS = (
     check_template_separation_guard,
     check_asciidoctor_stub_guard,
     check_asciidoctor_syntax,
+    check_ci_sharding_guard,
     check_table_row_pipe_guard,
     check_list_structure_guard,
     check_script_selfdoc_name_guard,
