@@ -1571,6 +1571,9 @@ DATA_DICTIONARY_KEYS = (
 
 DOC_FILE = os.path.join(SPECS_DIR, "general", "doc.adoc")
 DOC_MODULE_FILE = os.path.join(SPECS_DIR, "general", "doc-module.adoc")
+# 业务系统全生命周期文档规范：承载「功能全览（项目现有行为的唯一视图）」——按功能组织的
+# 现状视图，与按时间排的需求事件流是两件事（见 `check_feature_overview_guard`）。
+LIFECYCLE_FILE = os.path.join(SPECS_DIR, "general", "doc-lifecycle.adoc")
 # 必加载层执行原则（`specs/core/execution.adoc`）：其「任务生命周期与节点自查」是**任务
 # 从提出到收尾各节点各查什么**的集中清单——任务节点此前散落各规范、没有统一清单，于是
 # 出现"做完了才发现方向理解错"或"流程走完了但没人回头看规则是否有问题"。被删则
@@ -11051,6 +11054,31 @@ def check_dependency_view_guard():
     phase_done()
 
 
+def check_feature_overview_guard():
+    """『功能全览防线』：项目须有一份按功能组织的全览，而不是需求事件流。
+
+    用户口径（Issue）：『我的目的是需要有个项目的功能全览（包括细节），不是用户的需求流水账』。
+    为什么需要它：需求阶段的文档是**按时间排的事件流**——它能证明"这条被要过"，
+    却答不上"项目现在有什么"。同一功能被要过三次就有三段说法，两个功能的边界从事件流里
+    根本读不出来；于是"这功能还在不在、现在长什么样"只能回溯任务单，而那正是删改能静默
+    溜过去的地方。故把"全览的形态"变成可核对的：以功能为条目、写现在的样子、每项指得到
+    实现与反证、行为变了同一提交内改它。
+
+    效力边界：只核该节与各组锚点在不在——"这一项到底算不算一个功能、边界画在哪、
+    写出来的细节够不够"属语义判断，交人/子 agent 复核。
+    规则数据在 `script/specs-rules/doc/guards/check_feature_overview_guard.toml`。
+    """
+    phase("功能全览防线检查")
+    rel = "specs/general/doc-lifecycle.adoc"
+    if not os.path.isfile(LIFECYCLE_FILE):
+        err(f"缺少文件 {rel}——『功能全览』的落点丢失"
+            "（需求事件流会被重新当成项目现有行为的全貌）", rel)
+        phase_done()
+        return
+    run_rule_guard("check_feature_overview_guard")
+    phase_done()
+
+
 def check_index_page_guard():
     """『索引页触发判据防线』：索引页只对"已承载实质文档"的目录要求，空壳不建、索引只做导航。
 
@@ -15944,6 +15972,7 @@ CHECKS = (
     check_quote_line_guard,
     check_dependency_view_guard,
     check_index_page_guard,
+    check_feature_overview_guard,
     check_data_dictionary_guard,
     check_public_content_coverage,
     check_prompts_primary,
