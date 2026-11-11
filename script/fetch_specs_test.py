@@ -14,6 +14,11 @@
   * 取回契约（失败的形态一律归一成 `OSError`，不让 `HTTPException` 穿掉收尾）；
   * 入口/探针（`--probe` 不写盘、不换自身；退出码仍按 0/1/2 分）。
 
+**两个薄壳都真跑**：`.sh` 在 POSIX 上直接跑；`.bat` 在 Windows 上直接用 cmd 跑，
+其余平台**借 Wine 跑 `cmd /c`**（用户口径：Wine 上跑得起来就算数）——`.bat` 是纯 ASCII +
+CRLF + `for`/`call`/标签的一串东西，静态判据核得出"长什么样"，核不出"cmd 解不解析得动"。
+本机没有 wine、或 wine 自己跑不起来时**如实跳过并写明理由**（那种失败不是 `.bat` 的问题）。
+
 **只跑本机的解释器与文件系统，不联网**：需要远端的地方一律把 `fetch_text` 换掉。
 """
 import contextlib
@@ -463,27 +468,41 @@ class TestLayout(_TmpDirCase):
             module.shared_cache_dir()
 
 
-class TestEntryShells(unittest.TestCase):
-    """两个薄壳：**不假定有 python**、探到不等于跑得起来、退出码原样传回。
-
-    只在本机是 POSIX 时真跑 `.sh`（Windows 上 `.bat` 的行为由它自己的注释与
-    `check_specs` 的静态判据守，单测里不假装能跑 cmd）。
-    """
+class _EntryShellCase(unittest.TestCase):
+    """入口薄壳的公共夹具：三样安装脚本摆一处，壳原样同处。"""
 
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="fetch-specs-shell-")
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
 
-    def _stage_group(self):
-        for src in (SCRIPT, PATHCONFIG, CONFIG):
-            shutil.copyfile(src, os.path.join(self.root, os.path.basename(src)))
-        return shutil.copyfile(os.path.join(HERE, "fetch-specs.sh"),
-                               os.path.join(self.root, "fetch-specs.sh"))
+    def _stage_group(self, *keep):
+        """把三样安装脚本摆进落点；`keep` 给定时只摆这几样（缺组的形态）。"""
+        wanted = set(keep) or {"script", "pathconfig", "config"}
+        for name, src in (("script", SCRIPT), ("pathconfig", PATHCONFIG), ("config", CONFIG)):
+            if name in wanted:
+                shutil.copyfile(src, os.path.join(self.root, os.path.basename(src)))
+
+    def _shell(self, name):
+        path = shutil.copyfile(os.path.join(HERE, name), os.path.join(self.root, name))
+        os.chmod(path, 0o755)
+        return path
+
+
+class TestPosixShell(_EntryShellCase):
+    """Linux/macOS 薄壳：**不假定有 python**、探到不等于跑得起来、退出码原样传回。
+
+    只在 POSIX 上真跑（`.sh` 在 Windows 上没有能真跑它的默认壳——Windows 上真正会跑的是
+    `.bat`，那一侧在 `TestBatchShell`）。
+
+    用例目录：
+     * 1 `test_shell_passes_probe_through` — 探针通过（`--probe` 退出 0）
+     * 2 `test_shell_returns_exit_code_unchanged` — 缺整组时原样传回 2
+    """
 
     @unittest.skipIf(os.name == "nt", "POSIX 薄壳只在 POSIX 上真跑")
     def test_shell_passes_probe_through(self):
-        shell = self._stage_group()
-        os.chmod(shell, 0o755)
+        self._stage_group()
+        shell = self._shell("fetch-specs.sh")
         proc = subprocess.run([shell, "--probe"], capture_output=True, text=True, timeout=120)
         self.assertEqual(0, proc.returncode, proc.stderr)
         self.assertIn("探针通过", proc.stdout)
@@ -491,15 +510,132 @@ class TestEntryShells(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX 薄壳只在 POSIX 上真跑")
     def test_shell_returns_exit_code_unchanged(self):
         # 缺整组时脚本自己给 2：薄壳不得把它抹成 0（"被当成取到了"）
-        for src in (SCRIPT,):
-            shutil.copyfile(src, os.path.join(self.root, os.path.basename(src)))
-        shell = shutil.copyfile(os.path.join(HERE, "fetch-specs.sh"),
-                                os.path.join(self.root, "fetch-specs.sh"))
-        os.chmod(shell, 0o755)
+        self._stage_group("script")
+        shell = self._shell("fetch-specs.sh")
         proc = subprocess.run([shell, "--probe"], capture_output=True, text=True, timeout=120)
         self.assertEqual(2, proc.returncode, proc.stdout + proc.stderr)
         self.assertIn("整组", proc.stderr)
 
+
+# ── Windows 薄壳那一路：借 Wine 也真跑一遍 ──────────────────────────────────
+# `.sh` 原先有两条 POSIX 用例，`.bat` 一行真跑都没有——而它是纯 ASCII + CRLF + `for`/`call`/
+# 标签的一串东西：静态判据核得出"长什么样"，核不出 "cmd.exe 到底解不解析得动"。故这里把
+# `.bat` 放进真跑的射程：Windows 上直接用 cmd 跑，其余平台借 Wine 跑 `cmd /c`。
+WINE_ENV = "FETCH_SPECS_TEST_WINE"     # 显式指定 wine 可执行文件（镜像里未必叫 wine）
+WINE_TIMEOUT = 120                     # Wine 首次要建前缀、起 wineserver，比本机跑慢得多
+
+
+def _wine_program():
+    """用哪个 `wine`：先看 `FETCH_SPECS_TEST_WINE`，再看 PATH；都没有时返回 None。
+
+    留这条显式开关是因为镜像里的 wine 未必就叫 `wine`（`wine64`、自建前缀的包装脚本），
+    名字不该写死在用例里。
+    """
+    explicit = os.environ.get(WINE_ENV)
+    if explicit:
+        return explicit
+    return shutil.which("wine")
+
+
+def _wine(args, env_extra=None):
+    """在 Wine 里跑一条命令，返回 (退出码, stdout, stderr)。
+
+    `WINEDEBUG=-all`：Wine 每次都往 stderr 打一大段 `fixme:`／`warn:`（缺字体、缺 mono），
+    混进被测输出里就分不清"这句错是谁说的"。stderr 仍单独返回——被测脚本写的那几句在里面。
+    """
+    env = dict(os.environ)
+    env["WINEDEBUG"] = "-all"
+    env.update(env_extra or {})
+    proc = subprocess.run([_wine_program(), *args], capture_output=True, text=True,
+                          env=env, timeout=WINE_TIMEOUT, errors="replace")
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _wine_selftest():
+    """Wine 在这台机器上**跑不跑得动 cmd.exe**：返回 `(能不能, 为什么不能)`。
+
+    判据只有一条：`cmd /c exit 7` 的退出码原样是 7。装了 wine 不等于跑得动（前缀还没建、
+    容器里缺库）：那种失败与"`.bat` 解不解析得动"是两件事，混在一起时人查的是脚本、错在
+    环境。故先证这一条，证不过就如实跳过。
+    """
+    if _wine_program() is None:
+        return False, (f"本机没有 wine（可用 {WINE_ENV} 指定）——`.bat` 那一路要真跑一遍 "
+                       "cmd.exe 才看得见")
+    try:
+        code, out, err = _wine(["cmd", "/c", "exit", "7"])
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"wine 起不来：{e}"
+    if code != 7:
+        return False, (f"wine cmd /c exit 7 的退出码是 {code}（应 7），不是 `.bat` 的问题："
+                       f"{(err or out).strip()[:300]}")
+    return True, ""
+
+
+def _wine_dos_path(path):
+    """POSIX 路径 → Wine 里的 DOS 路径（默认前缀把 `/` 映到 `Z:`）。"""
+    return "Z:" + os.path.abspath(path).replace("/", "\\")
+
+
+class TestBatchShell(_EntryShellCase):
+    """Windows 薄壳：**两边都真跑**（Windows 直接跑，其余平台借 Wine 跑）。
+
+    跑不跑得动分成两层判：先证"这台机器的 wine 真能跑 cmd.exe"（`_wine_selftest`），
+    证不过就跳过并写明理由——那种失败与"`.bat` 解不解析得动"是两件事，混在一起时
+    人查的是脚本、错在环境。证得过才按退出码与被测输出断言。
+
+    入口口径是"按 PATH 取第一个、不先用 `--probe` 试跑"（`.bat` 上判"跑不跑得起来"这类
+    预检正是 #390 那两句误报的来源），故这里钉的是它能起得来、退出码原样传回、字节合规；
+    解释器挑哪一个、挑不挑得到，由 `check_specs` 的静态判据与 PATH 裁剪过的反例来核。
+
+    用例目录：
+     * 1 `test_batch_runs_logic_code` — 整组齐全时跑起来、退出码 0
+     * 2 `test_batch_returns_exit_code_unchanged` — 缺整组时经 `cmd /c … & pause` 仍原样传回 2
+     * 3 `test_batch_is_pure_ascii_and_crlf` — 纯 ASCII + 整份 CRLF（cmd.exe 的两条硬要求）
+    """
+
+    def _bat(self):
+        bat = self._shell("fetch-specs.bat")
+        if os.name == "nt":
+            return bat
+        ok, why = _wine_selftest()
+        if not ok:
+            self.skipTest(why)
+        return bat
+
+    def _run_bat(self, bat, *args, env_extra=None):
+        if os.name == "nt":
+            proc = subprocess.run([bat, *args], capture_output=True, text=True,
+                                  timeout=120, errors="replace",
+                                  env=dict(os.environ, **(env_extra or {})))
+            return proc.returncode, proc.stdout, proc.stderr
+        return _wine(["cmd", "/c", _wine_dos_path(bat), *args], env_extra=env_extra)
+
+    def test_batch_runs_logic_code(self):
+        # 整组齐全、PATH 上有解释器时它得**真跑起来**：入口不再预检候选（#390 那两句误报正是
+        # 预检判"跑不跑得起来"判出来的），跑得起来与否交给逻辑代码自己说话
+        self._stage_group()
+        bat = self._bat()
+        code, out, err = self._run_bat(bat, "--probe")
+        self.assertEqual(0, code, f"stdout={out!r}\nstderr={err!r}")
+        self.assertIn("探针通过", out)
+
+    def test_batch_returns_exit_code_unchanged(self):
+        # 缺整组时逻辑代码给 2。这一条钉的正是 `cmd /c ""…" %* & pause"` 后面那句 `set`：
+        # `&` 之后 `%errorlevel%` 是 pause 的，漏了 `set` 就永远传不回 2
+        self._stage_group("script")
+        bat = self._bat()
+        code, out, err = self._run_bat(bat, "--probe")
+        self.assertEqual(2, code, f"stdout={out!r}\nstderr={err!r}")
+        self.assertIn("整组", err)
+
+    def test_batch_is_pure_ascii_and_crlf(self):
+        # `cmd.exe` 的两条硬要求（按系统 ANSI 代码页解析、按字节认行尾）：不必跑一遍才看得见，
+        # 就地按字节核；与上面几条"真跑一遍"互为补集（跑起来时它们已经是乱码/执行失败了）
+        with open(os.path.join(HERE, "fetch-specs.bat"), "rb") as fh:
+            raw = fh.read()
+        self.assertEqual([], [b for b in raw if b > 0x7F][:8],
+                         "`.bat` 必须是纯 ASCII（cmd.exe 按系统 ANSI 代码页解析）")
+        self.assertNotIn(b"\n", raw.replace(b"\r\n", b""), "`.bat` 必须整份 CRLF")
 
 if __name__ == "__main__":
     unittest.main()
