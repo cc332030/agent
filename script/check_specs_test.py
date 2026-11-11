@@ -1091,6 +1091,162 @@ class TestCheckBaseAncestorGuard(CheckSpecsTestCase):
         self.assertEqual(cm.errors, [])
 
 
+class TestCheckBranchReuseGuard(CheckSpecsTestCase):
+    """钉住『环境已给出承载分支时不得另建分支/另开 PR』防线（**动作侧**）。
+
+    背景（本仓库实证两次，用户点名『我记得写过不允许私自建新分支和PR的，为什么没有限制住？
+    需要处理』）：平台层与 `delivery` 片段都写着「不得另建分支」，执行者仍另开了分支与 PR，
+    而文本侧三道防线全部报 OK——文本侧只证「规则写着」。故本组用例盯的是**仓库里真有几条
+    分支**这件事：环境给出的承载分支之外，凡分叉自当前 HEAD 的本地分支都算「另建」。
+
+    覆盖：正例（只有承载分支）、反例（另建了一条以 HEAD 为起点的分支）、两条"不误伤"
+    （与 HEAD 无分叉关系的既有分支；环境没给承载分支时干脆不发声）、以及一条"看本地分支"
+    （远端跟踪引用里有别的分支不得被读成另建——平台的一次性工作区会把所有分支都取回来）。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.mkdtemp()
+        self._env = {k: os.environ.get(k) for k in
+                     ("CNB_PULL_REQUEST_BRANCH", "CNB_BRANCH", "CNB_DEFAULT_BRANCH")}
+
+        def sh(cmd):
+            # 与 `check_merge_state_guard` 同口径按 UTF-8 收发（中文提交说明在本机 GBK 下会失真）
+            return subprocess.run(cmd, shell=True, cwd=self._tmp,
+                                  capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
+        self.sh = sh
+        sh("git init -q -b main . && git config user.email a@b.c && "
+           "git config user.name t && git config commit.gpgsign false")
+        with open(os.path.join(self._tmp, "a.txt"), "w", encoding="utf-8") as fh:
+            fh.write("x")
+        sh("git add -A && git commit -qm init && git checkout -q -b feat")
+        cm.REPO_ROOT = self._tmp
+        self._set_env("feat", "")
+
+    def tearDown(self) -> None:
+        for key, value in self._env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        shutil.rmtree(self._tmp, ignore_errors=True)
+        super().tearDown()
+
+    def _set_env(self, pull_branch, branch):
+        os.environ["CNB_DEFAULT_BRANCH"] = "main"
+        os.environ["CNB_PULL_REQUEST_BRANCH"] = pull_branch
+        os.environ["CNB_BRANCH"] = branch
+
+    def _run(self):
+        cm.errors.clear()
+        cm.check_branch_reuse_guard()
+        return self.error_texts()
+
+    def _rule_side(self, text=None):
+        """判据措辞侧（`check_branch_reuse_rules`）：与仓库状态无关，只核 `script/check_specs.py`。
+
+        本类把仓库根换到了 git 夹具（`self._tmp`），故这里把仓库根**再换到 `self.root`**
+        （父类的临时根）再落真脚本 + 现场规则目录——措辞侧与「有几条分支」是两件事，
+        不该被同一根绑在一起。用完把根还回 git 夹具（`cm.REPO_ROOT` 是全局的，
+        不还的话同进程里后面的用例会读到这个夹具的根）。
+        """
+        if text is None:
+            real = os.path.join(os.path.dirname(HERE), "script", "check_specs.py")
+            with open(real, encoding="utf-8") as fh:
+                text = fh.read()
+        self.write("script/check_specs.py", text)
+        self.write_rules_fixture()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        try:
+            cm.check_branch_reuse_rules()
+        finally:
+            cm.REPO_ROOT = self._tmp
+            cm._RULES_RUN_THIS_PHASE.clear()
+            cm.RULES = None
+
+    def test_rule_wording_is_live(self):
+        self._rule_side()
+        self.assertEqual(cm.errors, [])
+
+    def test_rule_wording_removed_reports(self):
+        # 反例：动作侧的判据被改回"执行者自报"（承载分支不再从环境取）→ 措辞侧须报红。
+        # 替换三处（定义、注释、报错文案**各一处**，都在同一段判据附近）；只替定义那一处时
+        # 剩下的两处会把锚点兜住——反例也就测不出来了。
+        real = os.path.join(os.path.dirname(HERE), "script", "check_specs.py")
+        with open(real, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("CNB_PULL_REQUEST_BRANCH", text)
+        trimmed = text.replace("CNB_PULL_REQUEST_BRANCH", "SELF_REPORTED_BRANCH")
+        self.assertNotIn("CNB_PULL_REQUEST_BRANCH", trimmed)
+        self._rule_side(trimmed)
+        self.assertIn("CNB_PULL_REQUEST_BRANCH", self.error_texts())
+
+    def _commit(self, name, text="y"):
+        with open(os.path.join(self._tmp, name), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        _git_commit(self._tmp, "feat: " + name)
+
+    def test_carrier_only_passes(self):
+        # 正例：环境给了承载分支、仓库里也只有它 → 不报红
+        self._commit("b.txt")
+        self.assertEqual(self._run(), "")
+
+    def test_new_branch_from_head_reports(self):
+        # 反例：另建了一条以当前 HEAD 为起点的分支（"把这条也处理了"就另开一处的机械形态）
+        self._commit("b.txt")
+        _git_argv(self._tmp, "branch", "another")
+        texts = self._run()
+        self.assertIn("又冒出了新分支", texts)
+        self.assertIn("another", texts)
+
+    def test_unrelated_branch_not_reported(self):
+        # 边界：落在别的线上的分支（别人的/别的任务的）不算「另建」——它和承载分支之间
+        # 没有任何分叉关系，本条不管它
+        _git_argv(self._tmp, "checkout", "-q", "-b", "someone")
+        self._commit("c.txt", "c")
+        _git_argv(self._tmp, "checkout", "-q", "-b", "carrier")
+        self._commit("b.txt")
+        self._set_env("carrier", "")
+        self.assertEqual(self._run(), "")
+
+    def test_no_carrier_branch_skips(self):
+        # 边界：环境没给承载分支（本地/其它 CI）→ 本条不发声、不猜
+        self._commit("b.txt")
+        _git_argv(self._tmp, "branch", "another")
+        self._set_env("", "main")
+        self.assertEqual(self._run(), "")
+
+    def test_remote_tracking_ref_not_counted(self):
+        # 边界：**只看 refs/heads**——远端跟踪引用里有别的分支（平台一次性工作区会全部取回）
+        # 不得被读成「另建」，否则本条会被自己的环境钉成常态红
+        self._commit("b.txt")
+        _git_argv(self._tmp, "update-ref", "refs/remotes/origin/another", "HEAD")
+        self.assertEqual(self._run(), "")
+
+    def test_carrier_taken_from_environment(self):
+        # 取值来源须是**环境**（`CNB_PULL_REQUEST_BRANCH` / 非默认分支的 `CNB_BRANCH`）
+        self._set_env("refs/heads/feat", "")
+        self.assertEqual(cm._carrier_branches(), ["feat"])
+        self._set_env("", "work-branch")
+        self.assertEqual(cm._carrier_branches(), ["work-branch"])
+        self._set_env("", "main")
+        self.assertEqual(cm._carrier_branches(), [])
+
+    def test_default_branch_taken_from_one_place(self):
+        # 默认分支名只有一处取值：两个判据（算不算承载分支、算不算本任务的）必须用同一个数。
+        # 各写一份时，环境只给了 `CNB_BRANCH` 且它等于默认分支的那一轮，两处会得出相反判断。
+        self._set_env("", "")
+        os.environ.pop("CNB_DEFAULT_BRANCH", None)
+        self._set_env("", "trunk")
+        os.environ["CNB_DEFAULT_BRANCH"] = "trunk"
+        self.assertEqual(cm._carrier_branches(), [])
+        self.assertEqual(cm._default_branch(), "trunk")
+
+
 class TestCheckGitMvSelfcheck(CheckSpecsTestCase):
     """钉住"本仓库自身侧"的 git mv 自查（P1 可机械核对的那一半）。
 
@@ -19517,7 +19673,11 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
         'self_update_suffix = ".update"\n'
         'self_handoff_suffix = ".handoff"\n\n'
         "[source-management]\n"
-        'mode = "conventional"\n'
+        'mode = "conventional"\n\n'
+        "[prompts]\n"
+        'name = "use-prompt"\n'
+        'usage = "{name} <提示词名>"\n'
+        'agent_command_dirs = ["{home}/.claude/commands"]\n'
     )
     # 判据本体（通用条）在真实仓库的 `specs/general/coding.adoc` 里：夹具只补"这一节在"，
     # 让规则数据那一步不因"缺文件/缺节"报红（真源是否完整由真实仓库的检查核）。
@@ -19547,6 +19707,9 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
         'TIMEOUT_SECONDS = _PATHCONFIG.timeout_seconds\n'
         'DEFAULT_WORKERS = _PATHCONFIG.workers\n'
         'SELF_TMP_DIR = _PATHCONFIG.tmp_dir\n'
+        'PROMPT_COMMAND_NAME = _PATHCONFIG.prompt_command_name\n'
+        'PROMPT_COMMAND_USAGE = _PATHCONFIG.prompt_command_usage\n'
+        'PROMPT_COMMAND_DIRS = _PATHCONFIG.prompt_command_dirs\n'
     )
 
     def _write_valid(self):
@@ -19576,6 +19739,17 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
         self._write_valid()
         cm.check_paths_single_source_guard()
         self.assertEqual([], cm.errors)
+
+    def test_prompt_command_literal_reports(self):
+        # 反例：口令名退回代码里的字面量 → 口令名、命令位与点名写形在三处各漂一份
+        # （同一条"取值只有一处"，只是这次的对象是口令入口那几个取值）
+        self._write_valid()
+        self.write("script/fetch-specs.py",
+                   self.FETCH.replace('PROMPT_COMMAND_NAME = _PATHCONFIG.prompt_command_name',
+                                      'PROMPT_COMMAND_NAME = "use-prompt"'))
+        cm.check_paths_single_source_guard()
+        self.assertIn("PROMPT_COMMAND_NAME", self.error_texts())
+        self.assertIn("不是从配置", self.error_texts())
 
     def test_missing_config_reports(self):
         # 反例：配置被删 → 执行侧与判据侧只能各写各的（正是本条要治的形态）
@@ -20947,6 +21121,130 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
         # 用例自清：落点在本次用例专属的家目录下（临时产物，见 specs/core/execution.adoc「临时产物」）
         shutil.rmtree(home, ignore_errors=True)
+
+    def test_prompts_fetched_with_specs(self):
+        """端到端（用户口径：『我希望一键使用』）：提示词与其公共片段随规范一起取到本地。
+
+        判据三条：① 登记处（入口指向的那个文件）列出的提示词**每份都落在落点里**；
+        ② 公共片段（不在清单里、但被提示词 `include`）也到位——缺它提示词读不全；
+        ③ 清单里列着、远端却没有的那份**报出名字并以非 0 退出**（提示词与规范互不引用，
+        少一份不会有任何东西报错，"看着取全了、其实少了几份"正是要防的形态）。
+        """
+        import threading
+
+        entry = (b"= test\n\nspecs/core/execution.adoc\n\n"
+                 b"prompt index: PROMPTS.adoc\n")
+        index = (b"= prompts\n\n| link:prompts/alpha.adoc[`prompts/alpha.adoc`] | x |\n")
+        served = {"AGENTS_COMMON.adoc": entry, "PROMPTS.adoc": index, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": b"e1\n",
+                  "prompts/alpha.adoc": b"a1\n",
+                  "prompts/_common.txt": b"c1\n"}
+        served.update(self._install_scripts_served())
+        home = tempfile.mkdtemp(prefix="fetch-home-prompts-")
+        self.addCleanup(shutil.rmtree, home, True)
+
+        with self._serve(served) as httpd:
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{httpd.server_address[1]}"
+            out_dir = os.path.join(home, ".cache", "agent-specs",
+                                   re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                          f"127.0.0.1:{httpd.server_address[1]}").strip("_"))
+
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertEqual(0, rc, se + so)
+            for rel in ("prompts/alpha.adoc", "PROMPTS.adoc"):
+                self.assertTrue(
+                    os.path.isfile(os.path.join(out_dir, *rel.split("/"))),
+                    f"{rel} 没落到落点里——提示词没跟着规范一起取（用户口径：一键使用）")
+            # 公共片段按它在仓库里的目录落盘（在落点根下、与安装脚本同一处——它跨来源共用
+            # 一份，不是哪个来源槽里的规范副本；与提示词同处，读的时候不必再拼路径）
+            self.assertTrue(os.path.isfile(
+                os.path.join(home, ".cache", "agent-specs", "prompts", "_common.txt")),
+                "提示词的公共片段没取——读那几份提示词时补不齐公共步骤")
+
+            # 远端少一份（登记处列着它）：须**报出名字**并以非 0 退出
+            served.pop("prompts/alpha.adoc")
+            served["prompts/beta.adoc"] = b"b1\n"
+            served["PROMPTS.adoc"] = (b"= prompts\n\n"
+                                     b"| link:prompts/alpha.adoc[`prompts/alpha.adoc`] | x |\n"
+                                     b"| link:prompts/beta.adoc[`prompts/beta.adoc`] | y |\n")
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertNotEqual(0, rc, so)
+            self.assertIn("prompts/alpha.adoc", se,
+                          "没取到的提示词须**报出名字**——只说'没取全'时读者不知道是哪一份")
+
+    def test_prompt_command_prints_assembled_prompt(self):
+        """口令入口（用户口径：『没有命令 你不能加进去吗？就一句话的事情』）：点名即得整段。
+
+        判据四条：① 取完落点根下与 agent 命令位**都**有入口；② `use-prompt review` 的输出
+        **没有一处 `include::` 残留**（取到的是原始文件，不装配就少半份题面——本仓库实证过：
+        十六处片段一处都没展开、返回码还是 0）；③ `{主侧重}` 已按该提示词自己的声明填好；
+        ④ 取不到那一份时**非 0 退出**，不输出半份当成功。
+        """
+        import shlex
+        import threading
+
+        entry = (b"= test\n\nspecs/core/execution.adoc\n\n"
+                 b"prompt index: PROMPTS.adoc\n")
+        index = (b"= prompts\n\n| link:prompts/alpha.adoc[`prompts/alpha.adoc`] | x |\n")
+        common = ("// tag::primary[]\n**主侧重（方向性前提，先读）**：**\"{主侧重}\"**\n"
+                  "// end::primary[]\n").encode("utf-8")
+        prompt = ("= alpha\n\n**主侧重（方向性前提，先读）**：**\"alpha 方向\"**\n\n"
+                  "include::_common.txt[tag=primary]\n").encode("utf-8")
+        served = {"AGENTS_COMMON.adoc": entry, "PROMPTS.adoc": index, "README.adoc": b"r1\n",
+                  "specs/core/execution.adoc": b"e1\n",
+                  "prompts/alpha.adoc": prompt,
+                  "prompts/_common.txt": common}
+        served.update(self._install_scripts_served())
+        home = tempfile.mkdtemp(prefix="fetch-home-prompt-cmd-")
+        self.addCleanup(shutil.rmtree, home, True)
+
+        with self._serve(served) as httpd:
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{httpd.server_address[1]}"
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertEqual(0, rc, se + so)
+            landing = os.path.join(home, ".cache", "agent-specs")
+            for name in ("use-prompt.sh", "use-prompt.bat"):
+                self.assertTrue(os.path.isfile(os.path.join(landing, name)),
+                                f"落点根下没有口令入口 {name}——取下来还得人肉复制，等于没取")
+            agent_dir = os.path.join(home, ".claude", "commands", "use-prompt.md")
+            self.assertTrue(os.path.isfile(agent_dir),
+                            "agent 命令位里没有口令——平台按命令名认，缺了它就没有可点名的入口")
+
+            run = subprocess.run(["sh", os.path.join(landing, "use-prompt.sh"), "alpha"],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(0, run.returncode, run.stderr)
+            self.assertNotIn("include::", run.stdout,
+                             "口令吐出来的必须是**装配好的整段**——留着 include:: 就是半份题面")
+            self.assertIn("alpha 方向", run.stdout,
+                          "`{主侧重}` 须按该提示词自己的声明填好：片段里只有占位符，照做的人不知道按哪个方向干")
+
+            # 入口**跑得起来、且搬到别处也跑得起来**：解释器现场试跑，不烘生成时的绝对路径
+            # （/usr/bin/python3 一类路径换台机器就失效，而落点是可被整个搬走的）
+            entry = os.path.join(landing, "use-prompt.sh")
+            with open(entry, encoding="utf-8") as fh:
+                entry_text = fh.read()
+            self.assertNotIn(sys.executable, entry_text,
+                             "口令入口里写了生成那一刻的解释器路径——换台机器就 no such file")
+            self.assertIn("--probe", entry_text,
+                          "入口须自己试跑解释器（--probe），而不是信一个烘进去的路径")
+
+            bad = subprocess.run(["sh", os.path.join(landing, "use-prompt.sh"), "nope"],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(0, bad.returncode, "取不到那一份时须非 0 退出")
+            self.assertEqual("", bad.stdout.strip(), "取不到时不得输出半份当成功")
+            # 入口里**不烘名单**：可用提示词由它在现场按落点现算——加一份提示词不必重生成入口
+            served["PROMPTS.adoc"] = (index
+                                     + b"| link:prompts/beta.adoc[`prompts/beta.adoc`] | y |\n")
+            served["prompts/beta.adoc"] = prompt
+            rc, so, se = self._run_fetch(base, home=home)
+            self.assertEqual(0, rc, se + so)
+            run = subprocess.run(["sh", os.path.join(landing, "use-prompt.sh"), "beta"],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(0, run.returncode, run.stderr)
+            self.assertNotIn("include::", run.stdout)
+            del shlex
 
     def test_refresh_is_default_passes(self):
         # 正例：默认以远程为准（内容不同才落盘）+ --keep 保留本地那份 + 失败保留本地
@@ -27869,8 +28167,8 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
         self._write_valid()
         # 变异打在**赋值语句**上（不是 `FOLLOWUP_FILES = (` 这个前缀）：注释里也出现了这个名字，
         # 只替换前缀时那几个字照样在、断言也就照样通过——判据指错了对象
-        self._mutate(self.SCRIPT, 'FOLLOWUP_FILES = ("index.html",)',
-                     'FOLLOWUP_FILES_UNUSED = ("index.html",)')
+        self._mutate(self.SCRIPT, 'FOLLOWUP_FILES = ("index.html", COMMON_PROMPT_REL)',
+                     'FOLLOWUP_FILES_UNUSED = ("index.html", COMMON_PROMPT_REL)')
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
 

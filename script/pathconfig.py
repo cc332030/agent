@@ -65,7 +65,8 @@ class Config:
     REQUIRED = ("landing_home_dir", "landing_app_dir", "base_url", "manifest_entry",
                 "manifest_optional", "install_scripts", "entry_scripts", "config_rel",
                 "timeout_seconds", "workers", "tmp_dir", "self_update_suffix",
-                "self_handoff_suffix", "source_management_mode")
+                "self_handoff_suffix", "source_management_mode", "prompt_command_name",
+                "prompt_command_usage", "prompt_command_dirs")
 
     def __init__(self, data, path):
         self.path = path
@@ -178,6 +179,21 @@ class Config:
         "取值是不是两档之一"由 `check_specs.source_management_mode()` 判，读取层只负责取值。
         """
         return str(self._get("source-management", "mode"))
+
+    @property
+    def prompt_command_name(self):
+        """口令入口的文件名主干（入口名、命令位、点名写形都由它拼出来）。"""
+        return str(self._get("prompts", "name"))
+
+    @property
+    def prompt_command_usage(self):
+        """口令的写形（`{name}` 为上面的主干占位）。"""
+        return str(self._get("prompts", "usage"))
+
+    @property
+    def prompt_command_dirs(self):
+        """落到哪些 agent 平台的命令位（`{home}`/`{name}` 为占位）。"""
+        return tuple(self._get("prompts", "agent_command_dirs"))
 
     def value(self, dotted):
         """按 `节.键` 取**本仓库自己新增**的取值（`[source-management].mode` 一类只有本仓库读的取值）。

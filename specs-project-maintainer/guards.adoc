@@ -116,6 +116,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_rule_instance_separation_guard` | `script/specs-rules/agents/guards/check_rule_instance_separation_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_prompt_delivery_surface_guard` | `script/specs-rules/prompts/guards/check_prompt_delivery_surface_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_prompts_index_guard` | `script/specs-rules/check_prompts_index_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_prompts_fetch_guard` | `script/specs-rules/prompts/guards/check_prompts_fetch_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_api_contract_reuse_guard` | `script/specs-rules/coding/guards/check_api_contract_reuse_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_api_naming_guard` | `script/specs-rules/coding/guards/check_api_naming_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_java_enum_valueof_catch_guard` | `script/specs-rules/java/guards/check_java_enum_valueof_catch_guard.adoc`
@@ -208,6 +209,8 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_example_not_surface_guard` | `script/specs-rules/check_example_not_surface_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ui_spec_guard` | `script/specs-rules/check_ui_spec_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_pr_scope_guard` | `script/specs-rules/cnb/guards/check_pr_scope_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_branch_reuse_rules` | `script/specs-rules/cnb/guards/check_branch_reuse_rules.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_branch_reuse_guard` | `script/specs-rules/check_branch_reuse_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_changelog_timing_prompt_guard` | `script/specs-rules/check_changelog_timing_prompt_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_guess_confirm_guard` | `script/specs-rules/execution/guards/check_guess_confirm_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cache_guard` | `script/specs-rules/check_cache_guard.adoc`

@@ -1115,6 +1115,28 @@ class TestSeparationInvariants(unittest.TestCase):
                 re_.load_rule_files(tmp)
             self.assertIn("重复定义", str(ctx.exception))
 
+    def test_same_file_appended_table_merges(self):
+        # 同一份文件里续写下一张 `[[guards.<防线名>]]` 表头 → **追加**，不是重复定义：
+        # 一张表写满几组之后要另起一段（另开一张表头）时，不能逼人把不相干的判据塞进同一组
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "a.toml")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write('[[guards.check_x_guard]]\nkind = "exists"\nfiles = ["X"]\n'
+                         '\n[[guards.check_x_guard]]\nkind = "exists"\nfiles = ["Y"]\n')
+            merged = re_.load_rule_files(tmp)
+            self.assertEqual(2, len(merged["guards"]["check_x_guard"]))
+
+    def test_empty_placeholder_guard_is_not_a_second_site(self):
+        # 空数组的防线项是**占位**（判据写在脚本里的那些防线靠它占一行），不是第二个落点：
+        # 判据真写在自己那份文件里时，两者必须能共存
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "guard-scripts.toml"), "w", encoding="utf-8") as fh:
+                fh.write("[guards]\ncheck_x_guard = []\n")
+            with open(os.path.join(tmp, "b.toml"), "w", encoding="utf-8") as fh:
+                fh.write('[[guards.check_x_guard]]\nkind = "exists"\nfiles = ["X"]\n')
+            merged = re_.load_rule_files(tmp)
+            self.assertEqual(1, len(merged["guards"]["check_x_guard"]))
+
     def test_unknown_placeholder_in_message_raises(self):
         # 报错文案里写了引擎不认识的占位符（实测形态：`{rel_exec}` 未被替换，
         # 报错正文原样带着它交给读者）→ 加载期即报错，不等跑起来才发现

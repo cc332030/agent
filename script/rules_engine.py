@@ -1857,6 +1857,11 @@ def _merge_file(name: str, data, merged: dict) -> None:
     """
     if not isinstance(data, dict):
         raise RulesError(f"规则文件 {name} 不是对象（顶层须为 `guards` / `tokens` 两张表）")
+    # 本文件里出现**两次以上**的防线名（同一文件内追加表头）：它们的步骤按追加合并，
+    # 而不是报"重复定义"——重复定义只在**跨文件**时才是那个形态。
+    occurrences = list(data.get("guards", {}).keys())
+    repeated = {k for k in occurrences if occurrences.count(k) > 1}
+    same_file_guards = {}
     # 每个步骤带上**它来自哪份规则文件**：跨文件的判据（如"这份清单有没有在别处又列一遍"）
     # 要按来源核，而合并结果本身不记来源。
     for key, value in data.get("guards", {}).items():
@@ -1864,11 +1869,31 @@ def _merge_file(name: str, data, merged: dict) -> None:
             for step in value:
                 if isinstance(step, dict):
                     step.setdefault("_file", f"script/{RULES_DIR_NAME}/{name}")
-        if key in merged["guards"]:
+        if key in repeated:
+            # **同一份文件里续写下一张 `[[guards.<防线名>]]` 表头**：并按次序拼成一个列表，
+            # 不是重复定义（跨文件才是，见下面那一句）。理由：一张表写满几组之后要另起一段
+            # 注释（如"这条防线的另一半：入口跑得起来吗"）就得再开一张表头——不许时只剩
+            # 两条路：把不相干的判据塞进同一个 `groups`，或者干脆删掉一组。
+            # `_check_placeholders` 对**每一张**表各核一遍：续写的那一张同样承载报错文案。
+            _check_placeholders(name, key, value)
+            same_file_guards.setdefault(key, []).extend(value)
+            continue
+        # **空列表不算一处落点**：判据写在脚本里的那些防线，靠 `guard-scripts.toml` 里
+        # 一个空数组占位（只为让"一道防线一份行正文"对两种形态都成立，见该文件表头）。
+        # 判据本体所在的规则文件随后才把真步骤并进来——按"非空即重复"判的话，这一条
+        # 占位与被占位的那道防线永远没法共存。
+        if key in merged["guards"] and value and merged["guards"][key]:
             raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了防线 `{key}`——"
                              "同一防线的规则只能有一处落点（第二处会让你改了其中一份、"
                              "另一份照旧生效；这正是'规则与脚本隔离'要防的形态）")
         _check_placeholders(name, key, value)
+        if value or key not in merged["guards"]:
+            merged["guards"][key] = value
+    for key, value in same_file_guards.items():
+        if key in merged["guards"] and value and merged["guards"][key]:
+            raise RulesError(f"规则文件 {name} 与其它规则文件重复定义了防线 `{key}`——"
+                             "同一防线的规则只能有一处落点（第二处会让你改了其中一份、"
+                             "另一份照旧生效；这正是'规则与脚本隔离'要防的形态）")
         merged["guards"][key] = value
     for key, value in data.get("tokens", {}).items():
         # **分片表不走 tokens 这一层的整表去重**：它按分片键并入（见下），整表同名是常态

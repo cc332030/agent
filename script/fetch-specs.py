@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到本地副本。
+fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/ + 任务提示词）批量取到本地副本。
 
 定位：
   规范常部署于外网、网络可能不佳，AGENTS_COMMON.adoc「网络不佳时取本地副本」建议先把入口与其 specs/
@@ -11,12 +11,26 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   故新增一份规范时**不需要改本脚本**、也不会漏取。取到的副本**落到用户路径下的唯一落点**
   （见下「落点」），不在每个项目里各存一份。
 
+  **提示词一并取**（用户口径：『我希望一键使用』）：只把规范取到本地、提示词还得回站点
+  一份份点，那不叫一键。它们的清单同样来自**一处登记**——入口里指向提示词登记处
+  （PROMPTS_INDEX_RE／`prompt_index_target`）那一行，登记处自己列着有哪些提示词
+  （`prompt_targets`）；公共片段 `prompts/_common.txt` 不在清单里（它不是提示词），
+  但缺了它提示词读不全，故随附随件走（`FOLLOWUP_FILES`）。
+
+  **取到本地还不够，要能点名**（用户口径：『我要是能复制，我为什么还要下载下来』
+  『没有命令 你不能加进去吗？就一句话的事情』）：取下来却还得打开文件、整段贴进会话，
+  "取下来"没换来任何东西。故每轮在落点根下与 agent 命令位各生成一份**口令入口**
+  （`<口令> <提示词名>`，名字/写形/命令位取配置 `[prompts]` 段），它把**装配好的整段**
+  打给会话：`include::` 就地展开、`{主侧重}` 按该提示词自己的声明填好。入口是**脚本**、
+  不抄提示词正文（抄了就是第二份，改一处必漂移），正文永远只有落点里那一份。
+
 用法（在目标项目根目录执行，入口名随平台而异、只给脚本名即可）：
   fetch-specs                          # 取到落点（用户家目录下的 `<落点父目录>/<落点名>`，见下「落点」）
   fetch-specs --base <URL>             # 换规范来源（默认取配置 `[source].base_url`，同源镜像可用）
   fetch-specs --keep                   # 保留本地已有的非空副本（不动已取到的那一份）
   fetch-specs --force                  # 同默认（保留写法，与 --keep 相反）
   fetch-specs --list                   # 只打印将要取的文件清单，不下载
+  fetch-specs --print-prompt <名>      # 装配好落点里那一份提示词并整段输出（口令入口用它；不联网、不写盘）
 
 取回与更新口径（**本节是「怎么取、怎么更新」的真源**——公共入口 `AGENTS_COMMON.adoc`
 「取规范到本地副本」只写落点那一处，其余回指本节；**同一句话不在两处各写一遍**）：
@@ -36,16 +50,20 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     机制形同没有）。换不动/留不下标记时**如实警告**、不得静默（同「落点只读」那条的效力边界口径）；
     **"取最新脚本"因此是每轮必然的一步**：它不另立第二套真源、也不引入校验和——更新的判据与
     规范副本**同一条**（取回的字节与本地逐字节比较），只是对象换成了本脚本自己；
-  - **一次取全**：一次运行把入口与其 `specs/` 全部取回，调用方不必手拼逐条下载命令
+  - **一次取全**：一次运行把入口与其 `specs/`、以及提示词全部取回，调用方不必手拼逐条下载命令
     （清单从入口自身解析，见上「文件清单」）；
-  - **清单以外的那一份（索引页）也每轮核一遍**：`FOLLOWUP_FILES` 里的附随文件**不在**清单里
-    （不是规范副本、也不给引用方读；常量 `FOLLOWUP_FILES`、执行体 `refresh_lagging_followups`），
-    而它列着本仓库有哪些文件——于是它与"脚本自己那一份"是**两件独立的事**：自更新只在
+  - **取全这件事要核得出来**：提示词与规范、索引页**互不引用**，少一份不会有任何东西报错。
+    故收尾按清单逐个核一遍（`report_prompts_missing`），缺的**报出名字并按失败计**——
+    "看着取全了、其实少了几份"是本脚本最贵的一种失效形态；
+  - **清单以外的附随件（索引页、提示词公共片段）也每轮核一遍**：常量 `FOLLOWUP_FILES` ＋ 执行体 `refresh_lagging_followups` 一并（**不在**清单里，不是规范副本、也不是提示词），
+    而索引页列着本仓库有哪些文件、公共片段里装着提示词的公共步骤
+    ——于是它与"脚本自己那一份"是**两件独立的事**：自更新只在
     **脚本变了**时才动手，脚本没变的那一轮一个字节都不写，
     索引页就会停在上一次脚本变动的那一版（人按站点找文件看到的是一份过期目录，且**没有任何
     输出**显示出它落后了）。故它按**规范副本同一条口径**办：每轮都取、按内容判、不同才落盘，
-    落点与安装脚本同一处（落点根下）；**取不到不算失败**（本仓库以外的来源多半没有这个文件），
-    网络失败只**如实警告**"本地那一份可能已落后"——不得静默；
+    落点与安装脚本同一处（落点根下；公共片段按它在仓库里的目录落进 `prompts/` 下）；
+    **取不到不算失败**（本仓库以外的来源多半没有这些文件），网络失败只**如实警告**
+    "本地那一份可能已落后"——不得静默；
   - **这一步的次序**：先认一个跑得起来的解释器 → **拉最新的本脚本** → 按**它**的清单取全 →
     最后取索引（用户口径：「更新顺序应该是 拉最新 py，执行 py，拉最新 toml 索引，拉取规范」）。
     落到 `main` 里就是那四步的先后：`--probe` 走到 `main` 早处即收工（不写盘、不换自身）→
@@ -124,8 +142,8 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
   - **默认以远程为准**：每份清单内文件都按"取回的字节与本地不同才落盘"核对，远端改过就刷新
     （安装脚本会更新，重复执行安装时须能拿到最新的一份）；取回失败时**保留本地已有的那一份**
     并如实报失败，**不得**把本地副本删掉换成没有；
-  - **附随文件（索引页）同样每轮核对**（见「取回与更新口径」）：它不在清单里，故不随清单走，
-    落点与安装脚本同一处、按内容判、取不到只警告；
+  - **附随文件（索引页、提示词公共片段）同样每轮核对**（见「取回与更新口径」）：它们不在清单里，
+    故不随清单走，按内容判、取不到只警告（索引页落点与安装脚本同一处，公共片段落 `prompts/` 下）；
   - `--keep` 反过来：本地已有且非空即不动（只补缺失项），要最新内容就别加它；
   - 退出码：0 成功；1 有文件没取到（清单同时打印失败项）；2 参数或前置条件错误；
   - 网络请求带超时（见 `TIMEOUT_SECONDS`）、失败重试一次；
@@ -142,6 +160,10 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/）批量取到
     `_ensure_writable` 临时恢复，之后重新收紧）——落点是只读的参考物，见上「落点」。
   - **"更新自身"会重跑一次**：换上新版脚本后当轮就 `os.execv` 重启（挂 `--self-updated` 作刹车，
     见 `_restart_with`）——重启后的那一轮按新脚本的清单口径取，用户侧看到的仍是**一次运行**。
+  - **口令入口每轮重写一遍**（`write_prompt_entries`）：内容是现算的，按"内容不同才落盘 + 原子替换
+    + 写完收只读"同一套纪律；**可用名单不烘进文本**，由入口在运行时按落点里 `prompts/` 现算
+    ——烘进去的名单在提示词增删之后就成了一份会撒谎的清单，而落点已只读、没人会去改它。
+    生成与否只看"这一轮认不认得提示词那一层"（登记处取不到时不生成空壳）。
 
 == 输出（用户口径：「显示文件下载进度及其他明细，下载完成不要关闭窗口」）
   - **开跑先交代一轮的规模**：共取几份、来源、落点、并发（一份都还没回来时，这就是唯一的
@@ -344,11 +366,51 @@ INSTALL_SCRIPTS = _PATHCONFIG.install_scripts
 # （见 `_ensure_executable`）。逻辑代码**不在内**——它不是给人直接敲的命令，
 # 落点里唯一的入口是入口脚本（见 specs/general/script.adoc「入口脚本须能直接执行」）。
 ENTRY_SCRIPTS = _PATHCONFIG.entry_scripts
-# 站点索引页：它**不在取回清单里**（不是规范副本、也不给引用方读），但它列着本仓库有哪些
-# 文件——不跟着更新时，人按站点找文件会得到一份过期的目录（见 `refresh_lagging_followups`）。
-# 取不到不算失败（本仓库以外的来源多半没有它）：落盘只在**远端确有、且与本地不同**时发生。
-FOLLOWUP_FILES = ("index.html",)
+# 提示词公共片段：**任务提示词清单里只有提示词本身**（`prompts/` 下非 `_` 前缀的 `.adoc`），
+# 而它们用 `include::_common.txt[tag=…]` 引这一份——故它随附随件走（见 `FOLLOWUP_FILES`）。
+COMMON_PROMPT_REL = "prompts/_common.txt"
+# 提示词所在的目录（`COMMON_PROMPT_REL` 与清单里的提示词都在它下面）
+PROMPT_DIR = os.path.dirname(COMMON_PROMPT_REL)
+
+# 『提示词一并取全』那几条共用的两份**本轮现算**的状态：提示词的登记处（入口里那一行）
+# 与"清单里列着的提示词实际取到了哪几份"。**不按落点里的文件判在不在**：落点是跨来源共用
+# 的只进不出池子，按它判会把"上一轮取到、这一轮没取到"读成"取全了"。
+_PROMPTS_INDEX = None
+# 登记处的正文（本轮取到的那一份）：口令入口的清单从它现算，故与它一起按轮次现取现清。
+_PROMPTS_INDEX_TEXT = ""
+_PROMPTS_TAKEN = set()
+
+# 站点索引页与**提示词的公共片段**：它们**不在取回清单里**（索引页不是规范副本、
+# `prompts/_common.txt` 不是任务提示词），但缺了任何一份，取到的东西都**用不起来**——
+# 索引页列着本仓库有哪些文件（不跟着更新时，人按站点找文件会得到一份过期的目录）；
+# 公共片段是提示词用 `include::_common.txt[tag=…]` 引的那几段，缺了它，提示词读入时
+# 补不齐公共步骤（见 `PROMPTS.adoc`「访问与解析」）。
+# **清单只看"该有哪些文件"、不看"怎么用它们"**：提示词是复制即用的，故提示词在清单里；
+# 片段是"被别的东西引用"的，故在附随件里。取不到不算失败（本仓库以外的来源多半没有它们）。
+FOLLOWUP_FILES = ("index.html", COMMON_PROMPT_REL)
+# 口令入口（『就一句话的事情』）：提示词取下来之后，**点名就能跑**——写入口文件这件事不靠人手。
+# 文件名主干、口令写形、落到哪些 agent 平台的命令位，全部取自配置（`[prompts]` 段，唯一真源）；
+# 本脚本只留"怎么生成"这一层。入口是**脚本**（能带参数，`<口令> review` 即可），不是把提示词
+# 内容抄进去的模板——抄进去等于在落点里放第二份提示词正文，改一处必漂移。
+PROMPT_COMMAND_NAME = _PATHCONFIG.prompt_command_name
+PROMPT_COMMAND_USAGE = _PATHCONFIG.prompt_command_usage
+PROMPT_COMMAND_DIRS = _PATHCONFIG.prompt_command_dirs
+# 入口文件的两套后缀：`.sh`/`.bat` 落**落点根下**（跟安装脚本同一处，`<落点>/<name>.sh <名>`），
+# `.md` 落 agent 平台的**命令位**（平台按 `<name>.md` 认，YAML front matter 给一句说明）。
+PROMPT_COMMAND_SHELL_NAME = PROMPT_COMMAND_NAME + ".sh"
+PROMPT_COMMAND_BAT_NAME = PROMPT_COMMAND_NAME + ".bat"
+PROMPT_COMMAND_AGENT_NAME = PROMPT_COMMAND_NAME + ".md"
+# 口令入口（`.sh`）运行时找解释器的候选次序（空白分隔）：与取规范入口 `fetch-specs.sh` 同一条
+# ——入口**不烘**生成时的 `sys.executable`，落点可被搬去另一台机器，绝对路径那时就失效了。
+PROMPT_SHELL_INTERPRETERS = ("python3", "python")
+# `use-prompt.bat` 的候选次序：Windows 上解释器多叫 `py`/`python3`/`python`（同
+# `fetch-specs.bat` 的探测次序），三个都试、认第一个跑得起来的。
+PROMPT_WINDOWS_INTERPRETERS = ("py", "python3", "python")
 SPECS_REF_RE = re.compile(r"specs/[A-Za-z0-9_./-]+\.adoc")
+# 提示词的**登记处**：入口文档里那一行指向它（如 `PROMPTS.adoc`），任务提示词的清单从它解析
+# （该文件自己声明"登记表在本文"，行形态是 `link:prompts/<名>.adoc[…`——格式由它维护）。
+PROMPTS_INDEX_RE = re.compile(r"[A-Za-z0-9_.\-/]*PROMPTS\.adoc")
+PROMPT_DOC_RE = re.compile(r"prompts/[A-Za-z0-9_.\-/]+\.adoc")
 TIMEOUT_SECONDS = _PATHCONFIG.timeout_seconds
 DEFAULT_WORKERS = _PATHCONFIG.workers
 # "待换的新版本在哪"的交接文件后缀（写在**本脚本自己的路径**之后）：见 `hand_off_self`。
@@ -470,6 +532,10 @@ def parse_args(argv=None):
     parser.add_argument("--self-updated", action="store_true", help=argparse.SUPPRESS)
     # 同上：入口探测解释器时用它跑一遍（走到 `main` 早处即收工：不联网、不写盘、不换自身）。
     parser.add_argument("--probe", action="store_true", help=argparse.SUPPRESS)
+    # 口令入口（`<落点>/<口令>.sh <提示词名>`）用的两件：点哪一份、落点在哪。它们只服务
+    # "把本地那份提示词装配好打印出来"，**不联网、不写盘**（见 `print_prompt`）。
+    parser.add_argument("--print-prompt", metavar="名", help=argparse.SUPPRESS)
+    parser.add_argument("--landing", metavar="目录", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -516,18 +582,66 @@ def fetch_text(base, path, missing_ok=False):
     return text
 
 
+def prompt_index_target(base, entry_text):
+    """从入口自身认出**提示词的登记处**（`PROMPTS.adoc`）。
+
+    入口里指向它的那一行是**一处登记**：提示词从此在本仓库有了"目录在哪"的可解析落点
+    （此前只有人点站点链接才找得到，脚本拿不到清单、也就只能取规范）。解析不到时**不报错**
+    ——来源可能只是本规范集合的一个镜像、没有提示词那一层；那时照旧只取规范（如实说明跳过）。
+    返回 `(登记处路径, 登记处正文)`，解析不到时返回 `(None, "")`。
+    """
+    m = PROMPTS_INDEX_RE.search(entry_text)
+    if not m:
+        return None, ""
+    return m.group(0), fetch_text(base, m.group(0))
+
+
+def prompt_targets(index_text):
+    """从**提示词的登记处**解析要取的任务提示词。
+
+    口径与规范清单同一条：**登记在哪、就取哪些**，不按目录扫——扫描会把草稿、素材与
+    "只对本项目生效"的命令一并取到调用方手里；登记表里那一串 `link:prompts/<名>.adoc[…]`
+    是提示词自己的目录（哪些是任务提示词、叫什么），故清单以它为准。
+    公共片段 `_common.txt` **不在这里**：它不是任务提示词，但缺了它提示词读不全，
+    故随附随件走（见 `FOLLOWUP_FILES`）。
+    """
+    return sorted(set(m for m in PROMPT_DOC_RE.findall(index_text)
+                      if not os.path.basename(m).startswith("_")))
+
+
 def manifest_targets(base):
     """从入口自身解析要取的文件清单。
 
     入口（AGENTS_COMMON.adoc）的加载调度器**唯一登记**了全部公共规范文件，故清单以它为准：
     新增规范文件时它必然被登记，清单随之自动变全（手工维护清单的失效形态正是漏项）。
+    **提示词同样在清单里**：用户口径是"一键使用"——只把规范取到本地、提示词还得回站点找，
+    那不是一键。它们的清单来自入口所指的**提示词登记处**（`PROMPTS.adoc`，见
+    `prompt_index_target`／`prompt_targets`），与规范走同一套"登记即清单"的口径。
     返回 (清单, 缺失的可选文件)；入口文件本身必然在清单里。
     """
+    global _PROMPTS_INDEX, _PROMPTS_INDEX_TEXT
     text = fetch_text(base, MANIFEST_FILE)
     specs = sorted(set(SPECS_REF_RE.findall(text)))
     if not specs:
         raise OSError(f"未能在 {MANIFEST_FILE} 中解析出任何 specs/ 清单")
-    targets = [MANIFEST_FILE] + list(specs)
+    index, index_text = prompt_index_target(base, text)
+    _PROMPTS_INDEX = index
+    _PROMPTS_INDEX_TEXT = index_text
+    prompts = prompt_targets(index_text) if index else []
+    # 两件事分开说：**认不出登记处**（来源多半没有提示词那一层，跳过合理）与**认出了却一份
+    # 都解析不出来**（登记表写法变了、或本页还没登记任何提示词——那时"不取提示词"是静默的
+    # 漏取，不是合理跳过）。同一句话盖住两种时，后一种没人会发现。
+    if not index:
+        print(f"说明: 未能在 {MANIFEST_FILE} 里认出提示词的登记处，本轮只取规范、不取提示词"
+              f"（来源 {base} 可能没有提示词那一层）", file=sys.stderr)
+    elif not prompts:
+        print(f"说明: {index} 里没有登记任何提示词，本轮只取规范"
+              "（该文件是提示词的登记处：一条都没解析出来时，先看它的登记表写法有没有变）",
+              file=sys.stderr)
+    targets = [MANIFEST_FILE]
+    if index:
+        targets.append(index)
+    targets += list(specs) + list(prompts)
     return targets, list(OPTIONAL_FILES)
 
 
@@ -599,7 +713,7 @@ def update_self(base, out_dir, cwd):
 
     只在**非 `--keep`、非 `--list`** 时调用（两者的语义分别是"不动本地那份"与"只看清单、不下载"，
     换上刚取到的新脚本与之相抵；真要最新脚本时不加它——与规范副本同一条口径）。
-    **但它只管"脚本自己这一份"**：清单以外的附随文件（索引页）与脚本是两件事，由
+    **但它只管"脚本自己这一份"**：清单以外的附随文件（索引页、提示词公共片段）与脚本是两件事，由
     `refresh_lagging_followups` **每轮**另行核对——脚本没变的那一轮这里直接返回，那时
     "索引页落后了没有"没有任何人去问（本会话实测的缺口）。反过来，**索引也等它**：那一步由
     `main` 排在取完清单之后，算它的是**已经换新的这一份自己**（用旧脚本算出来的索引还是旧目录）。
@@ -608,7 +722,7 @@ def update_self(base, out_dir, cwd):
 
 
 def refresh_lagging_followups(base):
-    """把**跟不上清单的附随文件**取回来（`FOLLOWUP_FILES`，即站点索引页）——**每轮都做**。
+    """把**跟不上清单的附随文件**取回来（`FOLLOWUP_FILES`：站点索引页、提示词公共片段）——**每轮都做**。
 
     为什么这件不能交给自更新的那条路（本会话实测的缺口，用户点名「避免漏规范」）：
     `update_self` 只在**脚本自身变了**时才动手（"远端那份与本轮真身逐字节不同"），脚本没变
@@ -626,6 +740,13 @@ def refresh_lagging_followups(base):
     本仓库以外的来源多半根本没有这个文件，把"没有这一份"报成整批失败会让一次成功的取文件
     看起来像失败（同 `OPTIONAL_FILES` 的口径）。**但"本地那一份可能已落后"须如实说出来**
     ——静默跳过时，读者无从知道手里那份索引是旧的。
+
+    **提示词的那一半按"缺了就说不全"办**：公共片段（`prompts/_common.txt`）不在任务提示词
+    清单里（它不是提示词），而提示词的公共步骤全在它里面——缺了它，取到的那几份提示词
+    读到未装配形态时**补不齐公共片段**（见 `PROMPTS.adoc`「访问与解析」）。故它随附随件
+    每轮核一次；而"清单里列着、实际没取到"的那几份，按清单逐个核一遍后**如实报出名字**：
+    索引页与提示词之间互不引用，少一份既不报红、也没人发现，那正是"取全了"这句话最贵的
+    一种失效形态（本仓库实证过：看着取全了、其实少了几份）。
     """
     out_dir = install_scripts_dir()
     for rel in FOLLOWUP_FILES:
@@ -671,7 +792,430 @@ def refresh_lagging_followups(base):
             pass
         _make_read_only(dest, is_dir=False)
         print(f"更新: 附随文件 {rel} 已按远端刷新（{_size(len(data))}）——"
-              "索引页与清单同步，按站点找文件不会看到过期目录", file=sys.stderr)
+              + ("索引页与清单同步，按站点找文件不会看到过期目录" if rel.endswith(".html")
+                 else "提示词的公共片段已就位，未装配形态下可照它补齐后再执行"),
+              file=sys.stderr)
+
+
+def prompts_missing(base):
+    """登记处列着的提示词里，**这一轮没取到**的那几份——返回 `(缺的清单, 可否核对)`。
+
+    为什么单列这一步：提示词与规范、索引页**互不引用**，少一份不会有任何东西报错——
+    而"我说取全了"这句话的全部分量就在这一处（漏掉的正是调用方最想要的那一份时，
+    他通常要等到真正去用它才发现，那时已经不在取文件这一步了）。
+    判据是**这一轮取到了哪几份**（`_PROMPTS_TAKEN`），不是"落点里在不在"——落点是跨来源
+    共用的只进不出池子，按它判会把"上一轮取到、这一轮没取到"读成"取全了"。
+    登记处本身取不到时返回 `([], False)`：这一轮的清单都算不出来，无从逐项核。
+    """
+    if not _PROMPTS_INDEX:
+        return [], True
+    try:
+        index_text = fetch_text(base, _PROMPTS_INDEX)
+    except (OSError, http.client.HTTPException):
+        return [], False
+    return [rel for rel in prompt_targets(index_text) if rel not in _PROMPTS_TAKEN], True
+
+
+def report_prompts_missing(base):
+    """把"提示词没取全"如实报出来（缺的名字逐个列出）——**在失败明细之前**打，返回是否取全。
+
+    结论写在明细前面才读得通：它是"要不要重跑"的那句话，而明细只是佐证。
+    **"核不了"与"取全了"必须分得清**：登记处本身取不到时，这一轮按**没取全**计（不是
+    "取全"——把没核到的写成取全了，正是本条要防的那种"看着齐全"）。
+    """
+    missing, checkable = prompts_missing(base)
+    if not checkable:
+        print(f"警告: 核不到提示词是否取全——{_PROMPTS_INDEX} 取不到（这一轮按没取全计，"
+              "不当成取全了）", file=sys.stderr)
+        return False
+    if missing:
+        print(f"警告: 提示词有 {len(missing)} 份这一轮没取到（{_PROMPTS_INDEX} 里列着它们）："
+              f"{'、'.join(missing)}——照着用时会缺这几份", file=sys.stderr, flush=True)
+        return False
+    return True
+
+
+def prompt_names_from_landing(landing):
+    """落点里**实际有哪几份**提示词（按目录现算）——口令入口的"可用名单"取自它。
+
+    为什么按目录而不按登记处：入口要能在**断网**下判"这一份在不在"，而登记处是远端文件；
+    落点里 `prompts/` 下非 `_` 前缀的 `.adoc` 与登记处列着的本就是同一批（取的时候按登记取）。
+    """
+    d = os.path.join(landing, *PROMPT_DIR.split("/"))
+    if not os.path.isdir(d):
+        return []
+    return sorted(f[:-len(".adoc")] for f in os.listdir(d)
+                  if f.endswith(".adoc") and not f.startswith("_"))
+
+
+def prompt_entry_script():
+    """`.sh` 形态的口令入口：正文一个字都不抄，只记"该跑哪一份"。
+
+    为什么是脚本而不是"把提示词正文填进模板"：那样落点里就有了**第二份提示词正文**
+    ——改一处必漂移，而落点里那份还看不出是旧的。脚本只记"该跑哪一份"，正文始终只有
+    落点里那一份（用户口径：取下来就是为了**不用再复制**，点名即用）。
+
+    **可用名单在现场算、不烘进文本**：烘进去的名单在提示词增删之后就是一份会撒谎的清单
+    （而落点已收紧只读，没人会去改它）；名单的判据只有一处——落点里 `prompts/` 下有哪些。
+    """
+    usage = PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+    # 解释器**现在算、不烘进文件**：入口生成时的 `sys.executable` 是"生成这一刻这台机器"上的
+    # Python，落点却是家目录下跨来源共用、可被整个搬去另一台机器的（换机器、换 venv、改名后
+    # 那一行直接 `no such file`）。故这里只留候选次序，由入口在运行时逐个试跑（`--probe`）。
+    # 次序与取规范入口同一条（`fetch-specs.sh`）：先 `python3` 再 `python`，Windows 上多一个
+    # `py`；空白分隔是刻意的约定——候选名里不会有空格。
+    interp = " ".join(PROMPT_SHELL_INTERPRETERS)
+    return f"""#!/bin/sh
+# {usage}——把落点里那一份提示词**装配好**整段输出（include:: 已就地展开）。
+#
+# 由取规范脚本生成（落点根下的 {os.path.basename(INSTALL_SCRIPTS[0])}），**不要手改**：
+# 重跑取规范会覆盖它。本文件不抄提示词正文——正文只有落点里那一份，改它不必改这里。
+set -eu
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+NAME=${{1:-}}
+if [ -z "$NAME" ] || [ "$NAME" = "-h" ] || [ "$NAME" = "--help" ]; then
+    echo "用法: {usage}" >&2
+    echo "可用的提示词名（落点里现有的）:" >&2
+    for f in "$HERE"/{PROMPT_DIR}/*.adoc; do
+        [ -e "$f" ] || continue
+        b=${{f##*/}}
+        case "$b" in _*) continue ;; esac
+        echo "  ${{b%.adoc}}" >&2
+    done
+    exit 2
+fi
+# 解释器逐个试跑（`--probe`：只证"这一份脚本在它底下跑得起来"，不联网、不写盘），
+# 认第一个真的跑得起来的——生成时那台机器上的绝对路径搬去别的机器就失效了。
+PY=
+for c in {interp}; do
+    if command -v "$c" >/dev/null 2>&1 \
+        && "$c" "$HERE/{os.path.basename(INSTALL_SCRIPTS[0])}" --probe >/dev/null 2>&1; then
+        PY=$c
+        break
+    fi
+done
+if [ -z "$PY" ]; then
+    echo "错误: 未找到可用的解释器（{interp}），无法输出提示词 $NAME" >&2
+    exit 127
+fi
+exec "$PY" "$HERE/{os.path.basename(INSTALL_SCRIPTS[0])}" --print-prompt "$NAME" --landing "$HERE"
+"""
+
+
+def prompt_entry_bat():
+    """`.bat` 形态的口令入口（与 `sh` 那份同一件事；Windows 上按关联执行）。
+
+    解释器同样**现场试跑、不烘路径**（同 `.sh` 那份的理由：落点可被搬去另一台机器），
+    次序是 Windows 上的常见命名 `py` → `python3` → `python`。
+    """
+    interp = " ".join(PROMPT_WINDOWS_INTERPRETERS)
+    usage = PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+    return f"""@echo off
+rem {usage}——把落点里那一份提示词装配好整段输出。
+rem 由取规范脚本（{os.path.basename(INSTALL_SCRIPTS[0])}）生成，不要手改：重跑取规范会覆盖它。
+rem 本文件不抄提示词正文——正文只有落点里那一份，改它不必改这里。
+setlocal
+set "HERE=%~dp0"
+if "%~1"=="" goto usage
+if "%~1"=="-h" goto usage
+if "%~1"=="--help" goto usage
+set "PY="
+for %%R in ({interp}) do (
+    if not defined PY (
+        %%~R "%HERE%{os.path.basename(INSTALL_SCRIPTS[0])}" --probe >nul 2>nul
+        if not errorlevel 1 set "PY=%%~R"
+    )
+)
+if not defined PY (
+    echo 错误: 未找到可用的解释器（{interp}），无法输出提示词 %~1 1>&2
+    exit /b 127
+)
+"%PY%" "%HERE%{os.path.basename(INSTALL_SCRIPTS[0])}" --print-prompt "%~1" --landing "%HERE%"
+exit /b %ERRORLEVEL%
+:usage
+echo 用法: {usage} 1>&2
+echo 可用的提示词名就在落点根下的 {PROMPT_DIR}/ 里（`_` 前缀的是公共片段，不是提示词） 1>&2
+exit /b 2
+"""
+
+
+def prompt_entry_agent():
+    """agent 平台命令位的 `<name>.md`：点名之后**照落点里那一份做**，不在这里抄正文。
+
+    平台只认自己目录下的命令，故这一段是"命令名"的落点；但它只负责**领到哪里去**。
+    取不到就停：空壳命令被当成"提示词已加载"是本条最贵的失效形态。
+
+    **路径写全、不写"PATH 上的 `<name>`"**：落点根下生成的是 `{PROMPT_COMMAND_SHELL_NAME}`
+    ——`<name>.sh` 那个名字本身**没有**进 PATH，让读者去敲 `{PROMPT_COMMAND_NAME} <名>` 时
+    他得到的是 "command not found"，而这个 `.md` 又不会自己跑命令（它只是指令）。故第 2 步
+    给出**本机上真的存在的那个路径**（家目录现取，与落点同一条口径）。
+    """
+    usage = PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+    landing = install_scripts_dir()
+    sh_path = os.path.join(landing, PROMPT_COMMAND_SHELL_NAME)
+    bat_path = os.path.join(landing, PROMPT_COMMAND_BAT_NAME)
+    return f"""---
+description: 跑本地落点里的任务提示词（{usage}；正文由取规范脚本取到本机，本文件只负责把它装好）
+---
+
+执行本命令：
+
+1. 先看调用参数里的提示词名（如 `review`、`refactor`）；没给就问一句要哪一份，
+   并把落点 `{PROMPT_DIR}/` 下现有的名字列出来（`_` 前缀的是公共片段，不是提示词）。
+2. 运行落点根下的入口（Linux/macOS：`{sh_path}`；Windows：`{bat_path}`），
+   参数就是第 1 步那个名字——`<入口> <提示词名>`。它不在 PATH 上，故**写全路径**。
+3. 它输出的是**装配好的整段提示词**（`include::` 已在落点内就地展开）。把那段输出当任务指令执行。
+4. **取不到就停**：退出码非 0、或没有输出时，如实说明"提示词 `<名>` 不在本机落点里"，
+   先补取再来——**不得**凭命令名或印象自己编一份步骤顶上。
+"""
+
+
+def resolve_prompt_command_dirs():
+    """把配置里的命令位取值填好：`{home}`/`{name}` 是**本轮现取**的家目录与口令名主干。
+
+    `{home}` 现取、不写死、不缓存（与落点同一条口径）；家目录取不到、或配置里仍留着未填的
+    占位符时，**那一项整个不生成**——拼不出来就不猜路径，绝不把 `{home}/...` 这个字面量
+    当成目录建出来（占位符留在路径里时，入口会落到一个没人会去的目录，而"已生成"那句话
+    照旧打了出来）。
+    """
+    try:
+        home = _user_home_dir()
+    except (OSError, ValueError):
+        home = ""
+    if not home or home == "~":
+        return []
+    out = []
+    for pattern in PROMPT_COMMAND_DIRS:
+        d = pattern.replace("{home}", home).replace("{name}", PROMPT_COMMAND_NAME)
+        if "{" in d or "}" in d:
+            continue
+        out.append(d)
+    return out
+
+
+
+def prompt_entries():
+    """本轮要生成的口令入口：`[(落点全路径, 平台, 生成函数)]`，服务的是**登记处列着的**那些提示词。
+
+    不另列一份清单：加一份提示词不必改任何一处（入口的可用名单在运行时按落点现算）。落点根下两套
+    （`sh`/`bat`，与安装脚本同一处）+ 每个 agent 命令位一套（`md`）。家目录取不到时只生成
+    落点根下那两套：命令位要拼家目录，拼不出来不猜路径（与落点同一条口径，不静默换地方）。
+    """
+    targets = [(os.path.join(install_scripts_dir(), PROMPT_COMMAND_SHELL_NAME), "sh",
+                prompt_entry_script),
+               (os.path.join(install_scripts_dir(), PROMPT_COMMAND_BAT_NAME), "bat",
+                prompt_entry_bat)]
+    for d in resolve_prompt_command_dirs():
+        targets.append((os.path.join(d, PROMPT_COMMAND_AGENT_NAME), "md", prompt_entry_agent))
+    return targets
+
+
+def write_prompt_entries(index_text):
+    """生成口令入口各一份——**每轮重写**（内容是现算的），与安装脚本同一套落盘纪律。
+
+    `index_text` 只用来判"这一轮认不认得提示词这一层"（登记处取不到时不生成空入口）。
+
+    内容不同才写、原子替换、写完收紧成只读：与规范副本、索引页同一条口径（"以远程/现算为准"）。
+    返回 `(写入的清单, 告警清单)`——写不进去时**如实告警**，不静默。
+    """
+    written, problems = [], []
+    if not index_text:
+        return written, problems
+    for dest, _platform, render in prompt_entries():
+        data = render().encode("utf-8")
+        if os.path.isfile(dest) and local_bytes(dest) == data:
+            # **内容一致的那一轮也要补在位**：清缓存/解压工具会把执行位吃掉，而这一步
+            # "内容没变"就跳过——不在这里补齐时，口令成了 `Permission denied`，而输出里
+            # 一个字都没说它跑不了（同 `ensure_landing_executables` 的口径：补位与
+            # "这一轮落了哪几个盘"解耦）。只对落点根下那两份（`.sh`/`.bat`）做。
+            _prompt_entry_mode(dest)
+            continue
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            _ensure_writable(os.path.dirname(dest), dest)
+            tmp = f"{dest}.part"
+            with open(tmp, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp, dest)
+        except OSError as e:
+            problems.append(f"{dest}（{e}）")
+            continue
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        _prompt_entry_mode(dest)
+        written.append(dest)
+    return written, problems
+
+
+def _prompt_entry_mode(dest):
+    """给口令入口定权限位：`.sh`/`.bat` **可执行 + 只读**（与安装脚本同一套），`.md` 只读。
+
+    执行位是口令能不能被点名的全部——写完就收紧成只读，故"补位"必须在收紧之前、且
+    **每一轮都做**（`write_prompt_entries` 在内容一致时也会走到这里）。
+    """
+    if dest.endswith((".sh", ".bat")):
+        _chmod_report(dest, _WRITABLE_FILE_MODE | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _make_read_only(dest, is_dir=False)
+
+
+# 行内的 `include::<文件>[tag=…]` 一律认（**不锚行首**）：公共片段的说明里就写着这个指令的
+# 形态，锚行首时形态一变就整份不装配，而"装配没装配"只能靠肉眼发现（本仓库实测：写在本行
+# 之前的说明文字挡住了匹配，十六处片段一处都没展开、返回码却是 0）。
+INCLUDE_RE = re.compile(
+    r"include::(?P<rel>[^\[\n:]+)\[(?:tag=(?P<tag>[^\]]+)|lines=(?P<lines>[^\]]*))?\]")
+
+
+def _tag_block(text, tag):
+    """取公共片段里 `// tag::<tag>[]` 与 `// end::<tag>[]` 之间的正文（含两端之间的空行）。"""
+    m = re.search(r"// tag::" + re.escape(tag) + r"\[\](.*?)// end::" + re.escape(tag) + r"\[\]",
+                  text, re.S)
+    return m.group(1).strip("\n") if m else None
+
+
+def assemble_prompt(text, base_dir, depth=0, root=None):
+    """把 `include::` 就地展开——**取到的是原始文件，命令入口必须自己装**。
+
+    不展开就少半份题面（本仓库实证：公共步骤一条都不在正文里，读到的人照着做会漏步）。
+    行为按 AsciiDoc 的两条取值实现：`tag=` 取标记段、`lines=` 取行区间或 `a..b`；引用的
+    文件找不到 / 标记不存在时**保留原指令**（`registry_text` 里"看着装过了"比"少了几段"
+    更难发现，故宁可让它显眼地留在输出里）。嵌套按 `depth` 限深，防互引成环。
+
+    `root` 是**落点根**：提示词落在来源槽里，而公共片段 `prompts/_common.txt` 是附随件、
+    落在落点根下的同一相对目录——只按引用方所在目录找时，那十六处片段一个都装不上
+    （本仓库实测）。故取文件的次序是"引用方所在目录 → 落点根下的同一相对路径"。
+    """
+    if depth > 8:
+        return text
+    root = base_dir if root is None else root
+
+    pkg = os.path.basename(base_dir)
+
+    def repl(m):
+        rel = m.group("rel").strip()
+        # 取文件三处依序：引用方所在目录 → 落点根下拼**同一包内相对路径** → 落点根下按原路径。
+        # 中间那一处是关键：提示词与公共片段同在 `prompts/` 包内，而片段是附随件、落在落点根下
+        # ——槽里的提示词写的是 `_common.txt`，根下那份却在 `prompts/_common.txt`
+        # （本仓库实测：少了这一处，十六处片段一个都装不上，而返回码仍是 0）。
+        candidates = [os.path.join(base_dir, *rel.split("/")),
+                      os.path.join(root, pkg, *rel.split("/")),
+                      os.path.join(root, *rel.split("/"))]
+        target = next((c for c in candidates if os.path.isfile(c)), None)
+        if target is None:
+            return m.group(0)
+        with open(target, encoding="utf-8") as fh:
+            sub = fh.read()
+        tag, lines = m.group("tag"), m.group("lines")
+        if tag:
+            block = _tag_block(sub, tag.strip())
+            if block is None:
+                return m.group(0)
+            return assemble_prompt(block, os.path.dirname(target), depth + 1, root)
+        if lines:
+            spec = lines.strip()
+            rows = sub.splitlines()
+            if ".." in spec:
+                a, _, b = spec.partition("..")
+                try:
+                    picked = rows[int(a) - 1:int(b)] if b.strip() else rows[int(a) - 1:]
+                except ValueError:
+                    return m.group(0)
+            else:
+                try:
+                    picked = [rows[int(spec) - 1]]
+                except ValueError:
+                    return m.group(0)
+            return assemble_prompt("\n".join(picked), os.path.dirname(target), depth + 1, root)
+        return assemble_prompt(sub, os.path.dirname(target), depth + 1, root)
+
+    return INCLUDE_RE.sub(repl, text)
+
+
+def _prompt_root(path, base):
+    """这份提示词对应的**落点根**（附随件 `prompts/_common.txt` 那一处）：来源槽的上一层。
+
+    `base` 本身是落点根（老版本把提示词放在根下、或用户自己复制过来的）时就用它自己——
+    故判据是"这份文件在不在 base 的下一层"，不是"base 看起来像不像一个槽名"。
+    """
+    parent = os.path.dirname(os.path.abspath(path))
+    while parent and os.path.abspath(parent) != os.path.abspath(os.sep):
+        if os.path.abspath(parent) == os.path.abspath(base):
+            return base
+        if os.path.dirname(parent) == os.path.abspath(base):
+            return os.path.abspath(base)
+        parent = os.path.dirname(parent)
+    return base
+
+
+def _prompt_slot_dirs(root):
+    """可能放着提示词的目录：**落点根下**（附随件 `prompts/_common.txt` 在那）与**每个来源槽**。
+
+    提示词属规范副本那一份（取回清单里、按来源分槽），安装脚本与口令入口在落点根下——
+    两处都可能命中（用户从落点复制过来的、或者老版本落在根下的），故两个都找一遍。
+    """
+    dirs = [root]
+    if os.path.isdir(root):
+        for child in sorted(os.listdir(root)):
+            slot = os.path.join(root, child)
+            if os.path.isdir(slot) and not child.startswith("."):
+                dirs.append(slot)
+    return dirs
+
+
+PRIMARY_DECL_RE = re.compile(r"\*\*主侧重[^*]*\*\*\s*[:：]\s*\*\*([^*\n]+?)\*\*")
+PLACEHOLDER = "{主侧重}"
+
+
+def fill_primary(body):
+    """把片段里的 `{主侧重}` 换成提示词自己声明的那一个值（值只在提示词正文里，一处）。
+
+    取不到声明时**原样留着**——宁可显眼地留一个占位符，也不替它猜一个方向：方向选错比漏步更糟。
+    """
+    m = PRIMARY_DECL_RE.search(body)
+    if not m:
+        return body
+    return body.replace(PLACEHOLDER, m.group(1).strip())
+
+
+def print_prompt(name, landing=None):
+    """把落点里那一份提示词**装配好**整段打到 stdout——口令入口的执行体（不联网、不写盘）。
+
+    判据只有一条：输出的必须是**可直接执行的那一整段**（`include::` 已就地展开）。取不到时
+    如实报错并返回非 0——"取不到"不得变成"输出了半份"，那正是让口令看起来能用、实际漏步的形态。
+    """
+    base = landing or shared_cache_dir()
+    path = None
+    # 提示词落在**来源槽**里（规范副本那一份，按来源分槽），口令入口却在落点根下
+    # ——故按"落点根 → 各来源槽"的顺序现找：来源换过几次时，先找到的那份就是这一轮的。
+    for slot in _prompt_slot_dirs(base):
+        candidate = os.path.join(slot, *PROMPT_DIR.split("/"), name + ".adoc")
+        if os.path.isfile(candidate):
+            path = candidate
+            break
+    if path is None:
+        print(f"错误: 落点里没有这份提示词 {name!r}（找过 "
+              f"{'、'.join(_prompt_slot_dirs(base))}）——先跑一次取规范脚本把它取下来",
+              file=sys.stderr)
+        return EXIT_USAGE
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    body = assemble_prompt(text, os.path.dirname(path),
+                           root=_prompt_root(path, base))
+    # `{主侧重}` 是片段里的占位符，取值只在提示词自己的「主侧重」段（值不同、不得混用）：
+    # 装配时补上——不补的话，命令吐出来的是一份还带着 `{主侧重}` 的题面，照做的人不知道
+    # 该按哪个方向干（本仓库实测：片段本身只有占位符，一个字的方向都不含）。
+    body = fill_primary(body)
+    # 装配完仍留着 include:: 的，说明有片段没取到：**说出来**，不静默当装配完成
+    left = INCLUDE_RE.findall(body)
+    if left:
+        print(f"警告: 装配后仍留有 {len(left)} 处 include:: 未展开（明细见正文）——公共片段可能"
+              f"没取全，先重跑取规范脚本（{os.path.basename(INSTALL_SCRIPTS[0])}）", file=sys.stderr)
+    sys.stdout.write(body)
+    if not body.endswith("\n"):
+        sys.stdout.write("\n")
+    return EXIT_OK
 
 
 def _refresh_self(base, out_dir, cwd):
@@ -1438,7 +1982,7 @@ def resolve_out_dir(args):
 
 
 def main(argv=None):
-    global _DONE
+    global _DONE, _PROMPTS_INDEX, _PROMPTS_INDEX_TEXT, _PROMPTS_TAKEN
     _DONE = 0
     args = parse_args(argv)
     base = args.base
@@ -1456,6 +2000,12 @@ def main(argv=None):
     if args.probe:
         print(f"# 探针通过：{sys.executable}")
         return EXIT_OK
+
+    # 口令入口的执行体（`<落点>/<口令>.sh <名>`）：只读落点里那一份、装配好打出来，
+    # **不联网、不写盘、不换自身**——它排在自更新之前，正是为了这两条（点一次口令不该
+    # 顺手把落点改一遍，也不该在断网时罢工）。
+    if args.print_prompt:
+        return print_prompt(args.print_prompt, args.landing)
 
     # 上一轮留下的新版本：先换上它、再照它的清单口径干活（见 `hand_off_self`）
     hand_off_self()
@@ -1488,6 +2038,10 @@ def main(argv=None):
         _clean_self_tmp(os.getcwd(), keep=[tmp_fallback])
         update_self(base, out_dir, os.getcwd())
 
+    # 这两份状态**每轮现算**：`update_self` 换上自己后当场重启、本轮由新进程从零开始，
+    # 故到这里它们只属于这一轮（同一进程内跑两轮也不接上一轮的数，见 `manifest_targets`）。
+    # 函数首行那句 `global` 是它们唯一的声明处（下面还有一处分派给 `manifest_targets`）。
+    _PROMPTS_INDEX, _PROMPTS_INDEX_TEXT, _PROMPTS_TAKEN = None, "", set()
     try:
         targets, optional = manifest_targets(base)
     except Exception as e:                                  # noqa: BLE001 - 网络与解析都按同一路径报错
@@ -1510,11 +2064,16 @@ def main(argv=None):
             print(f"{rel}  ->  {target_path(scripts_dir, rel)}")
         print(f"# 安装脚本 {len(INSTALL_SCRIPTS)} 份，落点根下: {scripts_dir}"
               f"{'（--no-scripts 时不取）' if args.no_scripts else ''}")
+        if _PROMPTS_INDEX_TEXT:
+            print(f"# 口令入口: {scripts_dir}（{PROMPT_COMMAND_SHELL_NAME} / "
+                  f"{PROMPT_COMMAND_BAT_NAME}）；点名写法 "
+                  + PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+                  + "（可用名单由落点里 prompts/ 现算）")
         return EXIT_OK
 
     # `--force` 与默认同为"以远程为准"，此处只保留它的写法（与 `--keep` 相反）；
     # `--keep` 下 `download_one` 自己判"本地已有即不动"
-    total = len(targets) + len(optional) + (0 if args.no_scripts else len(INSTALL_SCRIPTS))
+    total = len(targets) + len(optional) + (0 if args.no_scripts else len(INSTALL_SCRIPTS)) + len(FOLLOWUP_FILES)
     # 开跑前先交代**这一轮取多少份、从哪来、落到哪**：一份都还没回来时这几行是唯一的
     # "它在干活"的信号；进度行的分子分母以这里的 `total` 为口径。
     started = time.monotonic()
@@ -1556,8 +2115,26 @@ def main(argv=None):
     # 它排在这一串的**最后**、算它的也是**这一份已经更新过的自己**：它列着什么，取决于
     # "谁在算"——步骤提到前面，读者按站点找文件时看到的那一份就还是旧脚本算出来的
     # （新增/改名的文件静默不在索引里）。`--list` 不取文件，故也不取它。
+    # 清单里列着的提示词**这一轮取到了哪几份**：判据是这一轮的结果，不是"落点里在不在"
+    # ——落点只进不出、跨来源共用，按它在不在判会把上一轮的结果读成本轮的。失败项不进集合
+    # （"远端没有这一份"与"落盘失败"都以 `fail` 记，见 `download_one`）。
+    _PROMPTS_TAKEN.update(r[0] for r in results
+                          if _PROMPTS_INDEX and r[0].startswith(PROMPT_DIR + "/")
+                          and r[1] != "fail")
     if not args.list:
         refresh_lagging_followups(base)
+        # **口令入口**（用户口径：『没有命令 你不能加进去吗？就一句话的事情』）：提示词取到了
+        # 但还得人肉复制，等于没取——故落点根下与各 agent 命令位各生成一份，`<口令> <名>` 即可
+        # 把装配好的整段打给会话。生成与否取自"这一轮认不认得提示词那一层"（`_PROMPTS_INDEX_TEXT`），
+        # 可用名单则由入口在运行时按落点现算。
+        made, problems = write_prompt_entries(_PROMPTS_INDEX_TEXT)
+        for line in problems:
+            print(f"警告: 口令入口落盘失败 {line}——" + PROMPT_COMMAND_USAGE.format(
+                name=PROMPT_COMMAND_NAME) + " 可能跑不了（其余照常）", file=sys.stderr)
+        if made:
+            print(f"口令入口: 已生成 {len(made)} 份（落点根下与 agent 命令位）——"
+                  "口令 " + PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+                  + " 即可把落点里那一份提示词装配好整段输出，不必再打开文件复制")
 
     # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本的来源槽
     # + 安装脚本）**一次收紧**——只收紧一部分时另一半仍是可写的，"落点是只读的"这句话
@@ -1611,6 +2188,9 @@ def main(argv=None):
     if updated:
         for rel, _, why in updated:
             print(f"  [刷新] {rel} -- {why}")
+    # 提示词那一半先核一遍（**在失败清单之前**）：少的那几份的本轮明细就混在下面的
+    # `[失败]` 行里，结论写在明细前面才读得通（它是"要不要重跑"的那句话）。
+    prompts_complete = report_prompts_missing(base)
     if failed:
         for rel, _, why in failed:
             print(f"  [失败] {rel} -- {why}", file=sys.stderr)
@@ -1618,12 +2198,26 @@ def main(argv=None):
               "失败项若显示为 `0 B`，先见脚本头部「原子替换抵不住的那条路径」"
               "（多为把落点里的文件当成命令 stdout 的用法所致）。", file=sys.stderr)
         return EXIT_INCOMPLETE
+    if prompts_complete is False:
+        # 没取全的提示词已在 `report_prompts_missing` 里按名字报过；这里只给一句结论。
+        print("提示: 提示词没取全——重试本脚本即可补取（清单以提示词登记处为准）。",
+              file=sys.stderr)
+        return EXIT_INCOMPLETE
     if not fresh and not updated and not args.keep:
         print("说明: 清单内文件与远程逐字节一致，落点未改动（判据是内容，不是时间）。")
     if updated:
         print("提示: 本地副本**已被远程内容覆盖**（落点是本脚本自己的那份）——"
               "要留本地改动请先备份、或下次加 --keep。")
     print(f"规范已就绪：读取落点下的 {MANIFEST_FILE} 及其引用的 specs/ 规范，并持续遵守。")
+    if _PROMPTS_INDEX:
+        print(f"提示词已就绪：{_PROMPTS_INDEX} 登记的那几份在落点下的 "
+              f"{os.path.dirname(COMMON_PROMPT_REL)}/（公共片段 {COMMON_PROMPT_REL} 与它们同处）"
+              "——用哪一份就点名哪一份："
+              + PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
+              + "（落点根下的 "
+              f"{PROMPT_COMMAND_SHELL_NAME} / {PROMPT_COMMAND_BAT_NAME}），它把 `include::` "
+              "就地装配好整段输出，直接当任务指令用；也可直接读落点里那一份，"
+              "但那是**原始文件**、`include::` 尚未展开，须按公共片段的说明补齐后再执行。")
     return EXIT_OK
 
 
