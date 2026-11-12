@@ -227,6 +227,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ledger_table_generated_guard` | `script/specs-rules/check_ledger_table_generated_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_git_attributes_merge_guard` | `script/specs-rules/check_git_attributes_merge_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_spec_driven_guard` | `script/specs-rules/spec/guards/check_spec_driven_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_recurrence_escalation_guard` | `script/specs-rules/execution/guards/check_recurrence_escalation_guard.adoc`
 |===
 
 == 记账沿革（两个基线的口径与反复出现的教训）
@@ -354,6 +355,7 @@
 | 93 | 并行改动的独占落点：只增不改的落点须配 `merge=union`
 | 94 | 并行改动的独占落点：逐行登记表须是生成物
 | 95 | 规格（spec driven）防线
+| 96 | 复发即面防线（同一处改到第二遍就升级检查、反复修改的功能须落设计基线）
 |===
 
 == 维护约定

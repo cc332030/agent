@@ -35,7 +35,7 @@
 == 落点（按名加载，本文件不复制判据）
 
 * 分级与最高关注项的完整定义、指令执行、一件事的定义与展开、先规划后执行、范围控制、文件操作、破坏性操作、临时产物、节点自查、自检 → `specs/core/execution.adoc`
-* 指令的完整性、输出的对齐、一件事的判定标准、节点判定标准与依据、自检七问的逐条原文 → `specs/general/execution-detail.adoc`
+* 指令的完整性、输出的对齐、一件事的判定标准、节点判定标准与依据、自检九问的逐条原文 → `specs/general/execution-detail.adoc`
 * 知识边界（不得顺口编造）、环境能力自评、执行前自检清单的完整口径 → `specs/general/self-check.adoc`
 * 读取范围、长会话治理、执行吞吐、token 纪律 → `specs/general/context.adoc`
 * 验证的适用边界、效力等级、三视角与留证 → `specs/general/verify.adoc`
