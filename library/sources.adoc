@@ -277,6 +277,13 @@
 * 依据要点：上述标准要求的是"**有独立、可核对的评审发生**"与"**变更可追溯**"，**未**规定"复核者须与执行者来自同一产品/同一来源"。
 * **须注意的语义差异（同义性，同 Agent 复核的适用面）**：本集合"**强制同 Agent**"是**自己更严的取舍**（防"缺复核时随手抓一个不可核对的外部执行者"），其**成立前提是环境里确实有同 Agent 的执行者可用**——该前提**由平台给出**。故不得把它读成平台无关的通用前提、更不得读成"某标准规定必须同一产品复核"；**平台层未写明该前提**时，**不得**因"没有同 Agent 子执行者"而拒做或中断交付。规则本体见 `specs/platform/cnb.adoc`「评论唤起新实例」。
 
+== Chrome DevTools Protocol（运行时事实的可读入口）
+
+* 材料：Chrome DevTools Protocol 的官方协议描述（`ChromeDevTools/devtools-protocol` 官方仓库的协议 JSON，**官方文本已取回**：本次按原始 JSON 取回并逐字比对下列域描述）。
+* 依据要点（逐字摘，协议 JSON 中 `DOM`/`Network`/`Log` 与 `Runtime` 各域的 description 字段）：**Network** 域 —— "Network domain allows tracking network activities of the page. It exposes information about http, file, data and other requests and responses, their headers, bodies, timing, etc."；**DOM** 域 —— "This domain exposes DOM read/write operations. Each DOM Node is represented with its mirror object that has an `id`."；**Runtime** 域 —— "Runtime domain exposes JavaScript runtime by means of remote evaluation and mirror objects."；**Log** 域 —— "Provides access to log entries."。协议版本字段为 `{"major": "1", "minor": "3"}`。
+* 用途：`specs/general/planning.adoc`「卡住时先自证」的『取证用跑在真实场景里的工具、取真实证据』与 `specs/general/verify.adoc`「编译/运行验证」的『取证要用真实场景里的工具、取它给出的事实』——调试工具把运行时自己看到的事实暴露为可读数据，故"取证"不必先改代码。
+* **须注意的语义差异（同义性，取证次序）**：该协议给的是**可读的事实出口**（DOM/网络/运行时/日志各域把运行时状态变成可读数据），**未**规定"取证该在什么次序上排、什么时候才允许改代码加日志"、**未**规定"不得拿简化样例替代真实场景"——这两条是本集合按上述方向的**判据化取舍**（见 `library/adoption.adoc`）。
+
 == 上下文工程（Anthropic 工程博客 / Agent Skills 开放规范）
 
 * 材料：Anthropic 工程博客《Effective context engineering for AI agents》（公开文章，**官方网页已取回、仅题名与要点可逐字核对**）；Agent Skills 开放规范（**业界约定，非标准**，其 progressive disclosure 一节）。
