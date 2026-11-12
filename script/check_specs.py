@@ -122,6 +122,7 @@
  94. 并行改动的独占落点：逐行登记表须是生成物
  95. 规格（spec driven）防线
  96. 复发即面防线（同一处改到第二遍就升级检查、反复修改的功能须落设计基线）
+ 97. 依赖直接新增防线（能用现有依赖满足时不新增直接依赖）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -604,6 +605,19 @@
      的 `RECURRENCE_ESCALATION_ANCHORS`。由 `check_recurrence_escalation_guard` 钉住；
      「这次算不算第二遍」「成因是不是同一个」「这一遍到底升没升级到判据」属语义判断与运行时事实，
      交人/子 agent 复核。
+
+ 129. 依赖直接新增防线（**用户提出**）：用户原话「除非有冲突或者其他原因，否则能用的情况下（间接依赖），
+     不要去新增依赖（直接依赖），比如 maven 手动写依赖到 pom.xml 但是可能已经间接依赖了」。判据本体落
+     通用层 `specs/general/dependency.adoc`「引入依赖」，钉四件：① **能用现有依赖（含间接依赖）满足时
+     不新增直接依赖**（条文与 L1、三条判定标准——其中「找不到这个类是从哪来的」正是实测触发点）；
+     ② **三档例外及去向**（要钉版本时落**版本约束**而不是多一条声明、传递路径可能失效、对外编译期契约）；
+     ③ **反向口径**（间接依赖带入的库**可以直接使用**，本条不是「没声明就不许用」）；④ **依据两侧**
+     （`library/sources.adoc` 的 Maven 官方原文——官方给的是**相反**建议；`library/adoption.adoc` 的
+     本站取舍与同义性差异）。另核三处落点：两份栈文件的**载体条回指通用层、不复述**、调度器与公开面登记、
+     以及旧口径（「传递依赖不直接使用」「传递依赖已满足时不显式声明」）**不得写回**。规则数据在
+     `script/specs-rules/dependency/guards/check_dependency_direct_add_guard.toml`。由
+     `check_dependency_direct_add_guard` 钉住；「这次新增的那条依赖，其能力是不是现有依赖面里已有」
+     属运行时事实（要解析依赖树），交人/子 agent 复核。
 
 """
 
@@ -1676,6 +1690,7 @@ _LIBRARY_LOCATING_SOURCE_MARKERS = _RULES_TOKENS["_LIBRARY_LOCATING_SOURCE_MARKE
 # 具体源地址在技术栈/平台层（属推荐与举例，可增删——故只钉载体与边界，不钉名单）。
 # 锚点须**能区分语义**：只留"已配置过**"这类任何措辞都会命中的片段，等于只拦得住
 # "整条被删"、拦不住"边界被改写"（正是本防线要防的失效形态），故每条的锚点取判据句。
+DEPENDENCY_ADD_SECTION = "引入依赖"
 REGISTRY_SECTION = "包源（包仓库/镜像站）的选用"
 REGISTRY_ANCHORS = _RULES_TOKENS["REGISTRY_ANCHORS"]
 # 『包源与镜像源』依据主题（library/mirrors.adoc）的要点锚点：该主题的价值全在
@@ -9677,6 +9692,46 @@ def check_runtime_env_guard():
     phase_done()
 
 
+def check_dependency_direct_add_guard():
+    """『能用现有依赖满足时不新增直接依赖』防线（**用户提出**）。
+
+    用户口径（Issue）：『除非有冲突或者其他原因，否则能用的情况下（间接依赖），不要去新增
+    依赖（直接依赖），比如 maven 手动写依赖到 pom.xml 但是可能已经间接依赖了』。
+
+    要治的失效：某个类一直在用、却不知道它是被哪条依赖带进来的，于是"顺手补一条直接依赖"
+    ——构建照旧成功、代码一行没变，而同一个能力在**依赖图**与**依赖清单**里各留了一处入口
+    （上游一升版本，两处就开始各说各话）。它与"模块已间接依赖却又加一次"是同一成因的两种
+    载体：那边是模块之间、这边是库之间。
+
+    本道钉**判据本体**（条文与级别、判定标准、三档例外及其去向、为什么默认不新增）与
+    **反向口径**（间接依赖带入的库可以直接使用，本条不是"没声明就不许用"），并核三处落点：
+    两份栈文件的**载体条回指通用层**（不复述判据）、旧口径不得写回、依据两侧齐全
+    （`library/sources.adoc` 的官方原文——它给的是**相反**建议；`library/adoption.adoc`
+    的本站取舍与同义性差异）。缺任一侧，读者都会把本集合的加严口径读成 Maven 官方要求。
+
+    效力边界：只核**文本与落点**；「某次新增的那条依赖，其能力是不是现有依赖面里已有」
+    属运行时事实（要解析依赖树），交人/子 agent 复核（见 `GUARD_CHECK_LIMITS`）。
+    规则数据在 `script/specs-rules/dependency/guards/check_dependency_direct_add_guard.toml`。
+    """
+    phase("依赖直接新增防线检查")
+    rel = "specs/general/dependency.adoc"
+    path = os.path.join(REPO_ROOT, *rel.split("/"))
+    if not os.path.isfile(path):
+        err(f"缺少 {rel}——「能用现有依赖满足时不新增直接依赖」的判据失去落点"
+            "（依赖的引入口径只剩『先查再用』一句，查的那一步停在项目自有工具类上）", rel)
+        phase_done()
+        return
+    # 规则侧先跑：它按各节自己的正文核要点，缺哪一句报哪一句。整节被删时它报"缺节"，
+    # 这里再补一句指向失效——两者顺序不可互换。
+    run_rule_guard("check_dependency_direct_add_guard")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    if not _section_text(text, DEPENDENCY_ADD_SECTION):
+        err(f"{rel} 缺少「{DEPENDENCY_ADD_SECTION}」一节——依赖引入的判据被整节删掉后，"
+            "『看到类就补一条依赖』照旧发生而构建结果看不出差别", rel)
+    phase_done()
+
+
 def check_registry_mirror_guard():
     """『包源与镜像源防线』：推荐的包源地址**已实测可用**、且**换源有次序与降级边界**。
 
@@ -16150,6 +16205,7 @@ CHECKS = (
     check_java_object_template_guard,
     check_maven_mirror_guard,
     check_registry_mirror_guard,
+    check_dependency_direct_add_guard,
     check_throughput_guard,
     check_performance_guard,
     check_quality_guard,
