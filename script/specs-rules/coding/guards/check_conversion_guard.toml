@@ -55,6 +55,15 @@ groups = [
         "落点：须写明映射声明不塞进纯数据结构类（与「类设计」的纯数据结构类不写逻辑一致）",
     ],
     [
+        "声明的检查强度须真的落到构建期",
+        [
+            "声明的检查强度须真的落到构建期",
+            "构建期失败",
+            "显式忽略",
+        ],
+        "强度承载：须写明「字段对不上能报错」这一半落在映射工具的配置上（报错/只警告/忽略几档），配成后两档等于没有声明式映射；正当不映射的字段逐处显式忽略——缺则达标判据只剩口号",
+    ],
+    [
         "例外与边界（L2",
         [
             "例外与边界（L2",
@@ -150,6 +159,26 @@ groups = [
             "原因",
         ],
         "备注原因：须写明确需手写时在代码注释写明原因（与通用层同口径）",
+    ],
+    [
+        "处理器路径与 lombok 成组",
+        [
+            "annotationProcessorPaths",
+            "lombok-mapstruct-binding",
+            "只声明 `mapstruct` 库本身不生成任何实现",
+        ],
+        "构建接线：须写明映射实现由**编译期处理器**生成、处理器要进 `annotationProcessorPaths`/`annotationProcessor`，且**只声明库不生成实现**；与 lombok 共存时须点名 `lombok-mapstruct-binding` 成组——缺则「优先用 MapStruct」落不了地：映射实现没生成，错误指向业务代码",
+    ],
+    [
+        "未映射字段须在构建期报错",
+        [
+            "unmappedTargetPolicy",
+            "取 `ERROR`",
+            "只发警告、不阻断",
+            "-Amapstruct.unmappedTargetPolicy=ERROR",
+            "`@Mapper(config = ...)`",
+        ],
+        "检查强度：须写明 `unmappedTargetPolicy` 取 `ERROR` 并说明默认值只警告——缺则声明式映射的理由（字段对不上能报错）在默认配置下不成立，缺陷照旧留到运行期；另须点名**全项目生效的那一处**（处理器编译参数 `-Amapstruct.unmappedTargetPolicy=ERROR`）与 `@MapperConfig` 的漏引失效形态（新接口没写 `@Mapper(config = ...)` 即静默退回 `WARN`）——只写「项目级配置」时执行者会以为建一个 `@MapperConfig` 就全局生效",
     ],
     [
         "例外与边界（L2",

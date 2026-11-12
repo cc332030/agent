@@ -15092,6 +15092,9 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "改字段时，转换处**不会静默漏字段**。手写逐字段搬运在多层嵌套下达不到该判据。\n"
         "* **除主动声明外，优先声明式映射；确需手写时须备注原因（L2）**：人来主动声明允许手写的按声明写；"
         "否则优先走声明式映射，确需手写时在**代码注释写明原因**。本条**不设强制面**。\n"
+        "* **声明的检查强度须真的落到构建期（L2）**：映射库对「目标字段没被赋到」的处置有报错/只警告/忽略几档，"
+        "配成后两档时构建照旧成功、缺陷留到运行期——故须让这类不匹配**构建期失败**；"
+        "确有正当理由不映射的字段**逐处显式忽略**。\n"
         "* **映射声明的落点**：映射声明与转换方法独立成文件、不塞进纯数据结构类。\n"
         "* **例外与边界（L2）**：①映射声明表达不了的语义不在本条适用，可在映射声明内以自定义方法承接；"
         "②**无嵌套（单层）的转换不在本条范围内**（与字段数量无关）。\n"
@@ -15110,6 +15113,11 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "* **嵌套结构由映射声明表达（写法建议，非强制）**：对象含对象、集合含对象由**映射方法自动调用**"
         "或集合映射方法表达；手写循环不构成违规。\n"
         "* **不并存两套写法（先例优先）**：项目已有转换工具/既有 Converter 先例时跟随先例并在其基础上扩展。\n"
+        "* **映射实现由编译期处理器生成**：处理器放进 `annotationProcessorPaths`/`annotationProcessor`，"
+        "**只声明 `mapstruct` 库本身不生成任何实现**；与 lombok 共存时须加 `lombok-mapstruct-binding` 成组。\n"
+        "* **未映射字段须在构建期报错**：`unmappedTargetPolicy` 取 `ERROR`（默认值 `WARN` 只发警告、不阻断），"
+        "落在注解处理器的编译参数 `-Amapstruct.unmappedTargetPolicy=ERROR` 上；用 `@MapperConfig` 承载时，"
+        "新接口漏写 `@Mapper(config = ...)` 即静默退回 `WARN`。\n"
         "* **例外与边界（L2）**：**无嵌套（单层）的转换不在本条范围内**；确需手写时在**代码注释备注原因**。\n"
         "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
     )
@@ -15329,6 +15337,53 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         self.write("library/adoption.adoc", "= 规范准入与自身取舍\n\n== 同义性差异\n* 略。\n")
         cm.check_conversion_guard()
         self.assertIn("library/adoption.adoc", self.error_texts())
+
+    def test_general_build_time_strength_removed_reports(self):
+        # 反例⑲：构建期强度承载被删 → 「字段对不上能报错」只剩口号
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **声明的检查强度须真的落到构建期（L2）**：映射库对「目标字段没被赋到」的处置有报错/"
+                                       "只警告/忽略几档，配成后两档时构建照旧成功、缺陷留到运行期——故须让这类不匹配"
+                                       "**构建期失败**；确有正当理由不映射的字段**逐处显式忽略**。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("构建期", self.error_texts())
+
+    def test_java_processor_path_removed_reports(self):
+        # 反例⑳：处理器路径与 lombok 成组的接线被删 → 映射实现不生成、错误指向业务代码
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **映射实现由编译期处理器生成**：处理器放进 "
+                                      "`annotationProcessorPaths`/`annotationProcessor`，"
+                                      "**只声明 `mapstruct` 库本身不生成任何实现**；"
+                                      "与 lombok 共存时须加 `lombok-mapstruct-binding` 成组。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("annotationProcessorPaths", self.error_texts())
+
+    def test_java_unmapped_policy_removed_reports(self):
+        # 反例㉑：未映射策略的取值被删 → 默认 WARN 下构建照旧成功、缺陷留到运行期
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("* **未映射字段须在构建期报错**：`unmappedTargetPolicy` 取 `ERROR`"
+                                      "（默认值 `WARN` 只发警告、不阻断），"
+                                      "落在注解处理器的编译参数 "
+                                      "`-Amapstruct.unmappedTargetPolicy=ERROR` 上；"
+                                      "用 `@MapperConfig` 承载时，"
+                                      "新接口漏写 `@Mapper(config = ...)` 即静默退回 `WARN`。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("unmappedTargetPolicy", self.error_texts())
+
+    def test_java_unmapped_policy_project_scope_removed_reports(self):
+        # 反例㉒：只留「取 ERROR」、把**全项目生效的那一处**与 @MapperConfig 的漏引失效形态删掉
+        # → 执行者建一个 @MapperConfig 就以为全局生效，漏引的接口静默退回 WARN、构建照旧成功
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace(
+                       "落在注解处理器的编译参数 `-Amapstruct.unmappedTargetPolicy=ERROR` 上；"
+                       "用 `@MapperConfig` 承载时，"
+                       "新接口漏写 `@Mapper(config = ...)` 即静默退回 `WARN`。",
+                       "落在项目级配置上。"))
+        cm.check_conversion_guard()
+        self.assertIn("Amapstruct.unmappedTargetPolicy", self.error_texts())
 
 
 class TestCheckWiringGuard(CheckSpecsTestCase):
