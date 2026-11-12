@@ -1,0 +1,50 @@
+# 『复发即面』防线（`check_recurrence_escalation_guard`，**用户提出**）
+#
+# 用户口径：「需要自查，比如一个格式化sql的问题被改了好几次，就需要升级检查，因为发现一只
+# 蟑螂的时候，就意味着整个屋子都是蟑螂了，且反复修改的功能意味着细节很多或者很麻烦，这个
+# 时候要自己去生成文档入库进git管理（保留设计基线），方便排查以及避免后面被改错」。
+#
+# 判据本体落在通用层 `specs/general/planning.adoc`「复发即面（同一处改到第二遍就升级检查）」
+# ——它是**动手前**那一族的判据，与本文件所在目录（`execution/`）同源；本文件只核**本仓库侧
+# 的交付面**：判据本体的锚点（唯一来源 `_tokens.toml` 的 `RECURRENCE_ESCALATION_ANCHORS`，
+# 按节逐条核，此处不再手抄同一批字面）、自检关口的那一问、两处动作落点与三处登记面。
+#
+# 为什么三处登记都要核：本条是**触发面**而非某一份文件的私事——调度器不登记则它在真实任务里
+# 根本不会被加载到（等于没写）；公开面漏登记则引用方只在本仓库里看得到它；台账不登记则它在
+# 「定义了但没人跑」的清单里看不见。
+
+[[guards.check_recurrence_escalation_guard]]
+file = "specs/general/self-check.adoc"
+section = "执行前自检清单"
+tokens = [
+    "复发（L1）",
+    "specs/general/planning.adoc",
+    "复发即面",
+    "落可入库的设计基线",
+]
+kind = "file_tokens"
+message = "{file} 的「执行前自检清单」不再问『这一处是不是被改的第二遍』（缺 {missing}）——用户点名的失效正是「改到第二遍才发现该取面」：这一问不在动手前，前两遍的回归成本已经付过，随后仍会按「修一处、复发一处」走"
+
+# 调度器登记：识别特征写进「动手前」那一行（判据本体在 planning.adoc，入口只写触发面）。
+[[guards.check_recurrence_escalation_guard]]
+file = "AGENTS_COMMON.adoc"
+anchor = ["**动手前**", "specs/general/planning.adoc"]
+tokens = ["第二遍"]
+kind = "line_tokens"
+message = "『复发即面』未进调度器：{file} 里「动手前」那一行须写明『第二遍』这一识别特征（缺 {missing}）——触发面不写在这一层，改到第二遍时不会有任何入口把它加载进来"
+
+# 公开面：`README.adoc` 的目录说明是引用方唯一看得见的索引。
+[[guards.check_recurrence_escalation_guard]]
+file = "README.adoc"
+anchor = ["`planning.adoc`"]
+tokens = ["复发即面"]
+kind = "line_tokens"
+message = "『复发即面』未进公开面：{file} 里提到 `planning.adoc` 的那一行须写明『复发即面』（缺 {missing}）——公开面是引用方唯一的目录说明，漏登记即这份判据只在维护方视角存在"
+
+# 台账：`check_effective.py` 的 MECHANISMS 是「哪条规范由哪道防线钉住」的唯一一处。
+[[guards.check_recurrence_escalation_guard]]
+file = "script/check_effective.py"
+anchor = ["check_recurrence_escalation_guard"]
+tokens = ["check_recurrence_escalation_guard", "复发即面"]
+kind = "line_tokens"
+message = "『复发即面』未进台账：{file} 里提到 `check_recurrence_escalation_guard` 的行须同时写明『复发即面』（缺 {missing}）——台账不登记，这条判据在「定义了但没人跑」的清单里看不见"

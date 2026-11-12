@@ -121,6 +121,7 @@
  93. 并行改动的独占落点：只增不改的落点须配 `merge=union`
  94. 并行改动的独占落点：逐行登记表须是生成物
  95. 规格（spec driven）防线
+ 96. 复发即面防线（同一处改到第二遍就升级检查、反复修改的功能须落设计基线）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -583,6 +584,26 @@
      边界（未触达的存量随动迁移、不发动全库改造）。因该条与相邻条目同节且都含「三元」「三段式」
      字样，**按条目自己的正文**核（按整节核会把抽走的要点兜住）。由 `check_refactor_style_guard`
      钉住；「某处算不算三段式」「这一次算不算重构」属语义判断，交人/子 agent 复核。
+
+ 128. 复发即面防线（**用户提出**）：用户原话「需要自查，比如一个格式化sql的问题被改了好几次，
+     就需要升级检查，因为发现一只蟑螂的时候，就意味着整个屋子都是蟑螂了，且反复修改的功能意味着
+     细节很多或者很麻烦，这个时候要自己去生成文档入库进git管理（保留设计基线），方便排查以及
+     避免后面被改错」。判据本体落通用层 `specs/general/planning.adoc`「复发即面（同一处改到
+     第二遍就升级检查）」——它是「举例不是面」的**第二个取面来源**：那一节管"要求里带举例"时
+     取面，本条管"同一处被改到第二遍"时取面。要治的失效是**同一个洞补第 N 次**：第二遍仍只改
+     那一个实例，而同一成因的其余形态一个也碰不到（用户举的"格式化 SQL 被改了好几次"即其形态）。
+     钉五件：① **改到第二遍即升级检查**（第二遍要改的是这一类事的判据，不是这一处的写法）；
+     ② **升级的产物是判据、不是提醒**（"下次注意""已记下"不算升级，须能拦住同一形态再发生）；
+     ③ **反复修改的功能须落可入库的设计基线**（"细节多、很麻烦"是可观测信号；基线不等用户提、
+     不停在会话与 `tmp/`，落点按 `specs/general/doc-design.adoc`「设计文档」取）；④ 反向边界
+     （升级不得把面扩成别人的面）；⑤ 边界（要求变了不算复发，判据是成因是否同一个）。另核四处
+     落点：自检关口（`specs/general/self-check.adoc` 执行前清单的「复发」一问——用户点名的正是
+     "需要自查"）、两处动作落点（`specs/general/doc-design.adoc` 的编写时机、调度器「动手前」
+     一行的识别特征）、公开面 README 目录说明与台账登记。规则数据在
+     `script/specs-rules/execution/guards/check_recurrence_escalation_guard.toml` + `_tokens.toml`
+     的 `RECURRENCE_ESCALATION_ANCHORS`。由 `check_recurrence_escalation_guard` 钉住；
+     「这次算不算第二遍」「成因是不是同一个」「这一遍到底升没升级到判据」属语义判断与运行时事实，
+     交人/子 agent 复核。
 
 """
 
@@ -1090,7 +1111,7 @@ CORE_MIN_ITEMS = 10
 # **只出现一次**的词（落点路径本身），否则抽掉目标行后 token 仍从相邻行命中。
 CORE_LANDING_ANCHORS = (
     ("执行原则", ("specs/core/execution.adoc",), "底线清单要展开时须能按名走到执行原则"),
-    ("展开层细则", ("specs/general/execution-detail.adoc",), "指令分栏、判定标准与自检七问的原文落点"),
+    ("展开层细则", ("specs/general/execution-detail.adoc",), "指令分栏、判定标准与自检九问的原文落点"),
     ("知识边界", ("specs/general/self-check.adoc",), "不得顺口编造与环境能力自评的原文落点"),
     ("上下文与读取", ("specs/general/context.adoc",), "读取范围与执行吞吐的原文落点"),
     ("验证", ("specs/general/verify.adoc",), "验证边界与效力等级的原文落点"),
@@ -15928,6 +15949,49 @@ SPEC_SPEC_FILE = os.path.join(SPECS_DIR, "general", "spec.adoc")
 SPEC_SECTION = "规格写到什么程度（内容与判据）"
 
 
+RECURRENCE_ESCALATION_SECTION = _RULES_TOKENS["RECURRENCE_ESCALATION_SECTION"]
+RECURRENCE_ESCALATION_ANCHORS = _RULES_TOKENS["RECURRENCE_ESCALATION_ANCHORS"]
+
+
+def check_recurrence_escalation_guard():
+    """『复发即面』防线：同一处改到第二遍就升级检查；反复修改的功能须落设计基线。
+
+    用户口径（Issue）：『需要自查，比如一个格式化sql的问题被改了好几次，就需要升级检查，
+    因为发现一只蟑螂的时候，就意味着整个屋子都是蟑螂了，且反复修改的功能意味着细节很多或者
+    很麻烦，这个时候要自己去生成文档入库进git管理（保留设计基线），方便排查以及避免后面
+    被改错』。
+
+    它是「举例不是面」的**第二个取面来源**——那一节治"要求里带举例时只把例子当任务"，本条治
+    **"同一处被改到第二遍仍只改那一点"**：同一个洞补第 N 次，而同一成因的其余形态一个也碰不到。
+    两件事都要在判据本体里：**升级的产物必须是判据**（一句"下次注意"不改变下次的判定），
+    **反复修改的功能必须落可入库的设计基线**（它是"细节多、很麻烦"的可观测信号；没有基线时
+    下一次改动只能靠读代码反推，而改错的结果还会被当成新需求再改一遍）。
+
+    本函数钉**判据本体**（不是节名）：五组要点逐条核；另核四处落点——自检关口那一问（用户点名
+    的正是"需要自查"）、`specs/general/doc-design.adoc` 的编写时机、调度器「动手前」一行的识别
+    特征、公开面 `README.adoc` 与台账登记。**只核文本与落点是否仍在**；「这次算不算第二遍」
+    「成因是不是同一个」「这一遍到底升没升级到判据」属语义判断与运行时事实（见
+    `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("复发即面防线检查")
+    # 规则数据已登记本防线的步骤（`specs-rules/execution/guards/`）：只开阶段不接线时，规则
+    # 写了却没人执行（`rules_engine_test` 会报「规则文件里的防线没被脚本接线」）。
+    run_rule_guard("check_recurrence_escalation_guard")
+    rel = "specs/general/planning.adoc"
+    _section_anchor_check(rel, RECURRENCE_ESCALATION_SECTION,
+                          RECURRENCE_ESCALATION_ANCHORS)
+    # 设计文档侧的动作落点：判据本体只说"须落可入库的设计基线"，落在哪一层由 doc-design 给。
+    rel_dd = "specs/general/doc-design.adoc"
+    dd = _read_spec_text(rel_dd)
+    if not dd:
+        err(f"缺少 {rel_dd}——反复修改的功能「落设计基线」失去动作落点"
+            "（只留下一句'要有基线'，没有一处说它按什么形态写、写到哪一层）", rel_dd)
+    elif "反复修改" not in dd or "复发即面" not in dd:
+        err(f"{rel_dd}「设计文档」的编写时机不再含『反复修改的功能』（或未回指"
+            "『复发即面』）——判据本体说了要落基线，动作侧却没有任何一处触发它", rel_dd)
+    phase_done()
+
+
 def check_spec_driven_guard():
     """『规格（spec driven）』防线（**用户提出**：接入 spec 规范）。
 
@@ -16167,6 +16231,7 @@ CHECKS = (
     check_ledger_table_generated_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,
+    check_recurrence_escalation_guard,
 )
 
 

@@ -279,6 +279,15 @@ MECHANISMS = [
      "**与范围控制的边界**（报出与处置分开、不发动全库改造）、**重构须处理这一形态**（进重构清单并落地、不得只记为已发现）；另核三处落点：字典检索键、"
      "review 提示词的检查面、refactor 提示词的重构清单。"
      "「这一处算不算同一个功能的跨模块实现」「收敛到哪一层才合适」属语义判断，交人/子 agent 复核"),
+    ("复发即面：同一处改到第二遍就升级检查（产物须是判据）、反复修改的功能须落可入库的设计基线",
+     "specs/general/planning.adoc + specs/general/self-check.adoc + specs/general/doc-design.adoc",
+     "script/check_specs.py",
+     "check_recurrence_escalation_guard",
+     "check_recurrence_escalation_guard 钉『复发即面』的**判据本体**（不是节名）：『改到第二遍即升级检查』（第二遍要改的是这一类事的判据、不是这一处的写法）、"
+     "『升级的产物是判据、不是提醒』（一句'下次注意'不改变下次的判定）、『反复修改的功能须自己落可入库的设计基线』（不等用户提、不停在会话与 `tmp/`、"
+     "也不写成与代码互抄的第二份说明书）、反向边界（升级不得把面扩成别人的面）与边界（要求变了不算复发，判据是成因是否同一个）；"
+     "另核四处落点：自检关口那一问、`doc-design.adoc` 的编写时机、调度器「动手前」一行的识别特征、公开面与台账登记。"
+     "「这次算不算第二遍」「成因是不是同一个」「这一遍到底升没升级到判据」属语义判断与运行时事实，交人/子 agent 复核"),
     ("review 结论的记账形态：固定六列、一句事实、不复述判据原文、总账按三态分栏", "specs/general/review.adoc", "script/check_specs.py",
      "check_verdict_ledger_guard",
      "check_verdict_ledger_guard 钉**列本体与那句『不做什么』**（不是『有没有一节叫记账形态』）：六列逐列在且次序写明（问题／P 级／位置／一句事实／证据／判断）、"
@@ -1030,7 +1039,7 @@ MECHANISMS = [
      "check_intent_answer_guard",
      "check_intent_answer_guard 钉住「指令的完整性」「输出的对齐与唯一落点」两小节与「一件事的定义与展开」一节"
      "（事/步的定义、事做完才算做完、替代不是完成、重复表述不另计），以及四处承接面"
-     "（collab 的「任务的读懂」、planning 的「换一条路时的收尾与穷尽」、self-check 的「⑧ 回读」与"
+     "（collab 的「任务的读懂」、planning 的「换一条路时的收尾与穷尽」、self-check 的「⑨ 回读」与"
      "「已完成项的复读」、cnb 的「执行吞吐」两条）与题面侧两处（交付片段两条 + PROMPTS.adoc 索引）；"
      "**本条防的不是『没写要认真回答』而是『写了却仍然答到另一件事上』**——"
      "『这次到底答没答到发起人的问句』属语义判断，交复核（见 `GUARD_CHECK_LIMITS`）"),

@@ -32888,5 +32888,118 @@ class TestCheckFetchProgressSizeGuard(CheckSpecsTestCase):
 
 
 
+class TestCheckRecurrenceEscalationGuard(CheckSpecsTestCase):
+    """钉住『复发即面』防线（**用户提出**）。
+
+    用户原话：『需要自查，比如一个格式化sql的问题被改了好几次，就需要升级检查，因为发现一只
+    蟑螂的时候，就意味着整个屋子都是蟑螂了，且反复修改的功能意味着细节很多或者很麻烦，这个
+    时候要自己去生成文档入库进git管理（保留设计基线），方便排查以及避免后面被改错』。
+
+    反例都取"看起来处理过了、实际什么都没改变"的形态：把"升级"写成一句提醒、把"落基线"留成
+    `tmp/` 里的过程记录、或干脆只剩条件句。夹具用**真文件副本 + 一处定点改动**，不手抄判据。
+    """
+
+    PLANNING = "specs/general/planning.adoc"
+    SELF_CHECK = "specs/general/self-check.adoc"
+    DOC_DESIGN = "specs/general/doc-design.adoc"
+    GENERIC = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+    EFFECTIVE = "script/check_effective.py"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in
+                     (self.PLANNING, self.SELF_CHECK, self.DOC_DESIGN,
+                      self.GENERIC, self.README, self.EFFECTIVE)}
+        # 规则数据里本道核四处交付面（夹具须把现场那几份原样落进来，不手抄清单）
+        self.write_rules_fixture()
+        for rel, text in self.base.items():
+            self.write(rel, text)
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_recurrence_escalation_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_without(self, rel: str, old: str) -> None:
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要点 `{old}`")
+        self.write(rel, self.base[rel].replace(old, "", 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：判据本体整节被摘 → 复发退回成"再改一遍那一点"，一条判据也不升
+        text = self.base[self.PLANNING]
+        start = text.index("== 复发即面")
+        end = text.index("\n== 换一条路时的收尾与穷尽", start)
+        self.write(self.PLANNING, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("复发即面", self.error_texts())
+
+    def test_escalation_trigger_removed_reports(self):
+        # 反例②：触发条件被抽（第二遍仍只改那一个实例）→ 本条变成一句"要注意反复修改"
+        self._run_without(self.PLANNING, "改到第二遍即升级检查（L1）")
+        self.assertIn("改到第二遍即升级检查", self.error_texts())
+
+    def test_product_must_be_criteria_removed_reports(self):
+        # 反例③：产物要求被抽 → "已记下/下次注意"就算升级，复发照旧而它看起来已处理
+        self._run_without(self.PLANNING, "升级的产物是判据，不是提醒（L1）")
+        self.assertIn("升级的产物是判据", self.error_texts())
+
+    def test_design_baseline_removed_reports(self):
+        # 反例④：设计基线那条被抽 → 反复修改的功能没有可入库的基线（用户点名的另一半）
+        self._run_without(self.PLANNING, "反复修改的功能＝细节多或麻烦，须自己落设计基线（L1）")
+        self.assertIn("设计基线", self.error_texts())
+
+    def test_scope_boundary_removed_reports(self):
+        # 反例⑤：反向边界被抽 → 以"要升级"为由顺手全库重排（与范围控制相抵）
+        self._run_without(self.PLANNING, "反向也成立：升级不得把面扩成别人的面（L1）")
+        self.assertIn("反向也成立", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例⑥：边界被抽 → "用户改了主意"也算复发，本条纯成本
+        self._run_without(self.PLANNING, "边界（L2）")
+        self.assertIn("边界", self.error_texts())
+
+    def test_self_check_question_removed_reports(self):
+        # 反例⑦：自检关口那一问被抽 → 用户点名的"需要自查"落空，改到第二遍才发现该取面
+        self.write(self.SELF_CHECK, self.base[self.SELF_CHECK].replace(
+            "* **⑥ 复发（L1）**", "* **⑥ 提交（L1）**", 1))
+        self._run_guard()
+        self.assertIn("执行前自检清单", self.error_texts())
+
+    def test_doc_design_landing_removed_reports(self):
+        # 反例⑧：动作落点被抽 → 判据说要落基线，却没有一处说它按什么形态写、写到哪一层
+        self._run_without(self.DOC_DESIGN, "反复修改")
+        self._run_guard()
+        self.assertIn("doc-design.adoc", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例⑨：调度器那一行的识别特征被抽 → 改到第二遍时没有任何入口把它加载进来
+        self.write(self.GENERIC, self.base[self.GENERIC].replace("第二遍", "", 1))
+        self._run_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_public_face_removed_reports(self):
+        # 反例⑩：公开面漏登记 → 引用方只在本仓库里看得到这条判据
+        self.write(self.README, self.base[self.README].replace("复发即面", "", 1))
+        self._run_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_ledger_entry_removed_reports(self):
+        # 反例⑪：台账不登记 → 这条判据在「定义了但没人跑」的清单里看不见
+        self.write(self.EFFECTIVE, self.base[self.EFFECTIVE].replace("复发即面", ""))
+        self._run_guard()
+        self.assertIn("check_effective.py", self.error_texts())
+
+
+
 if __name__ == "__main__":
     unittest.main()
