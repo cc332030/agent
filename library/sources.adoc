@@ -465,6 +465,8 @@
 * 依据要点（**要点转述，未逐字取回**）：① **手写逐字段搬运没有编译期保障**——模型新增字段后既不报错也不提示，只在运行期表现为"某个字段一直是空"；② **声明式映射的失效是编译期的**；③ **嵌套与集合是一等公民**。
 * **须注意的语义差异（同义性）**：上述材料给的是**该库能做什么、以及为什么生成式映射比手写更可靠**，**未**规定"多层嵌套对象转换必须用某库"、"禁止手写转换代码"，也**未**规定"哪种技术栈必须用哪个库"；本集合据此给出的是**自己的取向（建议、非强制）**。**本条不设强制面**——等价路径同样合规。
 * 实证反例（**本项目真实记载**）：用户报告的失效形态——多层嵌套对象之间的转换由执行者**手写逐字段搬运代码**；用户口径为"**多层嵌套对象转换时，优先使用 mapstruct（jvm下），不允许手动写转换代码——不是强制，但是建议**"。
+* **材料（构建接线与检查强度，支持 `specs/stack/java.adoc`「对象转换（MapStruct）」的两条 L2）**：**MapStruct 官方参考文档**（stable 版页面，**官方文本已取回**；取回方式 `curl -s https://mapstruct.org/documentation/stable/reference/html/` 取回 HTML 后按正文比对，下列要点已逐字核对）。依据要点（转述）：① **两个构件分工**——`org.mapstruct:mapstruct` 只放 `@Mapping` 一类注解，`org.mapstruct:mapstruct-processor` 才是**生成实现的注解处理器**，须配进构建的处理器路径（Maven `annotationProcessorPaths`、Gradle `annotationProcessor`）；② **与 lombok 共存的硬前提**——文档原文口径为 Lombok 1.18.16 引入破坏性变更，"The additional annotation processor `lombok-mapstruct-binding` **must** be added otherwise MapStruct stops working with Lombok"，且给出的配置示例里处理器路径为 lombok + `lombok-mapstruct-binding` + `mapstruct-processor` 三者；③ **未映射目标字段的默认处置**——`mapstruct.unmappedTargetPolicy` / `@Mapper#unmappedTargetPolicy` 取 `ERROR`（生成失败）/ `WARN`（构建期警告）/ `IGNORE`，**默认 `WARN`**，即默认配置下字段对不上**不阻断构建**。
+* **须注意的语义差异（同义性）**：官方只给**机制与默认值**，**未**规定"项目必须取 `ERROR`"、也**未**规定"必须用 MapStruct"——「取 `ERROR`」「必须点名 `lombok-mapstruct-binding`」是本集合据其失效形态给出的自身取舍（前者属可核对的结构性约束，后者是官方明文的**硬前提**、照原文执行）。**本条仍不设强制面**：选不选该库由项目按通用层「对象转换」的达标判据判断。
 
 == HTTP 接口路径的命名风格（RFC 3986 / Google API 设计指南）
 
