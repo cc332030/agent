@@ -313,6 +313,122 @@ class TestSelfUpdateGuard(_TmpDirCase):
         self.assertTrue(os.path.basename(target).startswith("."))
         self.assertTrue(target.endswith(module.SELF_UPDATE_SUFFIX))
 
+    def test_self_update_temp_name_is_fixed_without_pid(self):
+        # 中转件名**不带 pid**（用户口径：临时文件名要固定，带 pid 的名字每轮一个、
+        # 换成功后谁也不认，只会攒下一堆 `.fetch-specs.py.<pid>.update`）
+        module = self._module()
+        real = _stage(self.mkdir("realdir"))
+        module._real_script = lambda: real
+        out_dir = self.mkdir("slot")
+        cwd = self.mkdir("cwd")
+        target, _ = list(module._self_update_candidates(out_dir, cwd))[0]
+        self.assertEqual(".fetch-specs.py.update", os.path.basename(target))
+        self.assertNotIn(str(os.getpid()), os.path.basename(target))
+
+
+class TestSelfUpdateHousekeeping(_TmpDirCase):
+    """自更新中转件与落点根的**残留清扫**（用户口径：临时文件名固定、落点下没有多余文件）。"""
+
+    def _module(self):
+        landing = self.mkdir("landing")
+        _stage(landing)
+        return _load_module(landing)
+
+    def test_sweep_removes_stale_temps_without_note(self):
+        # 固定名残件（进程死在落盘与换上之间）与历史带 pid 的旧名都清
+        module = self._module()
+        directory = self.mkdir("realdir")
+        fixed = os.path.join(directory, ".fetch-specs.py.update")
+        legacy = os.path.join(directory, ".fetch-specs.py.10600.update")
+        for path in (fixed, legacy):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("stale = True\n")
+        module._sweep_self_update_stale(directory)
+        self.assertFalse(os.path.exists(fixed))
+        self.assertFalse(os.path.exists(legacy))
+
+    def test_sweep_keeps_temp_pointed_by_live_note(self):
+        # 有活着的待换标记指着的那份**不清**（真身下一轮要消费它），没被指着的旧名照清
+        module = self._module()
+        directory = self.mkdir("realdir")
+        pointed = os.path.join(directory, ".fetch-specs.py.update")
+        unpointed = os.path.join(directory, ".fetch-specs.py.10600.update")
+        for path in (pointed, unpointed):
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("fresh = True\n")
+        note = os.path.join(directory, "fetch-specs.py.handoff")
+        with open(note, "w", encoding="utf-8") as fh:
+            fh.write(pointed + "\n")
+        module._sweep_self_update_stale(directory)
+        self.assertTrue(os.path.exists(pointed), "标记指着的中转件被清了")
+        self.assertFalse(os.path.exists(unpointed))
+        self.assertTrue(os.path.exists(note), "标记本身被清了")
+
+    def test_landing_root_sweep_removes_extras_keeps_layout(self):
+        # 落点根只该有：安装脚本、配置、附随文件、口令入口、来源槽目录；
+        # `__pycache__` 与排布外的散文件清掉，别的目录（可能是别的来源槽）不碰
+        module = self._module()
+        root = self.mkdir("cacheroot")
+        keep_files = ["fetch-specs.py", "fetch-specs.sh", "fetch-specs.bat",
+                      "pathconfig.py", "specs-config.toml", "index.html",
+                      "use-prompt.sh", "use-prompt.bat"]
+        for name in keep_files:
+            with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
+                fh.write("# placeholder\n")
+        os.makedirs(os.path.join(root, "prompts"))
+        with open(os.path.join(root, "prompts", "_common.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("include::\n")
+        os.makedirs(os.path.join(root, "agent.example.com"))
+        os.makedirs(os.path.join(root, "__pycache__"))
+        with open(os.path.join(root, "__pycache__", "pathconfig.cpython-314.pyc"),
+                  "wb") as fh:
+            fh.write(b"\x00")
+        stray = os.path.join(root, "leftover.txt")
+        with open(stray, "w", encoding="utf-8") as fh:
+            fh.write("stale\n")
+        module._sweep_landing_root(root)
+        for name in keep_files:
+            self.assertTrue(os.path.isfile(os.path.join(root, name)), f"{name} 被误清")
+        self.assertTrue(os.path.isfile(os.path.join(root, "prompts", "_common.txt")))
+        self.assertTrue(os.path.isdir(os.path.join(root, "agent.example.com")),
+                        "来源槽目录被误清")
+        self.assertFalse(os.path.exists(os.path.join(root, "__pycache__")))
+        self.assertFalse(os.path.exists(stray))
+
+    def test_landing_root_sweep_removes_readonly_pycache(self):
+        # 本仓库实测：`__pycache__` 里的 .pyc 带只读位（落点收紧过）时，
+        # `rmtree(ignore_errors=True)` 整树静默失败——清了一轮它还在，看着清了其实没清。
+        # 故须逐节点补写位再删（`_self_update_discard_dir`）。
+        module = self._module()
+        root = self.mkdir("cacheroot")
+        with open(os.path.join(root, "fetch-specs.py"), "w", encoding="utf-8") as fh:
+            fh.write("# placeholder\n")
+        pycache = os.path.join(root, "__pycache__")
+        os.makedirs(pycache)
+        pyc = os.path.join(pycache, "pathconfig.cpython-314.pyc")
+        with open(pyc, "wb") as fh:
+            fh.write(b"\x00")
+        os.chmod(pyc, 0o444)
+        os.chmod(pycache, 0o555)
+        module._sweep_landing_root(root)
+        self.assertFalse(os.path.exists(pycache),
+                         "只读位没补、整树静默留下了（本仓库实测的假清形态）")
+
+    def test_landing_root_sweep_keeps_temp_pointed_by_live_note(self):
+        # 落点根下的中转件同样受"活着的标记"保护（真身就在落点根下、换不动时留标记）
+        module = self._module()
+        root = self.mkdir("cacheroot")
+        pointed = os.path.join(root, ".fetch-specs.py.update")
+        with open(pointed, "w", encoding="utf-8") as fh:
+            fh.write("fresh = True\n")
+        note = os.path.join(root, "fetch-specs.py.handoff")
+        with open(note, "w", encoding="utf-8") as fh:
+            fh.write(pointed + "\n")
+        module._sweep_landing_root(root)
+        self.assertTrue(os.path.exists(pointed))
+        self.assertTrue(os.path.exists(note))
+
 
 class TestFetchContract(_TmpDirCase):
     """`fetch_text` 的契约：失败一律 `OSError`（`HTTPException` 不得穿到 `main`）。"""

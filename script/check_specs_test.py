@@ -209,6 +209,21 @@ class CheckSpecsTestCase(GuardNamingTestCase):
          cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
 
+    def _skip_if_home_not_redirectable(self):
+        """端到端用例把家目录指到临时目录来隔离落点；**Windows 上这一步做不到**：
+        个人目录由壳现取（KnownFolder 随注册表改随取，见 `_user_home_dir`），环境变量
+        顶替不了——`HOME`/`USERPROFILE` 指到临时目录时副本照样落进**真家目录**
+        （本仓库实测：真落点里攒出一批 `127.0.0.1_*` 测试槽）。故这类端到端用例只在
+        POSIX 真跑；Windows 的家目录语义由
+        `test_windows_home_is_read_live_every_round` 在进程内钉住（跳过不等于通过）。
+        """
+        if os.name != "posix":
+            self.skipTest("Windows 上落点由壳现取的个人目录决定（KnownFolder），环境变量"
+                          "顶替不了，临时家目录隔离无从做——真跑会把副本落进真家目录"
+                          "（本仓库实测）；跳过不等于通过，POSIX 侧真跑，Windows 的"
+                          "家目录语义另由 test_windows_home_is_read_live_every_round "
+                          "在进程内钉住")
+
     def _write_source_management(self, mode: str):
         """把**源码管理档**落进运行期配置对象（取值只有一处：`[source-management].mode`）。
 
@@ -18918,6 +18933,20 @@ class TestCheckPowershellVersionGuard(CheckSpecsTestCase):
     永远不会被触发加载）；⑦ 校验通过（不误报）。
     """
 
+    def setUp(self) -> None:
+        super().setUp()
+        # 栈文件常量是导入期按真仓库拼出的绝对路径：不指到夹具根时，本机 %TEMP% 与仓库
+        # 不同盘处 `os.path.relpath(栈文件, REPO_ROOT)` 直接抛（跨挂载点），同盘处则
+        # 检查读到的是**真仓库**那份栈文件、夹具反例整个落空（看着全绿，其实没核到）。
+        # 故与 `JAVA_STACK_FILE`/`SPRING_STACK_FILE` 各类同一形态：setUp 指进夹具、
+        # tearDown 还原。
+        self._orig_powershell_stack = cm.POWERSHELL_STACK_FILE
+        cm.POWERSHELL_STACK_FILE = os.path.join(self.root, "specs", "stack", "powershell.adoc")
+
+    def tearDown(self) -> None:
+        cm.POWERSHELL_STACK_FILE = self._orig_powershell_stack
+        super().tearDown()
+
     VERSION_SECTION = (
         "== 版本口径：先认运行环境，再选写法\n"
         "* **运行环境取引擎自身的取值**：`$PSVersionTable`、`PSEdition`；特性探测；"
@@ -20213,31 +20242,42 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.write("script/fetch-specs.py", self.SCRIPT_PY)
         self.write("script/fetch-specs.sh", self.SCRIPT_SH)
         with open(os.path.join(self.root, "script", "fetch-specs.bat"), "wb") as fh:
-            # 与仓库里那份同构：一行一候选（`call :take %%~R`）、按 **PATH 判定**在不在
-            # （`if not defined %%~$PATH:1`）——判据要核的正是这个形态，夹具落后于脚本时
-            # 反例就核在"已经不存在的写法"上（本仓库实测：夹具里写的还是旧写法，新脚本一改即报红）。
+            # 与仓库里那份同构：一行一候选（`call :take %%~R`，候选名自带 `.exe`）、
+            # 按 **PATH 判定**在不在（`if "%~$PATH:1"==""`）——判据要核的正是这个形态，
+            # 夹具落后于脚本时反例就核在"已经不存在的写法"上（本仓库实测：夹具里写的
+            # 还是旧写法，新脚本一改即报红）。
             # 曾经的 `:probe`（跑一次 `--probe` 再判退出码）已撤：配置不在旁边时逻辑代码自己以 2
             # 退出，每个候选都像"跑不起来"，机器上明明有 python 却报没有可用解释器。
+            # `:run` 直接跑解释器、先记退出码再 pause：嵌一层 `cmd /c "… & pause"` 时
+            # `cmd /c` 返回的是行上最后一条命令（pause）的退出码，逻辑代码的退出码传不回来。
             fh.write(b'@echo off\r\n'
+                     b'rem fetch-specs - Windows entry (thin shell: locate the logic code, pass\r\n'
+                     b'rem arguments through unchanged, return its exit code unchanged)\r\n'
+                     b'setlocal\r\n'
                      b'set "FETCH_SPECS_RUNTIME="\r\n'
-                     b'set "FETCH_SPECS_FOUND="\r\n'
-                     b'for %%R in (py python3 python) do if not defined FETCH_SPECS_RUNTIME'
+                     b'rem one line per candidate, explicit .exe: the $PATH lookup in :take\r\n'
+                     b'rem matches exact file names only (it does not try PATHEXT)\r\n'
+                     b'for %%R in (py.exe python3.exe python.exe) do if not defined FETCH_SPECS_RUNTIME'
                      b' call :take %%~R\r\n'
                      b'if not defined FETCH_SPECS_RUNTIME (\r\n'
-                     b'  echo Error: no python interpreter found in PATH 1>&2\r\n'
+                     b'  echo Error: no python interpreter found in PATH ^(tried py, python3, python^) 1>&2\r\n'
                      b'  exit /b 127\r\n'
                      b')\r\n'
                      b'goto run\r\n'
                      b'\r\n'
                      b':take\r\n'
-                     b'rem %%~1 is the candidate: take it if PATH has it, and only that one\r\n'
-                     b'if not defined %%~$PATH:1 exit /b 0\r\n'
-                     b'set "FETCH_SPECS_FOUND=%~1"\r\n'
+                     b'rem %~$PATH:1 resolves the candidate on PATH, empty when it is not\r\n'
+                     b'rem there -- an exact-name search, hence the .exe in the candidates\r\n'
+                     b'if "%~$PATH:1"=="" exit /b 0\r\n'
+                     b'set "FETCH_SPECS_RUNTIME=%~$PATH:1"\r\n'
                      b'exit /b 0\r\n'
                      b'\r\n'
                      b':run\r\n'
-                     b'cmd /c ""%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %* & pause"\r\n'
+                     b'rem do not disturb the user\'s session: the pause belongs only to a console of\r\n'
+                     b'rem our own (a dot-double-click) -- see specs/stack/windows.adoc\r\n'
+                     b'"%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %*\r\n'
                      b'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
+                     b'pause\r\n'
                      b'exit /b %FETCH_SPECS_STATUS%\r\n')
         # 入口（**兼具安装口径**）：既有各节要点 + 入口模板代码块（承载"怎么取/取不到怎么办/怎么更新"三要点）
         self.write("AGENTS_COMMON.adoc", self.INSTALL_BODY)
@@ -20478,7 +20518,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
                    'exit /b %FETCH_SPECS_STATUS%\r\n')
         cm.check_spec_fetch_guard()
-        self.assertIn("%%~$PATH:1", self.error_texts())
+        self.assertIn("%~$PATH:1", self.error_texts())
 
     def test_bat_candidate_not_checked_in_path_reports(self):
         # 反例：候选不做任何判定就用（`set "FETCH_SPECS_FOUND=%~1"` 一上来就落地）——
@@ -20506,7 +20546,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    'set "FETCH_SPECS_STATUS=%errorlevel%"\r\n'
                    'exit /b %FETCH_SPECS_STATUS%\r\n')
         cm.check_spec_fetch_guard()
-        self.assertIn("%%~$PATH:1", self.error_texts())
+        self.assertIn("%~$PATH:1", self.error_texts())
 
     def test_bat_candidate_order_reversed_reports(self):
         # 反例：`.bat` 的候选名单写反（`python` 排到 `py` 前面）——后面的候选被前面那个
@@ -20518,7 +20558,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    '@echo off\r\n'
                    'set "FETCH_SPECS_RUNTIME="\r\n'
                    'set "FETCH_SPECS_FOUND="\r\n'
-                   'for %%R in (python python3 py) do if not defined FETCH_SPECS_RUNTIME'
+                   'for %%R in (python.exe python3.exe py.exe) do if not defined FETCH_SPECS_RUNTIME'
                    ' call :take %%~R\r\n'
                    'if not defined FETCH_SPECS_RUNTIME (\r\n'
                    '  echo Error: no python interpreter found in PATH 1>&2\r\n'
@@ -20546,7 +20586,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                    '@echo off\r\n'
                    'set "FETCH_SPECS_RUNTIME="\r\n'
                    'set "FETCH_SPECS_FOUND="\r\n'
-                   'for %%R in (py python3) do if not defined FETCH_SPECS_RUNTIME'
+                   'for %%R in (py.exe python3.exe) do if not defined FETCH_SPECS_RUNTIME'
                    ' call :take %%~R\r\n'
                    'if not defined FETCH_SPECS_RUNTIME (\r\n'
                    '  echo Error: no python interpreter found in PATH 1>&2\r\n'
@@ -21009,6 +21049,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         （"用户家目录下的 `.cache/agent-specs`"，即用户路径下的 `~/.cache/agent-specs`）。
         落在项目里或别处即与模板矛盾：新实例按入口文档给出的路径会找不到副本。
         """
+        self._skip_if_home_not_redirectable()
         import threading
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
@@ -21043,6 +21084,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         ——正是"静默换落点"（入口文档写下的那一个用户路径与实际落点对不上）。
         用例对三种取不到家目录的取值各跑一次，判据是**退出码 2 + 报错文案 + 没有写出任何副本**。
         """
+        self._skip_if_home_not_redirectable()
         real_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         script = os.path.join(real_root, "script", "fetch-specs.py")
         proj = tempfile.mkdtemp(prefix="fetch-nohome-proj-")
@@ -21103,30 +21145,35 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             ole32 = _Ole32()
 
         saved = getattr(ctypes, "windll", None)
-        ctypes.windll = _Windll()
         old_env = os.environ.get("USERPROFILE")
-        os.environ["USERPROFILE"] = os.path.join(work, "from-env")
+        from_env = os.path.join(work, "from-env")
+        os.makedirs(from_env, exist_ok=True)
+        os.environ["USERPROFILE"] = from_env
         try:
-            self.assertEqual(old, mod._user_home_dir(),
-                             "壳给出个人目录时须以它为准（不得拿登录时设上的环境变量顶替）")
-            state["path"] = new
-            self.assertEqual(new, mod._user_home_dir(),
-                             "个人目录迁走后**再取一次**须得到新路径（取一次就存着＝写死）")
+            ctypes.windll = _Windll()
+            try:
+                self.assertEqual(old, mod._user_home_dir(),
+                                 "壳给出个人目录时须以它为准（不得拿登录时设上的环境变量顶替）")
+                state["path"] = new
+                self.assertEqual(new, mod._user_home_dir(),
+                                 "个人目录迁走后**再取一次**须得到新路径（取一次就存着＝写死）")
+            finally:
+                ctypes.windll = saved
+            # 壳不可用时退回环境变量（不得因此报成整批失败）。退路取的就是**环境变量里
+            # 此刻的那一条**，故 USERPROFILE 的还原必须排在这条断言之后——先前版本把还原
+            # 放进上一段的 finally，断言读到的是真家目录，Windows 上整条必红（本仓库实测）。
+            if saved is not None:
+                ctypes.windll = object()
+                try:
+                    self.assertEqual(from_env, mod._user_home_dir(),
+                                     "壳那条路取不到时须退回环境变量/expanduser 那一套")
+                finally:
+                    ctypes.windll = saved
         finally:
-            ctypes.windll = saved
             if old_env is None:
                 os.environ.pop("USERPROFILE", None)
             else:
                 os.environ["USERPROFILE"] = old_env
-        # 壳不可用时退回环境变量（不得因此报成整批失败）
-        if saved is not None:
-            ctypes.windll = object()
-            try:
-                os.makedirs(os.path.join(work, "from-env"), exist_ok=True)
-                self.assertEqual(os.path.join(work, "from-env"), mod._user_home_dir(),
-                                 "壳那条路取不到时须退回环境变量/expanduser 那一套")
-            finally:
-                ctypes.windll = saved
 
     def test_windows_home_migrated_away_does_not_fall_back_to_env(self):
         """壳答出的家目录**已经不存在**时，不得退回环境变量——退回去正好拿到登录时那条旧值。
@@ -21215,6 +21262,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         时，shell 会先把该文件截断成 `0 B`——这是调用方的用法问题，脚本侧能保证的是：`0 B`
         也算"以前取到过的那一份"占位、失败时不判"新取"、并如实写明"本地已有那一份原样保留"。
         """
+        self._skip_if_home_not_redirectable()
         home = tempfile.mkdtemp(prefix="fetch-home-fail-")
         # 先在"本机来源"上取一份，再换一个不可达的来源：落点按来源分槽，故要让两次命中同一槽
         # （`cache_slot_dir` 按来源地址分槽，换来源即换槽）——这里直接按来源槽路径预置那一份
@@ -21239,6 +21287,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         正例夹具用本文件所在工作区当"远端"（无网络依赖）：`--base` 指到 file 服务不可用，
         故改用本机临时 HTTP 服务托管两个文件，验证"远端改了 → 客户端刷新"。
         """
+        self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
         import threading
@@ -21343,6 +21392,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         ③ 清单里列着、远端却没有的那份**报出名字并以非 0 退出**（提示词与规范互不引用，
         少一份不会有任何东西报错，"看着取全了、其实少了几份"正是要防的形态）。
         """
+        self._skip_if_home_not_redirectable()
         import threading
 
         entry = (b"= test\n\nspecs/core/execution.adoc\n\n"
@@ -21394,6 +21444,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         十六处片段一处都没展开、返回码还是 0）；③ `{主侧重}` 已按该提示词自己的声明填好；
         ④ 取不到那一份时**非 0 退出**，不输出半份当成功。
         """
+        self._skip_if_home_not_redirectable()
         import shlex
         import threading
 
@@ -21489,6 +21540,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         ① 远端脚本是 v1：落点里的索引是 v1 算的；② 只改远端脚本为 v2（索引字节也随内容变）：
         这一轮里 `update_self` 先换上 v2、重启，随后索引必须**由 v2** 算出（而不是跑完再补）。
         """
+        self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
         import threading
@@ -21575,6 +21627,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
     def test_index_not_fetched_by_default_list(self):
         """`--list` 只列清单、不取文件：索引不落盘（否则"看一眼清单"会顺手改落点）。"""
+        self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
         import threading
@@ -21769,7 +21822,9 @@ class TestCheckFetchProgressGuard(CheckSpecsTestCase):
         self._write_valid()
         with open(os.path.join(self.root, self.BAT), "rb") as fh:
             data = fh.read()
-        self._write_bat(data.replace(b" & pause", b""))
+        # 现行 `:run` 是"直接跑解释器 → 记退出码 → pause（独占一行）"：挪走的就是
+        # `pause` 那一行（旧的 `cmd /c "… & pause"` 形态已撤，` & pause` 不再出现）。
+        self._write_bat(data.replace(b"pause\r\n", b""))
         cm.check_fetch_progress_guard()
         self.assertIn("pause", self.error_texts())
 
@@ -23111,6 +23166,7 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                               timeout=120, env=env)
 
     def test_landing_is_read_only_and_still_updatable(self):
+        self._skip_if_home_not_redirectable()
         import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
@@ -23276,6 +23332,7 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         "不动本地那一份"（不核内容、不覆盖）与"它还是只读的"是两件事——只在前一路收紧时，
         最需要它的一路（有人 `chmod -R u+w` 改过副本、又按安装流程加了 `--keep`）恰恰漏掉。
         """
+        self._skip_if_home_not_redirectable()
         import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}

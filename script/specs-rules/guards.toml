@@ -20,8 +20,18 @@ kind = "corpus_ownership"
 corpus = "adoc"
 # 历史留痕按定义不参与覆盖面核对（它的职责就是逐字保留历史产物，见
 # `specs/general/changelog.adoc`）。
+# 本表须与 `script/specs-rules/_tokens.toml` 的 `HISTORICAL_FILES` 逐项相等：
+# 清单取值端（`_pointer_scan_files`）把 `HISTORICAL_FILES` 整体剔除，故这里的 exclude
+# 少一项或多一项都会被本防线自己报红——两处各司其职，漂移由核对兜住。
 exclude = [
     "CHANGELOG.adoc",
+    "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
+    "specs-project-maintainer/ledger/sharding-rolled-back.adoc",
+    "specs-project-maintainer/ledger/concurrent-hotspots-2026-11.adoc",
+    "specs-project-maintainer/ledger/conflict-by-shape.adoc",
+    "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
+    "specs-project-maintainer/ledger/powershell-cross-version.adoc",
+    "specs-project-maintainer/ledger/review-compact-form-sizing.adoc",
 ]
 # 清单名 → [脚本侧取值函数, 登记该清单的那一行]，第二段只作报错时的落点提示——它指的是
 # “哪些文件算维护范围”这件事在哪里被写进防线清单，不是清单内容的另一份落点。

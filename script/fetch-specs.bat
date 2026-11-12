@@ -68,6 +68,11 @@ rem the line, which is pause -- always 0 -- so a real failure (exit code 2,
 rem missing config group) came back as 0. Running the interpreter directly in
 rem this cmd keeps %errorlevel% pointing at the logic code when the `set` line
 rem runs; pause then holds the window, and `exit /b` returns the saved status.
+rem
+rem do not disturb the user's session: the pause belongs only to a console of
+rem our own (a dot-double-click). Launched from an existing console, a pipe or
+rem CI it just runs and returns -- prompting there would look like a hung
+rem command and eat the next keystroke (specs/stack/windows.adoc).
 "%FETCH_SPECS_RUNTIME%" "%~dp0fetch-specs.py" %*
 set "FETCH_SPECS_STATUS=%errorlevel%"
 pause

@@ -1484,6 +1484,16 @@ GUARD_CHECK_LIMITS = [
 ]
 HISTORICAL_FILES = [
     "CHANGELOG.adoc",
+    # 逐轮记账的历史归档（`ledger/README.adoc` 的目录级口径「不回溯改旧文件」：旧轮次
+    # 记的是**当时**的基线与承接面，引用的文件此后被改名/分片删除属历史事实，
+    # 存在性检查对它们不适用（同 CHANGELOG.adoc 的口径））
+    "specs-project-maintainer/ledger/rounds-before-sharding.adoc",
+    "specs-project-maintainer/ledger/sharding-rolled-back.adoc",
+    "specs-project-maintainer/ledger/concurrent-hotspots-2026-11.adoc",
+    "specs-project-maintainer/ledger/conflict-by-shape.adoc",
+    "specs-project-maintainer/ledger/guard-test-floor-sharding.adoc",
+    "specs-project-maintainer/ledger/powershell-cross-version.adoc",
+    "specs-project-maintainer/ledger/review-compact-form-sizing.adoc",
 ]
 INFO_DENSITY_ANCHORS = [
     [

@@ -752,7 +752,7 @@ def update_self(base, out_dir, cwd):
     "下次运行会读到的真身"），并**如实警告**"这一轮仍按旧口径取"（见下，不得静默）。
 
     **落盘路径按写位取**（判据不是平台名，见 `_self_update_candidates`）：
-      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.<pid>.update`）——直接跑
+      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.update`，固定名不带 pid）——直接跑
         `python3 fetch-specs.py`、或经壳调起时都在这一处，换起来不必跨目录；
       * 只有**落点根下**可写（`<落点根>/fetch-specs.py` 是本脚本自己写的那份）→ 落在落点根下
         的**真身同名文件**——它本身就是"下次运行会读到的真身"，故拷过去即已成事；
@@ -1288,7 +1288,7 @@ def _refresh_self(base, out_dir, cwd):
     "下次运行会读到的真身"），并**如实警告**"这一轮仍按旧口径取"（见下，不得静默）。
 
     **落盘路径按写位取**（判据不是平台名，见 `_self_update_candidates`）：
-      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.<pid>.update`）——直接跑
+      * 本轮真身的目录可写 → 落在它旁边（`<目录>/.<脚本名>.update`，固定名不带 pid）——直接跑
         `python3 fetch-specs.py`、或经壳调起时都在这一处，换起来不必跨目录；
       * 只有**落点根下**可写（`<落点根>/fetch-specs.py` 是本脚本自己写的那份）→ 落在落点根下
         的**真身同名文件**——它本身就是"下次运行会读到的真身"，故拷过去即已成事；
@@ -1390,6 +1390,9 @@ def _take_over_self(local, target):
                   file=sys.stderr)
         else:
             _discard_handoff_note(f"{local}{SELF_HANDOFF_SUFFIX}")
+            # 中转件已拷到真身、本轮由新版接着跑：用完即清（固定名下不留残件）。
+            # 重启失败也不受影响——真身已经是新版，中转件没有再被读的一天。
+            _self_update_discard(target)
             print("更新: 已就地换上新版取规范脚本，本轮即按它的清单口径取全", file=sys.stderr)
             _restart_with(local, "--self-updated")     # 成事即不返回
     # 真身这回换不动：新版本落在 `target`，标记只能指向它——**上一轮那份标记要一并清掉**。
@@ -1494,7 +1497,7 @@ def _self_update_candidates(out_dir, cwd):
     （见 `shared_cache_dir` 对"落点只有一处"的同一层取舍）。
 
       * **真身那份（`sys.argv[0]`）所在的目录可写** → 落在它旁边
-        （`.<真身名>.<pid>.update`）：这是"下一轮会读到的那份"自己，最快也最合适的一处
+        （`.<真身名>.update`，固定名不带 pid）：这是"下一轮会读到的那份"自己，最快也最合适的一处
         （直接跑、经壳调起都走这一条：两个入口都用 `exec`/绝对路径调这份逻辑代码，
         `sys.argv[0]` 就是真身——见 `specs/general/script.adoc`「跨环境脚本」）；
       * **真身读不到**（`sys.argv[0]` 不是一份真实文件、如 `python3 - < x.py` 或壳给的临时副本）
@@ -1537,7 +1540,11 @@ def _self_update_candidates(out_dir, cwd):
             writable = _first_writable_dir(on_dir) is not None
         if not writable:
             continue
-        suffix = f".{name}.{os.getpid()}{SELF_UPDATE_SUFFIX}" if is_real else name
+        # 中转件用**固定名**（`.<脚本名>.update`），不带 pid：带 pid 的名字每轮各一个，
+        # 换成功/中断留下的旧件谁也不认，只会越攒越多（用户口径：临时文件名要固定）。
+        # 并发两轮同写一个名字是良性的——两轮取的是同一份远端内容、字节一致，谁后写完都是
+        # 同一份；写半份的情形由 `_readable_as_script` 那道闸挡住，不成换上。
+        suffix = f".{name}{SELF_UPDATE_SUFFIX}" if is_real else name
         where = f"{kind}（= 真身）" if is_real else kind
         yield os.path.join(on_dir, suffix), where
 
@@ -1615,6 +1622,8 @@ def hand_off_self():
               file=sys.stderr)
         return
     _discard_handoff_note(note)
+    # 标记指向的那份已拷到真身：用完即清（同 `_take_over_self` 的换成功那条路）。
+    _self_update_discard(fresh)
     print("更新: 已换成上一轮取到的新版取规范脚本，本轮按它的清单口径取全", file=sys.stderr)
     _restart_with(_this_file(), "--self-updated")
 
@@ -1663,6 +1672,143 @@ def _clean_self_tmp(cwd, keep=()):
             os.remove(victim)
         except OSError:
             pass
+
+
+def _self_update_discard(path):
+    """自更新中转件**用完即清**（先补写位再删；删不掉只当它还在，不得中断本轮）。
+
+    落点里的文件收尾时被收紧成只读，直接 `os.remove` 在部分平台上会被只读位拒掉——
+    与 `_take_over_self` 换真身前先补写位是同一条例外：补位只为清这一步。
+    """
+    try:
+        os.chmod(path, _WRITABLE_FILE_MODE)
+    except OSError:
+        pass
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _self_update_discard_dir(path):
+    """目录版的**用完即清**（`__pycache__` 一类：里面每个文件都可能带着只读位）。
+
+    `shutil.rmtree(ignore_errors=True)` 对"文件带 READONLY 属性"的目录会**整树静默失败**
+    （Windows 上删不掉只读文件，本仓库实测：落点根下的 `__pycache__` 清了一轮还在）
+    ——故逐个节点先补写位再删；哪一层删不掉只当它还在，不得中断本轮（同
+    `_self_update_discard` 的口径）。
+    """
+
+    def _retry(func, p, _exc):
+        try:
+            os.chmod(p, _WRITABLE_DIR_MODE if os.path.isdir(p) else _WRITABLE_FILE_MODE)
+            os.chmod(os.path.dirname(p), _WRITABLE_DIR_MODE)
+            func(p)
+        except OSError:
+            pass
+
+    shutil.rmtree(path, onerror=_retry)
+
+
+def _self_update_temp_res():
+    """自更新中转件的**名字**正则：当前那份（固定名 `.<脚本名>.update`）+ 历史上带
+    pid 的旧名（`.<脚本名>.<pid>.update`）——旧名每轮各一个、换成功后谁也不认，
+    只会越攒越多，清扫要连它们一并认得。名字主干取自本脚本自己的文件名
+    （中转件落在真身旁边，与真身同名）与安装脚本登记名（落点根下那一份）。
+    """
+    bases = {os.path.basename(INSTALL_SCRIPTS[0])}
+    this = _this_file()
+    if this:
+        bases.add(os.path.basename(this))
+    return [re.compile(r"^\." + re.escape(b) + r"(?:\.\d+)?"
+                       + re.escape(SELF_UPDATE_SUFFIX) + r"$")
+            for b in sorted(bases)]
+
+
+def _live_handoff_targets(directory):
+    """`directory` 里**活着的待换标记**指向的路径集合（无标记/读不到时为空集）。
+
+    标记由 `_leave_handoff_note` 写在脚本文件旁边（`<脚本路径>.handoff`），内容是
+    待换新版本的全路径；主干按 `_self_update_temp_res` 同一套名字找（真身被改名过时
+    标记也跟着改名）。
+    """
+    bases = {os.path.basename(INSTALL_SCRIPTS[0])}
+    this = _this_file()
+    if this:
+        bases.add(os.path.basename(this))
+    pointed = set()
+    for base in sorted(bases):
+        note = os.path.join(directory, f"{base}{SELF_HANDOFF_SUFFIX}")
+        try:
+            with open(note, encoding="utf-8") as fh:
+                text = fh.read().strip()
+        except OSError:
+            continue
+        if text:
+            pointed.add(os.path.abspath(text))
+    return pointed
+
+
+def _sweep_self_update_stale(directory):
+    """清掉**没有活着的待换标记指着**的自更新中转件（固定名与历史带 pid 的旧名）。
+
+    固定名之后，换成功那条路自己就把中转件清了（`_take_over_self`／`hand_off_self`）；
+    这里兜的是"进程被杀在落盘与换上之间"与旧版本留下的 pid 名残件。**有标记指着的那份
+    不清**——它要由真身下一轮消费（见 `hand_off_self`），清了等于把"重跑一次即用上"
+    弄成空话。只 `listdir` + 按名比对、不拼外部输入；目录不碰（同名目录不是中转件）。
+    """
+    if not os.path.isdir(directory) or os.path.islink(directory):
+        return
+    res = _self_update_temp_res()
+    pointed = _live_handoff_targets(directory)
+    for name in os.listdir(directory):
+        if not any(p.match(name) for p in res):
+            continue
+        victim = os.path.join(directory, name)
+        if os.path.isdir(victim) and not os.path.islink(victim):
+            continue
+        if os.path.abspath(victim) in pointed:
+            continue
+        _self_update_discard(victim)
+
+
+def _sweep_landing_root(directory):
+    """把落点根下**当前排布之外的残留**清掉（用户口径：落点下不许有多余文件）。
+
+    落点根的应然形态只有这几样：来源槽**目录**、安装脚本（`INSTALL_SCRIPTS`）、其配置
+    （`CONFIG_IN_SCRIPTS_DIR`）、附随文件（`FOLLOWUP_FILES`，公共片段所在的 `prompts/`
+    一层随其目录保留）、口令入口（`PROMPT_COMMAND_*_NAME`）、活着的自更新标记。
+    旧排布散在根下的旧副本、字节码缓存（`__pycache__`，本脚本从落点被 import 时留下）
+    都不在形态里——攒着只会让人分不清"哪一份是真的"。**目录一律保留**（`__pycache__`
+    除外）：目录可能是别的来源槽，槽按来源地址现算、这里认不全，删错槽等于让换过
+    `--base` 的副本凭空丢一份。**有活着的标记指着的中转件不清**（同
+    `_sweep_self_update_stale`）；收尾收紧只读之前调用——收紧后连清的写位都没有。
+    """
+    if not os.path.isdir(directory) or os.path.islink(directory):
+        return
+    keep = {os.path.basename(p) for p in INSTALL_SCRIPTS}
+    keep.add(os.path.basename(CONFIG_IN_SCRIPTS_DIR))
+    keep |= {os.path.basename(p) for p in FOLLOWUP_FILES}
+    keep |= {PROMPT_COMMAND_SHELL_NAME, PROMPT_COMMAND_BAT_NAME}
+    # 活着的待换标记也是排布里的一份（`hand_off_self` 下一轮要读它），与它指着的中转件一并保
+    this = _this_file()
+    bases = {os.path.basename(INSTALL_SCRIPTS[0])} | (
+        {os.path.basename(this)} if this else set())
+    keep |= {f"{b}{SELF_HANDOFF_SUFFIX}" for b in bases}
+    pointed = _live_handoff_targets(directory)
+    for name in os.listdir(directory):
+        entry = os.path.join(directory, name)
+        if os.path.isdir(entry) and not os.path.islink(entry):
+            if name == "__pycache__":
+                # 里面的 .pyc 多半带着只读位（落点收紧过），须逐节点补写位才删得动
+                # （`ignore_errors=True` 会整树静默失败，本仓库实测）
+                _self_update_discard_dir(entry)
+            continue                # 其余目录一概不碰：可能是别的来源槽
+        if name in keep:
+            continue
+        if os.path.abspath(entry) in pointed:
+            continue
+        _self_update_discard(entry)
 
 
 def download_one(base, rel, out_dir, keep, total=0):
@@ -2112,6 +2258,11 @@ def main(argv=None):
 
     # 上一轮留下的新版本：先换上它、再照它的清单口径干活（见 `hand_off_self`）
     hand_off_self()
+    # 开工前清一遍上一轮自更新留下的中转件残件（带 pid 的旧名只攒不走——用户口径：
+    # 临时文件名要固定；固定名换成/中断后留下的同样不在落点形态里）。有活着的待换
+    # 标记指着的那份不清，它要由真身下一轮消费（见 `_sweep_self_update_stale`）。
+    _sweep_self_update_stale(
+        os.path.dirname(os.path.abspath(_real_script() or _this_file() or os.getcwd())))
     try:
         out_dir = resolve_out_dir(args)
     except ValueError as e:
@@ -2239,6 +2390,10 @@ def main(argv=None):
                   "口令 " + PROMPT_COMMAND_USAGE.format(name=PROMPT_COMMAND_NAME)
                   + " 即可把落点里那一份提示词装配好整段输出，不必再打开文件复制")
 
+    # 落点根先清一遍**当前排布之外的残留**再收紧只读（用户口径：落点下不许有多余文件）
+    # ——清理要在可写态做，收紧后连"清"都动不了权限位，旧副本与 `__pycache__` 会就此长住
+    # （见 `_sweep_landing_root`；活着的待换标记与它指着的中转件不在清的范围）。
+    _sweep_landing_root(install_scripts_dir())
     # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本的来源槽
     # + 安装脚本）**一次收紧**——只收紧一部分时另一半仍是可写的，"落点是只读的"这句话
     # 对读者就无法核对。**收紧失败不算取文件失败**（`_make_read_only` 吞掉 OSError，
