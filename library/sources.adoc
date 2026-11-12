@@ -178,6 +178,13 @@
 * 材料：GNU Make 官方手册（行尾与行/字节严格解析相关的说明）。
 * 用途：`specs/general/encoding.adoc`「易被 CRLF 破坏的文本类格式」——`Makefile` 默认 LF。
 
+== Maven 依赖机制（传递依赖、依赖调解、排除与可选依赖）
+
+* 材料：Apache Maven 官方文档《Introduction to the Dependency Mechanism》（官方网页已取回）。
+* **逐字摘（官方网页已取回）**："Maven avoids the need to discover and specify the libraries that your own dependencies require by including transitive dependencies automatically."、"Dependency mediation - this determines what version of an artifact will be chosen when multiple versions are encountered as dependencies. Maven picks the “nearest definition”."、"Dependency management - this allows project authors to directly specify the versions of artifacts to be used when they are encountered in transitive dependencies or in dependencies where no version has been specified."、"Excluded dependencies - If project X depends on project Y, and project Y depends on project Z, the owner of project X can explicitly exclude project Z as a dependency, using the “exclusion” element."、"Although transitive dependencies can implicitly include desired dependencies, it is a good practice to explicitly specify the dependencies your source code uses directly. This best practice proves its value especially when the dependencies of your project change their dependencies."。
+* 用途：`specs/general/dependency.adoc`「引入依赖」与「依赖冲突与统一」——传递依赖（间接依赖）**自动带入、可直接使用**；要固定某个构件的版本时官方给的载体是 `dependencyManagement`（它**不新增依赖**，只定版本），而不是在依赖清单里多一条；`specs/stack/maven.adoc`「依赖」的载体条同源。
+* **须注意的语义差异（同义性）**：官方**给的是相反方向**——它建议「显式声明源码直接使用的依赖」（理由：上游改动其依赖时可能让构建失败、且清单本身是文档）。本集合按用户口径取**更严的一侧**：现有依赖面（含间接依赖）已能提供该能力时**不新增直接依赖**，仅三档例外可显式声明，且「要钉版本」那一档的落点是**版本约束**（官方正是这么定位 `dependencyManagement` 的）。**该偏离与理由登记在 `library/adoption.adoc`**，不得把本站口径标成 Maven 官方要求。
+
 == Maven Surefire / Failsafe 插件默认 includes 与 JUnit 平台的默认类名过滤
 
 * 材料：Apache Maven 官方插件文档（Surefire / Failsafe 的 Inclusions and Exclusions 页与 `test`/`integration-test` 目标参数表）、JUnit 官方用户指南与 API 文档（`ClassNameFilter.STANDARD_INCLUDE_PATTERN`、Console Launcher 的 `--include-classname`、Definitions 的 Test Class 定义）。

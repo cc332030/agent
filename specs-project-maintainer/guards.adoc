@@ -146,6 +146,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_java_object_template_guard` | `script/specs-rules/java/guards/check_java_object_template_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_maven_mirror_guard` | `script/specs-rules/check_maven_mirror_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_registry_mirror_guard` | `script/specs-rules/check_registry_mirror_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_dependency_direct_add_guard` | `script/specs-rules/dependency/guards/check_dependency_direct_add_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_throughput_guard` | `script/specs-rules/check_throughput_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_performance_guard` | `script/specs-rules/check_performance_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_quality_guard` | `script/specs-rules/check_quality_guard.adoc`
@@ -356,6 +357,7 @@
 | 94 | 并行改动的独占落点：逐行登记表须是生成物
 | 95 | 规格（spec driven）防线
 | 96 | 复发即面防线（同一处改到第二遍就升级检查、反复修改的功能须落设计基线）
+| 97 | 依赖直接新增防线（能用现有依赖满足时不新增直接依赖）
 |===
 
 == 维护约定

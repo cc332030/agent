@@ -1,0 +1,182 @@
+# 『能用现有依赖满足时不新增直接依赖』防线（**用户提出**）。
+#
+# 用户口径（Issue）：『除非有冲突或者其他原因，否则能用的情况下（间接依赖），不要去新增依赖
+# （直接依赖），比如 maven 手动写依赖到 pom.xml 但是可能已经间接依赖了』。
+#
+# 要治的失效：同一个能力在**依赖图**与**依赖清单**里各留一处入口——能力本来已经由别的依赖
+# 传递带入（间接依赖）、代码也一直在用，执行者却"顺手"在 `pom.xml`/`build.gradle` 里再声明
+# 一条直接依赖。多出来那一条不报错、不改变构建结果，却把版本与依赖图的入口变成了两处：
+# 上游一升版本，清单里钉住的那条与解析结果就开始各说各话。
+#
+# **必须一起钉的反向口径**：官方（Maven《Dependency Mechanism》）给的是相反的建议——"最好
+# 显式声明源码直接使用的依赖"。故本条**不是**官方要求的复述，而是本集合按用户口径做的更严取舍，
+# 取舍与同义性差异登记在 `library/adoption.adoc`、官方原文摘在 `library/sources.adoc`——两处
+# 缺任一处，读者都无从判断"这条到底是谁的要求"。
+#
+# 判据本体落**通用层** `specs/general/dependency.adoc`「引入依赖」（跨语言成立）；技术栈层
+# 只给**载体**（现有依赖面在 Maven 取解析后的依赖树、Gradle 取解析结果；要钉版本时落点是
+# 版本约束而不是多一条声明），两份栈文件都**回指**通用层、不复述判据。
+
+# ① 判据本体：能用现成的不新增直接依赖（条文 + 判定标准 + 三档例外 + 为什么默认不新增）。
+[[guards.check_dependency_direct_add_guard]]
+kind = "section_groups"
+file = "specs/general/dependency.adoc"
+section = "引入依赖"
+message = "『能用现有依赖满足时不新增直接依赖』防线被破坏：{file}「引入依赖」缺失要点 {missing}——{desc}；该条对应用户口径（间接依赖已带来的能力不要再新增直接依赖），删掉或降级后「看到类就顺手加一条依赖」照旧发生，而构建结果看不出差别"
+groups = [
+    [
+        "条文与级别",
+        [
+            "能用现有依赖满足时不新增直接依赖（L1）",
+            "含**间接依赖**",
+            "不得**再往依赖清单里新增一条直接依赖",
+        ],
+        "条文：须有该条并标 L1，且写明现有依赖面**含间接依赖**、不得再新增一条直接依赖——只写『先查再用』时，查到的那一步停在『项目自有工具类』上，间接依赖带入的库不在被查的范围里",
+    ],
+    [
+        "判定标准",
+        [
+            "判定标准（任一命中即违规）",
+            "其能力已出现在现有依赖的解析结果里",
+            "找不到来源属**没查现有依赖面**",
+            "说不出「现有依赖面里没有这个能力」就新增",
+        ],
+        "判定标准：须可逐条核对——含『找到那个类却不知道它从哪来』这一形态（它正是本仓库实测的触发点：找不到来源就算新增的理由，于是每次都多一条）",
+    ],
+    [
+        "三档例外",
+        [
+            "例外（L2，须写明理由，理由只有三档）",
+            "有冲突或要钉版本",
+            "传递路径可能失效",
+            "编译期契约",
+        ],
+        "例外：须写明只有三档理由可显式声明（第一档即用户说的『有冲突』：版本对不上、要钉版本）——缺则本条被读成「一律不准声明」，与『同一依赖全局唯一版本』『对外契约须可见』两条互相打脸",
+    ],
+    [
+        "钉版本的去向是版本约束",
+        [
+            "落点是**版本约束**",
+            "`<dependencyManagement>`",
+            "不是",
+            "在依赖清单里多一条",
+        ],
+        "例外①的去向须写清：要防版本漂移时，正确落点是版本约束（`<dependencyManagement>`/constraints/platform），不是在依赖清单里多一条直接声明——缺则『要钉版本』被当成新增直接依赖的通行理由，本条等于没写",
+    ],
+    [
+        "为什么默认不新增",
+        [
+            "为什么默认不新增",
+            "多一处版本与依赖图的入口",
+            "doc-design.adoc",
+        ],
+        "理由：须写明『多一条直接声明＝多一处版本入口』，并回指模块间依赖的同形判据（模块已间接依赖时不得重复声明）——缺则本条只剩一句禁止，读者不知道代价在哪、遇到反弹时先删的就是它",
+    ],
+]
+
+# ② 反向口径：间接依赖带入的库**可以用**，不得把本条读成「没声明就不许用」。
+[[guards.check_dependency_direct_add_guard]]
+kind = "section_groups"
+file = "specs/general/dependency.adoc"
+section = "引入依赖"
+message = "『能用现有依赖满足时不新增直接依赖』防线被破坏：{file}「引入依赖」缺失要点 {missing}——{desc}"
+groups = [
+    [
+        "间接依赖可直接使用",
+        [
+            "间接依赖带入的库可直接使用，但不得据此重复声明（L2）",
+            "**可以直接使用**",
+            "按本节「能用现有依赖满足时不新增直接依赖」的三档例外",
+        ],
+        "反向口径：须写明间接依赖带入的库**可以直接使用**（只是别重复声明）——缺则本条被读成『没在自己清单里声明就不许用』，于是执行者为了「合法使用」去加一条直接依赖，正好回到本条要治的形态",
+    ],
+]
+
+# ③ 技术栈层的载体：只回指通用层、不复述判据（同一件事只有一处完整定义）。
+[[guards.check_dependency_direct_add_guard]]
+kind = "line_tokens"
+file = "specs/stack/maven.adoc"
+section = "依赖"
+anchor = ["现有依赖已满足时不新增直接依赖（L1）"]
+tokens = [
+    "specs/general/dependency.adoc",
+    "此处**不复述**",
+    "<dependencyManagement>",
+]
+message = "{file}「依赖」缺 {missing}——Maven 侧那一行须**回指**通用层判据、只给载体（解析后的依赖树 / 要钉版本时落 `<dependencyManagement>`）；缺则 Maven 读者只读到一句禁止、或者把栈层的载体当成判据本体的第二份定义"
+
+[[guards.check_dependency_direct_add_guard]]
+kind = "line_tokens"
+file = "specs/stack/gradle.adoc"
+section = "依赖"
+anchor = ["要新增依赖前先看已有的（L1）"]
+tokens = [
+    "specs/general/dependency.adoc",
+    "本文件只给 Gradle 侧载体",
+    "constraints",
+]
+message = "{file}「依赖」缺 {missing}——Gradle 侧那一行须**回指**通用层判据、只给载体（解析结果 / 要钉版本时落版本约束）；缺则同一件事在栈层长出第二份定义"
+
+# ④ 旧口径不得写回：本条的失效形态正是"传递依赖已满足也再声明一条"的老说法。
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_forbidden"
+file = "specs/general/dependency.adoc"
+forbidden = [
+    "传递依赖不直接使用",
+    "传递依赖已满足时不显式声明",
+]
+message = "{file} 写回了**已被本条取代**的旧口径 {hit}——『传递依赖不直接使用』把间接依赖当成不可用的东西（于是执行者为了合法使用去加一条直接依赖），『已满足时不显式声明』只是一句没有判定标准的建议；两条都与『能用现成的就不新增直接依赖』相反"
+
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_forbidden"
+file = "specs/stack/maven.adoc"
+# 锚点取**不带强调标记**的子串：旧句原文是 `**除非有必要**（…）`，把整句连 `**` 抄进
+# `forbidden` 时，源文件里那半句永远不是它的子串——写回旧口径也不报（本仓库实证：
+# 整行还原成旧句时防线全绿）。故两段各取一处、都与强调标记无关。
+forbidden = [
+    "否则不重复声明依赖",
+    "传递依赖已满足时不显式声明",
+]
+message = "{file} 写回了**已被取代**的旧口径 {hit}——它是无判定标准的建议句（『除非有必要』由谁判、怎么判都没写），判据本体现在在 `specs/general/dependency.adoc`「引入依赖」，栈层只给载体"
+
+# ⑤ 依据两侧：官方原文（它是相反建议）与本站取舍各一处，缺则本条会被读成官方要求。
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_tokens"
+file = "library/sources.adoc"
+tokens = [
+    "it is a good practice to explicitly specify the dependencies your source code uses directly",
+    "Dependency mediation",
+]
+message = "{file} 缺少 Maven 依赖机制的官方原文锚点 {missing}——官方给的恰恰是**相反**的建议（显式声明源码直接使用的依赖）；不把原文摘下来，读者无法判断本集合这条是加严取舍还是官方要求"
+
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_tokens"
+file = "library/adoption.adoc"
+tokens = [
+    "能用现有依赖满足时不新增直接依赖",
+    "相反",
+]
+message = "{file} 未登记『能用现有依赖满足时不新增直接依赖』这条取舍（缺 {missing}）——本集合在此**偏离**了 Maven 官方『显式声明直接使用的依赖』的建议，不写明取舍与理由，读者会把本集合的加严口径当成官方要求"
+
+# ⑥ 加载门：调度器那一行的识别特征须写明"要新增依赖"——只写「引入/调整/升级依赖」时，
+# 「不知道某个类从哪来、顺手补一条」这个真实的触发形态不会被读成"引入依赖"，于是本条
+# 在加载这一步就落空（规则写了、没人读到）。
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_tokens"
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "specs/general/dependency.adoc",
+    "要新增依赖",
+    "可能已由间接依赖带入",
+]
+message = "{file} 的通用层未按名登记 {missing}——『看到某个类一直在用、就补一条依赖』这一触发形态不会把 `dependency.adoc` 加载进来（缺的不只是链接，是那个识别特征）"
+
+# ⑦ 公开面同步：读者按 README 的目录说明学习时须知道有这条判据。
+[[guards.check_dependency_direct_add_guard]]
+kind = "file_tokens"
+file = "README.adoc"
+tokens = [
+    "`dependency.adoc`",
+    "能用现有依赖（含间接依赖）满足时不新增直接依赖",
+]
+message = "{file} 的目录说明未登记 {missing}——公开面看不见这条判据，等于它只对读全库的人生效"

@@ -33055,6 +33055,132 @@ class TestCheckRecurrenceEscalationGuard(CheckSpecsTestCase):
         self.assertIn("check_effective.py", self.error_texts())
 
 
+class TestCheckDependencyDirectAddGuard(CheckSpecsTestCase):
+    """钉住『能用现有依赖满足时不新增直接依赖』防线（**用户提出**）。
+
+    用户口径（Issue）：『除非有冲突或者其他原因，否则能用的情况下（间接依赖），不要去新增
+    依赖（直接依赖），比如 maven 手动写依赖到 pom.xml 但是可能已经间接依赖了』。
+
+    最易被冲掉的四件事（故逐条覆盖）：**条文与级别**（降成建议即失效）、**三档例外里的去向**
+    （「要钉版本」若被写成"多声明一条"的理由，正落到本条要治的形态）、**反向口径**（缺则本条被
+    读成"没声明就不许用"，执行者为了合法使用反而去补一条）、**依据两侧**（官方原文给的是**相反**
+    建议，不摘下来读者分不清这是本站取舍还是官方要求）。夹具用真文件副本 + 一处定点改动。
+    """
+
+    DEP = "specs/general/dependency.adoc"
+    MAVEN = "specs/stack/maven.adoc"
+    GRADLE = "specs/stack/gradle.adoc"
+    SOURCES = "library/sources.adoc"
+    ADOPTION = "library/adoption.adoc"
+    GENERIC = "AGENTS_COMMON.adoc"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in
+                     (self.DEP, self.MAVEN, self.GRADLE, self.SOURCES, self.ADOPTION,
+                      self.GENERIC, self.README)}
+        self.write_rules_fixture()
+        for rel, text in self.base.items():
+            self.write(rel, text)
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_dependency_direct_add_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_without(self, rel: str, old: str) -> None:
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要点 `{old}`")
+        self.write(rel, self.base[rel].replace(old, "", 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 「看到类就补一条依赖」照旧发生，而构建结果看不出差别
+        text = self.base[self.DEP]
+        start = text.index("== 引入依赖")
+        end = text.index("\n== 依赖冲突与统一", start)
+        self.write(self.DEP, text[:start] + text[end + 1:])
+        self._run_guard()
+        self.assertIn("引入依赖", self.error_texts())
+
+    def test_rule_body_removed_reports(self):
+        # 反例②：条文与 L1 被抽 → 需求退回成一句「先查再用」，查的那一步停在项目自有工具类上
+        self._run_without(self.DEP, "能用现有依赖满足时不新增直接依赖（L1）")
+        self.assertIn("能用现有依赖满足时不新增直接依赖", self.error_texts())
+
+    def test_judgement_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 → 本条只剩方向，"找不到这个类是从哪来的"这一形态重新成为新增理由
+        self._run_without(self.DEP, "找不到来源属**没查现有依赖面**")
+        self.assertIn("判定标准", self.error_texts())
+
+    def test_exception_destination_removed_reports(self):
+        # 反例④：「要钉版本」的去向被抽 → 它被当成新增直接依赖的通行理由，本条等于没写
+        self._run_without(self.DEP, "落点是**版本约束**")
+        self.assertIn("版本约束", self.error_texts())
+
+    def test_reverse_wording_removed_reports(self):
+        # 反例⑤：反向口径被抽 → 本条被读成「没声明就不许用」，执行者为了合法使用反而去补一条
+        self._run_without(self.DEP, "**可以直接使用**")
+        self.assertIn("可以直接使用", self.error_texts())
+
+    def test_old_wording_written_back_reports(self):
+        # 反例⑥：旧的「传递依赖不直接使用」写回 → 间接依赖重新变成不可用的东西
+        self.write(self.DEP, self.base[self.DEP].replace(
+            "== 依赖冲突与统一", "* **传递依赖不直接使用（L2）**：不得直接使用。\n\n== 依赖冲突与统一", 1))
+        self._run_guard()
+        self.assertIn("传递依赖不直接使用", self.error_texts())
+
+    def test_maven_landing_removed_reports(self):
+        # 反例⑦：Maven 侧载体条被抽 → Maven 读者只读到通用层的一句禁止、或把栈层当第二份定义
+        self._run_without(self.MAVEN, "现有依赖已满足时不新增直接依赖（L1）")
+        self.assertIn("maven.adoc", self.error_texts())
+
+    def test_gradle_landing_removed_reports(self):
+        # 反例⑧：Gradle 侧载体条被抽 → 同一件事在栈层长出第二份定义（或根本没有落点）
+        self._run_without(self.GRADLE, "要新增依赖前先看已有的（L1）")
+        self.assertIn("gradle.adoc", self.error_texts())
+
+    def test_official_quote_removed_reports(self):
+        # 反例⑨：官方原文被删 → 读者无从看出官方给的是**相反**建议（本站取舍 vs 官方要求分不清）
+        self._run_without(self.SOURCES, "it is a good practice to explicitly specify the dependencies your source code uses directly")
+        self.assertIn("sources.adoc", self.error_texts())
+
+    def test_adoption_entry_removed_reports(self):
+        # 反例⑩：取舍未登记 → 本站的加严口径被读成 Maven 官方要求
+        self._run_without(self.ADOPTION, "能用现有依赖满足时不新增直接依赖")
+        self.assertIn("adoption.adoc", self.error_texts())
+
+    def test_dispatcher_hint_removed_reports(self):
+        # 反例⑪：调度器识别特征被抽 → 「看到某个类一直在用就补一条」这个形态不会加载本条
+        self._run_without(self.GENERIC, "可能已由间接依赖带入")
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_public_face_removed_reports(self):
+        # 反例⑫：公开面漏登记 → 引用方按 README 学习时看不到这条判据
+        self._run_without(self.README, "能用现有依赖（含间接依赖）满足时不新增直接依赖")
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_maven_old_wording_written_back_reports(self):
+        # 反例⑬：Maven 侧旧建议句被写回（**这条曾整条失效**）→ 栈层重新给出无判定标准的
+        # 「除非有必要…否则不重复声明」，与本条并存时读者按它办正好回到「补一条」。
+        # 旧句原文带强调标记（`**除非有必要**（…）`），故夹具按**原文整句**写回：锚点若
+        # 连 `**` 一起抄进 `forbidden`，那半句永远不是源文件的子串，写回也不报。
+        self.assertIn("现有依赖已满足时不新增直接依赖（L1）", self.base[self.MAVEN])
+        self.write(self.MAVEN, self.base[self.MAVEN].replace(
+            "== 全局跳过测试",
+            "* **除非有必要**（避免传递依赖版本漂移、传递路径可能失效），否则不重复声明依赖；"
+            "传递依赖已满足时不显式声明。\n\n== 全局跳过测试", 1))
+        self._run_guard()
+        self.assertIn("maven.adoc", self.error_texts())
+
 
 if __name__ == "__main__":
     unittest.main()
