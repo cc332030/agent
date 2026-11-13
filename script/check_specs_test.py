@@ -31553,6 +31553,7 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
 
     EXECUTION_DOC = "specs/core/execution.adoc"
     COMMON_PROMPT = "prompts/_common.txt"
+    ENTRY_DOC = "specs/general/entry-doc.adoc"
 
     def setUp(self) -> None:
         super().setUp()
@@ -31572,6 +31573,9 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
     def _write_valid(self) -> None:
         self.write_real_file(self.EXECUTION_DOC)
         self.write_real_file(self.COMMON_PROMPT)
+        # 索引的形态与并行取值落在通用层（判据本体在必加载层、形态在这里）：
+        # 不落这份文件时"缺整节"与"要点被删"分不开，两类反例都会命中同一条报错。
+        self.write_real_file(self.ENTRY_DOC)
         # 落点是**这一主题当前的那几份文件**（一份文件或一组子目录文件都算）
         for rel in cm.rules_engine.load_rule_specs(
                 os.path.join(self._rules_dir(), "execution")):
@@ -31614,6 +31618,48 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
         # 反例④：清理的判据句被抽——"删了还能不能原样得到"没了，只剩一句"用毕即删"
         self.assertIn("删了还能不能原样得到", self._run(
             lambda text: self._mutate(text, "判据是\"删了还能不能原样得到\"")))
+
+    # ---- 并行取值那一侧（判据本体在通用层 `specs/general/entry-doc.adoc`）----
+
+    def _run_entry(self, mutate) -> str:
+        """改**通用层**那一份后跑同一道防线（两类文件同属 `check_tmp_layout_guard`）。"""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.ENTRY_DOC), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        mutate(text)
+        cm.check_tmp_layout_guard()
+        return self.error_texts()
+
+    def _mutate_entry(self, text, removed, replacement=""):
+        self.assertIn(removed, text)
+        self.write(self.ENTRY_DOC, text.replace(removed, replacement, 1))
+
+    def test_parallel_row_rule_dropped_reports(self):
+        # 反例⑤：并行分行那条被抽——多任务合写一行，分不出哪一个做完了
+        self.assertIn("并行按任务分", self._run_entry(
+            lambda text: self._mutate_entry(
+                text, "**并行按任务分，不按任务单合并、不按执行拆行（L1）**")))
+
+    def test_parallel_no_touch_others_dropped_reports(self):
+        # 反例⑥：'不动别人的行'被抽——两人各改索引必然撞同一行，合并策略帮不上忙
+        self.assertIn("不动别人的行", self._run_entry(
+            lambda text: self._mutate_entry(text, "**并行时不动别人的行（L1）**")))
+
+    def test_union_by_versioned_rule_dropped_reports(self):
+        # 反例⑦：合并策略的判别口径被抽——两种错法都合规：给不提交的 tmp/ 白配、提交了却不配
+        self.assertIn("唯一决定", self._run_entry(
+            lambda text: self._mutate_entry(text, "由\"索引是否进版本库\"唯一决定（L1）")))
+
+    def test_handoff_read_order_dropped_reports(self):
+        # 反例⑧：接替时的读取次序被抽——"索引被清过"这一形态没有取值，接替者不知道退到哪
+        self.assertIn("接替时的读取次序", self._run_entry(
+            lambda text: self._mutate_entry(text, "**接替时的读取次序（L1）**")))
+
+    def test_entry_point_in_minimum_set_dropped_reports(self):
+        # 反例⑨：最小集里"接替时的读取入口"被抽——机制有了，触发它的那句话不在入口文档里
+        self.assertIn("接替时的读取入口", self._run_entry(
+            lambda text: self._mutate_entry(text, "**接替时的读取入口（L1）**")))
 
 
 class TestCheckSourceFileScaleGuard(CheckSpecsTestCase):

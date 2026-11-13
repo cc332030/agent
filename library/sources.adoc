@@ -309,6 +309,18 @@
 * 用途：`specs/general/spec.adoc` 的总依据——"规格只到行为面、按行为影响面分三档、默认只服务本次任务（first）、anchored 须项目声明、as-source 默认不做"。
 * **须注意的语义差异（同义性）**：上述材料给的是**做法与代价**（各家流程、三档深度、以及"重流程用在小改动上是浪费"的实测批评），**未**规定"规格写到哪一步""小改动要不要写规格"，也**未**要求各家流程必须照搬；ISO/IEC/IEEE 29148 只给"需求须单一、无歧义、可验证、可追溯"的下限。**"按规模分档、只到行为面、默认 first"是本集合据上述方向做的判据化取舍**，不是任何一家工具的规定，也不是标准原文。
 
+== 长跑 agent 的跨会话交接（Anthropic 工程博客 / Cline Memory Bank / GitHub Spec Kit）
+
+* 材料（**业界材料与工程实践，非标准**）：Anthropic 工程博客《Effective harnesses for long-running agents》（**官方网页已取回**，要点可逐字核对）；Cline 官方文档「Memory Bank」（`docs.cline.bot/best-practices/memory-bank`，**官方文本已取回**）；GitHub Spec Kit 的 `templates/` 下的 tasks 模板（`github/spec-kit`，**官方文本已取回**）；git 官方文档 `gitattributes`（**官方文本已取回**）。
+* 依据要点（要点转述，逐字仅限下列引号内）：
+** **问题本身**："each new session begins with no memory of what came before"，故须靠"进度文件 + 提交历史"让新会话快速对齐（"Read the git logs and progress files to get up to speed on what was recently worked on"）；两种失效形态是"一次做完"（"try to do too much at once"）与"过早宣布完成"（"declare the job done"）。
+** **进度落在项目里**：claude-progress.txt 与首个提交是"下一次会话读得到"的落点；Cline Memory Bank 把同一件事做成一份分层文档（projectbrief / productContext / activeContext / systemPatterns / techContext / progress 六份，均为同名的 .md），其中 activeContext 是 "Current focus, recent changes, next steps (updates most frequently)"、progress 是 "What works, what's left, known issues"；恢复动作是一句固定口令（"follow your custom instructions"）而不是靠记忆。
+** **一个会话开始时要读什么**：上述两家的次序都是"先读进度文件、再看提交历史、然后选一件尚未完成的事开始做"。
+** **任务并行与否的判据**：Spec Kit 的任务模板用 `[P]` 标记"可并行"，定义为 "Can run in parallel (different files, no dependencies)"，并按用户故事分组以便各自独立实现与验证。
+** **合并策略的作用边界**：git 官方文档对 `union` 驱动的表述是 "Run 3-way file level merge for text files, but take lines from both versions, instead of leaving conflict markers. This tends to leave the added lines in the resulting file in random order and the user should verify the result."（**逐字摘**）——即只合并**各自新增的整行**，且行序不保证。
+* 用途：`specs/general/entry-doc.adoc`「最小集」的「接替时的读取入口」与该文件「`tmp/` 索引的形态与并行取值」；`specs/core/execution.adoc`「tmp/ 的布局与命名」。
+* **须注意的同义性差异**：上述材料给的是**做法与机制**（进度文件、分层文档、`[P]` 并行标记、合并驱动语义），**未**规定"索引一行一任务""并行时各改自己那一行""索引不提交故不配合并策略""两者不一致时以任务单评论为准"——这四条例**是本集合的判据化取舍**（理由见 `library/adoption.adoc`「`tmp/` 索引的并行取值」）。
+
 == The Twelve-Factor App
 
 * 材料：The Twelve-Factor App（十二要素应用方法论）。

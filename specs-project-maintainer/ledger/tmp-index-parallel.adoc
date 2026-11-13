@@ -1,0 +1,10 @@
+= 本轮记账：`tmp/` 索引的并行取值与接替入口（业界调研后补齐）
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（`tmp/` 索引的并行取值 + 接替读取入口） | 沿用 `check_tmp_layout_guard`（**不新开一道**） | 206 → **206**（接线数不抬） | 上一轮补齐了"`tmp/` 根一份 `INDEX.md`、判据是不用打开任何文件"与"结论进持久落点"，但留下两处**真空隙**：① **"去读 `tmp/INDEX.md`"这句话只在提示词片段里**，入口文档「最小集」没有"接替时先从哪一份读起"这一项——换 agent 的那一位按最小集读入口文档时拿不到入口；② **并行任务一个字没写**——四个取值（行按任务还是按任务单、同一任务单拆出的多任务在索引里怎么分行、多个执行者同时推进时谁改哪一行、索引要不要配 `merge=union`）全空。**调研**（材料与逐字摘见 `library/sources.adoc`「长跑 agent 的跨会话交接」）：Anthropic《Effective harnesses for long-running agents》——新会话靠"进度文件 + 提交历史"对齐（"Read the git logs and progress files to get up to speed"），失效形态是"一次做完"与"过早宣布完成"；Cline Memory Bank——分层文档 + `activeContext.md` "updates most frequently"、`progress.md` "what's left"；Spec Kit 的 `tasks-template.md`——`[P]` = "Can run in parallel (different files, no dependencies)"；git 官方文档对 `union` 的原文——只取两侧的行、**行序不保证**（"tends to leave the added lines in the resulting file in random order"）。**改动**：① 通用层 `specs/general/entry-doc.adoc`「最小集」补一条「接替时的读取入口」（判据：另起实例按入口文档就能答"上一轮停在哪、下一步做什么"，不必逐个目录翻 `PLAN.md`）；② 同文件新增「`tmp/` 索引的形态与并行取值」一节——行按任务分（同单多任务各占一行、同任务多轮只改自己那一行）、并行只增且不动别人的行、同单多任务仍共用一个分支一个 PR（回指平台层）、**合并策略按"索引是否进版本库"唯一决定**（`tmp/` 不提交 ⇒ 不配 `merge=union`；给不提交的文件配属"配了但不是那些落点"）、接替读取次序与"不一致时以任务单评论为准"；③ 必加载层 `specs/core/execution.adoc` 那一句补"形态与并行取值见"的回指（只加 15 字节，改后 67451 / 67500）；④ 提示词公共片段 `baseline-and-compat` 补同口径一句（片段会被未知项目复制执行）；⑤ 规则数据 `script/specs-rules/execution/guards/check_tmp_layout_guard.toml` 补一节六组锚点 + 最小集一条三枚锚点 + 片段一枚锚点；⑥ 反例用例 `TestCheckTmpIndexAndCleanupGuard` 新开 5 条（并行分行、不动别人的行、合并策略判别口径、接替读取次序、最小集接替入口），并把该类夹具补上通用层那一份（不落时"缺整节"与"要点被删"分不开）；⑦ 依据两侧：`library/sources.adoc` 新增主题段、`library/adoption.adoc` 登记四条判据化取舍与同义性差异。**验证**：`python3 script/check_specs.py` 全绿（本机装 Ruby 版 asciidoctor 2.0.26 跑真编译）；`TestCheckTmpIndexAndCleanupGuard` 10 条通过。**review 补三处**：① 最小集那段被插入的空行断成两个列表，收回（同上一轮那处）；② 「判据见下节」「上「交接」一节」两处回指错位——新增小节插在「交接」之前，回指已改成点名的「交接：什么必须扛过中断」；③ 合并策略那句漏了「那一条属并发档」（`specs/general/version-control.adoc`「冲突处理」的该条只在并发档成立），按原文补齐，免得常规档项目被读成必须配 `merge=union`。**只钉"判据是否仍在"**——"这次把索引行写对了没""某两个任务算不算可并行"属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核
+|===
