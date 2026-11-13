@@ -20300,12 +20300,16 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'CACHE_APP_DIR = "agent-specs"\n'
         'LANDING_REL = (CACHE_HOME_DIR, CACHE_APP_DIR)\n'
         'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.py")\n'
+        'def _sweep_landing_root(directory, manifest=()):\n'
+        '    """清落点根下的残留：清单里落在根下的那几份不当残留"""\n'
+        '    keep |= {rel for rel in manifest if "/" not in rel}\n'
         'def fetch_install_scripts(base, out_dir, keep):\n'
         '    """安装脚本一并取到落点根下：os.path.basename(rel)；落点里的入口须能直接跑"""\n'
         'def _ensure_executable(dest, rel):\n'
         '    """补可执行位：os.chmod"""\n'
-        'def resolve_out_dir(args):\n'
-        '    """落点＝cache_slot_dir(shared_cache_dir(), args.base)（只有这一个落点）"""\n'
+        'def resolve_out_dir():\n'
+        '    """落点＝os.path.join(shared_cache_dir(), *LANDING_REL)（只有这一个落点）"""\n'
+        '    return os.path.join(shared_cache_dir(), *LANDING_REL)\n'
         'def shared_cache_dir():\n'
         '    """落点所在的那一层：用户家目录（os.path.expanduser）——本机所有项目共用一份"""\n'
         '    if not os.path.isdir(home):\n'
@@ -20316,9 +20320,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         'def _shell_known_folder(name):\n'
         '    """Windows 壳登记的 KnownFolder 当刻路径：SHGetKnownFolderPath(FOLDERID_Profile)\n'
         '    取不到一律返回 None、不抛（优先取值，不是前置条件）"""\n'
-        'def cache_slot_dir(d, b):\n'
-        '    """按来源地址分槽（urllib.parse.urlsplit）；只进不出：不删除落点里的任何文件"""\n'
-        '    return os.path.join(d, *LANDING_REL, b)\n'
         'def fetch(t):\n'
         '    """不是站点首页判据: <!doctype html / <html"""\n'
         'def main():\n'
@@ -20528,11 +20529,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         # 地方"只剩一半：落点里那份入口还得再手工下载一遍（取完规范仍要回来问"脚本在哪"）
         self._write_valid()
         self.write("script/fetch-specs.py", self.SCRIPT_PY.replace(
-            'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.py")\n'
-            'def fetch_install_scripts(base, out_dir, keep):\n'
-            '    """安装脚本一并取到落点根下：os.path.basename(rel)；落点里的入口须能直接跑"""\n'
-            'def _ensure_executable(dest, rel):\n'
-            '    """补可执行位：os.chmod"""\n', ""))
+            'INSTALL_SCRIPTS = ("script/fetch-specs.py", "script/fetch-specs.py")\n', ""))
         cm.check_shared_cache_guard()
         self.assertIn("INSTALL_SCRIPTS", self.error_texts())
 
@@ -20963,7 +20960,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self.assertIn("缺失落点", self.error_texts())
 
     def test_shared_cache_guard_passes(self):
-        # 正例：落点只有用户家目录下的一处（由两个常量拼出）+ 按来源分槽 + 不删除落点文件 + 四处文档同步
+        # 正例：落点只有用户家目录下的一处（由两个常量拼出）+ 按仓库原结构平铺 + 不删除落点文件
+        # + 四处文档同步
         self._write_valid()
         cm.check_shared_cache_guard()
         self.assertEqual([], cm.errors)
@@ -21039,12 +21037,16 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         cm.check_shared_cache_guard()
         self.assertIn("AGENT_SPECS_CACHE", self.error_texts())
 
-    def test_cache_slot_removed_reports(self):
-        # 反例：去掉"按来源分槽" → 换过来源的副本互相覆盖（同一份规范内容说不清是哪来的）
+    def test_source_slot_revived_reports(self):
+        # 反例：按来源地址另建目录又长回来（`cache_slot_dir`）→ 落点按来源分成多套，
+        # 与"按仓库原结构平铺"不符（用户口径：「不要域名这个目录，按项目原始结构放置」）
         self._write_valid()
-        self.write("script/fetch-specs.py", self.SCRIPT_PY.replace("urlsplit", ""))
+        self.write("script/fetch-specs.py",
+                   self.SCRIPT_PY + 'def cache_slot_dir(d, b):\n'
+                   '    """按来源地址分槽"""\n'
+                   '    return os.path.join(d, *LANDING_REL, b)\n')
         cm.check_shared_cache_guard()
-        self.assertIn("urlsplit", self.error_texts())
+        self.assertIn("cache_slot_dir", self.error_texts())
 
     def test_user_home_dir_removed_reports(self):
         # 反例：落点不再从用户家目录取 → "用户家目录下的那一处"无从谈起
@@ -21053,14 +21055,14 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         cm.check_shared_cache_guard()
         self.assertIn("expanduser", self.error_texts())
 
-    def test_slot_constants_unused_reports(self):
+    def test_landing_constants_unused_reports(self):
         # 反例：两个落点常量还在、却不参与落点拼装（落点改由别处/按平台算）→
         # "只有用户家目录下这一处"不再成立，而正向判据只核常量名时会放过
         self._write_valid()
         self.write("script/fetch-specs.py",
                    self.SCRIPT_PY.replace(
-                       "return os.path.join(d, *LANDING_REL, b)",
-                       "return os.path.join(d, b)"))
+                       "os.path.join(shared_cache_dir(), *LANDING_REL)",
+                       "shared_cache_dir()"))
         cm.check_shared_cache_guard()
         self.assertIn("LANDING_REL", self.error_texts())
 
@@ -21184,8 +21186,9 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
 
     def test_default_out_is_user_home(self):
         """端到端（唯一落点）：**只给脚本名**时副本必须落在用户家目录下的
-        `<家目录>/.cache/agent-specs/<来源槽>/`——这是安装文档入口模板写明的那一个路径
-        （"用户家目录下的 `.cache/agent-specs`"，即用户路径下的 `~/.cache/agent-specs`）。
+        `<家目录>/.cache/agent-specs/`——这是安装文档入口模板写明的那一个路径
+        （"用户家目录下的 `.cache/agent-specs`"，即用户路径下的 `~/.cache/agent-specs`），
+        且按仓库原结构平铺（`AGENTS_COMMON.adoc` 就在这一层，不再套一层来源目录）。
         落在项目里或别处即与模板矛盾：新实例按入口文档给出的路径会找不到副本。
         """
         self._skip_if_home_not_redirectable()
@@ -21206,6 +21209,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                 if "AGENTS_COMMON.adoc" in files:
                     hits.append(dirpath)
             self.assertTrue(hits, f"用户家目录下的落点未见副本: {cache_root}\n{so}{se}")
+            self.assertEqual([cache_root], hits,
+                             f"副本不在落点根下（按仓库原结构平铺，不该再套一层目录）: {hits}")
             with open(os.path.join(hits[0], "AGENTS_COMMON.adoc"), "rb") as fh:
                 self.assertEqual(entry, fh.read())
             self.assertIn(os.path.join(home, ".cache"), so)
@@ -21403,10 +21408,9 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         """
         self._skip_if_home_not_redirectable()
         home = tempfile.mkdtemp(prefix="fetch-home-fail-")
-        # 先在"本机来源"上取一份，再换一个不可达的来源：落点按来源分槽，故要让两次命中同一槽
-        # （`cache_slot_dir` 按来源地址分槽，换来源即换槽）——这里直接按来源槽路径预置那一份
-        slot = re.sub(r"[^A-Za-z0-9._-]+", "_", "127.0.0.1:1").strip("_")
-        dest = os.path.join(home, ".cache", "agent-specs", slot, "AGENTS_COMMON.adoc")
+        # 先在"本机来源"上取一份，再换一个不可达的来源：落点按仓库原结构平铺，换来源落同一处，
+        # 故这里直接按落点路径预置那一份
+        dest = os.path.join(home, ".cache", "agent-specs", "AGENTS_COMMON.adoc")
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, "wb") as fh:
             fh.write(b"= old\n")
@@ -21498,7 +21502,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                 self.assertEqual(entry.replace(b"= test", b"= v2"), fh.read())
 
             # 第五次：远端不可达（本机服务已关、端口不可达）→ 本地那一份必须还在
-            # （不得把副本删掉换成没有；来源仍相同故命中同一来源槽）
+            # （不得把副本删掉换成没有；落点只有一处，失败的这一轮照样命中它）
             #
             # **`shutdown()` 之后必须 `server_close()`**：`shutdown()` 只停 `serve_forever`
             # 循环、监听 socket 仍开着，内核照样把 TCP 连接接进 backlog（`connect()` 返回成功），
@@ -21558,8 +21562,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                 self.assertTrue(
                     os.path.isfile(os.path.join(out_dir, *rel.split("/"))),
                     f"{rel} 没落到落点里——提示词没跟着规范一起取（用户口径：一键使用）")
-            # 公共片段按它在仓库里的目录落盘（在落点根下、与安装脚本同一处——它跨来源共用
-            # 一份，不是哪个来源槽里的规范副本；与提示词同处，读的时候不必再拼路径）
+            # 公共片段按它在仓库里的相对位置落盘（`prompts/` 下，与引用它的提示词同处——
+            # 这正是仓库里的相对关系，`include::` 按引用方目录就能解析，不必再留第二种找法）
             self.assertTrue(os.path.isfile(
                 os.path.join(home, ".cache", "agent-specs", "prompts", "_common.txt")),
                 "提示词的公共片段没取——读那几份提示词时补不齐公共步骤")
@@ -21691,9 +21695,8 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
                             if b"CALC-INDEX-BY-" not in line)
 
         def script_of(version: bytes) -> bytes:
-            # 只多加一行打印，其余照用仓库里那份（`--probe` 等口径不变）。剥标记得**在拼接前**
-            # 按行做：仓库里那份自己也带一行按整行剥的同类源码，按字节整体替换会把**这行代码
-            # 本身**也当成标记剥掉，夹具当场 `SyntaxError`（本仓库实测）。
+            # 只多加一行打印，其余照用仓库里那份（`--probe` 等口径不变）。剥标记按**整行**做：
+            # 注入须**幂等**——自更新把带标记的那一份换回落点后，下一轮读到的就是带标记的版本。
             with open(os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "script", "fetch-specs.py"), "rb") as fh:
@@ -23315,24 +23318,22 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                 port = httpd.server_address[1]
                 threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
-                slot = os.path.join(home, ".cache", "agent-specs",
-                                    re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                           f"127.0.0.1:{port}").strip("_"))
+                # 落点只有这一处、且按仓库原结构平铺（不再套一层来源目录）
+                landing = os.path.join(home, ".cache", "agent-specs")
 
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
 
                 # ① 落点里的目录没有写位、文件没有写位（只读真的生效，不只是一句注释）
                 if os.name == "posix":
-                    for dirpath, dirnames, filenames in os.walk(slot):
+                    for dirpath, dirnames, filenames in os.walk(landing):
                         self.assertFalse(os.stat(dirpath).st_mode & stat.S_IWUSR,
                                          f"目录仍有写位: {dirpath}")
                         for name in filenames:
                             self.assertFalse(
                                 os.stat(os.path.join(dirpath, name)).st_mode & stat.S_IWUSR,
                                 f"文件仍有写位: {os.path.join(dirpath, name)}")
-                    root = os.path.join(home, ".cache", "agent-specs")
-                    self.assertFalse(os.stat(root).st_mode & stat.S_IWUSR)
+                    self.assertFalse(os.stat(landing).st_mode & stat.S_IWUSR)
                 else:
                     # win32 上只核得到"文件已置只读"这一半（`os.chmod` 只认
                     # `stat.S_IWRITE`；目录的增删改名来自父目录的 `DELETE_CHILD`，
@@ -23353,12 +23354,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
                 self.assertIn("刷新", proc.stdout)
-                with open(os.path.join(slot, "AGENTS_COMMON.adoc"), "rb") as fh:
+                with open(os.path.join(landing, "AGENTS_COMMON.adoc"), "rb") as fh:
                     self.assertEqual(self.ENTRY.replace(b"= test", b"= v2"), fh.read())
                 # 更新之后仍须是只读的（收紧动作在每一次落盘后都做）
                 if os.name == "posix":
                     self.assertFalse(
-                        os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode & stat.S_IWUSR)
+                        os.stat(os.path.join(landing, "AGENTS_COMMON.adoc")).st_mode & stat.S_IWUSR)
         finally:
             shutil.rmtree(home, ignore_errors=True)
 
@@ -23443,13 +23444,11 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
                 root = os.path.join(home, ".cache", "agent-specs")
-                slot = os.path.join(root, re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                                 f"127.0.0.1:{port}").strip("_"))
                 os.chmod(home, 0o755)          # 让非特权用户能走到落点（家目录本身要能进）
-                for path in (root, slot, os.path.join(slot, "specs"),
-                             os.path.join(slot, "specs", "core")):
+                for path in (root, os.path.join(root, "specs"),
+                             os.path.join(root, "specs", "core")):
                     os.chmod(path, 0o555 if os.path.isdir(path) else 0o444)
-                target = os.path.join(slot, "AGENTS_COMMON.adoc")
+                target = os.path.join(root, "AGENTS_COMMON.adoc")
                 # 就地改：非特权用户必须写不进去
                 r = subprocess.run(["su", nobody, "-c",
                                     f'printf x >> "{target}"'], capture_output=True, text=True)
@@ -23459,7 +23458,7 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                     self.assertEqual(self.ENTRY, fh.read())     # 内容逐字节未变
                 # 往落点里新增文件：目录没有写位，同样必须失败
                 r = subprocess.run(["su", nobody, "-c",
-                                    f'touch "{slot}/injected"'], capture_output=True, text=True)
+                                    f'touch "{root}/injected"'], capture_output=True, text=True)
                 self.assertNotEqual(0, r.returncode,
                                     "非特权用户往落点里新增了文件（目录写位没收紧）")
         finally:
@@ -23484,8 +23483,6 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
                 root = os.path.join(home, ".cache", "agent-specs")
-                slot = os.path.join(root, re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                                 f"127.0.0.1:{port}").strip("_"))
                 if os.name != "posix":
                     self.skipTest("Windows 上 chmod 只切只读位，权限位实测不适用（跳过不等于通过）")
                 # 放开权限（模拟"有人就地改了副本"，也模拟只读位被外部改动）
@@ -23493,14 +23490,14 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
                     os.chmod(dirpath, 0o755)
                     for name in filenames:
                         os.chmod(os.path.join(dirpath, name), 0o644)
-                self.assertTrue(os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode
+                self.assertTrue(os.stat(os.path.join(root, "AGENTS_COMMON.adoc")).st_mode
                                 & stat.S_IWUSR, "夹具没生效：目标文件仍是只读的")
                 proc = self._run_fetch(base, extra=("--keep",), home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
-                self.assertFalse(os.stat(os.path.join(slot, "AGENTS_COMMON.adoc")).st_mode
+                self.assertFalse(os.stat(os.path.join(root, "AGENTS_COMMON.adoc")).st_mode
                                  & stat.S_IWUSR,
                                  "--keep 没把放开过权限的落点收回只读")
-                self.assertFalse(os.stat(slot).st_mode & stat.S_IWUSR)
+                self.assertFalse(os.stat(root).st_mode & stat.S_IWUSR)
                 self.assertNotIn("没能收紧", proc.stdout + proc.stderr)
         finally:
             shutil.rmtree(home, ignore_errors=True)
@@ -23737,13 +23734,10 @@ class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
 
                 # ② 失败须如实报出、且不牵连别的文件（成功的那几份仍在）
                 self.assertIn("失败", proc.stdout + proc.stderr)
-                slot = os.path.join(home, ".cache", "agent-specs",
-                                    re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                           f"127.0.0.1:{port}").strip("_"))
-                self.assertFalse(os.path.exists(os.path.join(slot, "specs", "core",
+                self.assertFalse(os.path.exists(os.path.join(root, "specs", "core",
                                                              "execution.adoc")),
                                  "被截断的那一份不该出现在落点里")
-                with open(os.path.join(slot, "AGENTS_COMMON.adoc"), "rb") as fh:
+                with open(os.path.join(root, "AGENTS_COMMON.adoc"), "rb") as fh:
                     self.assertEqual(self.ENTRY, fh.read())   # 别的文件照旧取到
 
                 # ③ **收尾没被跳过**：落点里的目录与文件确实没有写位

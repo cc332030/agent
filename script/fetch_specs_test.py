@@ -365,8 +365,9 @@ class TestSelfUpdateHousekeeping(_TmpDirCase):
         self.assertTrue(os.path.exists(note), "标记本身被清了")
 
     def test_landing_root_sweep_removes_extras_keeps_layout(self):
-        # 落点根只该有：安装脚本、配置、附随文件、口令入口、来源槽目录；
-        # `__pycache__` 与排布外的散文件清掉，别的目录（可能是别的来源槽）不碰
+        # 落点根只该有：清单里落在根下的那几份、安装脚本、配置、附随文件、口令入口、
+        # 按仓库原结构铺开的目录；`__pycache__` 与排布外的散文件清掉，
+        # 别的目录（规范副本的包目录、人自己放的副本）不碰
         module = self._module()
         root = self.mkdir("cacheroot")
         keep_files = ["fetch-specs.py", "fetch-specs.sh", "fetch-specs.bat",
@@ -375,11 +376,16 @@ class TestSelfUpdateHousekeeping(_TmpDirCase):
         for name in keep_files:
             with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
                 fh.write("# placeholder\n")
+        # 清单里的顶层副本（平铺后就落在根下）：不许当成散落残留清掉
+        for name in ("AGENTS_COMMON.adoc", "PROMPTS.adoc", "README.adoc"):
+            with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
+                fh.write("= 清单文件\n")
         os.makedirs(os.path.join(root, "prompts"))
         with open(os.path.join(root, "prompts", "_common.txt"), "w",
                   encoding="utf-8") as fh:
             fh.write("include::\n")
-        os.makedirs(os.path.join(root, "agent.example.com"))
+        os.makedirs(os.path.join(root, "specs"))
+        os.makedirs(os.path.join(root, "notes"))  # 人自己放的副本目录
         os.makedirs(os.path.join(root, "__pycache__"))
         with open(os.path.join(root, "__pycache__", "pathconfig.cpython-314.pyc"),
                   "wb") as fh:
@@ -387,12 +393,19 @@ class TestSelfUpdateHousekeeping(_TmpDirCase):
         stray = os.path.join(root, "leftover.txt")
         with open(stray, "w", encoding="utf-8") as fh:
             fh.write("stale\n")
-        module._sweep_landing_root(root)
+        manifest = ["AGENTS_COMMON.adoc", "PROMPTS.adoc", "README.adoc",
+                    "specs/core/index.adoc"]
+        module._sweep_landing_root(root, manifest)
         for name in keep_files:
             self.assertTrue(os.path.isfile(os.path.join(root, name)), f"{name} 被误清")
+        for name in ("AGENTS_COMMON.adoc", "PROMPTS.adoc", "README.adoc"):
+            self.assertTrue(os.path.isfile(os.path.join(root, name)),
+                            f"清单里的顶层文件 {name} 被当成残留清掉了")
         self.assertTrue(os.path.isfile(os.path.join(root, "prompts", "_common.txt")))
-        self.assertTrue(os.path.isdir(os.path.join(root, "agent.example.com")),
-                        "来源槽目录被误清")
+        self.assertTrue(os.path.isdir(os.path.join(root, "specs")),
+                        "规范副本的包目录被误清")
+        self.assertTrue(os.path.isdir(os.path.join(root, "notes")),
+                        "人自己放的目录被误清（目录一概不碰）")
         self.assertFalse(os.path.exists(os.path.join(root, "__pycache__")))
         self.assertFalse(os.path.exists(stray))
 
@@ -540,25 +553,28 @@ class TestManifestParsing(_TmpDirCase):
 
 
 class TestLayout(_TmpDirCase):
-    """落点与清单路径：**只有一处**、且按内容分槽（换 `--base` 不互相覆盖）。"""
+    """落点与清单路径：**只有一处**、按仓库原结构平铺（不按来源地址另建目录）。"""
 
     def _module(self):
         landing = self.mkdir("landing")
         _stage(landing)
         return _load_module(landing)
 
-    def test_cache_slot_dir_is_stable_across_trailing_slash(self):
+    def test_out_dir_ignores_source(self):
+        # 落点不收来源参数：换过 `--base` 落同一处、同名文件就地更新，
+        # 不按来源地址另建一层目录（用户口径：「不要域名这个目录，按项目原始结构放置」）
         module = self._module()
         home = self.mkdir("home")
-        a = module.cache_slot_dir(home, "https://agent.example.com")
-        b = module.cache_slot_dir(home, "https://agent.example.com/")
-        self.assertEqual(a, b)
+        module._user_home_dir = lambda: home
+        want = os.path.join(home, *module.LANDING_REL)
+        self.assertEqual(want, module.resolve_out_dir())
+        # 安装脚本与规范副本同一处：两个名字不得各算一遍（各算一遍时换落点必漏改一份）
+        self.assertEqual(want, module.install_scripts_dir())
 
-    def test_cache_slot_dir_differs_across_sources(self):
+    def test_no_source_slot_helper(self):
+        # 分槽时代的入口已撤：别再为"落点按来源分区"留第二种找法
         module = self._module()
-        home = self.mkdir("home")
-        self.assertNotEqual(module.cache_slot_dir(home, "https://a.example.com"),
-                            module.cache_slot_dir(home, "https://b.example.com"))
+        self.assertFalse(hasattr(module, "cache_slot_dir"))
 
     def test_target_path_strips_source_dir_for_install_scripts(self):
         # 落点根下只放文件名：带 `script/` 那一层时，"下次重装直接跑落点里的入口"会找不到它

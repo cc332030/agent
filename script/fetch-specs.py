@@ -114,12 +114,14 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/ + 任务提示
     取不到再退回环境变量/`expanduser("~")`；**不落任何缓存**（缓存即"下次还用旧目录"，正好
     是本条要防的形态），也**不在代码里写任何一条家目录字面值**——落点每次都是由"这一轮现取到的
     家目录"算出来的；
-  - 落点下按来源地址分目录（见 `cache_slot_dir`）——换过 `--base` 取到的不同来源副本互不覆盖；
-    且**只进不出**：本脚本不删除落点里的任何文件（含换源留下的旧副本），要清理由人来做
-    （清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）。
-  - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：规范副本进来源槽，取规范脚本与它的
-    平台入口落**落点根下**——跨来源共用一份，下次重装直接跑落点里的入口，
-    不必再手工下载一遍（用户口径：下载的文件一律只落这一个地方）。
+  - 落点下**按仓库原结构平铺**：`AGENTS_COMMON.adoc`、`specs/...`、`prompts/...` 与站点上的
+    相对位置一一对应，不再按来源地址另建一层目录（用户口径：「不要域名这个目录，按项目原始
+    结构放置」）；换过 `--base` 时同名文件**就地更新**、两份来源不各存一套；
+    且**只进不出**：本脚本不删除落点里的任何文件（旧来源独有、新来源已经没有的那几份会留在
+    原处），要清理由人来做（清理属不可逆操作，见 specs/core/execution.adoc「破坏性操作」）。
+  - **安装脚本自己也落这里**（见 `INSTALL_SCRIPTS`）：取规范脚本与它的平台入口落**落点根下**
+    ——下次重装直接跑落点里的入口，不必再手工下载一遍
+    （用户口径：下载的文件一律只落这一个地方）。
   - **交接文件也落在脚本旁边**（`<脚本路径>.handoff`，见 `hand_off_self`）：它记着"待换的新版本
     在哪"，是**本脚本自己的状态**、不是规范副本；换完即删，且不参与落点的只读收紧那一套
     （它就在本脚本旁边，跟着脚本自己的可写性走）。**它只在换不动真身时才出现**——真身可写时
@@ -236,7 +238,6 @@ import sys
 import threading
 import time
 import tomllib
-import urllib.parse
 import urllib.request
 import uuid
 
@@ -402,7 +403,7 @@ LANDING_NAME = _PATHCONFIG.landing_name
 # 入口 + 顶层说明文件；specs/ 下的文件从入口的调度器登记解析得到
 MANIFEST_FILE = _PATHCONFIG.manifest_entry
 OPTIONAL_FILES = _PATHCONFIG.manifest_optional
-# 与本脚本同处的安装脚本：一并取到落点**根下**（不在来源槽里）——跨来源共用一份。
+# 与本脚本同处的安装脚本：一并取到落点**根下**——下次重装直接跑落点里的入口。
 # 用户口径是"下载的文件一律只落这一个地方"，故下载完就不必再来第二次；
 # 薄壳也一并取回：只取逻辑代码时，落点里那份没法直接跑（入口层三件事见 specs/general/script.adoc）。
 INSTALL_SCRIPTS = _PATHCONFIG.install_scripts
@@ -788,8 +789,8 @@ def refresh_lagging_followups(base):
     显示出它没跟着更新。故这一件事按"与规范副本同一条口径"办：**每轮都取、按内容判、
     不同才落盘**（同一套落盘动作：先取到内存、再原子替换、写后收紧成只读）。
 
-    落点与安装脚本同一处（落点根下、跨来源共用一份，见 `install_scripts_dir`），不按来源
-    分槽：它是"脚本自己那一份"，换来源时跟着换即可（索引页不是规范副本）。
+    落点与安装脚本同一处（落点根下，见 `install_scripts_dir`）：落点按仓库原结构平铺后，
+    索引页就在它该在的位置（站点根），与规范副本的相对位置一致。
 
     取不到**不算失败**（`missing_ok=True` 放行"站点首页"这一形态；网络失败只警告）：
     本仓库以外的来源多半根本没有这个文件，把"没有这一份"报成整批失败会让一次成功的取文件
@@ -805,7 +806,6 @@ def refresh_lagging_followups(base):
     """
     out_dir = install_scripts_dir()
     for rel in FOLLOWUP_FILES:
-        print(f"CALC-INDEX-BY-v2", file=sys.stderr)  # noqa: E501
         dest = target_path(out_dir, rel)
         before = local_bytes(dest) if os.path.isfile(dest) else None
         # 取不到**不算失败**，但网络类异常须在这里收住：`HTTPException` 不是 `OSError`
@@ -1130,7 +1130,7 @@ def _tag_block(text, tag):
     return m.group(1).strip("\n") if m else None
 
 
-def assemble_prompt(text, base_dir, depth=0, root=None):
+def assemble_prompt(text, base_dir, depth=0):
     """把 `include::` 就地展开——**取到的是原始文件，命令入口必须自己装**。
 
     不展开就少半份题面（本仓库实证：公共步骤一条都不在正文里，读到的人照着做会漏步）。
@@ -1138,27 +1138,17 @@ def assemble_prompt(text, base_dir, depth=0, root=None):
     文件找不到 / 标记不存在时**保留原指令**（`registry_text` 里"看着装过了"比"少了几段"
     更难发现，故宁可让它显眼地留在输出里）。嵌套按 `depth` 限深，防互引成环。
 
-    `root` 是**落点根**：提示词落在来源槽里，而公共片段 `prompts/_common.txt` 是附随件、
-    落在落点根下的同一相对目录——只按引用方所在目录找时，那十六处片段一个都装不上
-    （本仓库实测）。故取文件的次序是"引用方所在目录 → 落点根下的同一相对路径"。
+    引用一律按**引用方所在目录**解析：落点按仓库原结构平铺后，提示词与公共片段同在
+    `prompts/` 下（`include::_common.txt` 与它同一层）——这正是仓库里的相对关系，
+    不需要再为"片段落在别处"留第二种找法。
     """
     if depth > 8:
         return text
-    root = base_dir if root is None else root
-
-    pkg = os.path.basename(base_dir)
 
     def repl(m):
         rel = m.group("rel").strip()
-        # 取文件三处依序：引用方所在目录 → 落点根下拼**同一包内相对路径** → 落点根下按原路径。
-        # 中间那一处是关键：提示词与公共片段同在 `prompts/` 包内，而片段是附随件、落在落点根下
-        # ——槽里的提示词写的是 `_common.txt`，根下那份却在 `prompts/_common.txt`
-        # （本仓库实测：少了这一处，十六处片段一个都装不上，而返回码仍是 0）。
-        candidates = [os.path.join(base_dir, *rel.split("/")),
-                      os.path.join(root, pkg, *rel.split("/")),
-                      os.path.join(root, *rel.split("/"))]
-        target = next((c for c in candidates if os.path.isfile(c)), None)
-        if target is None:
+        target = os.path.join(base_dir, *rel.split("/"))
+        if not os.path.isfile(target):
             return m.group(0)
         with open(target, encoding="utf-8") as fh:
             sub = fh.read()
@@ -1167,7 +1157,7 @@ def assemble_prompt(text, base_dir, depth=0, root=None):
             block = _tag_block(sub, tag.strip())
             if block is None:
                 return m.group(0)
-            return assemble_prompt(block, os.path.dirname(target), depth + 1, root)
+            return assemble_prompt(block, os.path.dirname(target), depth + 1)
         if lines:
             spec = lines.strip()
             rows = sub.splitlines()
@@ -1182,41 +1172,10 @@ def assemble_prompt(text, base_dir, depth=0, root=None):
                     picked = [rows[int(spec) - 1]]
                 except ValueError:
                     return m.group(0)
-            return assemble_prompt("\n".join(picked), os.path.dirname(target), depth + 1, root)
-        return assemble_prompt(sub, os.path.dirname(target), depth + 1, root)
+            return assemble_prompt("\n".join(picked), os.path.dirname(target), depth + 1)
+        return assemble_prompt(sub, os.path.dirname(target), depth + 1)
 
     return INCLUDE_RE.sub(repl, text)
-
-
-def _prompt_root(path, base):
-    """这份提示词对应的**落点根**（附随件 `prompts/_common.txt` 那一处）：来源槽的上一层。
-
-    `base` 本身是落点根（老版本把提示词放在根下、或用户自己复制过来的）时就用它自己——
-    故判据是"这份文件在不在 base 的下一层"，不是"base 看起来像不像一个槽名"。
-    """
-    parent = os.path.dirname(os.path.abspath(path))
-    while parent and os.path.abspath(parent) != os.path.abspath(os.sep):
-        if os.path.abspath(parent) == os.path.abspath(base):
-            return base
-        if os.path.dirname(parent) == os.path.abspath(base):
-            return os.path.abspath(base)
-        parent = os.path.dirname(parent)
-    return base
-
-
-def _prompt_slot_dirs(root):
-    """可能放着提示词的目录：**落点根下**（附随件 `prompts/_common.txt` 在那）与**每个来源槽**。
-
-    提示词属规范副本那一份（取回清单里、按来源分槽），安装脚本与口令入口在落点根下——
-    两处都可能命中（用户从落点复制过来的、或者老版本落在根下的），故两个都找一遍。
-    """
-    dirs = [root]
-    if os.path.isdir(root):
-        for child in sorted(os.listdir(root)):
-            slot = os.path.join(root, child)
-            if os.path.isdir(slot) and not child.startswith("."):
-                dirs.append(slot)
-    return dirs
 
 
 PRIMARY_DECL_RE = re.compile(r"\*\*主侧重[^*]*\*\*\s*[:：]\s*\*\*([^*\n]+?)\*\*")
@@ -1240,24 +1199,16 @@ def print_prompt(name, landing=None):
     判据只有一条：输出的必须是**可直接执行的那一整段**（`include::` 已就地展开）。取不到时
     如实报错并返回非 0——"取不到"不得变成"输出了半份"，那正是让口令看起来能用、实际漏步的形态。
     """
-    base = landing or shared_cache_dir()
-    path = None
-    # 提示词落在**来源槽**里（规范副本那一份，按来源分槽），口令入口却在落点根下
-    # ——故按"落点根 → 各来源槽"的顺序现找：来源换过几次时，先找到的那份就是这一轮的。
-    for slot in _prompt_slot_dirs(base):
-        candidate = os.path.join(slot, *PROMPT_DIR.split("/"), name + ".adoc")
-        if os.path.isfile(candidate):
-            path = candidate
-            break
-    if path is None:
-        print(f"错误: 落点里没有这份提示词 {name!r}（找过 "
-              f"{'、'.join(_prompt_slot_dirs(base))}）——先跑一次取规范脚本把它取下来",
-              file=sys.stderr)
+    base = landing or install_scripts_dir()
+    # 落点按仓库原结构平铺，提示词就在 `<落点>/prompts/` 下——只有这一处。
+    path = os.path.join(base, *PROMPT_DIR.split("/"), name + ".adoc")
+    if not os.path.isfile(path):
+        print(f"错误: 落点里没有这份提示词 {name!r}（找过 {path}）"
+              "——先跑一次取规范脚本把它取下来", file=sys.stderr)
         return EXIT_USAGE
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    body = assemble_prompt(text, os.path.dirname(path),
-                           root=_prompt_root(path, base))
+    body = assemble_prompt(text, os.path.dirname(path))
     # `{主侧重}` 是片段里的占位符，取值只在提示词自己的「主侧重」段（值不同、不得混用）：
     # 装配时补上——不补的话，命令吐出来的是一份还带着 `{主侧重}` 的题面，照做的人不知道
     # 该按哪个方向干（本仓库实测：片段本身只有占位符，一个字的方向都不含）。
@@ -1772,17 +1723,22 @@ def _sweep_self_update_stale(directory):
         _self_update_discard(victim)
 
 
-def _sweep_landing_root(directory):
+def _sweep_landing_root(directory, manifest=()):
     """把落点根下**当前排布之外的残留**清掉（用户口径：落点下不许有多余文件）。
 
-    落点根的应然形态只有这几样：来源槽**目录**、安装脚本（`INSTALL_SCRIPTS`）、其配置
+    落点根的应然形态只有这几样：规范副本按仓库原结构铺开的**目录**（`specs/`、`prompts/`）
+    与直接落在根下的那几份（`manifest` 里不带目录的那些：`AGENTS_COMMON.adoc`、
+    `PROMPTS.adoc`、`README.adoc`）、安装脚本（`INSTALL_SCRIPTS`）、其配置
     （`CONFIG_IN_SCRIPTS_DIR`）、附随文件（`FOLLOWUP_FILES`，公共片段所在的 `prompts/`
     一层随其目录保留）、口令入口（`PROMPT_COMMAND_*_NAME`）、活着的自更新标记。
-    旧排布散在根下的旧副本、字节码缓存（`__pycache__`，本脚本从落点被 import 时留下）
+    `manifest` 必须传：平铺后清单里的顶层文件就落在根下，只按脚本自己的文件名认，会把它们
+    当成散落残留清掉（本仓库实测：`AGENTS_COMMON.adoc` 取完即被删，下一轮又"新取"）。
+    散落在根下的多余副本、字节码缓存（`__pycache__`，本脚本从落点被 import 时留下）
     都不在形态里——攒着只会让人分不清"哪一份是真的"。**目录一律保留**（`__pycache__`
-    除外）：目录可能是别的来源槽，槽按来源地址现算、这里认不全，删错槽等于让换过
-    `--base` 的副本凭空丢一份。**有活着的标记指着的中转件不清**（同
-    `_sweep_self_update_stale`）；收尾收紧只读之前调用——收紧后连清的写位都没有。
+    除外）：除了 `specs/`、`prompts/` 这些规范副本的包目录，还可能是人自己放的副本，
+    按名字认不全，删错等于让人丢一份。
+    **有活着的标记指着的中转件不清**（同 `_sweep_self_update_stale`）；收尾收紧只读之前
+    调用——收紧后连清的写位都没有。
     """
     if not os.path.isdir(directory) or os.path.islink(directory):
         return
@@ -1790,6 +1746,8 @@ def _sweep_landing_root(directory):
     keep.add(os.path.basename(CONFIG_IN_SCRIPTS_DIR))
     keep |= {os.path.basename(p) for p in FOLLOWUP_FILES}
     keep |= {PROMPT_COMMAND_SHELL_NAME, PROMPT_COMMAND_BAT_NAME}
+    # 清单里落在根下的那几份（`specs/...` 这类带目录的不算：它们在包目录里，目录一概不碰）
+    keep |= {rel for rel in manifest if "/" not in rel}
     # 活着的待换标记也是排布里的一份（`hand_off_self` 下一轮要读它），与它指着的中转件一并保
     this = _this_file()
     bases = {os.path.basename(INSTALL_SCRIPTS[0])} | (
@@ -1803,7 +1761,7 @@ def _sweep_landing_root(directory):
                 # 里面的 .pyc 多半带着只读位（落点收紧过），须逐节点补写位才删得动
                 # （`ignore_errors=True` 会整树静默失败，本仓库实测）
                 _self_update_discard_dir(entry)
-            continue                # 其余目录一概不碰：可能是别的来源槽
+            continue                # 其余目录一概不碰：可能是规范副本的包目录或人自己放的副本
         if name in keep:
             continue
         if os.path.abspath(entry) in pointed:
@@ -2077,13 +2035,12 @@ def _ensure_writable(out_dir, dest):
 
 
 def install_scripts_dir():
-    """安装脚本的落点：落点**根下**（不在来源槽里）。
+    """安装脚本的落点：落点**根下**——与规范副本**同一处**（路径只在 `resolve_out_dir` 算一次）。
 
-    规范副本按来源分槽（换过 `--base` 的副本互不覆盖），但安装脚本**跨来源共用一份**
-    ——"下载的东西一律只落这一个地方"这条要对得上：同一个人从哪个来源取，落点里都是
-    同一份入口，下次重装直接跑它即可（见脚本头部「落点」）。
+    "下载的东西一律只落这一个地方"这条要对得上：落点里既有规范副本（按仓库原结构平铺），
+    也有同一份入口，下次重装直接跑它即可（见脚本头部「落点」）。
     """
-    return os.path.join(shared_cache_dir(), *LANDING_REL)
+    return resolve_out_dir()
 
 
 def _user_home_dir():
@@ -2204,30 +2161,19 @@ def shared_cache_dir():
     return home
 
 
-def cache_slot_dir(home_dir, base):
-    """某个来源地址在落点里的专属子目录（按来源分槽）。
+def resolve_out_dir():
+    """定出本次落点：`shared_cache_dir()` 与两个落点常量拼出的那一处（**不再按来源分目录**）。
 
-    换过 `--base` 时（站点挂了换同源镜像、内网走自建地址）取到的副本**内容不同却同名**，
-    直接覆盖会把上一来源的副本悄悄改掉、也无法解释"为什么同一份规范这次不一样"。
-    故按来源地址分槽：来源相同则命中同一份、来源不同则各存各的（见
-    specs/general/dependency.adoc「构建可重现」——同一清单在任意环境应得到同一份内容）。
-    散列按来源地址的规范形态（scheme + 主机 + 端口 + 路径）取值，`https://a.com` 与
-    `https://a.com/` 落到同一槽。
-    """
-    parsed = urllib.parse.urlsplit(base)
-    slot = parsed.netloc + parsed.path.rstrip("/")
-    slot = re.sub(r"[^A-Za-z0-9._-]+", "_", slot).strip("_") or "default"
-    return os.path.join(home_dir, *LANDING_REL, slot)
-
-
-def resolve_out_dir(args):
-    """定出本次落点：`shared_cache_dir()` 与两个落点常量拼出的那一处，其下按来源分槽。
+    落点即"规范副本按仓库原结构平铺"的那一层——`AGENTS_COMMON.adoc`、`specs/`、`prompts/`
+    与站点上的相对位置一一对应（用户口径：「不要域名这个目录，按项目原始结构放置」）。
+    **不接收来源参数**：换过 `--base` 时同一份文件就地更新——`--base` 只影响从哪取，
+    不影响取到哪；落点这一处只有本函数算，`install_scripts_dir` 也来取它（同一处两个叫法）。
 
     **不曾保留的备选做法**（撤掉它们正是本函数的全部内容）：按平台各取一套缓存目录、
     留一批换落点的参数与环境变量、缓存不可得或来源指向本机时自动退回项目内临时目录
     ——每一种都会让"副本在哪"变成环境相关的事实（理由与用户口径见脚本头部「落点」）。
     """
-    return cache_slot_dir(shared_cache_dir(), args.base)
+    return os.path.join(shared_cache_dir(), *LANDING_REL)
 
 
 def main(argv=None):
@@ -2264,7 +2210,7 @@ def main(argv=None):
     _sweep_self_update_stale(
         os.path.dirname(os.path.abspath(_real_script() or _this_file() or os.getcwd())))
     try:
-        out_dir = resolve_out_dir(args)
+        out_dir = resolve_out_dir()
     except ValueError as e:
         print(f"错误: {e}", file=sys.stderr)
         return EXIT_USAGE
@@ -2358,7 +2304,7 @@ def main(argv=None):
         except Exception as e:          # noqa: BLE001 - 同上（README.adoc 等有则取项）
             _progress(total, rel, "失败", f"取回时发生意外异常: {e!r}", 0.0)
             results.append((rel, "fail", f"取回时发生意外异常: {e!r}"))
-    # 安装脚本落**落点根下**（不在来源槽里）：这是"下载的文件一律只落这一个地方"里
+    # 安装脚本落**落点根下**：这是"下载的文件一律只落这一个地方"里
     # 「安装脚本」那一半——取完规范就不必再手工下载一遍入口（见脚本头部「落点」）。
     # 清单在 `INSTALL_SCRIPTS`，与本脚本同处 `script/`；`--no-scripts` 时整组跳过。
     if not args.no_scripts:
@@ -2393,8 +2339,8 @@ def main(argv=None):
     # 落点根先清一遍**当前排布之外的残留**再收紧只读（用户口径：落点下不许有多余文件）
     # ——清理要在可写态做，收紧后连"清"都动不了权限位，旧副本与 `__pycache__` 会就此长住
     # （见 `_sweep_landing_root`；活着的待换标记与它指着的中转件不在清的范围）。
-    _sweep_landing_root(install_scripts_dir())
-    # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本的来源槽
+    _sweep_landing_root(install_scripts_dir(), targets + optional)
+    # 落点取完即**只读**（见脚本头部「落点」与「安全保证」）：整个落点根（规范副本
     # + 安装脚本）**一次收紧**——只收紧一部分时另一半仍是可写的，"落点是只读的"这句话
     # 对读者就无法核对。**收紧失败不算取文件失败**（`_make_read_only` 吞掉 OSError，
     # 与 `_ensure_executable` 同口径）：只读挂载、Windows 或非属主时改不动权限位，

@@ -5271,15 +5271,17 @@ def check_shared_cache_guard():
                  ("每一轮现取", "不写死", "_user_home_dir()")),
                 ("壳那条路取不到时有退路（不得因此把整批报成失败）",
                  ("_shell_known_folder", "不抛")),
-                ("落点须按来源地址分槽（不同来源的副本互不覆盖）",
-                 ("cache_slot_dir", "urlsplit")),
+                ("落点须按仓库原结构平铺（不再按来源地址另建一层目录）",
+                 ("resolve_out_dir", "os.path.join(shared_cache_dir(), *LANDING_REL)")),
                 ("脚本不得删除落点里的既有文件（清理属破坏性操作）",
                  ("不删除",)),
                 ("安装脚本（本脚本与其平台入口）须一并取到落点（用户口径："
                  "下载的文件一律只落这一个地方）",
                  ("INSTALL_SCRIPTS", "fetch_install_scripts")),
-                ("安装脚本在落点里只保留文件名、跨来源共用（不落来源槽）",
+                ("安装脚本在落点里只保留文件名（落点根下）",
                  ("os.path.basename(rel)", "落点根下")),
+                ("落点清理须认得清单里的顶层文件（平铺后它们就在根下，不得当残留清掉）",
+                 ('keep |= {rel for rel in manifest if "/" not in rel}',)),
                 ("落点里的入口须能直接跑（HTTP 取回不带文件模式，须补可执行位）",
                  ("_ensure_executable", "os.chmod")),
         ):
@@ -5295,6 +5297,8 @@ def check_shared_cache_guard():
                  ("--local", "tmp/agent-specs")),
                 ("不得再保留换落点的入口（落点固定）",
                  ("--cache-dir", "AGENT_SPECS_CACHE", "--out")),
+                ("不得再按来源地址另建目录（落点按仓库原结构平铺）",
+                 ("cache_slot_dir",)),
         ):
             present = [k for k in keys if k in text]
             if present:
