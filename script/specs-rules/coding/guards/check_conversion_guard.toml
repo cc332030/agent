@@ -48,6 +48,16 @@ groups = [
         "范围：须写明**无嵌套（单层）的转换不在本条范围内**（不是例外、是本条不管；口径按嵌套判、不得按字段数判）",
     ],
     [
+        "取用走该技术给定的装配方式",
+        [
+            "取用走该技术给定的装配方式",
+            "**一律经依赖注入取用**",
+            "静态实例常量",
+            "同一转换的两处来源",
+        ],
+        "取用方式：须写明映射实现由依赖注入容器托管时**一律经依赖注入取用**、不得以工厂方法/静态实例常量/`new` 实现类自取（容器外自取的那份装不进协作映射，且与注入的那份成了同一转换的两处来源）——缺则「一处来源」判据在取用侧落空；通用层只留抽象形态、不点框架专名",
+    ],
+    [
         "纯数据结构类",
         [
             "纯数据结构类",
@@ -159,6 +169,17 @@ groups = [
             "原因",
         ],
         "备注原因：须写明确需手写时在代码注释写明原因（与通用层同口径）",
+    ],
+    [
+        "映射接口须进容器、取用走依赖注入",
+        [
+            "映射接口须进 Bean 容器、取用一律走依赖注入",
+            'componentModel = "spring"',
+            "-Amapstruct.defaultComponentModel=spring",
+            "Mappers.getMapper(...)",
+            "-Amapstruct.defaultInjectionStrategy=constructor",
+        ],
+        "容器托管与取用：须写明映射接口定 componentModel 使其实现成为**容器托管的单例 Bean**、取用一律靠依赖注入，并点名禁止 `Mappers.getMapper(...)`/`INSTANCE`/`new` 实现类自取（用户口径「mapper 需要进 spring bean，使用时使用 spring 依赖注入」）；**componentModel 的落点两处等价**（`@Mapper` 注解与处理器参数 `-Amapstruct.defaultComponentModel`，官方原文「either via @Mapper#componentModel or using a processor option」）——只认注解写法会把用编译参数的项目误判成没定；另须写明生成实现内部的注入策略也要定到构造器（库默认字段注入，与 Spring 栈的构造器注入口径相抵）——缺则映射接口虽在，取用仍是容器外自取、协作映射装不进去",
     ],
     [
         "处理器路径与 lombok 成组",

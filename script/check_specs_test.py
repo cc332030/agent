@@ -15096,6 +15096,8 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "配成后两档时构建照旧成功、缺陷留到运行期——故须让这类不匹配**构建期失败**；"
         "确有正当理由不映射的字段**逐处显式忽略**。\n"
         "* **映射声明的落点**：映射声明与转换方法独立成文件、不塞进纯数据结构类。\n"
+        "* **取用走该技术给定的装配方式（L2）**：映射实现由**依赖注入容器托管**时**一律经依赖注入取用**——"
+        "不以工厂方法、**静态实例常量**或 `new` 实现类自取实例，否则与注入的那份成了**同一转换的两处来源**。\n"
         "* **例外与边界（L2）**：①映射声明表达不了的语义不在本条适用，可在映射声明内以自定义方法承接；"
         "②**无嵌套（单层）的转换不在本条范围内**（与字段数量无关）。\n"
         "* **存量边界**：随动迁移，见 `specs/core/execution.adoc`。\n"
@@ -15113,6 +15115,10 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
         "* **嵌套结构由映射声明表达（写法建议，非强制）**：对象含对象、集合含对象由**映射方法自动调用**"
         "或集合映射方法表达；手写循环不构成违规。\n"
         "* **不并存两套写法（先例优先）**：项目已有转换工具/既有 Converter 先例时跟随先例并在其基础上扩展。\n"
+        "* **映射接口须进 Bean 容器、取用一律走依赖注入**：映射接口写 `@Mapper(componentModel = \"spring\")`"
+        "（或用编译参数 `-Amapstruct.defaultComponentModel=spring`）；"
+        "生成的实现是容器托管的单例 Bean、取用靠依赖注入；不得用 `Mappers.getMapper(...)`、`INSTANCE` 常量"
+        "或 `new` 实现类自取；生成实现内部的注入策略取 `-Amapstruct.defaultInjectionStrategy=constructor`。\n"
         "* **映射实现由编译期处理器生成**：处理器放进 `annotationProcessorPaths`/`annotationProcessor`，"
         "**只声明 `mapstruct` 库本身不生成任何实现**；与 lombok 共存时须加 `lombok-mapstruct-binding` 成组。\n"
         "* **未映射字段须在构建期报错**：`unmappedTargetPolicy` 取 `ERROR`（默认值 `WARN` 只发警告、不阻断），"
@@ -15384,6 +15390,57 @@ class TestCheckConversionGuard(CheckSpecsTestCase):
                        "落在项目级配置上。"))
         cm.check_conversion_guard()
         self.assertIn("Amapstruct.unmappedTargetPolicy", self.error_texts())
+
+
+    def test_general_injection_usage_removed_reports(self):
+        # 反例㉓：通用层「取用走该技术给定的装配方式」被删 → 容器托管的映射实现在调用点被自取，
+        # 与注入的那份成了同一转换的两处来源，「一处来源」判据在取用侧落空
+        self._write_valid()
+        self.write("specs/general/coding.adoc",
+                   self.CODING.replace(
+                       "* **取用走该技术给定的装配方式（L2）**：映射实现由**依赖注入容器托管**时"
+                       "**一律经依赖注入取用**——"
+                       "不以工厂方法、**静态实例常量**或 `new` 实现类自取实例，"
+                       "否则与注入的那份成了**同一转换的两处来源**。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("取用走该技术给定的装配方式", self.error_texts())
+
+    def test_java_container_injection_removed_reports(self):
+        # 反例㉔：Java 栈「映射接口进容器 + 取用走注入」被删 → 映射实现不是 Bean，
+        # 或代码里照样 Mappers.getMapper(...) 自取（用户口径「mapper 需要进 spring bean」）
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace(
+                       "* **映射接口须进 Bean 容器、取用一律走依赖注入**：映射接口写 "
+                       "`@Mapper(componentModel = \"spring\")`"
+                       "（或用编译参数 `-Amapstruct.defaultComponentModel=spring`）；"
+                       "生成的实现是容器托管的单例 Bean、取用靠依赖注入；"
+                       "不得用 `Mappers.getMapper(...)`、`INSTANCE` 常量或 `new` 实现类自取；"
+                       "生成实现内部的注入策略取 "
+                       "`-Amapstruct.defaultInjectionStrategy=constructor`。\n", ""))
+        cm.check_conversion_guard()
+        self.assertIn("componentModel", self.error_texts())
+
+    def test_java_injection_strategy_removed_reports(self):
+        # 反例㉕：只留「进容器 + 走注入」、把生成实现的注入策略删掉 → 协作映射仍按字段注入，
+        # 与 Spring 栈「禁止字段注入」的构造器口径相抵
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace(
+                       "生成实现内部的注入策略取 "
+                       "`-Amapstruct.defaultInjectionStrategy=constructor`。", "。"))
+        cm.check_conversion_guard()
+        self.assertIn("Amapstruct.defaultInjectionStrategy", self.error_texts())
+
+    def test_java_component_model_option_path_kept(self):
+        # 反例㉖：只认注解写法、把「编译参数定 componentModel」这一等效路径删掉 →
+        # 用 -Amapstruct.defaultComponentModel=spring 的项目会被误判成「没定 componentModel」
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace(
+                       "（或用编译参数 `-Amapstruct.defaultComponentModel=spring`）", ""))
+        cm.check_conversion_guard()
+        self.assertIn("defaultComponentModel", self.error_texts())
 
 
 class TestCheckWiringGuard(CheckSpecsTestCase):
