@@ -326,6 +326,101 @@ class TestSelfUpdateGuard(_TmpDirCase):
         self.assertNotIn(str(os.getpid()), os.path.basename(target))
 
 
+class TestRestartWaits(_TmpDirCase):
+    """自更新重启**必须等新一轮跑完**（入口的 `pause` 与退出码都挂在这件事上）。
+
+    失效形态（本机实测，Windows）：`os.execv` 在那里不是"替换本进程"，而是"起一个新进程、
+    老进程立即以 0 结束"——入口（`fetch-specs.bat`）以为整轮跑完了，收尾 `pause` 在取文件
+    之前就弹出来（人看到的：中途停一下、真跑完了反而不等），真正的失败码也随老进程丢掉。
+
+    用例：
+      * 退出码原样带回（等到了才可能带回；改回裸 `os.execv` 时这里是 0）；
+      * 调用方的参数与 `--self-updated` 一起原样传给新一轮（一个都不能少/不能改序）；
+      * POSIX 那条仍是"原地替身"（本机可能是 Windows，故换一个假的 `os` 走这条路）；
+      * 重启起不来时如实警告并继续（`OSError` 不得掀掉整批）。
+    """
+
+    def _restart_in_child(self, script, *extra, caller_args=()):
+        """在子进程里调 `_restart_with`——两种做法都不返回，只能隔着进程看退出码。"""
+        call = ", ".join([repr(script), *(repr(e) for e in extra)])
+        driver = (
+            "import importlib.util, sys\n"
+            f"spec = importlib.util.spec_from_file_location('_m', {SCRIPT!r})\n"
+            "m = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['_m'] = m\n"
+            "spec.loader.exec_module(m)\n"
+            f"m._restart_with({call})\n")
+        return subprocess.run([sys.executable, "-c", driver, *caller_args],
+                              capture_output=True, text=True, timeout=120)
+
+    def test_restart_returns_restarted_run_exit_code(self):
+        child = os.path.join(self.root, "child.py")
+        with open(child, "w", encoding="utf-8") as fh:
+            fh.write("import sys\nsys.exit(7)\n")
+        proc = self._restart_in_child(child)
+        self.assertEqual(7, proc.returncode,
+                         f"重启后的退出码没带回来（stdout={proc.stdout!r} stderr={proc.stderr!r}）")
+
+    def test_restart_passes_arguments_through(self):
+        # 「原样参数」（`check_fetch_self_update_guard` 的锚点）落到字节上：调用方的参数在前、
+        # `--self-updated` 刹车在后，一个都不少、也不改序
+        child = os.path.join(self.root, "child.py")
+        seen = os.path.join(self.root, "argv.txt")
+        with open(child, "w", encoding="utf-8") as fh:
+            fh.write("import sys\n"
+                     f"open({seen!r}, 'w', encoding='utf-8').write(' '.join(sys.argv[1:]))\n")
+        proc = self._restart_in_child(child, "--self-updated", caller_args=("--keep",))
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        with open(seen, encoding="utf-8") as fh:
+            self.assertEqual("--keep --self-updated", fh.read())
+
+    def test_posix_restart_execs_in_place(self):
+        # POSIX 那条**原地替身**：`os.execv` 把进程映像换掉，函数到此为止、不另起进程。
+        # 本机可能是 Windows（那时这条分支跑不到），故换一个假的 `os` 走它——要核的是
+        # "同一份 argv 交给 execv"，而"起子进程"正是 Windows 的补法，在这里属走错分支。
+        landing = self.mkdir("landing")
+        _stage(landing)
+        module = _load_module(landing)
+        seen = []
+
+        class FakeOs:
+            name = "posix"
+
+            @staticmethod
+            def execv(executable, argv):
+                seen.append((executable, argv))
+
+        saved_os, saved_call = module.os, module.subprocess.call
+        module.os = FakeOs
+        module.subprocess.call = lambda *a, **k: self.fail("POSIX 上不得起子进程")
+        try:
+            module._restart_with("x.py", "--self-updated")
+        finally:
+            module.os, module.subprocess.call = saved_os, saved_call
+        self.assertEqual([(sys.executable,
+                           [sys.executable, "x.py", *sys.argv[1:], "--self-updated"])], seen)
+
+    def test_restart_failure_warns_and_continues(self):
+        # 重启起不来（解释器不可执行等）不得把整批报成失败：警告一句、按已换好的新版继续
+        landing = self.mkdir("landing")
+        _stage(landing)
+        module = _load_module(landing)
+
+        def boom(*_args, **_kwargs):
+            raise OSError("boom")
+
+        saved_call, saved_execv = module.subprocess.call, module.os.execv
+        module.subprocess.call = boom
+        module.os.execv = boom
+        err = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(err):
+                module._restart_with("x.py")
+        finally:
+            module.subprocess.call, module.os.execv = saved_call, saved_execv
+        self.assertIn("重启失败", err.getvalue())
+
+
 class TestSelfUpdateHousekeeping(_TmpDirCase):
     """自更新中转件与落点根的**残留清扫**（用户口径：临时文件名固定、落点下没有多余文件）。"""
 

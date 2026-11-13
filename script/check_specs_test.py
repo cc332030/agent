@@ -28684,6 +28684,16 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
         self._run()
         self.assertIn("清理旧的那一份", self.error_texts())
 
+    def test_windows_restart_without_wait_reports(self):
+        # 反例⑰（本机实测）：Windows 分支被去掉、回到裸 `os.execv`——入口的 `pause` 会在
+        # 「取规范开始」之前弹出来，真跑完反倒不等，失败码也回不去
+        self._write_valid()
+        self._mutate(self.SCRIPT,
+                     "if os.name == \"nt\":\n            sys.exit(subprocess.call(argv))",
+                     "if False:\n            sys.exit(subprocess.call(argv))")
+        self._run()
+        self.assertIn("Windows 上重启必须等", self.error_texts())
+
 
 class TestFetchSpecsSwapOnReadOnlyRealScript(CheckSpecsTestCase):
     """端到端实测：**真身带着落点收尾收紧的只读位时，自更新仍须换得动**（本仓库实测的死循环）。

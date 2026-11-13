@@ -1,0 +1,10 @@
+= 本轮记账：自更新重启在 Windows 上要等子进程（修实测缺陷）
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（自更新重启等子进程） | 不新开一道：在既有 `check_fetch_self_update_guard` 的锚点表里补一项（`os.name == "nt"` × `subprocess.call`） | 206 → **206**（无新增防线，接线数不抬） | 上一轮把次序定稿成六格（`bat → py → 下载新 py → 执行新 py → 下载新索引 → 下载新配置`）、并钉了文字锚点与"只看 `main` 函数体"的结构锚点；但"执行新 py"这一步在 Windows 上**根本没等到新一轮跑完**。**本机实测**：Windows 上的 `os.execv` 不是替换进程映像，而是"起一个新进程、老进程**立即以 0 结束**"（`python -c "os.execv(自己, 子进程 sys.exit(7))"` → `exit=0`）。由此两个实证缺陷：① 入口 `fetch-specs.bat` 的 `run` 段（跑 python → `set FETCH_SPECS_STATUS=%errorlevel%` → `pause`）在新进程还没开始取文件时就弹 `pause`——人看到的正是"中途停一下、真跑完了反而不等"；② 真正的退出码随老进程丢掉，`fetch-specs.bat` 头部承诺的 "return its exit code unchanged" 不成立（失败也报 0）。**改动**：① `_restart_with` 按平台分支——POSIX 继续 `os.execv`（真替身，入口那行命令自然等到新一轮结束），Windows 走 `subprocess.call(argv)` + `sys.exit(...)` 等子进程跑完、把它的退出码原样带回；`OSError` 仍只是警告一句、不掀掉整批；② 脚本文档头的「"更新自身"会重跑一次」与「取回与更新口径」六格 bullet、`update_self` 的 docstring 第 2 步与三处判据末条，同步改成"两个平台两种做法"（唯一真源仍是 `script/fetch-specs.py` 的文档头）；③ 判据侧补一项正向锚点，挡住"把平台分支改回裸 `os.execv`"这一种回退；④ 反例用例 `test_windows_restart_without_wait_reports`（把 `if os.name == "nt"` 变异成 `if False`，断言报「Windows 上重启必须等」）；⑤ `fetch_specs_test` 新增 `TestRestartWaits` 四条，按 `specs/general/testing.adoc` 补**分支输出**与异常路径——退出码原样带回（等到了才可能带回；改回裸 `os.execv` 时这里是 0）、调用方的参数与 `--self-updated` 一起原样传给新一轮（一个都不少、也不改序）、POSIX 那条仍是"原地替身"（本机可能是 Windows，换一个假的 `os` 走这条分支，断言 argv 交给 `execv`、不得起子进程）、重启起不来时如实警告并继续（不得把 `OSError` 报成整批失败）。**验证**：`python script/check_specs.py` 全绿；`fetch_specs_test` 44 条 OK（2 skip）；`check_specs_test` 2641 条 OK（21 skip）；`check_exclusive_landing_test` + `check_effective_test` + `rules_engine_test` 187 条 OK。
+|===
