@@ -432,8 +432,9 @@
 
 * 材料：**Google Java Style Guide**（Google 官方；**本次未逐字取回**，按其公开章节定位）——4.8 节 “Local Variable Type Inference”（`var` 的使用边界：初始化表达式须能表达出类型、可读性优先于省字）与 4.5 节 “Line Wrapping” / 4.5.1 “Where to break”（**按行宽决定是否换行**、换行后在运算符处断开）；**Project Lombok 官方文档**（`val` / `var`：仅用于局部变量、类型由初始化表达式推断）；**《阿里巴巴 Java 开发手册》**（链式调用与换行的风格约定）。
 * 依据要点（**要点转述**）：① 语言与风格指南对**要不要写显式类型**给出的判据是「可读性」（推断结果不清时写显式类型）；② **换行与否的通用判据是行宽**，不是「链有多长」；③ lombok 的 `val`/`var` 是**局部变量作用域**的类型推断。
+* **实测（本仓库实测记录，JDK 17.0.21 + lombok 1.18.34，`javac` 真编译）**：`val` 的失手面分两类——① **编译直接报错**（`cannot infer type for local variable`）：`null` 字面量（`variable initializer is 'null'`）、lambda（`lambda expression needs an explicit target-type`）、方法引用（`method reference needs an explicit target-type`）、`void` 表达式（`variable initializer is 'void'`——这一项**只证明别拿 `val`/`var` 去接**，并不存在可退的显式类型：`void x = ...` 本身是语法错误，`javac` 报 `illegal start of expression`）；② **编译通过但类型被推坏**：`val r = Box.builder().build()`（泛型类的 `@SuperBuilder`，`@Builder` 同理）得到的是 `Box<Object>`、`val l = new ArrayList<>()` 得到 `ArrayList<Object>`，把 `r` 赋给 `Box<String>` 才报 `incompatible types`。**推得出**（写显式类型即属裁量点）：通配类型的取值、交集类型、匿名类、带完整实参的泛型。泛型类 builder 处还须**类型见证**（`Box.<String>builder()`）——光写显式类型拿不回实参。**与官方文档不一致处按实测记**：lombok `val` 页写「initializer 为 `null` 时推断为 `Object`」，实测是直接编译报错。
 * 用途：`specs/stack/java.adoc`「编码」的「局部变量优先 `val`、可变才用 `var`」、`specs/general/coding-shape.adoc`「表达式与调用写法」的「链式调用一律换行」。
-* **须注意的语义差异（同义性，L1）**：**没有任何材料规定「局部变量必须用 `val`/`var`」或「链式调用哪怕很短也必须换行」**——风格指南给的是**可读性判据与行宽判据**，本集合取的是**更严的单一形态**（免去「多短算短」「哪种更可读」的临场裁量）；同理「优先 `val`、确实可变才 `var`」也是本集合对 lombok 的判据化取值，**不得**读成标准规定。
+* **须注意的语义差异（同义性，L1）**：**没有任何材料规定「局部变量必须用 `val`/`var`」或「链式调用哪怕很短也必须换行」**——风格指南给的是**可读性判据与行宽判据**，本集合取的是**更严的单一形态**（免去「多短算短」「哪种更可读」的临场裁量）；同理「优先 `val`、确实可变才 `var`」也是本集合对 lombok 的判据化取值，**不得**读成标准规定。**例外清单同样不得按印象写**：风格指南只说「推断结果不清时写显式类型」，**没有**给出清单；本集合所列两类例外按上述实测形态取，**不得**扩成「看着复杂的泛型」——那与「裁量点不留临场发挥」相抵。
 
 == 字段接口的访问器与 lombok 链式风格（Project Lombok 官方文档 /《阿里巴巴 Java 开发手册》）
 

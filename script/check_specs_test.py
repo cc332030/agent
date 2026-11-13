@@ -10290,8 +10290,11 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
         "仅当该变量**确实需要重新赋值**时才用 `var`——两者都优先于显式类型；字段不得使用。"
         "**`var` 是例外档、不是并列选项**。**判定标准（任一命中即违规）**："
         "① 写了显式类型且不属例外；② **用 `var` 声明的局部变量此后从未重新赋值**；"
-        "③ 同法里一半 `val` 一半显式类型。**例外（L2）**：**类型推断结果不清晰**、"
-        "**以 `null` 字面量初始化**等场景可写显式类型。**未引入 lombok 时**：JDK 只有 `var`、"
+        "③ 同法里一半 `val` 一半显式类型。**例外（L2，只认两类可实测形态）**："
+        "① **编译直接报错**——**以 `null` 字面量初始化**、lambda、方法引用；"
+        "**`void` 表达式**报同一句错但**不构成例外**（没有显式类型可退）；"
+        "② **编译通过但类型被推坏**——**泛型实参丢失**（`val` 被推成 `Object`）。"
+        "**不属例外**（实测推得出，写了显式类型即违规）：**通配类型的取值**、交集类型、匿名类、带完整实参的泛型。**未引入 lombok 时**：JDK 只有 `var`、"
         "**没有 `val`**，按 `var` 执行。**依据（标准名/编号）**：ISO/IEC 25010、"
         "ISO/IEC/IEEE 29148、**Project Lombok 官方文档**、**Google Java Style Guide**；"
         "**「优先 `val`、可变才 `var`」是本集合对 lombok 的判据化取值**。\n\n"
@@ -10406,6 +10409,30 @@ class TestCheckJavaSerialGuard(CheckSpecsTestCase):
             "② **用 `var` 声明的局部变量此后从未重新赋值**；", "② 略；"))
         cm.check_java_serial_guard()
         self.assertIn("从未重新赋值", self.error_texts())
+
+    def test_exception_list_back_to_vague_removed_reports(self):
+        # 反例：例外退回「类型推断结果不清晰（复杂泛型、联合类型、匿名类）」这种按印象的枚举
+        self._write(java=self.JAVA.replace("**例外（L2，只认两类可实测形态）**", "**例外（L2）**")
+                    .replace("**不属例外**（实测推得出，写了显式类型即违规）："
+                             "**通配类型的取值**、交集类型、匿名类、带完整实参的泛型。",
+                             "复杂泛型、联合类型、匿名类等推断不清晰时可写显式类型，此类例外克制使用。"))
+        cm.check_java_serial_guard()
+        self.assertIn("不属例外", self.error_texts())
+
+    def test_void_expr_listed_as_exception_reports(self):
+        # 反例：把 `void` 表达式并进「编译直接报错」的例外里 —— 它没有可退的显式类型
+        # （`void x = ...` 本身是语法错误），照抄成例外会把人引到不存在的写法上
+        self._write(java=self.JAVA.replace("**`void` 表达式**报同一句错但**不构成例外**（没有显式类型可退）",
+                                          "`void` 表达式"))
+        cm.check_java_serial_guard()
+        self.assertIn("（应含 `不构成例外`）", self.error_texts())
+
+    def test_generic_erasure_half_removed_reports(self):
+        # 反例：真正该显式声明的那一半（val 推成 Object、泛型实参丢失）被抽走 ——
+        # 只留「编译直接报错」时，泛型类 builder 处照写 val 会静默推坏类型
+        self._write(java=self.JAVA.replace("**泛型实参丢失**（`val` 被推成 `Object`）", "略"))
+        cm.check_java_serial_guard()
+        self.assertIn("泛型实参丢失", self.error_texts())
 
     def test_chain_length_not_criterion_removed_reports(self):
         # 反例：把"长度不是判据"删掉 -> 退回通行风格的"按行宽决定"（用户点名的裁量点）
