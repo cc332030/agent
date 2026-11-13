@@ -28647,6 +28647,43 @@ class TestCheckFetchSelfUpdateGuard(CheckSpecsTestCase):
         self._run()
         self.assertIn(self.SCRIPT, self.error_texts())
 
+    def test_update_order_line_removed_reports(self):
+        # 反例⑭（用户口径：『流程变了，这个流程要固定在文档里永远不能变』）：头部那条次序
+        # 被抽掉——次序就只剩 `main` 的调用行，下一次改动看不出它是定稿，随手调一行即丢
+        self._write_valid()
+        self._mutate(self.SCRIPT,
+                     "bat → py → 下载新 py → 执行新 py → 下载新索引 → 下载新配置", "")
+        self._run()
+        self.assertIn("更新的次序", self.error_texts())
+
+    def test_config_fetched_before_index_reports(self):
+        # 反例⑮（同一条次序的另一半）：两处都还在，但**配置的调用挪到了索引之前**——
+        # 只核"都在"时这一改照样全绿，而"配置最后取"就只剩注释里那一句
+        self._write_valid()
+        # 变异按**实际形态**取块——索引调用与配置调用之间隔着两行说明，只取调用行时
+        # `replace` 空转，变异没发生、判据自然不报（反例就假绿）
+        self._mutate(
+            self.SCRIPT,
+            "        refresh_lagging_followups(base)\n"
+            "        # **配置最后取**（头部「更新的次序」的末格）：它决定落点与口令入口的取值、且启动时\n"
+            "        # 读入，故这一轮取到的字节下一轮才生效——排在索引之前也只是\"取了但本轮不用\"。\n"
+            "        if not args.no_scripts:\n"
+            "            results.extend(fetch_config(base, install_scripts_dir(), args.keep, total))\n",
+            "        if not args.no_scripts:\n"
+            "            results.extend(fetch_config(base, install_scripts_dir(), args.keep, total))\n"
+            "        refresh_lagging_followups(base)\n")
+        self._run()
+        self.assertIn("先后不对", self.error_texts())
+
+    def test_cleanup_bound_to_order_reports(self):
+        # 反例⑯（用户口径：『移除旧 py 不限定阶段』）：头部那句"都行"被抽掉——清理从此
+        # 可以被人写成"某一格之后才能清"，而真身是就地覆盖、盘上只剩中转件与标记，
+        # 清理与次序本无先后可言
+        self._write_valid()
+        self._mutate(self.SCRIPT, "开工前清、换之前清、收尾清都行", "")
+        self._run()
+        self.assertIn("清理旧的那一份", self.error_texts())
+
 
 class TestFetchSpecsSwapOnReadOnlyRealScript(CheckSpecsTestCase):
     """端到端实测：**真身带着落点收尾收紧的只读位时，自更新仍须换得动**（本仓库实测的死循环）。
