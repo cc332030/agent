@@ -4380,6 +4380,8 @@ class TestCheckDeliveryGuard(CheckSpecsTestCase):
                 "**输出通道只有两条**（最终汇报 / 必须停下确认），"
                 "**除这两条之外的任何中间话一律不发**（自己认定的\"必要说明\"不构成"
                 "**第三条通道**）。\n"
+                "   - **汇报须真的送到发起人手里**：**必须在该任务单下新增一条评论**"
+                "（**判据是这条评论发出去没有**），有改动却没评论**按**没有交付**判**。\n"
                 "// end::delivery[]\n")
 
     def setUp(self) -> None:
@@ -33351,6 +33353,190 @@ class TestCheckDependencyDirectAddGuard(CheckSpecsTestCase):
             "传递依赖已满足时不显式声明。\n\n== 全局跳过测试", 1))
         self._run_guard()
         self.assertIn("maven.adoc", self.error_texts())
+
+
+class TestCheckNoMemoryStoreGuard(CheckSpecsTestCase):
+    """钉住『记录只落项目文档、不进任何"记忆"类载体』防线（**用户提出**）。
+
+    用户口径：『不允许记到项目记忆、临时记忆、长期记忆或者其他类型，一定要记到项目文档里』。
+
+    反例都取"看起来已经留档了、实际项目里什么都没有"的形态：把落点写成泛指的"存档"、
+    只拦三个名字（换个名目就绕过）、把它当成比项目文档更权威的真源、或干脆只剩方向。
+    夹具用**真文件副本 + 一处定点改动**，不手抄判据。
+    """
+
+    DOC = "specs/general/doc.adoc"
+    CONTEXT = "specs/general/context.adoc"
+    GENERIC = "AGENTS_COMMON.adoc"
+    COMMON_PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in
+                     (self.DOC, self.CONTEXT, self.GENERIC, self.COMMON_PROMPT, self.README)}
+        self.write_rules_fixture()
+        for rel, text in self.base.items():
+            self.write(rel, text)
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_no_memory_store_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_without(self, rel: str, old: str) -> None:
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要点 `{old}`")
+        self.write(rel, self.base[rel].replace(old, "", 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_rule_body_removed_reports(self):
+        # 反例①：条文与 L1 被抽 → 「记进记忆里」重新算做过，而项目里查不到任何东西
+        self._run_without(self.DOC, "**记录只落项目文档，不进任何\"记忆\"类载体（L1）**")
+        self.assertIn("记录只落项目文档", self.error_texts())
+
+    def test_other_kinds_removed_reports(self):
+        # 反例②：只拦三个名字、"其他类型"那一面被抽 → 换个名目（知识库/长期存储/自定义指令）即绕过
+        self._run_without(self.DOC, "工具以别的名目提供的知识库、长期存储、自定义指令一类容器")
+        self.assertIn("知识库", self.error_texts())
+
+    def test_false_source_criterion_removed_reports(self):
+        # 反例③：「把它当成比项目文档更权威的真源」被抽 → 两者不一致时照着记忆改文档（真源反向）
+        self._run_without(self.DOC, "把记忆类载体当成比项目文档更权威的真源")
+        self.assertIn("更权威的真源", self.error_texts())
+
+    def test_boundary_removed_reports(self):
+        # 反例④：边界被抽 → 本条被读成「一律不许用这类功能」，连工具怎么配也判违规
+        self._run_without(self.DOC, "本条管的是**落点**，不是禁用它存在")
+        self.assertIn("不是禁用它存在", self.error_texts())
+
+    def test_tmp_boundary_removed_reports(self):
+        # 反例⑤：与 tmp/ 的分界被抽 → 本条被读成「连 tmp/ 也不许写」，与临时产物的整套布局相抵
+        self._run_without(self.DOC, "会话上下文、`tmp/` 一类临时产物本来就不是持久落点")
+        self.assertIn("临时产物", self.error_texts())
+
+    def test_why_project_only_removed_reports(self):
+        # 反例⑥：可核对的反面被抽 → 只剩「统一记文档」，遇到「记住更方便」就让位
+        self._run_without(self.DOC, "换台机器、换个账号、换个工具就取不到")
+        self.assertIn("换台机器", self.error_texts())
+
+    def test_context_landing_removed_reports(self):
+        # 反例⑦：持久结论那条的同口径一句被抽 → 它列出的落点全是项目内的，
+        # 读者仍会把「记进记忆」当成同类落点
+        self._run_without(self.CONTEXT, "也不得只记进项目之外的\"记忆\"类载体")
+        self.assertIn("context.adoc", self.error_texts())
+
+    def test_dispatcher_entry_removed_reports(self):
+        # 反例⑧：调度器识别特征被抽 → 判据写了也永不被加载（规则在、没人读）
+        self.write(self.GENERIC, self.base[self.GENERIC].replace("、要留档", "", 1))
+        self._run_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
+
+    def test_common_prompt_removed_reports(self):
+        # 反例⑨：提示词公共片段缺这一句 → 复制出去执行的那一份只列项目内落点，
+        # 「记进记忆」无从判为不合规
+        self._run_without(self.COMMON_PROMPT, "也不得只记进项目之外的\"记忆\"类载体")
+        self.assertIn("_common.txt", self.error_texts())
+
+    def test_public_face_removed_reports(self):
+        # 反例⑩：公开面漏登记 → 引用方按 README 学习时看不到这条判据
+        self._run_without(self.README, "记录只落项目文档（不进项目之外的\"记忆\"类载体）")
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_whole_clause_dropped_reports(self):
+        # 反例⑪：整条被删（只留同节其余条目）→ 判据失去落点，而"文档要求一条不少"看起来仍成立
+        text = self.base[self.DOC]
+        start = text.index('* **记录只落项目文档')
+        end = text.index('* **文档内容不得因承载位置迁移而减少**', start)
+        self.write(self.DOC, text[:start] + text[end:])
+        self._run_guard()
+        self.assertIn("记录只落项目文档", self.error_texts())
+
+
+class TestCheckReportDeliveryGuard(CheckSpecsTestCase):
+    """钉住『汇报须送到发起人手里』（**本仓库实证失效**）。
+
+    实证：一轮 NPC 任务改动做完、校验全绿、`git push` 也推了，**PR 下一条新评论都没有**——
+    发起人只能再问一次"你的结果回复到哪里了"。执行者的最终输出里是有汇报的，但那个输出没落到
+    任务单的评论上，读者拿到的仍是零。
+
+    失效落在两个缺口之间：交付片段管**汇报的内容与通道数**，从没说过"这条汇报要**发出去**"；
+    平台层管"往哪派"与"不得自派"，**回程没有对称的一条**。故两处各钉一半——夹具用**真文件
+    副本 + 一处定点改动**，不手抄判据。
+    """
+
+    CNB = "specs/platform/cnb.adoc"
+    COMMON_PROMPT = "prompts/_common.txt"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in (self.CNB, self.COMMON_PROMPT)}
+        self.write_rules_fixture()
+        for rel, text in self.base.items():
+            self.write(rel, text)
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_report_delivery_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_without(self, rel: str, old: str) -> None:
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到要点 `{old}`")
+        self.write(rel, self.base[rel].replace(old, "", 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_platform_clause_removed_reports(self):
+        # 反例①：平台层那条 L1 被抽 → "我的输出里写了汇报"重新等同于"已经回复了"
+        self._run_without(
+            self.CNB, "收尾汇报须在唤起你的那处任务单下新增一条评论（L1，本平台实证失效）")
+        self.assertIn("收尾汇报", self.error_texts())
+
+    def test_own_output_exemption_removed_reports(self):
+        # 反例②：不点名"自己的输出/会话自述/提交说明不算送达" → 最省事的那条路看起来等价
+        self._run_without(
+            self.CNB, "执行者自己的最终输出、会话内的自述、提交说明都不算送达")
+        self.assertIn("不算送达", self.error_texts())
+
+    def test_criteria_removed_reports(self):
+        # 反例③：判定标准被抽 → "算不算送达"回到执行者自述
+        self._run_without(
+            self.CNB, "有改动、已提交推送，而该任务单下**一条新评论都没有**")
+        self.assertIn("一条新评论都没有", self.error_texts())
+
+    def test_boundary_with_self_dispatch_removed_reports(self):
+        # 反例④：与「不得自派」的分工被抽 → 执行者会用"不许发评论"把回帖一起免掉
+        self._run_without(self.CNB, "与「不得以评论派发唤起自己」是两件事")
+        self.assertIn("两件事", self.error_texts())
+
+    def test_pointer_removed_reports(self):
+        # 反例⑤：内容口径的回指被抽 → 汇报内容与送达形态两处各写一份正文，改一处必漏另一处
+        self._run_without(self.CNB, "只补**平台侧的送达形态**")
+        self.assertIn("送达形态", self.error_texts())
+
+    def test_delivery_fragment_removed_reports(self):
+        # 反例⑥：公共片段缺这一句 → 复制到未知项目执行的那一份仍在缺口里
+        self._run_without(self.COMMON_PROMPT, "汇报须真的送到发起人手里")
+        self.assertIn("汇报须真的送到发起人手里", self.error_texts())
+
+    def test_fragment_criterion_removed_reports(self):
+        # 反例⑦：片段的判据被抽 → 只写"要发出去"时，"发了算不算"仍由执行者自述
+        self._run_without(self.COMMON_PROMPT, "判据是这条评论发出去没有")
+        self.assertIn("这条评论发出去没有", self.error_texts())
 
 
 if __name__ == "__main__":

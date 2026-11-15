@@ -147,6 +147,8 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_maven_mirror_guard` | `script/specs-rules/check_maven_mirror_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_registry_mirror_guard` | `script/specs-rules/check_registry_mirror_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_dependency_direct_add_guard` | `script/specs-rules/dependency/guards/check_dependency_direct_add_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_no_memory_store_guard` | `script/specs-rules/doc/guards/check_no_memory_store_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_report_delivery_guard` | `script/specs-rules/cnb/guards/check_report_delivery_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_throughput_guard` | `script/specs-rules/check_throughput_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_performance_guard` | `script/specs-rules/check_performance_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_quality_guard` | `script/specs-rules/check_quality_guard.adoc`
@@ -358,6 +360,8 @@
 | 95 | 规格（spec driven）防线
 | 96 | 复发即面防线（同一处改到第二遍就升级检查、反复修改的功能须落设计基线）
 | 97 | 依赖直接新增防线（能用现有依赖满足时不新增直接依赖）
+| 98 | 记录只落项目文档防线（不进项目之外的"记忆"类载体）
+| 99 | 汇报须送到发起人手里防线（写了汇报 ≠ 发出去了）
 |===
 
 == 维护约定
