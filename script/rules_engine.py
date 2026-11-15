@@ -60,13 +60,17 @@
   会让整批规则静默失效（`specs/general/verify.adoc`「验证的效力等级」的确定项不得空转）。
 * **TOML 没有 null**：数据里"不指定某字段"一律写成**缺键**——写 `file = ""` 才是
   "显式指明了一个空路径"（引擎按"键不存在" 取默认值，故 `null` 不参与判据）。
+* **规则数据全进程共用一份只读的**：合并只做一次（键＝这批路径 + 各文件摘要），交出去的是
+  只读视图——步骤的 `_guard` / `_file` 在**合并期**写死，运行期什么也不写，故共用是安全的；
+  往共用那一份里写即 `TypeError`（共用取值上一次就地写入会串给别的防线，那种串味最难查）。
+  读盘按 `(mtime, size)` 取样缓存：路径与内容不一一对应，只按路径判命中会读到上一次那份。
 * **兜底与已知限制**：本引擎不解析 AsciiDoc 结构，仅按行取节与做子串命中——
   锚点若被拆行或改写措辞，机械侧判不出"语义仍在"，那属语义复核的范围。
 """
 
-import copy
 import functools
 import hashlib
+import inspect
 import os
 import re
 import tomllib
@@ -182,8 +186,8 @@ def _read_file(ctx, rel):
     return ctx.read(rel)
 
 
-def _read_target(ctx, rel):
-    """读"按整份/按节核要点"时用的文本：上下文支持 `family_text` 时按族取。
+def _read_family(ctx, rel):
+    """按**族**读文本：上下文支持 `family_text` 时按族取，否则等同于 `ctx.read`。
 
     **为什么要有两个读法**：`specs/general/coding.adoc` 这一族按主题拆成多份，规则数据仍
     按族入口那一份写（一处登记）；"某条判据还在不在"要按**整族**取，而"两份文档有没有
@@ -191,6 +195,17 @@ def _read_target(ctx, rel):
     """
     getter = getattr(ctx, "family_text", None)
     return getter(rel) if callable(getter) else ctx.read(rel)
+
+
+def _read_target(ctx, rel):
+    """读"按整份/按节核要点"时用的文本：与 `_read_family` 同一实现（按族取）。
+
+    **按节核的那条路不经过这里**：`_step_target` 取到节之后要**在这一节里**核对，而"哪一份
+    文档里有这一节"由 `find_section` 回答（族内逐成员找、并交回成员路径）——原先那里先按族
+    拼一遍、再用成员路径去找节，同一批文件被读了两遍，而拼出来的那份根本没用上。现在按节核
+    只走 `find_section`，本函数只剩"按整份核"这一条路。
+    """
+    return _read_family(ctx, rel)
 
 
 def _find_section(ctx, rel, title, subsection=False):
@@ -288,13 +303,13 @@ def _step_target(rules, step):
     """
     ctx = rules.ctx
     rel = step["file"]
-    text = _read_target(ctx, rel)
-    if text is None:
-        ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
-        return None, ""
     section = step.get("section")
     subsection = step.get("subsection")
     if not section and not subsection:
+        text = _read_target(ctx, rel)
+        if text is None:
+            ctx.err(_msg(step, "missing_file_message").replace("{file}", rel), rel)
+            return None, ""
         return text, step.get("scope", "文件")
     title = subsection or section
     found, _owner = _find_section(ctx, rel, title, subsection=bool(subsection))
@@ -580,7 +595,7 @@ def _step_bullet_tokens(rules, step):
                 .replace("{min}", str(floor)).replace("{bullet}", step["bullet"]), rel)
 
 
-def _paired_bullet_token_count(rules, step):
+def _paired_bullet_token_count(rules, step, guard):
     """取本步所指清单的锚点条数；**清单本身取不到时返回 `None`**（调用方须报红）。
 
     两种取法：① `token_list` 给出规则数据里的锚点清单名（`tokens` 段里的常量，形如
@@ -590,7 +605,6 @@ def _paired_bullet_token_count(rules, step):
     把读者指向错误的原因（真因是清单名对不上）。② `file` + `bullet` 指向同防线同位置的
     那条 `bullet_tokens` 步骤，取其 `tokens` 条数（取不到成对那一步同样是"取不到"）。
     """
-    guard = step.get("_guard")
     if guard is None:
         return 0
     named = step.get("token_list")
@@ -636,7 +650,7 @@ def _paired_bullet_token_count(rules, step):
     return None
 
 
-def _step_anchor_count(rules, step):
+def _step_anchor_count(rules, step, guard):
     """核「锚点清单自身的条数」——**规则数据里的锚点被删**是唯一一种"防线零证据"的形态。
 
     其余步骤核的都是"现场文档里有没有这些锚点"；而锚点清单**自己**被删掉几项时（规范正文
@@ -650,7 +664,7 @@ def _step_anchor_count(rules, step):
     删清单须与改 `min` 一并发生，于是这个动作在 diff 里可见。
     """
     ctx = rules.ctx
-    have = _paired_bullet_token_count(rules, step)
+    have = _paired_bullet_token_count(rules, step, guard)
     if have is None:
         # 清单名拼错 / 成对的那一步被删：条数取不到时若当成 0，报错会写成"清单只剩 0 项"，
         # 读者按那句话去正文里找，而真因在规则数据这一侧——故单列一句、指向该清单。
@@ -967,7 +981,7 @@ def _step_corpus_ownership(rules, step):
                       where)
 
 
-def _step_manifest_single_owner(rules, step):
+def _step_manifest_single_owner(rules, step, guard):
     """**覆盖面清单只允许一处**：`guards_files` 里不得有步骤把同一份清单再列一遍。
 
     判据是"这份清单在别处也列着一份"（两处各维护一份时，新增文件只进得去一处、另一处
@@ -1554,7 +1568,7 @@ def _step_prose_mentions(rules, step):
             break
 
 
-def _step_registry_owner(rules, step):
+def _step_registry_owner(rules, step, guard):
     """**声明**一处登记面（不核任何东西）：表在哪里、表头长什么样。
 
     为什么它也是一种步骤而不是脚本里的常量：这类声明的寿命与规则数据一样长——本轮定下
@@ -1562,7 +1576,7 @@ def _step_registry_owner(rules, step):
     （`specs/general/script.adoc`「规则与脚本的隔离」判定标准①）。真正的**核对**仍由脚本做，
     因为"按 `CHECKS` 现算序号"这件事要读脚本自己。
     """
-    del rules, step
+    del rules, step, guard
 
 
 def _prose_paragraphs(text):
@@ -1733,21 +1747,31 @@ class Rules:
     def run(self, guard: str) -> None:
         """跑某道防线的全部规则步骤（步骤相互独立：任一失败即报错、其余照跑）。
 
-        运行前给每步注入 `_guard`（**运行期视图，不回写规则数据**）：步骤之间可以互相
-        取用对方的信息（如 `anchor_count` 取同防线同 bullet 的 `bullet_tokens` 步的锚点条数），
-        故步骤须知道自己属于哪道防线。
+        `guard` 一路传下去（`_run_step` → 步骤函数），**不写进步骤**：步骤之间可以互相取用
+        对方的信息（如 `anchor_count` 取同防线同 bullet 的 `bullet_tokens` 步的锚点条数），
+        故步骤须知道自己属于哪道防线——这件事在**合并期**就写死在 `_guard` 里，运行期读、
+        不写。原先的写法是运行期就地写 `_guard`，而规则数据现在全进程共用一份，就地写会把
+        "这一次"的防线名串给下一次、下一道防线。
         """
         for step in self.steps(guard):
-            step["_guard"] = guard
-            self._run_step(step)
+            self._run_step(step, guard)
 
-    def _run_step(self, step):
+    def _run_step(self, step, guard: str):
         kind = step.get("kind")
         handler = KINDS.get(kind)
         if handler is None:
             raise RulesError(f"未知规则步骤类型 `{kind}`——配置文件里有引擎不认识的 kind，"
                              "若是拼写错误则该规则会静默不生效")
-        handler(self, step)
+        handler(self, step, guard) if _wants_guard(handler) else handler(self, step)
+
+
+def _wants_guard(handler) -> bool:
+    """这一步要不要防线名：**只给真的会用到它的步骤**（本仓库只有 `anchor_count`）。
+
+    按签名判（有没有第三个形参），不在表里另记一份"哪些步骤要防线名"——那份记的东西
+    比签名本身更容易漂：加一步、改一步时没人会记得同步那张表。
+    """
+    return len(inspect.signature(handler).parameters) >= 3
 
 
 def load_rules(path: str):
@@ -1770,28 +1794,51 @@ def _load_toml(path: str):
     TOML 自身的语法就是一层确定项：重复表头（同名防线/同名名单）直接被解析器拒绝，
     不必等加载期才发现"两处各写一半"。
 
-    读与解析都走缓存（键是文件字节的摘要、**不是路径**）：同一份规则从不同目录读出来
-    （单测把规则原样落到各自的临时仓库根）只解析一次，改动任何一个字节即换键。
+    解析结果按**文件字节的摘要**缓存（键不是路径）：同一份规则从不同目录读出来（单测把
+    规则原样落到各自的临时仓库根）只解析一次，改动任何一个字节即换键。交出去的是**浅拷贝**
+    （两张表各是新字典、表内取值共用），只有"只想读一份"的调用方走这里——防线侧走的是
+    `load_rule_files` 交出的那份**共用只读**数据（见 `_freeze`）。
     """
-    key = _digest(read_bytes(path))
+    seen = {}
+    return _parsed(_digest(read_bytes(path, seen)), path, seen)
+
+
+def _parsed(key, path: str, seen: dict = None):
+    """按字节摘要取解析结果；没解析过就现读现解析（键与内容绑定，读一次即够）。"""
     if key not in _TOML_CACHE:
-        raw = read_bytes(path)
+        raw = read_bytes(path, seen)
         try:
             _TOML_CACHE[key] = tomllib.loads(raw.decode("utf-8"))
         except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
             raise RulesError(f"规则文件 {path} 不是合法 TOML：{exc}")
-    # 交出的是**浅拷贝**：`guards` / `tokens` 两张表各是新字典，表内的取值（锚点清单、
-    # 报错文案）共用同一份、按只读使用。合并期只往这两张表里加键，不会改已有取值。
+    # 交出**浅拷贝**：`guards` / `tokens` 两张表各是新字典，表内的取值（锚点清单、报错文案）
+    # 共用同一份。合并期只往这两张表里加键，不会改已有取值。
     return {k: dict(v) if isinstance(v, dict) else v for k, v in _TOML_CACHE[key].items()}
 
 
-def read_bytes(path: str) -> bytes:
-    """读一份规则文件的原始字节（缓存键的**唯一来源**：读与解析用同一份内容）。"""
+def read_bytes(path: str, seen: dict = None) -> bytes:
+    """读一份规则文件的原始字节；**同一次加载里**同一份文件只读一次（去重靠 `seen`）。
+
+    要省的是"合并期取一次摘要、解析期再取同一份字节"这一层重复读。**不跨调用缓存**：
+    路径与内容不一一对应，而 `(mtime_ns, size)` 这类样本只是内容的**替身**、不是内容本身
+    ——同尺寸的改写落在同一个 mtime tick 里时样本一模一样（本仓库实测：`min = 16` 改成
+    `min = 17` 在同一毫秒内完成，100 次里 5 次读到上一次那份；用 `os.utime` 把时间戳还原
+    回去时 100% 读到旧的，而夹具与构建脚本都干过这件事）。跨调用信任样本，等于把上一轮
+    的字节当成这一轮的规则——`load_rule_files` 于是交出上一份合并结果，按清单条数核的
+    反例静默假绿。故去重的范围就是**一次加载**：`seen` 由调用方建、随调用结束丢弃。
+    """
+    if seen is not None:
+        hit = seen.get(path)
+        if hit is not None:
+            return hit
     try:
         with open(path, "rb") as fh:
-            return fh.read()
+            raw = fh.read()
     except OSError as exc:
         raise RulesError(f"规则文件 {path} 读不出来：{exc}")
+    if seen is not None:
+        seen[path] = raw
+    return raw
 
 
 def _digest(raw: bytes) -> bytes:
@@ -1840,8 +1887,21 @@ SHARDED_DATA_TABLE_KEYS = ("guard_test_floor",)
 # 缓存里存**可变**结构，交出去的是浅拷贝（见 `_load_toml` / `load_rule_files`）——
 # 引擎会就地把 `_guard` 写进步骤表，深拷一份冻结结构比省下的解析还贵。
 _TOML_CACHE = {}
-# 合并结果同样按内容缓存（见 `load_rule_files`）：键是这批文件摘要的排序元组。
+# 合并结果按**内容**缓存（见 `load_rule_files`）：键是"各文件基名 + 摘要"，不含路径。
 _MERGED_CACHE = {}
+# 读盘结果**不设进程级缓存**（见 `read_bytes`）：取样判不出同尺寸的改写，跨调用信任它
+# 就会读到上一份规则。要省的那层重复读在一次加载之内用 `seen` 去重，用完即弃——于是
+# "几百个夹具根各留一份字节、内存只增不减"这条路也不会出现（本仓库实测：全量单测
+# 峰值曾到 654MB，其中读盘缓存占 365MB）。
+# 合并结果的上限（同上）：一份合并结果约 1.6MB，键是"名字 + 内容"，正常的规则数据只有
+# 个位数个不同版本，留 64 个足够；超出即丢最早的那份（丢了只是重算，不会读错）。
+_MERGED_CACHE_LIMIT = 64
+
+
+def _evict(cache: dict, limit: int) -> None:
+    """缓存超出上限时丢最早写入的那几项（**只丢缓存，不影响正确性**）。"""
+    while len(cache) > limit:
+        del cache[next(iter(cache))]
 
 
 def _merge_file(name: str, data, merged: dict) -> None:
@@ -1868,7 +1928,12 @@ def _merge_file(name: str, data, merged: dict) -> None:
         if isinstance(value, list):
             for step in value:
                 if isinstance(step, dict):
+                    # 步骤的两处"归属"都在**合并期**写死：来自哪份文件（`_file`，按来源核的
+                    # 判据读它）与属于哪道防线（`_guard`，`anchor_count` 据此取配对步骤）。
+                    # 原先 `_guard` 是运行期就地写的——那是"必须深拷一份规则数据"的唯一原因，
+                    # 而共用一份的前提恰恰是：跑的时候什么都不写。
                     step.setdefault("_file", f"script/{RULES_DIR_NAME}/{name}")
+                    step.setdefault("_guard", key)
         if key in repeated:
             # **同一份文件里续写下一张 `[[guards.<防线名>]]` 表头**：并按次序拼成一个列表，
             # 不是重复定义（跨文件才是，见下面那一句）。理由：一张表写满几组之后要另起一段
@@ -2010,32 +2075,139 @@ def load_rule_files(spec) -> dict:
 
     合并不是"后一份覆盖前一份"：重复防线名/名单名一律抛 `RulesError`——两条规则同名时，
     读者会以为新的一条生效，而实际生效的可能是另一份文件里的那一条。
+
+    **交出的是共用的一份只读数据**（按"各文件基名 + 内容摘要"缓存）：调用方从它构造
+    `Rules`、按防线取步骤跑，**不得就地改**——改了会串给别的调用方、别的防线（本仓库实测：
+    运行期就地给步骤写 `_guard` 时，共用一份会把"这一次"的防线名串给下一次）。故引擎里那两处
+    原地改动都挪走了：`_guard` 与 `_file` 在合并期写死、步骤函数按 `guard` 形参收防线名；
+    往这份数据里写即 `TypeError`（报错而不是静默吞掉）。
     """
     paths = load_rule_specs(spec)
-    # 合并结果按**这批文件的内容**缓存：合并（逐个文件并进同一张表、逐条核占位符）比解析
-    # 还贵一点，且它与内容一一对应。键取各文件摘要的排序结果——同一批内容只合一次。
-    key = tuple(sorted(_digest(read_bytes(path)) for path in paths))
-    if key not in _MERGED_CACHE:
-        _MERGED_CACHE[key] = _merge_all(paths)
-    # 每次返回**独立的一份**：引擎运行期要给步骤注入 `_guard`（就地写）、并可能就地把
-    # 分组切成两段（`groups` 是嵌套列表）。原先只浅拷贝到"步骤这一层"是不够的——`groups`
-    # 仍是缓存里那一份，于是两次加载共用同一批嵌套列表（本仓库实测：`groups[0][0]` 被
-    # 由"组名"改成了 bullet 前缀，一整批按 bullet 核的防线静默不报）。
-    return copy.deepcopy(_MERGED_CACHE[key])
+    # 缓存键＝**这批文件的"名字 + 内容"**（按扫描次序），不含绝对路径：合并结果只由
+    # 这两样决定（`_file` 取的是基名），故同一份规则从不同目录读出来只合一次。
+    # 键里带路径时，每个临时根都成新键——单测几百个夹具根各留一整份合并结果，
+    # 内存随用例数一路涨（本仓库实测：全量单测峰值 89MB → 654MB）。
+    seen = {}
+    key = tuple((os.path.basename(path), _digest(read_bytes(path, seen))) for path in paths)
+    hit = _MERGED_CACHE.get(key)
+    if hit is None:
+        hit = _MERGED_CACHE[key] = _merge_all(paths, seen)
+        _evict(_MERGED_CACHE, _MERGED_CACHE_LIMIT)
+    return hit
 
 
-def _merge_all(paths) -> dict:
-    """把一批规则文件并成 `{"guards":…, "tokens":…}`；冲突即抛 `RulesError`。"""
+def _merge_all(paths, seen: dict = None) -> dict:
+    """把一批规则文件并成 `{"guards":…, "tokens":…}`；冲突即抛 `RulesError`。
+
+    结果**只读**（见 `_freeze`）：合并只做一次、全进程共用，故"往它里面写"这条路要当场
+    关掉——共用数据上一次就地写入会串到别的用例、别的防线，那种串味最难查。
+    """
     merged = {"guards": {}, "tokens": {}, **{k: None for k in DATA_TABLE_KEYS}}
     for path in paths:
         if not os.path.isfile(path):
             raise RulesError(f"缺少规则文件 {path}——规则数据与脚本隔离后，"
                              "规则文件是规则措辞的唯一来源，缺失即整批规则静默失效")
-        _merge_file(os.path.basename(path), _load_toml(path), merged)
+        # 每份文件的解析结果**另抄一份树**再合并：解析缓存是全进程共用的（同一份规则从不同
+        # 目录读出来只解析一次），而合并期要往步骤里写 `_file` / `_guard`——直接在缓存对象上
+        # 写，第二次合并同一份内容就会撞上"共用数据不许写"。
+        _merge_file(os.path.basename(path),
+                    _mutable(_parsed(_digest(read_bytes(path, seen)), path, seen)), merged)
     for key in DATA_TABLE_KEYS:
         if merged[key] is None:
             del merged[key]
     if not merged["guards"]:
         raise RulesError("规则文件里一道防线的规则都没有——规则数据整体缺失，"
                          "所有防线会静默空转（不得当成'没有规则就是通过'）")
-    return merged
+    return _freeze(merged)
+
+
+class _FrozenTypeError(TypeError):
+    """往共用只读规则数据里写（含 `del` / `pop` / `update` / `append` / `+=` / `|=`）时抛的错。"""
+
+
+class _FrozenDict(dict):
+    """**只读**字典：读照常，任何写入即 `TypeError`（报错而不是静默吞掉）。
+
+    为什么要报错：合并结果是全进程共用的那一份，一处就地写入会串给下一个用例、下一道
+    防线。故共用的那一份**不许写**，要改就自己另抄一份可写的（`dict(...)`）。
+    """
+
+    __slots__ = ()
+
+    def _deny(self, *_args, **_kw):
+        raise _FrozenTypeError(
+            "规则数据是共用的一份只读数据，不得就地修改——就地改会串给别的防线、"
+            "别的用例；要改请自己另抄一份可写的")
+
+    __setitem__ = __delitem__ = _deny
+    clear = pop = popitem = setdefault = update = _deny
+    # `|=` 走 `__ior__`，不经 `update`：不写这一条时共用数据会被静默改掉
+    __ior__ = _deny
+
+
+class _FrozenList(list):
+    """**只读**列表（同上）：锚点组、清单这类取值不许原地追加、排序、改写。"""
+
+    __slots__ = ()
+
+    def _deny(self, *_args, **_kw):
+        raise _FrozenTypeError(
+            "规则数据是共用的一份只读数据，不得就地修改——就地改会串给别的防线、"
+            "别的用例；要改请自己另抄一份可写的")
+
+    __setitem__ = __delitem__ = _deny
+    append = clear = extend = insert = pop = remove = sort = reverse = _deny
+    # `+=` / `*=` 走 `__iadd__` / `__imul__`，这两个不查 `append` / `extend`：
+    # 不写这两条时共用清单会被静默加长（本仓库实测：`lst += [3]` 之外一声不响）
+    __iadd__ = __imul__ = _deny
+
+
+def _mutable(value, _memo=None):
+    """给合并期一份**可写**的树（解析缓存里那份是共用的，不能就地写）。
+
+    按 `id` 记忆：解析缓存里的同一份锚点清单常被多处引用（`tokens` 里一份、步骤里按名
+    再取一次），逐处深拷会把同一份内容拷两遍，而合并期只写步骤表这一层。
+    """
+    memo = {} if _memo is None else _memo
+    key = id(value)
+    if key in memo:
+        return memo[key]
+    if isinstance(value, dict):
+        out = {}
+        memo[key] = out
+        out.update({k: _mutable(v, memo) for k, v in value.items()})
+        return out
+    if isinstance(value, list):
+        out = []
+        memo[key] = out
+        out.extend(_mutable(v, memo) for v in value)
+        return out
+    return value
+
+
+def _freeze(value, _memo=None):
+    """把合并结果整棵换成只读结构（合并结果本就是一次性的新对象，不必再拷）。
+
+    只读的是**每一层**容器：写 `groups[0][1] = …` 与写 `data["guards"][名] = …` 一样
+    当场报错。按 `id` 记忆已处理过的容器：同一份锚点清单被多处引用时不重复包一层。
+    """
+    memo = {} if _memo is None else _memo
+    key = id(value)
+    if key in memo:
+        return memo[key]
+    if isinstance(value, tuple):
+        return tuple(_freeze(v, memo) if isinstance(v, (dict, list)) else v for v in value)
+    if isinstance(value, dict):
+        out = _FrozenDict()
+        memo[key] = out
+        frozen = {k: _freeze(item, memo) if isinstance(item, (dict, list)) else item
+                  for k, item in value.items()}
+        dict.update(out, frozen)
+        return out
+    if isinstance(value, list):
+        out = _FrozenList()
+        memo[key] = out
+        list.extend(out, [_freeze(item, memo) if isinstance(item, (dict, list)) else item
+                          for item in value])
+        return out
+    return value
