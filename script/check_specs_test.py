@@ -41,7 +41,7 @@
 排序中相邻（check_specs.py 紧邻 check_specs_test.py）。
 """
 
-import copy
+import functools
 import importlib.util
 import os
 import re
@@ -180,6 +180,28 @@ class GuardNamingTestCase(unittest.TestCase):
         cls.guard = cm._guard_of_test_class(cls.__name__)
 
 
+@functools.lru_cache(maxsize=1)
+def _rules_fixture_texts() -> tuple:
+    """现场规则目录里每份文件的 `(仓库根相对路径, 正文)`（按路径排序，读一次全进程共用）。
+
+    夹具要的是"现场有什么、夹具就有什么"，而现场那一份在一轮测试里一个字都不会变；
+    每类用例各读 133 份是把同一批只读输入反复读进内存（本轮实测：全量单测里这类读取是
+    open 次数的大头）。**共用的是正文（只读）**，写进各自夹具根的动作仍由 `write` 做。
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+    src_root = os.path.join(repo_root, "script", "specs-rules")
+    out = []
+    for dirpath, _dirnames, filenames in os.walk(src_root):
+        for name in sorted(filenames):
+            if not name.endswith(".toml"):
+                continue
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
+            with open(full, encoding="utf-8") as fh:
+                out.append((rel, fh.read()))
+    return tuple(sorted(out))
+
+
 class CheckSpecsTestCase(GuardNamingTestCase):
     def setUp(self) -> None:
         # 保存模块全局并重定向到临时根，避免污染/依赖真实仓库
@@ -194,6 +216,7 @@ class CheckSpecsTestCase(GuardNamingTestCase):
         # 本机 `%TEMP%` 与仓库可能不同盘，由此引发的 `os.path.relpath` 跨盘问题改在
         # **判据侧**修（见 `check_specs.py` 的 `_rel_label`），不再靠"把夹具搬进仓库"绕开。
         self.root = tempfile.mkdtemp()
+        self._dirs_made = set()
         cm.REPO_ROOT = self.root
         cm.GENERIC_FILE = os.path.join(self.root, "AGENTS_COMMON.adoc")
         cm.SPECS_DIR = os.path.join(self.root, "specs")
@@ -205,6 +228,10 @@ class CheckSpecsTestCase(GuardNamingTestCase):
     def tearDown(self) -> None:
         cm.errors.clear()
         cm.REPO_SCRIPT_SRC_CACHE.clear()
+        # 覆盖层是**本进程**叠在规则数据之上的那一层（`_RuleTokensView`）：用例在里面按锚点
+        # 做过定点替换，留着就会盖住下一个用例的夹具——那种串味看起来是"夹具没生效"。
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
         (cm.REPO_ROOT, cm.GENERIC_FILE, cm.SPECS_DIR, cm.PROJECT_SPECS_DIR,
          cm.INSTALL_FILE, cm.PROJECT_FILE) = self._orig
         shutil.rmtree(self.root, ignore_errors=True)
@@ -245,7 +272,15 @@ class CheckSpecsTestCase(GuardNamingTestCase):
         不受本参数影响。
         """
         p = os.path.join(self.root, relpath)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
+        parent = os.path.dirname(p)
+        # 父目录建过就不再 `makedirs`：一个用例要落上百份文件（规则目录整份照抄），
+        # 每次都去建同一批目录纯属白付——用例里绝大多数文件都落在同一组目录下。
+        made = getattr(self, "_dirs_made", None)
+        if made is None:
+            made = self._dirs_made = set()
+        if parent not in made:
+            os.makedirs(parent, exist_ok=True)
+            made.add(parent)
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
 
@@ -266,16 +301,8 @@ class CheckSpecsTestCase(GuardNamingTestCase):
         整批失效，几百个用例一起报"缺少规则文件"）。故这里按目录**递归照抄**：
         现场有什么、夹具就有什么，一份不漏、一份不多。
         """
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        src_root = os.path.join(repo_root, "script", "specs-rules")
-        for dirpath, _dirnames, filenames in os.walk(src_root):
-            for name in sorted(filenames):
-                if not name.endswith(".toml"):
-                    continue
-                full = os.path.join(dirpath, name)
-                rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
-                with open(full, encoding="utf-8") as fh:
-                    self.write(rel, fh.read())
+        for rel, text in _rules_fixture_texts():
+            self.write(rel, text)
 
     def read_real(self, rel: str) -> str:
         """读仓库里**真实的那份文件**（判据本体的正例用它，不手抄）。
@@ -6292,10 +6319,10 @@ class TestCheckTestScopeGuard(CheckSpecsTestCase):
         self.write("script/specs-rules/_tokens.toml", tokens)
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
-        # `ctx.tokens()` 读的是导入期就位的那份（`_RULES_TOKENS`），故须一并换掉——
-        # 只改文件而不换这份常量时，`anchor_count` 读到的是**内存里那份完好的清单**。
-        self._orig_rules_tokens = cm._RULES_TOKENS
-        cm._RULES_TOKENS = cm.rules_engine.load_rule_files(cm._rules_spec())["tokens"]
+        # `ctx.tokens()` 按**当前根**取，写进视图的那一层会盖住它——故这里把那层清空，
+        # 让它读夹具里那份（先前有人按它做过定点替换时留下的写入层，也必须清掉）。
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
 
     def test_anchor_list_shrunk_reports(self):
         # 反例⑫：跑测试范围那一侧的锚点清单被削一组（正文一字不少）
@@ -6316,8 +6343,6 @@ class TestCheckTestScopeGuard(CheckSpecsTestCase):
         self.assertIn("TEST_SELECTION_TOKENS", self.error_texts())
 
     def tearDown(self) -> None:
-        if hasattr(self, "_orig_rules_tokens"):
-            cm._RULES_TOKENS = self._orig_rules_tokens
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
         super().tearDown()
@@ -17114,7 +17139,9 @@ class TestCheckMavenParallelGuard(CheckSpecsTestCase):
         # 与"没核"无从区分）。本条的新增要点只在这里登记过一次，故须有入场核拦它。
         self._fixture()
         saved = cm.MAVEN_PARALLEL_ANCHORS
-        reduced = copy.deepcopy(list(saved))
+        # 按组抄一份**可写**的：清单本身是共用的只读结构（深拷会撞上它的 `_deny`）。
+        reduced = [[g[0], list(g[1]), g[2]] if isinstance(g, (list, tuple)) and len(g) >= 3
+                   else g for g in saved]
         reduced[0][1] = [t for t in reduced[0][1]
                          if t != "取值以命令行参数形态显式传（L1）"]
         cm.MAVEN_PARALLEL_ANCHORS = reduced
@@ -17429,7 +17456,9 @@ class TestCheckMavenSkipTestsGuard(CheckSpecsTestCase):
         # 规范正文一字未动，而那圈"逐 token 核现场文本"一次都不报错。
         self._fixture()
         saved = cm.MAVEN_SKIP_TESTS_ANCHORS
-        reduced = copy.deepcopy(list(saved))
+        # 按组抄一份**可写**的：清单本身是共用的只读结构（深拷会撞上它的 `_deny`）。
+        reduced = [[g[0], list(g[1]), g[2]] if isinstance(g, (list, tuple)) and len(g) >= 3
+                   else g for g in saved]
         reduced[0][1] = [t for t in reduced[0][1] if t != "`skipITs`"]
         reduced[1][1] = [t for t in reduced[1][1] if t != "只跳 Surefire、集成测试照跑"]
         cm.MAVEN_SKIP_TESTS_ANCHORS = reduced
@@ -18462,6 +18491,28 @@ class TestCheckAfterChangeReviewGuard(CheckSpecsTestCase):
         self.assertIn("AGENTS.adoc", self.error_texts())
 
 
+class TestRuleTokensFollowTheFixture(CheckSpecsTestCase):
+    """`ctx.tokens()` 必须跟着**当前根的那份规则**走，且跟着**内容**走。
+
+    失效形态（本改动引入过、已修）：`_site_rules_tokens()` 只按规则**目录**判缓存命中，
+    而单测夹具常往同一个根里把 `_tokens.toml` 写回新内容——目录一字不变、内容全变，
+    于是 `anchor_count` 读到上一次那份清单，'清单被削一项'的反例当场假绿。
+    """
+
+    GUARD = ("[tokens]\n"
+             "A = [[\"组一\", [\"锚一\"], \"因为一\"]]\n"
+             "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+
+    def test_tokens_follow_new_content_at_the_same_path(self):
+        self.write("script/specs-rules/_tokens.toml", self.GUARD)
+        self.assertEqual(1, len(cm._RULE_TOKENS_VIEW["A"]))
+        # 同一个路径、写回**多一组**的新内容（夹具的常见形态）
+        self.write("script/specs-rules/_tokens.toml",
+                   self.GUARD.replace("\"因为一\"]]\n",
+                                      "\"因为一\"], [\"组二\", [\"锚二\"], \"因为二\"]]\n"))
+        self.assertEqual(2, len(cm._RULE_TOKENS_VIEW["A"]))
+
+
 class TestRuleGuardsRegistryFallback(CheckSpecsTestCase):
     """夹具只备了部分规则数据时的回落（见 `check_specs._guard_rules_for`）。
 
@@ -18493,14 +18544,23 @@ class TestRuleGuardsRegistryFallback(CheckSpecsTestCase):
         rules = cm._guard_rules_for("check_no_such_guard_at_all")
         self.assertNotIn("check_no_such_guard_at_all", rules.guard_names())
 
-    def test_fallback_steps_are_not_shared(self):
-        # 回落取到的步骤与夹具那一份**不共享**（引擎运行期会就地写 `_guard`）
+    def test_fallback_shares_read_only_rule_data(self):
+        # 回落取到的是**共用的一份只读数据**：两次取的是同一步（省掉每次重建一份），
+        # 而"共用是安全的"这件事由**写入当场报错**钉住——就地写会串给别的防线、
+        # 别的用例，那种串味最难查，故要报错而不是静默吞掉。
         cm.RULES = cm.rules_engine.Rules(
             {"guards": {"check_zzz_guard": [{"kind": "exists", "files": []}]}},
             cm.RulesContext())
         first = cm._guard_rules_for(self.GUARD).steps(self.GUARD)
         second = cm._guard_rules_for(self.GUARD).steps(self.GUARD)
-        self.assertIsNot(first[0], second[0])
+        self.assertIs(first[0], second[0])
+        # 与夹具自己造的那一份**不共享**（那一份归调用方，本条不管它）
+        self.assertIsNot(first[0], cm.RULES.steps("check_zzz_guard")[0])
+        with self.assertRaises(TypeError):
+            first[0]["kind"] = "修改共用的规则数据"
+        # 追加同样要报错：只钉"改键"时，往共用列表里 append 一条仍会串给下一个读方
+        with self.assertRaises(TypeError):
+            first.append({"kind": "exists", "files": []})
 
 
 class TestCheckCleanSubagentReviewGuard(CheckSpecsTestCase):
@@ -18684,8 +18744,11 @@ class TestCleanSubagentReviewAnchorListShape(CheckSpecsTestCase):
         self.write_real_file("AGENTS_COMMON.adoc")
         self.write_real_file("specs-project-maintainer/verify.adoc")
         self.write_rules_fixture()
-        # `_RULES_TOKENS` 是**导入期**读的（模块级常量），用例改了它之后须还原
-        self.addCleanup(cm._RULES_TOKENS.update, cm._RULES_TOKENS)
+        # 用例会往覆盖层里按名替换一份清单：用完按名删掉即可（`tearDown` 另会整体清空）。
+        # **不能**写成 `addCleanup(_RULES_TOKENS.update, _RULES_TOKENS)`：那会把本用例刚写
+        # 进去的改动连同整份 tokens 一起抄进覆盖层，"还原"于是变成"固化"。
+        self.addCleanup(cm._RULE_TOKENS_STORAGE.pop,
+                        "CLEAN_SUBAGENT_REVIEW_ANCHORS", None)
 
     def test_anchor_item_removed_reports(self):
         # 反例：清单里被削掉一个锚点项 → 按文档核的那些步骤全绿，只有条数这一步报得出
@@ -29665,14 +29728,11 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         # 削掉尾部两组（存量 + 依据行）后补一个换行：剩下的仍是合法 TOML，少了恰恰是
         # `anchor_count` 该报出的那一形态（清单被删项、正文一字不少）。
         self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
-        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，不读夹具里的文件，
-        # 故须就地替换（否则这条用例核的是一个永远不再变化的常量、必假绿）。用完还原。
-        original = cm._RULES_TOKENS["UI_STYLE_ANCHORS"]
-        trimmed = [g for g in original
-                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
-        self.assertLess(len(trimmed), len(original))
-        cm._RULES_TOKENS["UI_STYLE_ANCHORS"] = trimmed
-        self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_STYLE_ANCHORS", original)
+        # 条数这一步按**当前根**读（`ctx.tokens()`）——上面把夹具里那两组削掉之后，读到的
+        # 就该是削过的清单；读到原样即说明它没跟到夹具根，这条反例也就成了空转。
+        names = [str(g[0]) for g in cm._RULES_TOKENS["UI_STYLE_ANCHORS"]]
+        self.assertFalse([n for n in names if n.startswith("存量随动迁移")],
+                         "读到的仍是削之前那份清单——`ctx.tokens()` 没跟到夹具根")
         self._run_guard()
         # 只核文件名不够：须落成"清单条数"这一步自己的文案（正文缺项那一步在这里不该报）。
         self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
@@ -29847,12 +29907,12 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
         cut_end = tokens.index("    ],\n", tokens.index("]", tail)) + len("    ],\n")
         # 削掉尾部那组后剩下的仍是合法 TOML，少了恰恰是 `anchor_count` 该报出的形态。
         self.write(tokens_rel, tokens[:cut] + tokens[cut_end:])
-        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换。用完还原。
-        original = cm._RULES_TOKENS["UI_PERFORMANCE_ANCHORS"]
-        trimmed = [g for g in original if g[0] != "依据行"]
-        self.assertLess(len(trimmed), len(original))
-        cm._RULES_TOKENS["UI_PERFORMANCE_ANCHORS"] = trimmed
-        self.addCleanup(cm._RULES_TOKENS.__setitem__, "UI_PERFORMANCE_ANCHORS", original)
+        # 条数这一步按**当前根**读（`ctx.tokens()`）——上面那一步已把夹具里的清单削了一组，
+        # 这里只需确认它真的读到了夹具那份（真读到即条数已少），不必再往覆盖层里写：
+        # 写进去的那一层会盖住夹具、并留给后面的用例（那种串味最难查）。
+        names = [str(g[0]) for g in cm._RULES_TOKENS["UI_PERFORMANCE_ANCHORS"]]
+        self.assertFalse([n for n in names if n.startswith("依据行")],
+                         "读到的仍是削之前那份清单——`ctx.tokens()` 没跟到夹具根")
         self._run_guard()
         self.assertIn("UI_PERFORMANCE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
@@ -30218,13 +30278,11 @@ class TestCheckSameThingOneSourceGuard(CheckSpecsTestCase):
         cut_end = tokens.index("\n    ],\n", end) + len("\n    ],\n")
         # 削掉尾部两组（存量 + 依据行）：剩下的仍是合法 TOML，正是"清单被删项、正文一字不少"
         self.write(tokens_rel, tokens[:cut] + "\n" + tokens[cut_end:])
-        # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换、用完还原。
-        original = cm._RULES_TOKENS["SAME_SOURCE_ANCHORS"]
-        trimmed = [g for g in original
-                   if g[0] not in ("存量随动迁移", "依据行（标准名/编号 + 取舍归属）")]
-        self.assertLess(len(trimmed), len(original))
-        cm._RULES_TOKENS["SAME_SOURCE_ANCHORS"] = trimmed
-        self.addCleanup(cm._RULES_TOKENS.__setitem__, "SAME_SOURCE_ANCHORS", original)
+        # 条数这一步按**当前根**读（`ctx.tokens()`）：上面把夹具里那两组削掉之后，读到的
+        # 就该是削过的清单——这也顺带钉住"它读的确实是夹具那份、不是别处那半"。
+        names = [str(g[0]) for g in cm._RULES_TOKENS["SAME_SOURCE_ANCHORS"]]
+        self.assertFalse([n for n in names if n.startswith("存量随动迁移")],
+                         "读到的仍是削之前那份清单——`ctx.tokens()` 没跟到夹具根")
         self._run_guard()
         self.assertIn("SAME_SOURCE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
@@ -30589,6 +30647,10 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
         self.write_rules_fixture()
 
     def _run_guard(self) -> None:
+        # 覆盖层清空：读到的必须是**夹具自己**那份规则（别的类按它改过锚点时留下的写入会
+        # 盖住夹具，那些反例随即假绿、正例假红）。
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
         cm.REPO_ROOT = self.root
         cm.errors.clear()
         cm._RULES_RUN_THIS_PHASE.clear()
@@ -30732,7 +30794,7 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
                    tokens[:start] + trimmed_body + tokens[end:])
         # 条数这一步读的是**导入期**读进 `_RULES_TOKENS` 的那份清单，故须就地替换；用完还原。
         original = cm._RULES_TOKENS["CACHE_ANCHORS"]
-        trimmed = [g for g in original if g[0] != "依据行"]
+        trimmed = [g for g in original if not g[0].startswith("依据行")]
         self.assertLess(len(trimmed), len(original))
         cm._RULES_TOKENS["CACHE_ANCHORS"] = trimmed
         self.addCleanup(cm._RULES_TOKENS.__setitem__, "CACHE_ANCHORS", original)
@@ -32710,6 +32772,53 @@ class TestCheckCodingFamilyGuard(CheckSpecsTestCase):
         self._write_valid(other="= 写法\n\n只有一句说明。\n")
         self._run()
         self.assertIn("空壳分份", self.error_texts())
+
+
+class TestFamilyTextCache(CheckSpecsTestCase):
+    """钉住 `_coding_text` 的缓存**跟着内容走**：同尺寸改写不得交出上一版正文。
+
+    失效形态（本仓库实测）：缓存键取族内各份的 `(mtime_ns, size)`，而"改一个字、条目数
+    不变"正是判据改动最常见的形态——同尺寸的改写落在同一个 mtime tick 里时样本一模一样，
+    于是整批按族正文核的防线对着**上一版文本**报绿（60 次里 6 次；用 `os.utime` 还原
+    时间戳时 100%）。判据被删掉这件事因此看不见。
+    """
+
+    ENTRY = "specs/general/coding.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.FAMILY_TEXT_CACHE.clear()
+
+    def tearDown(self) -> None:
+        cm.FAMILY_TEXT_CACHE.clear()
+        super().tearDown()
+
+    def _write(self, body: str) -> None:
+        self.write(self.ENTRY, "= 通用编码规范\n\n== 抽象与接入成本\n\n" + body)
+
+    def test_same_size_rewrite_is_reread(self):
+        # 反例①：同尺寸改写（`条文甲甲甲` → `条文乙乙乙`），紧接着再取一次整族正文
+        self._write("* 条文甲甲甲。\n")
+        self.assertIn("条文甲甲甲", cm._coding_text())
+        self._write("* 条文乙乙乙。\n")
+        self.assertIn("条文乙乙乙", cm._coding_text())
+
+    def test_rewrite_with_restored_mtime_is_reread(self):
+        # 反例②：改写后把时间戳还原（夹具"只换内容"、`git checkout`、构建脚本 restore
+        # timestamp 都干这件事）——`(mtime_ns, size)` 与上一次完全相等
+        self._write("* 条文甲甲甲。\n")
+        path = os.path.join(self.root, *self.ENTRY.split("/"))
+        before = os.stat(path)
+        self.assertIn("条文甲甲甲", cm._coding_text())
+        self._write("* 条文乙乙乙。\n")
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertIn("条文乙乙乙", cm._coding_text())
+
+    def test_unchanged_family_hits_the_cache(self):
+        # 另一半：内容不变时真的命中缓存（缓存要么正确、要么就是纯开销）
+        self._write("* 条文甲甲甲。\n")
+        first = cm._coding_text()
+        self.assertIs(first, cm._coding_text())
 
 
 class TestCheckVerifyTierGuard(CheckSpecsTestCase):

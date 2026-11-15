@@ -171,6 +171,176 @@ class TestRulesLoad(unittest.TestCase):
         self.assertTrue(re_.default_rules_spec("/x").endswith(re_.RULES_DIR_NAME))
 
 
+class TestSharedRuleData(unittest.TestCase):
+    """规则数据**全进程共用一份只读的**，而"共用"这件事要被钉住（不是只把深拷删掉）。
+
+    共用省下的是"每次加载再拷一整份"；它成立的前提是**运行期什么都不写**——`_guard` /
+    `_file` 在合并期就写死、步骤函数按形参收防线名。故这里钉三件事：两次加载取到同一批
+    步骤、往里写当场报错、`_guard` 在加载期就已就位（运行期不再补写）。
+    """
+
+    def test_two_loads_share_the_same_steps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml", "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+            first = re_.load_rule_files(tmp)["guards"]["g"]
+            second = re_.load_rule_files(tmp)["guards"]["g"]
+            self.assertIs(first[0], second[0])
+
+    def test_writing_shared_steps_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml", "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+            step = re_.load_rule_files(tmp)["guards"]["g"][0]
+            with self.assertRaises(TypeError):
+                step["kind"] = "别的步骤"
+            with self.assertRaises(TypeError):
+                del step["kind"]
+
+    def test_writing_nested_groups_raises(self):
+        # 只读的是**每一层**：`groups` 这种嵌套取值同样不许原地改（浅拷到"步骤这一层"
+        # 那一年就是这样漏的——`groups[0][0]` 被别的用例改掉，整批判据静默不报）。
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml",
+                         "[[guards.g]]\nkind = \"section_groups\"\nfile = \"a\"\n"
+                         "section = \"S\"\ngroups = [[\"组\", [\"锚\"], \"因为\"]]\n")
+            step = re_.load_rule_files(tmp)["guards"]["g"][0]
+            with self.assertRaises(TypeError):
+                step["groups"][0][0] = "改掉组名"
+            with self.assertRaises(TypeError):
+                step["groups"].append(["另一组", [], "理由"])
+
+    def test_guard_is_written_at_merge_time(self):
+        # `_guard` 在**合并期**写死：`anchor_count` 靠它取配对那一步，运行期不再补写
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml",
+                         "[[guards.g]]\nkind = \"bullet_tokens\"\nfile = \"a\"\n"
+                         "section = \"S\"\nbullet = \"B\"\ntokens = [\"x\"]\n"
+                         "message = \"缺 {missing}\"\n")
+            step = re_.load_rule_files(tmp)["guards"]["g"][0]
+            self.assertEqual(step["_guard"], "g")
+            self.assertTrue(step["_file"].endswith("a.toml"))
+
+    def test_inplace_operators_on_shared_data_raise(self):
+        # `+=` / `*=` / `|=` 走的是 `__iadd__` / `__imul__` / `__ior__`，**不查** `append` /
+        # `extend` / `update`：漏了这三个，共用清单与共用表仍能被静默改掉（本仓库实测：
+        # `lst += [3]` 一声不响地把共用取值加长，下一个读方拿到的就是改过的那份）。
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml",
+                         "[[guards.g]]\nkind = \"section_groups\"\nfile = \"a\"\n"
+                         "section = \"S\"\ngroups = [[\"组\", [\"锚\"], \"因为\"]]\n")
+            data = re_.load_rule_files(tmp)
+            with self.assertRaises(TypeError):
+                data["guards"]["g"] += [{"kind": "exists", "files": []}]
+            with self.assertRaises(TypeError):
+                data["tokens"] |= {"另一份": []}
+            step = data["guards"]["g"][0]
+            with self.assertRaises(TypeError):
+                step["groups"] += [["另一组", [], "理由"]]
+            with self.assertRaises(TypeError):
+                step["groups"][0] *= 2
+
+    def test_guard_name_follows_its_table(self):
+        # 两道防线各一步：各自归属自己那道（不是"最后一次运行的那道"）。`_guard` 在合并期
+        # 按「步骤在哪张表下」写死，故同一次加载里两道防线的步骤不会串味。
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, guard in (("a.toml", "check_x_guard"), ("b.toml", "check_y_guard")):
+                _write_rules(tmp, name, f'[[guards.{guard}]]\nkind = "exists"\nfiles = ["X"]\n')
+            data = re_.load_rule_files(tmp)["guards"]
+            self.assertEqual("check_x_guard", data["check_x_guard"][0]["_guard"])
+            self.assertEqual("check_y_guard", data["check_y_guard"][0]["_guard"])
+
+
+class TestRuleDataCache(unittest.TestCase):
+    """读盘与合并的缓存**都绑取样**：路径还在、内容换了，就不许拿上一次那份。"""
+
+    def test_same_path_new_content_is_reparsed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_rules(tmp, "a.toml", "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+            before = re_.load_rule_files(tmp)["guards"]["g"]
+            # 同名文件写回新内容（用例夹具的常见形态）：文件名不变、内容变了
+            _write_rules(tmp, "a.toml",
+                         "[[guards.g]]\nkind = \"exists\"\nfiles = []\n"
+                         "[[guards.h]]\nkind = \"exists\"\nfiles = []\n")
+            after = re_.load_rule_files(tmp)
+            self.assertEqual(len(before), 1)
+            self.assertEqual(sorted(after["guards"]), ["g", "h"])
+
+    def test_removed_file_does_not_hit_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml", "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+            re_.load_rule_files(tmp)
+            os.remove(os.path.join(tmp, "a.toml"))
+            with self.assertRaises(re_.RulesError):
+                re_.load_rule_files(tmp)
+
+    def test_read_bytes_follows_the_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_rules(tmp, "a.toml", "x = 1\n")
+            self.assertEqual(re_.read_bytes(path), b"x = 1\n")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("x = 22\n")
+            self.assertEqual(re_.read_bytes(path), b"x = 22\n")
+
+    def test_same_size_rewrite_is_not_served_from_an_old_read(self):
+        # 反例①：**同尺寸**改写（`min = 16` → `min = 17`）。按 `(mtime_ns, size)` 判命中时
+        # 样本一模一样、读回来是上一次那份，而 `load_rule_files` 的合并键取的是这份字节的
+        # 摘要——于是整批规则停在上一版上（本仓库实测：同一毫秒内改写，100 次里 5 次读到旧值）。
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_rules(tmp, "a.toml", '[[guards.g]]\nkind = "exists"\nmin = 16\nfiles = ["A"]\n')
+            self.assertEqual(16, re_.load_rule_files(tmp)["guards"]["g"][0]["min"])
+            _write_rules(tmp, "a.toml", '[[guards.g]]\nkind = "exists"\nmin = 17\nfiles = ["A"]\n')
+            self.assertEqual(17, re_.load_rule_files(tmp)["guards"]["g"][0]["min"])
+
+    def test_rewrite_with_restored_mtime_is_not_served_from_an_old_read(self):
+        # 反例②：改写后把时间戳还原（`git checkout`、夹具"只换内容"、构建脚本 restore
+        # timestamp 都干这件事）——`(mtime_ns, size)` 与上一次**完全相等**，样本这一层
+        # 根本不是内容。读盘缓存不跨调用，故这里必须读到新内容。
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_rules(tmp, "a.toml",
+                                '[[guards.g]]\nkind = "exists"\nmin = 16\nfiles = ["A"]\n')
+            before = os.stat(path)
+            re_.load_rule_files(tmp)
+            _write_rules(tmp, "a.toml",
+                         '[[guards.g]]\nkind = "exists"\nmin = 17\nfiles = ["A"]\n')
+            os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+            self.assertEqual(17, re_.load_rule_files(tmp)["guards"]["g"][0]["min"])
+
+    def test_one_load_reads_each_file_once(self):
+        # 另一半：同一次加载里同一份文件只读一次（合并期取摘要、解析期取字节）。
+        # 去重靠调用方传的 `seen`，不靠一张跨调用的缓存表。
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_rules(tmp, "a.toml", "[[guards.g]]\nkind = \"exists\"\nfiles = []\n")
+            seen = {}
+            re_.read_bytes(path, seen)
+            re_.read_bytes(path, seen)
+            self.assertEqual({path}, set(seen))
+
+    def test_no_process_wide_read_cache(self):
+        # 读盘结果**不留在进程里**：留着就是"下一次加载可能拿到上一轮的字节"，而那正是
+        # 上面两条反例的成因。这条钉住"没有这张表"，防它以后被顺手加回来。
+        self.assertFalse(hasattr(re_, "_READ_CACHE"))
+
+    def test_merge_cache_key_ignores_the_directory(self):
+        # 合并结果只由"文件基名 + 内容"决定（`_file` 取基名）：键里带绝对路径时，
+        # 单测几百个夹具根各留一整份合并结果（本仓库实测：占 96MB 峰值的大头）。
+        texts = {"a.toml": "[[guards.g]]\nkind = \"exists\"\nfiles = []\n"}
+        first = second = None
+        with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
+            for root in (one, two):
+                for name, text in texts.items():
+                    _write_rules(root, name, text)
+            first = re_.load_rule_files(one)
+            second = re_.load_rule_files(two)
+            self.assertIs(first, second)
+
+
+def _write_rules(root: str, name: str, text: str) -> str:
+    """在 `root` 下落一份规则文件（夹具用：现场规则长什么样，这里就长什么样）。"""
+    path = os.path.join(root, name)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
+
+
 class TestGuardFallback(unittest.TestCase):
     """『规则数据缺失不得静默空转』与夹具回落的分界（见 `check_specs.run_rule_guard`）。
 

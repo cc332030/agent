@@ -656,6 +656,7 @@
 import argparse
 import concurrent.futures
 import fnmatch
+import hashlib
 import json
 import os
 import posixpath
@@ -804,7 +805,7 @@ class RulesContext:
         只对锚点清单开放：清单是**纯数据**，删掉一项时现场文档一字不少、按文档核的那些
         步骤全绿——故清单条数须另有一步核（见 `rules_engine._step_anchor_count`）。
         """
-        data = _RULES_TOKENS.get(name)
+        data = _RULE_TOKENS_VIEW.get(name)
         return data if isinstance(data, (list, tuple)) else None
 
     def err(self, msg, path="", line=0):
@@ -1012,8 +1013,119 @@ def _bootstrap_rules_tokens():
         return {}
 
 
-# 规则数据（锚点组/名单）在**导入期**就位：这些常量在模块级被其它定义引用。
-_RULES_TOKENS = _bootstrap_rules_tokens()
+def _site_rules_tokens() -> dict:
+    """**当前根**那一边规则数据里的"名单/锚点"段——`REPO_ROOT` 指向的那份规则目录。
+
+    `REPO_ROOT` 是模块级变量、会在运行期被重定向（单测夹具每个用例换一个根），故 tokens
+    不能在导入期定死：按**当前根**取，夹具换了根即刻读到它自己那一份。
+
+    **缓存认的是合并结果那个对象、不是路径**：引擎按"这批文件的名字 + 内容"缓存合并结果，
+    同一批路径写回新内容就会交出另一个对象（见 `rules_engine.load_rule_files`）。只按路径
+    判命中时，夹具往同一个根里改写 `_tokens.toml` 后仍读得到上一次那份清单——`anchor_count`
+    这条反例当场假绿（本仓库实测）。
+    """
+    global _SITE_TOKENS_CACHE
+    try:
+        data = rules_engine.load_rule_files(_rules_spec())
+    except rules_engine.RulesError:
+        return {}
+    if _SITE_TOKENS_CACHE is None or _SITE_TOKENS_CACHE[0] is not data:
+        _SITE_TOKENS_CACHE = (data, data.get("tokens", {}))
+    return _SITE_TOKENS_CACHE[1]
+
+
+# 规则数据（锚点组/名单）在**导入期**就位：这些常量在模块级被其它定义引用。`REPO_ROOT`
+# 被重定向后（单测夹具）改由 `_site_rules_tokens()` 现取，见 `_RuleTokensView`。
+# `_BOOT_TOKENS` 就是导入期那一份（拼接的底）；`_RULES_TOKENS` 是它的读视图，在
+# `_RuleTokensView` 定义之后才绑上（顺序即依赖）。
+_BOOT_TOKENS = _bootstrap_rules_tokens()
+
+# `(合并结果, 其中 tokens 段)`：认对象不认路径，见 `_site_rules_tokens`。
+_SITE_TOKENS_CACHE = None
+
+
+class _RuleTokensView:
+    """规则数据的 `tokens` 段视图：**按当前仓库根取**，写入叠在本进程那一层上。
+
+    为什么要有这一层：`ctx.tokens()` 与模块级常量都不能钉死在导入期那一份上——单测把
+    `REPO_ROOT` 指到夹具根、夹具里各写一份规则；钉死导入期那份时，"这道防线的清单"与
+    "这道防线自己的 `bullet_tokens` 步骤"会读成两份不同的数据，`anchor_count` 的反例
+    （清单被削一项）就测不出来，而且看起来是绿的。
+
+    读：按当前根现取，再叠上本进程写过的键；写：只写本进程那一层（共用只读的那一份一个
+    字都不动——共用取值上一次就地写入会串给别的防线，那正是"必须深拷"的老问题的根）。
+    """
+
+    def _live(self) -> dict:
+        """**本进程生效的** tokens 段。
+
+        三层：底＝导入期那一份（模块级常量就是从它取的，夹具的定点替换也发生在它上面），
+        当前根下那一份逐键叠上去（换了根、备了规则的键以夹具为准），本进程写过的再叠最上面。
+        逐**键**叠、不整份替换——现场有的名字夹具没备时照旧取得到（与规则的回落同一条道理：
+        夹具不备不等于这条清单不存在）。
+        """
+        data = dict(_BOOT_TOKENS)
+        data.update(_site_rules_tokens())
+        data.update(_RULE_TOKENS_STORAGE)
+        for name in _RULE_TOKENS_DELETED:
+            data.pop(name, None)
+        return data
+
+    def __getitem__(self, name):
+        return self._live()[name]
+
+    def get(self, name, default=None):
+        return self._live().get(name, default)
+
+    def __contains__(self, name):
+        return name in self._live()
+
+    def __len__(self):
+        return len(self._live())
+
+    def __iter__(self):
+        return iter(self._live())
+
+    def keys(self):
+        return self._live().keys()
+
+    def items(self):
+        return self._live().items()
+
+    def values(self):
+        return self._live().values()
+
+    def __setitem__(self, name, value):
+        _RULE_TOKENS_DELETED.discard(name)
+        _RULE_TOKENS_STORAGE[name] = value
+
+    def __delitem__(self, name):
+        _RULE_TOKENS_STORAGE.pop(name, None)
+        _RULE_TOKENS_DELETED.add(name)
+
+    def update(self, *args, **kw):
+        for name, value in dict(*args, **kw).items():
+            self[name] = value
+
+    def pop(self, name, *default):
+        data = self._live()
+        if name not in data:
+            if default:
+                return default[0]
+            raise KeyError(name)
+        _RULE_TOKENS_STORAGE.pop(name, None)
+        _RULE_TOKENS_DELETED.add(name)
+        return data[name]
+
+
+# 本进程**叠加**在规则数据之上的那层（夹具按它改锚点）：空字典＝直接用现场那一份。
+_RULE_TOKENS_STORAGE = {}
+# 本进程显式删掉的键（`pop` / `del`）：回落时不再出现。
+_RULE_TOKENS_DELETED = set()
+# `tokens` 段是"改措辞不动代码"的落点，也是本脚本里**引用最多**的一份数据：模块级常量
+# 都从它取。改成视图之后，模块级的引用**不可能**再钉在导入期那一份上。
+_RULE_TOKENS_VIEW = _RuleTokensView()
+_RULES_TOKENS = _RULE_TOKENS_VIEW
 
 # 规则引擎实例：首次用到时构造（单测会重定向 `REPO_ROOT`，故不在导入期读仓库）。
 RULES = None
@@ -1026,6 +1138,26 @@ _RULES_RUN_THIS_PHASE = set()
 # 现场规则数据（本脚本旁那一份）的名单：`frozenset` 或 `None`（未取过）。
 # 只用来判"这道防线现场到底有没有"——回落与"报配置缺失"的分界靠它，与夹具那份无关。
 _SITE_GUARDS = None
+# 现场规则数据构造出来的 `Rules`（见 `_site_rules`）：`(规则目录, 实例)`。
+_SITE_RULES = None
+
+
+def _site_rules():
+    """**现场**规则数据构造的 `Rules`（构造一次、按规则目录记住）。
+
+    为什么单列一层：每道防线都可能走到回落这里，而构造一次要校验全部步骤的报错文案——
+    先前每回落一次就重建一份（"必须深拷"的年代更是每次 ~6ms）。规则数据全进程共用一份
+    只读的，故这里按**规则目录**记一份即可。
+
+    这里**不需要**按内容判新鲜：取的是本脚本旁那一份规则（`__file__` 所在目录），不是
+    夹具根——一轮校验里它不会变；夹具那一份走的是 `RULES`，与这里无关。
+    """
+    global _SITE_RULES
+    spec = rules_engine.default_rules_spec(os.path.dirname(os.path.abspath(__file__)))
+    if _SITE_RULES is None or _SITE_RULES[0] != spec:
+        _SITE_RULES = (spec, rules_engine.Rules(rules_engine.load_rule_files(spec),
+                                               RulesContext()))
+    return _SITE_RULES[1]
 
 
 def _site_guards():
@@ -1051,8 +1183,8 @@ def _site_guards():
 def _guard_rules_for(guard: str):
     """本道防线该用的规则集：夹具备了就随夹具走，夹具没备这一道则回落到现场那一份。
 
-    **为什么要回落**：夹具常只备**本类**要用的那几份规则文件，而 `RULES` 是**进程级**
-    单例——全量跑一遍测试文件时，"夹具没备这一道"与"这道防线配置缺失"在返回值上分不开，
+    **为什么要回落**：夹具常只备**本类**要用的那几份规则文件，而规则集是**进程级**单例
+    ——全量跑一遍测试文件时，"夹具没备这一道"与"这道防线配置缺失"在返回值上分不开，
     各道防线的反例用例被别类的夹具带成假红（本仓库实测：全量跑 `check_specs_test.py`
     时 102 个用例报"规则配置里没有防线"、耗时还翻了倍）。
 
@@ -1063,12 +1195,7 @@ def _guard_rules_for(guard: str):
         return RULES
     if guard not in _site_guards():
         return RULES
-    # 回落到现场那一份：每次新构造、`load_rule_files` 返回独立的深拷贝，故夹具那一份
-    # 与它不共享步骤。
-    return rules_engine.Rules(
-        rules_engine.load_rule_files(
-            rules_engine.default_rules_spec(os.path.dirname(os.path.abspath(__file__)))),
-        RULES.ctx)
+    return _site_rules()
 
 
 def run_rule_guard(guard: str) -> None:
@@ -1434,19 +1561,53 @@ def _coding_find_section(keyword: str):
     return "", ""
 
 
+FAMILY_TEXT_CACHE: dict = {}
+
+
 def _coding_text() -> str:
     """取**整族**的正文（按文件顺序拼接）。
 
     为什么拼而不是各核一份：各道防线核的是"某条判据还在不在"，判据在族内哪一份是
     **落点问题**（由调度器与族入口说明），不是"在不在"问题；按整族取文本，
     判据在主题之间搬家时防线不必跟着改（要核"在不在"的那件事没变）。
+
+    拼接结果按**族内各份的取样**缓存：规则数据里按节核的步骤一步就能取到整族，不缓存时
+    每道防线都要把十几份文档重读一遍。取样变了（改一个字、加一份）即重新拼。
     """
+    return _family_text_cached()
+
+
+def _family_text_cached() -> str:
+    """`_coding_text` 的缓存层：键是族内各份的 `(路径, 内容摘要)`。
+
+    **键取内容摘要、不取 `(mtime_ns, size)`**：那个样本只是内容的替身——同尺寸的改写落在
+    同一个 mtime tick 里时样本一模一样（改一个字、条目数不变是最常见的形态），于是这段
+    缓存会把上一版正文交出去，而按它核的防线全部对着旧文本报绿（本仓库实测：同尺寸改写
+    后 60 次里 6 次读到旧正文）。摘要是内容本身，多花的只是 133KB 族内文本的 sha256
+    （实测 0.18ms/次，比重新读+拼一遍还便宜）。
+    """
+    paths = _coding_family()
+    key = []
+    for path in paths:
+        try:
+            with open(path, "rb") as fh:
+                key.append(hashlib.sha256(fh.read()).digest())
+        except OSError:
+            key.append(None)
+    key = tuple(key)
+    hit = FAMILY_TEXT_CACHE.get("coding")
+    if hit is not None and hit[0] == key:
+        return hit[1]
     out = []
-    for path in _coding_family():
+    for path in paths:
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as fh:
                 out.append(fh.read())
-    return "\n".join(out)
+    text = "\n".join(out)
+    FAMILY_TEXT_CACHE["coding"] = (key, text)
+    return text
+
+
 # 弃用类/API 迁移（`specs/general/coding-runtime.adoc`「警告与弃用」+ `specs/general/dependency.adoc`
 # 「升级与废弃」）：不得使用被弃用的类/API、改用替代者（优先升级类/同名新类），**默认不调整依赖、
 # 也不动依赖版本**。两处同向：代码侧给禁止面与替代者取向、依赖侧给「不动依赖面」的落点。
@@ -4651,15 +4812,23 @@ def check_historical_notes():
 # 同时命中（`_code_lines`），次序也只在候选代码行之间比较（`_order_violation`）。
 # 这不是"更严"，而是把原本想表达的判据真正实现出来（"这段代码里有没有这个分支"）。
 REPO_SCRIPT_SRC_CACHE: dict = {}
+# 缓存里那一批条目是**按哪个仓库根**读的：根一换（单测夹具每个用例都换）缓存就必须作废，
+# 否则读到的是上一个用例那一份。原先靠"用例自己在 setUp/tearDown 里清"来维持，漏一处就
+# 串味；现在由这个样本兜住——根不在这个样本里，缓存整体作废。
+REPO_SCRIPT_SRC_ROOT = None
 
 
 def _read_script_src(rel: str):
     """读仓库内某个脚本/文本文件的原文（读不到返回 None）——多处防线共用的读入口。
 
     带缓存：同一轮校验里同一文件可能被多道防线读（解释器兜底 / 落点 / 薄壳），
-    重复读取无意义。缓存的键是**仓库根相对路径**，故 REPO_ROOT 变化时调用方须清缓存
-    （单测已统一在 setUp/tearDown 里清）。
+    重复读取无意义。缓存**绑在仓库根上**（见 `REPO_SCRIPT_SRC_ROOT`）：根换了整体作废，
+    调用方不必记得清（记得清的那种约定，漏一处就串味）。
     """
+    global REPO_SCRIPT_SRC_ROOT
+    if REPO_SCRIPT_SRC_ROOT != REPO_ROOT:
+        REPO_SCRIPT_SRC_CACHE.clear()
+        REPO_SCRIPT_SRC_ROOT = REPO_ROOT
     if rel not in REPO_SCRIPT_SRC_CACHE:
         path = os.path.join(REPO_ROOT, *rel.split("/"))
         try:
@@ -6574,9 +6743,9 @@ def check_guard_manifest():
     **台账点名的防线名**（必须真实存在且真的会被调用）。数字变了就得改基线——
     改基线这个动作本身让"删了什么"在 diff 里可见。
     """
-    # 本道含"跨规则数据核同一批数据"的步骤：缓存按**内容摘要**做键，而同一批内容可能来自
-    # 另一个已删除的夹具根（临时目录下的同一组文件内容一致，摘要也就一致）——那一份的路径
-    # 已经不存在，读回来是空。故每次跑之前作废合并缓存，按当前根重读。
+    # 本道含"跨规则数据核同一批数据"的步骤，要在**当前仓库根**上跑（单测夹具每类一换）。
+    # 引擎的合并缓存按"内容"判命中（键＝各文件基名 + 摘要），同一批内容来自哪个根都一样、
+    # 本不必作废；作废只为**内存**：单测几百个夹具根各写一份 133 份规则，留着一份都嫌贵。
     rules_engine._MERGED_CACHE.clear()
     global RULES
     RULES = None
