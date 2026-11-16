@@ -109,12 +109,132 @@ tokens = [
     "须按名字识别、并按该语言栈的机制排除",
     "`<被测类名>SandboxTests`",
     "不用\"手动\"字样命名",
+    "名字被当成执行开关",
 ]
 [[guards.check_java_test_playground_guard]]
 file = "specs/general/testing.adoc"
 kind = "anchor_count"
 bullet = "永不自动执行的实验代码"
 section = "执行与验证"
+min = 5
+
+# 『取数/调试用例』（`SandboxTests` 的用途之一，**用户提出**）：判据本体在
+# `specs/stack/java-testing.adoc`「取数/调试用例（`SandboxTests` 的用途之一）」。
+# 用户口径：手工跑一次拿数据（某取值的密文、某密文的明文）、**不验证行为**的代码，
+# 借 JUnit 的多入口承载——**一个用途一个 `@Test` 方法**（`-Dtest=<类名>#<方法>` 单选）、
+# 结果走日志、不做断言；**不写 `main`、不放 `tmp/`**；执行边界靠 `@Tag("sandbox")` +
+# 类级 `@Disabled` + 构建配置排除，且排除项取**可被命令行置空的属性**（手工入口才打得开）。
+# 按键名核**每一条 bullet 自己的正文**：相邻条目（三重落点、执行边界不靠名字）含同样的
+# `@Tag`/`excludedGroups`/`@Disabled` 字样，按整节核会把从本条抽走的要点兜住。
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "用途判定与承载（L1）"
+section = "取数/调试用例"
+message = "『取数/调试用例』防线被破坏：{file} 缺失要点 {missing}——缺用途判定时「手工取数」会被写成 `tmp/` 脚本或 `main` 方法；缺承载口径时它与 `Tests` 的界线消失（「不验证行为」的那类被塞进自动执行集合）"
+min = 7
+tokens = [
+    "用途判定与承载（L1）",
+    "手工跑一次拿数据",
+    "不验证行为",
+    "`SandboxTests`",
+    "落在 `src/test/java` 下、包路径与被测类相同",
+    "断言是这条用例的**目的**",
+    "对取数结果做一次非空/非异常防御不改变归属",
+]
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "用途判定与承载（L1）"
+section = "取数/调试用例"
+min = 7
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "一个用途一个 `@Test` 方法（L1）"
+section = "取数/调试用例"
+message = "『取数/调试用例』防线被破坏：{file} 缺失要点 {missing}——缺「一个用途一个方法」则多用途挤进一个方法、`-Dtest=<类名>#<方法>` 选不开；缺「结果走日志」则 `System.out` 回流（控制台打印的判据在通用层）"
+min = 7
+tokens = [
+    "一个用途一个 `@Test` 方法（L1）",
+    "`-Dtest=<类名>#<方法>`",
+    "不做断言",
+    "日志框架",
+    "一个方法承担两个及以上互不相干的用途",
+    "同类数据换不同取值仍是**一个**用途",
+    "手工运行时看得到那个值",
+]
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "一个用途一个 `@Test` 方法（L1）"
+section = "取数/调试用例"
+min = 7
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "不另立入口（L1）"
+section = "取数/调试用例"
+message = "『取数/调试用例』防线被破坏：{file} 缺失要点 {missing}——缺禁止面时取数照旧写成 `main`/一次性脚本、留在 `tmp/`（与通用层「验证场景要复用就写成测试方法」正相反）"
+min = 4
+tokens = [
+    "不另立入口（L1）",
+    "`main` 方法",
+    "不得放进 `tmp/`",
+    "该条的「用例方法带断言」不适用于本节",
+]
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "不另立入口（L1）"
+section = "取数/调试用例"
+min = 4
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "手工打开的取值（L1）"
+section = "取数/调试用例"
+message = "『取数/调试用例』防线被破坏：{file} 缺失要点 {missing}——缺「排除项取可被命令行置空的属性」时，手工入口只能靠改构建配置打开（跑一次就留下一个被改坏的构型）；缺停用条件与置空属性两个取值则手工命令不成立"
+min = 6
+tokens = [
+    "手工打开的取值（L1）",
+    "可被命令行置空的属性",
+    "${test.excludedGroups}",
+    "**须含该项目全部要排除的标记**",
+    "`-Dtest.excludedGroups=` 之所以生效全靠上面那处引用",
+    "-Dtest.excludedGroups=",
+    "junit.jupiter.conditions.deactivate",
+    "手工运行前需先把 `@Tag` 或 `@Disabled` 从类上删掉",
+    "本条只答**怎么用手打开**",
+]
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "手工打开的取值（L1）"
+section = "取数/调试用例"
+min = 9
+
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "凭据不进源码（L1）"
+section = "取数/调试用例"
+message = "『取数/调试用例』防线被破坏：{file} 缺失要点 {missing}——缺「源码留空、运行时给」则取数用的密钥被写进源码；缺「临时填、提交前清空不算合规」这条判定标准则那种做法继续被当合规"
+min = 4
+tokens = [
+    "凭据不进源码（L1）",
+    "留空",
+    "系统属性或环境变量",
+    "本机临时填、提交前清空",
+]
+[[guards.check_java_test_playground_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "凭据不进源码（L1）"
+section = "取数/调试用例"
 min = 4
 
 # 加载门：调度器的 Java 技术栈条须登记 `SandboxTests` 这一识别特征——缺则"要新建或改动 Java 测试类"
@@ -124,14 +244,15 @@ file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
 message = "Java `SandboxTests` 防线被破坏：{file} 的 Java 技术栈登记缺失 {missing}——缺该识别特征时，写 `SandboxTests` 类时该文件不会被加载，规则实际失效"
 anchor = ["Java 项目"]
-tokens = ["**测试类命名与拆分**", "`Tests`/`BootTests`/`PerfTests`/`IntegrationTests`/`SandboxTests`"]
+tokens = ["**测试类命名与拆分**", "`Tests`/`BootTests`/`PerfTests`/`IntegrationTests`/`SandboxTests`",
+          "手工取数"]
 
 # README 目录说明须登记五类后缀与"执行边界不靠名字"（读者按 README 学习时才知道有这一类）。
 [[guards.check_java_test_playground_guard]]
 file = "README.adoc"
 kind = "file_tokens"
 message = "Java `SandboxTests` 防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须登记五类后缀与「执行边界由 `@Tag` 与构建配置承担」，否则读者按 README 学习时无从知道有这类永不自动执行的代码"
-tokens = ["java-testing（", "`SandboxTests`", "永不自动执行"]
+tokens = ["java-testing（", "`SandboxTests`", "永不自动执行", "手工取数"]
 
 # 『没有多态时不得为 service 类加有相同方法的父接口』防线（**用户提出**，判据本体在通用层）
 # 用户口径：「在没有多态的情况下，禁止为 service 类添加有相同方法的父接口」。

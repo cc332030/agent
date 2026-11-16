@@ -161,6 +161,9 @@ MECHANISMS = [
      "check_java_test_playground_guard", "check_java_test_playground_guard 钉住取名口径（后缀 `SandboxTests`、不叫 `Manual*`）、命名面只取 JUnit/Maven 约定内的名字（五类后缀一律以 `Tests` 结尾、命中 JUnit 平台默认类名过滤与 surefire 默认 includes）、执行边界不靠名字承担、三重落点、不得混入其他后缀五条，"
      "以及通用层跨语言口径与调度器/README 登记；"
      "『某次构建到底有没有跑到它』属运行时事实（构建日志），交人/子 agent 复核"),
+    ("Java 手工取数/调试用例走 `SandboxTests`（一个用途一个 `@Test` 方法、结果走日志、不写 main、不放 tmp；排除项可被命令行置空；凭据留空运行时给）", "specs/stack/java-testing.adoc", "script/check_specs.py",
+     "check_java_test_playground_guard", "check_java_test_playground_guard 钉住「取数/调试用例」一节的五条要点（用途判定与承载 / 一个用途一个 `@Test` 方法 / 不另立入口 / 手工打开的取值 / 凭据不进源码）与调度器、README 登记；"
+     "『某个类到底是取数还是该被自动验证』『某次手工执行有没有真的置空排除项』属语义判断与运行时事实，交人/子 agent 复核"),
     ("Java 测试类拆分裁决（一个被测类可拆多个类，但同分类同属性须归一类、不得滥拆）", "specs/stack/java-testing.adoc", "script/check_specs.py",
      "check_java_test_naming", "check_java_test_naming 钉住规范侧三段判据（可拆声明 / 同分类同属性须归一类 / 禁止滥拆）与调度器侧同口径——「可拆但不得滥拆」是单一语义，只剩一半即被读成『每个场景一个类』或『一个被测类一个类』"),
     ("校验范围只限公共内容与本仓库工具（不检查引用方项目工作区）", "AGENTS.adoc", "script/check_specs_test.py",

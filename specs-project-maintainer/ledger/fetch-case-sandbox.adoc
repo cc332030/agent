@@ -1,0 +1,11 @@
+= 逐轮记账：手工取数/调试用例归 `SandboxTests`
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（手工取数/调试用例） | 沿用 `check_java_test_playground_guard`（**不新开一道**） | 208 → **208**（接线数不抬） | 用户口径（Issue）：手工跑一次拿数据（某取值的密文、某密文的明文）、**不验证行为**的代码，借 JUnit 的多入口承载——**一个用途一个 `@Test` 方法**、结果走日志、不做断言，**不写 `main`、不放 `tmp/`**，执行边界仍是类级 `@Tag("sandbox")` + 类级 `@Disabled` + 构建配置排除。**要治的失效**：这类"只是想拿个数据"的活儿既不该进自动集合，也不该退回 `tmp/` 脚本与 `main` 方法（同一条判据在 `specs/general/verify.adoc`「编译/运行验证」里已有通用形态，Java 侧一直没有承载）。**改动**：① `specs/stack/java-testing.adoc` 新增「取数/调试用例（`SandboxTests` 的用途之一）」五条（用途判定与承载／一个用途一个 `@Test` 方法／不另立入口／手工打开的取值／凭据不进源码，各带判定标准与依据行）；② 规则数据 `script/specs-rules/java/guards/check_java_test_playground_guard.toml` 补五组 bullet 锚点 + 成对 `anchor_count`，调度器与 README 的识别特征补「手工取数」；③ 反例用例新增六条（用途、单选入口、`main`/`tmp/` 回流、手工打开取值、凭据口径、整节被删）与两条登记面（README 取数一句、调度器识别特征）；④ 依据两侧：`library/sources.adoc` 补 Surefire `test` 参数与 `junit.jupiter.conditions.deactivate` 的逐字摘（含"`#<方法>` 官方只承诺 junit 4.x/TestNG、JUnit 5 侧为本仓库实测可用"这处同义性差异），`library/adoption.adoc` 登记五条判据化取舍。**与用户原话的一处偏离（按 P8 收严并写明）**：用户写"密钥本机临时填、提交前清空"，规范取"源码留空、运行时由系统属性或环境变量给"——进过提交历史即为泄漏，"临时填再清空"不构成合规。**review 修掉五处**：① 「手工打开的取值」只给了 `-Dtest.excludedGroups=` 这条命令，没写它在构建配置里**靠什么生效**——Surefire 自己的用户属性名是 `excludedGroups`，属性没被 `<excludedGroups>${test.excludedGroups}</excludedGroups>` 引用时那条命令**空转**（看着置空了、跑起来照样被排除）；补上引用形态，并把「默认值须含该项目全部要排除的标记」写成判据（只写 `sandbox` 时 `perf`/`integration` 两类反而进了常规阶段）；② 通用层 `specs/general/testing.adoc`「永不自动执行的实验代码」判定标准②原写「名字落在某自动集合的默认匹配式内（如以 `Tests` 结尾）」——与 Java 侧「五类后缀一律命中 surefire 默认 includes、执行边界不靠名字承担」直接对撞（照通用层读，`SandboxTests` 自己就违规），改判「名字被当成执行开关」；③ 「不另立入口」回指的「验证场景要复用就写成测试方法」写着**用例方法带断言**，而本节恰恰不做断言——不写明例外时两处口径对撞（照哪一处都能自证），补一句落点与禁止面借用、断言面不适用；④ `library/sources.adoc` 三处逐字摘把标点也带进引号（`includes and excludes .`、`#myMethod` 后的 ` .`、`broken .`），官方原文该处无空格——逐字摘只要多一个空格就不再是逐字；⑤ 依据行把 ISO/IEC/IEEE 29119-4 说成「测试过程的可控与可追溯」，而馆内该标准登记的是**测试技术**（用例须可复用、可追溯），改按馆内口径引并注明它不规定这类代码的形态。**反例补四条**（属性引用、默认值标记集、断言面例外、通用层判据②），`anchor_count` 的 `min` 随条数走。
+**只钉「判据是否仍在」**——"某个类到底算取数还是该被自动验证""这次手工执行有没有真的置空排除项"属语义判断与运行时事实，交人/子 agent 复核。
+|===

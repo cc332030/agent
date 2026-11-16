@@ -5820,15 +5820,18 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
 
 
 class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
-    """钉住『Java 永不自动执行的实验代码后缀 `Playground`』（用户口径：`src/test/java`
-    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**、
-    **通过名字匹配**避免执行）。
+    """钉住『Java 永不自动执行的实验代码后缀 `SandboxTests`』（用户口径：`src/test/java`
+    下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**，
+    执行边界由 `@Tag` + 构建配置排除 + 类级 `@Disabled` 三层承担）。
 
-    失效形态四类：① 取名口径被删（回到 `Manual*`）；② **名字匹配天然落空**这一机制被删
-    （后缀可能被改成 `*Tests`/`*IT` 一类会进自动集合的形态）；③ 构建配置显式排除被删
-    （默认 includes 落空只挡默认规则，自定义扫描仍会收它）；④ 不得混入其他后缀被删
-    （`XxxPlaygroundTests` 被 surefire 命中）。故按**四条 bullet 各自的正文**核；读错物也要钉
+    失效形态四类：① 取名口径被删（回到 `Manual*`）；② **执行边界不靠名字**这一机制被删
+    （名字重新背起执行开关）；③ 三重落点缺任一层（自定义扫描一扫就真跑）；④ 不得混入
+    其他后缀被删（混出来的名字读不出归属）。故按**各条 bullet 各自的正文**核；读错物也要钉
     通用层口径与调度器/README 登记。
+
+    本类另钉「取数/调试用例」这一**用途**（用户追加口径：手工跑一次拿数据、不验证行为的
+    代码借 JUnit 的多入口承载）——五条要点各带一条反例，否则"取数"会退回 `tmp/` 脚本、
+    `main` 方法，或让手工入口只能靠改构建配置打开。
     """
 
     JAVA_TEST = "specs/stack/java-testing.adoc"
@@ -5923,6 +5926,14 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         cm.check_java_test_playground_guard()
         self.assertIn("specs/general/testing.adoc", self.error_texts())
 
+    def test_generic_name_as_switch_dropped_reports(self):
+        # 反例⑤之二：通用层判据②被抽——原来的写法「名字落在默认匹配式内即违规」与 Java 侧
+        # 「五类后缀一律命中 surefire 默认 includes」直接对撞（照通用层读，`SandboxTests`
+        # 自己就违规）；改判「名字被当成执行开关」后，须钉住这一句不被写回原样
+        self._mutate(self.GEN_TEST, "名字被当成执行开关", "名字落在默认匹配式内")
+        cm.check_java_test_playground_guard()
+        self.assertIn("specs/general/testing.adoc", self.error_texts())
+
     def test_dispatch_trigger_dropped_reports(self):
         self.skipTest("`Playground` 后缀已由 `SandboxTests` 取代（五类后缀一律以 `Tests` 结尾），本反例随旧口径下线；现行契约由 `TestCheckJavaTestNaming` 与 spec 侧的沙盒防线钉住")
         # 反例⑥：调度器识别特征被删（写 `Playground` 类时不加载该文件）
@@ -5931,15 +5942,99 @@ class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
         self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_readme_entry_dropped_reports(self):
-        # 反例⑦：README 目录说明未登记该后缀
-        self._mutate(self.README, "、`Playground`（**永不自动执行**的实验代码后缀）", "")
+        # 反例⑦：README 目录说明未登记该后缀（读者按 README 学习时看不到有这一类）。
+        # 锚点取**现在这一份**的措辞：旧口径的 `Playground` 已由 `SandboxTests` 取代，
+        # 按旧字样核会在 README 一变就报"找不到待改文本"、而不是报本条要防的缺失。
+        self._mutate(self.README, "、`SandboxTests`（**永不自动执行**的实验代码后缀", "")
         cm.check_java_test_playground_guard()
         self.assertIn("README.adoc", self.error_texts())
+
+    def test_readme_fetch_case_dropped_reports(self):
+        # 反例⑦之二：README 只写"永不自动执行"、不写「手工取数也走它」——读者按 README
+        # 学习时仍把取数写成 `tmp/` 脚本
+        self._mutate(self.README, "含**手工取数/调试用例**", "")
+        cm.check_java_test_playground_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_dispatch_fetch_case_dropped_reports(self):
+        # 反例⑭：调度器的识别特征里丢掉了「手工取数」——那么要写一个取数类时该文件不会被加载，
+        # `SandboxTests` 的形态与三重落点都读不到（写规则与登记是同一个动作）
+        self._mutate(self.COMMON, "也管**手工取数**、", "")
+        cm.check_java_test_playground_guard()
+        self.assertIn("AGENTS_COMMON.adoc", self.error_texts())
 
     def test_missing_file_reports(self):
         # 反例：Java 测试规范整体缺失
         cm.check_java_test_playground_guard()
         self.assertIn("缺少 specs/stack/java-testing.adoc", self.error_texts())
+
+    # ---- 『取数/调试用例』（`SandboxTests` 的用途之一）----
+    # 用户口径：手工跑一次拿数据、不验证行为的代码借 JUnit 的多入口承载——一个用途一个
+    # `@Test` 方法、结果走日志、不做断言、不写 `main`、不放 `tmp/`；执行边界仍是三层，
+    # 但排除项要**能被命令行置空**，否则手工入口只能靠改构建配置打开。
+    # 失效形态五类：① 用途判定被删（取数又回到 `tmp/` 脚本与 `main` 方法）；② 「一个用途
+    # 一个方法」被删（多用途挤进一个方法，`-Dtest=<类名>#<方法>` 选不开）；③ 不另立入口被删
+    # （`main`/一次性脚本回流）；④ 「排除项可被命令行置空」被删（跑一次就留下被改坏的构型）；
+    # ⑤ 凭据口径被删（密钥写进源码，「临时填、提交前清空」被当合规）。
+
+    def test_fetch_case_purpose_dropped_reports(self):
+        # 反例⑧：用途判定与承载被删
+        self._mutate(self.JAVA_TEST, "手工跑一次拿数据", "另议")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_one_method_dropped_reports(self):
+        # 反例⑨：一个用途一个 `@Test` 方法（单选入口）被删
+        self._mutate(self.JAVA_TEST, "`-Dtest=<类名>#<方法>`", "整类执行")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_other_entry_dropped_reports(self):
+        # 反例⑩：不另立入口（`main`/`tmp/` 的回流面）被删
+        self._mutate(self.JAVA_TEST, "不得放进 `tmp/`", "可暂放 `tmp/`")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_manual_open_dropped_reports(self):
+        # 反例⑪：手工入口的取值（可置空属性 + 停用 `@Disabled` 条件）被删
+        self._mutate(self.JAVA_TEST, "可被命令行置空的属性", "固定取值")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_attribute_not_wired_dropped_reports(self):
+        # 反例⑪之二：「属性要真的被 `<excludedGroups>` 引用」被删——只留 `-Dtest.excludedGroups=`
+        # 这一句时，读者照抄的手工命令会**空转**：Surefire 自己的用户属性名是 `excludedGroups`，
+        # 属性没在构建配置里接上，置空只改了命令行、跑起来照样被排除（跑了等于没跑）
+        self._mutate(self.JAVA_TEST, "`-Dtest.excludedGroups=` 之所以生效全靠上面那处引用", "")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_default_marker_set_dropped_reports(self):
+        # 反例⑪之三：「默认值须含该项目全部要排除的标记」被删——默认值写成只含 `sandbox` 时，
+        # `perf`/`integration` 两类反而进了常规 `test` 阶段（与「执行边界不靠名字承担」相反）
+        self._mutate(self.JAVA_TEST, "**须含该项目全部要排除的标记**", "**只写 sandbox**")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_assertion_scope_dropped_reports(self):
+        # 反例⑩之二：与「验证场景要复用就写成测试方法」的分工被删——那条写着"用例方法带断言"，
+        # 而本节恰恰不做断言；不写明例外时，两处口径对撞（照哪一处都能自证合规）
+        self._mutate(self.JAVA_TEST, "该条的「用例方法带断言」不适用于本节", "")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_credential_dropped_reports(self):
+        # 反例⑫：凭据口径被删（「临时填、提交前清空」重新被当合规）
+        self._mutate(self.JAVA_TEST, "本机临时填、提交前清空", "临时填写即可")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
+
+    def test_fetch_case_section_missing_reports(self):
+        # 反例⑬：整节被删（只留 `SandboxTests` 的三重落点，取数这一用途无处安放）
+        self._mutate(self.JAVA_TEST, "== 取数/调试用例（`SandboxTests` 的用途之一）",
+                     "== 其他用途")
+        cm.check_java_test_playground_guard()
+        self.assertIn("取数/调试用例", self.error_texts())
 
     def tearDown(self) -> None:
         # 同 setUp：把规则引擎缓存作废，避免本类的夹具目录残留给后续用例
