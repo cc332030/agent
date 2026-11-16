@@ -41,6 +41,7 @@
 排序中相邻（check_specs.py 紧邻 check_specs_test.py）。
 """
 
+import contextlib
 import functools
 import importlib.util
 import os
@@ -50,6 +51,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -65,6 +67,46 @@ sys.path.insert(0, HERE)
 import check_specs as cm  # noqa: E402
 import rules_engine  # noqa: E402  （加载期判据：自定义文案里不得出现 `{section}`）
 import pathconfig   # noqa: E402  （运行期配置的落点：端到端用例要按它供给配置）
+
+
+@contextlib.contextmanager
+def _serving(server):
+    """在后台线程里跑本机 HTTP 服务，**退出时真正把它停掉**（`shutdown` + `server_close`）。
+
+    为什么必须自己收尾：`socketserver.BaseServer` 作为上下文管理器只调 `server_close()`
+    ——那只关监听 socket，`serve_forever()` 的循环照旧转（`select` 对已关的 fd 立即返错、
+    下一轮又是一次），线程永不退出。它是 daemon 线程，进程不退就一直在，每跑完一个端到端
+    用例就多留一个**空转吃满 GIL** 的线程（本机实测：留 6 个之后 CPU 空转 1.6 核/s）。
+    后果不是"多几个线程"，而是**全进程的每一次 open/listdir 慢两个数量级**（同一份 135 份
+    规则文件的加载从 4ms 涨到 340ms，`os.listdir` 从 0.025ms 涨到 3ms）：整份单测 2 分半
+    变 10 分钟、且这十分钟里全是"绿着慢"——单跑任何一个用例都很快，看不出来。
+
+    `shutdown()` 之后必须 `server_close()`（只 `shutdown` 时监听 socket 还开着，内核照样把
+    连接接进 backlog，客户端干等到超时）；两者都幂等，用例里已经手动收尾过一遍也不会出问题。
+
+    `poll_interval` 取 0.05 秒（默认 0.5 秒）：`shutdown()` 要等 `serve_forever` 的下一轮
+    轮询才生效，默认值下每收一个服务就白等半秒——十几处端到端用例叠起来是几秒的纯等待。
+    """
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05},
+                     daemon=True).start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _restore_file_bytes(path: str, data: bytes) -> None:
+    """把文件内容还原成跑之前那份（用例自清：不得把测试改动留在工作区）。
+
+    端到端用例跑的是**仓库里那一份**脚本，而自更新会把它就地换掉——不还原时，跑一遍单测
+    `git status` 就多一处改动，提交时顺手把测试标记带进仓库（本仓库实测）。
+    """
+    with open(path, "rb") as fh:
+        if fh.read() == data:
+            return
+    with open(path, "wb") as fh:
+        fh.write(data)
 
 
 def _install_scripts_served():
@@ -554,7 +596,6 @@ class TestCheckFileSizeHint(CheckSpecsTestCase):
         super().tearDown()
 
     def _run_capture(self):
-        import contextlib
         import io as _io
         buf = _io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -20434,6 +20475,72 @@ class TestCheckPathsSingleSourceGuard(CheckSpecsTestCase):
         # 落点那一段的判据本体（`check_shared_cache_guard` 的落点分支）：只看这一条有没有报
         self.assertNotIn("未写明落点", self.error_texts())
 
+class TestLoopbackServerTeardown(unittest.TestCase):
+    """钉住『用例起的本机服务必须收尾』：不收尾时**整份单测慢二十倍**，而用例一条不红。
+
+    要治的失效（本仓库实证）：端到端用例用 `socketserver.TCPServer` 起本机"远端"，
+    收尾走的是它的上下文管理器——那只调 `server_close()`，`serve_forever()` 的循环照旧转，
+    **daemon 线程永不退出**。进程不退它就一直在，每跑完一个端到端用例多留一个空转吃满 GIL
+    的线程；留到 6 个之后，全进程的每一次 `open`/`listdir` 慢两个数量级（同一份 135 份规则
+    文件的加载 4ms → 340ms）。结果是**整份单测 2 分半变 10 分钟，且十条用例全绿**——单跑
+    任何一条都很快，谁也不会怀疑是"上一个用例留下的线程"。
+
+    两条判据，一条管形态、一条管运行事实：光有形态（都写成 `_serving`）时，某天有人加一处
+    新服务仍可能忘；光有运行事实时，报出来的是"慢了"、指不到是哪个服务。故两条都留。
+    """
+
+    def test_every_server_is_wrapped(self):
+        """形态：本文件里每个 `TCPServer(` 都出现在 `_serving(` 的实参里（不得裸起）。"""
+        with open(os.path.join(HERE, "check_specs_test.py"), encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        naked = []
+        for idx, line in enumerate(lines):
+            # 认**真的起服务**那一行（`TCPServer((` 后面跟的是地址元组）；夹具里的
+            # `_serve` 工厂把服务 `return` 给调用方、由调用方包 `_serving`，不算裸起。
+            if (not re.search(r"TCPServer\(\(", line)
+                    or line.lstrip().startswith(("#", "return "))):
+                continue
+            # `with _serving(...) as httpd:` 可能跨行，故看这一行及其上文几行。
+            window = "\n".join(lines[max(0, idx - 3):idx + 1])
+            if "_serving(" not in window:
+                naked.append(idx + 1)
+        self.assertEqual([], naked,
+                         "这些行起的本机服务没有被 `_serving(...)` 包住——裸起时收尾只关"
+                         "监听 socket、`serve_forever` 线程不退，整份单测会慢二十倍且全程全绿："
+                         f"{naked}")
+
+    def test_helper_really_stops_the_thread(self):
+        """运行事实：`_serving` 退出后线程退干净、监听 socket 也关了（端口立刻不可连）。"""
+        import http.server
+        import socket
+        import socketserver
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):                                # noqa: N802 - http.server 约定
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *a):                       # 静音
+                pass
+
+        before = threading.active_count()
+        with _serving(socketserver.TCPServer(("127.0.0.1", 0), Handler)) as httpd:
+            port = httpd.server_address[1]
+            self.assertEqual(before + 1, threading.active_count(),
+                             "`_serving` 没把服务跑在后台线程里，用例会卡死等请求")
+        self.assertEqual(before, threading.active_count(),
+                         "`_serving` 收尾后线程还在——退回只 `server_close()` 的老形态时"
+                         "就是这样，整份单测慢二十倍而用例全绿")
+        probe = socket.socket()
+        try:
+            probe.settimeout(2)
+            self.assertNotEqual(0, probe.connect_ex(("127.0.0.1", port)),
+                                "监听 socket 还开着（只 `shutdown()` 没 `server_close()`）"
+                                "——内核照样把连接接进 backlog，客户端要干等到超时")
+        finally:
+            probe.close()
+
+
 class TestCheckSpecFetchGuard(CheckSpecsTestCase):
     """钉住『规范抓取（安装取文件）防线』：随规范分发的取文件脚本不得被删或退化。
 
@@ -21352,14 +21459,12 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         落在项目里或别处即与模板矛盾：新实例按入口文档给出的路径会找不到副本。
         """
         self._skip_if_home_not_redirectable()
-        import threading
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": b"e1\n", **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="fetch-home-")
         proj = tempfile.mkdtemp(prefix="fetch-proj-")
-        with self._serve(served) as httpd:
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with _serving(self._serve(served)) as httpd:
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
             rc, so, se = self._run_fetch(base, cwd=proj, home=home)   # 只给脚本名
             self.assertEqual(0, rc, se + so)
@@ -21593,7 +21698,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
-        import threading
 
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "README.adoc": b"r1\n",
@@ -21626,13 +21730,12 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             def log_message(self, *a):                       # 静音
                 pass
 
-        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+        with _serving(socketserver.TCPServer(("127.0.0.1", 0), Handler)) as httpd:
             port = httpd.server_address[1]
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
             base = f"http://127.0.0.1:{port}"
-            out_dir = os.path.join(home, ".cache", "agent-specs",
-                                   re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                          f"127.0.0.1:{port}").strip("_"))
+            # 落点**不再按来源分目录**（`fetch-specs.py`「落点」：`--base` 只影响从哪取、
+            # 不影响取到哪）：副本按仓库原结构平铺在落点根下，故这里取根、不拼来源子目录。
+            out_dir = os.path.join(home, ".cache", "agent-specs")
 
             rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
@@ -21696,7 +21799,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         少一份不会有任何东西报错，"看着取全了、其实少了几份"正是要防的形态）。
         """
         self._skip_if_home_not_redirectable()
-        import threading
 
         entry = (b"= test\n\nspecs/core/execution.adoc\n\n"
                  b"prompt index: PROMPTS.adoc\n")
@@ -21709,12 +21811,10 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         home = tempfile.mkdtemp(prefix="fetch-home-prompts-")
         self.addCleanup(shutil.rmtree, home, True)
 
-        with self._serve(served) as httpd:
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with _serving(self._serve(served)) as httpd:
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
-            out_dir = os.path.join(home, ".cache", "agent-specs",
-                                   re.sub(r"[^A-Za-z0-9._-]+", "_",
-                                          f"127.0.0.1:{httpd.server_address[1]}").strip("_"))
+            # 落点不按来源分目录（同上）：副本按仓库原结构平铺在落点根下。
+            out_dir = os.path.join(home, ".cache", "agent-specs")
 
             rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
@@ -21749,7 +21849,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         """
         self._skip_if_home_not_redirectable()
         import shlex
-        import threading
 
         entry = (b"= test\n\nspecs/core/execution.adoc\n\n"
                  b"prompt index: PROMPTS.adoc\n")
@@ -21766,8 +21865,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         home = tempfile.mkdtemp(prefix="fetch-home-prompt-cmd-")
         self.addCleanup(shutil.rmtree, home, True)
 
-        with self._serve(served) as httpd:
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with _serving(self._serve(served)) as httpd:
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
             rc, so, se = self._run_fetch(base, home=home)
             self.assertEqual(0, rc, se + so)
@@ -21846,7 +21944,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
-        import threading
 
         def strip_index_stamp(src: bytes) -> bytes:
             # 标记行按**整行**剥（`splitlines(keepends=True)`）：注入须**幂等**——真实仓库里那一份
@@ -21882,6 +21979,14 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         served["script/fetch-specs.py"] = script_of(b"v1")
         home = tempfile.mkdtemp(prefix="fetch-home-order-")
         self.addCleanup(shutil.rmtree, home, True)
+        # `_run_fetch` 跑的是**仓库里那一份**脚本（真身就是它），自更新会**就地换掉它**：
+        # 用例把带标记的版本留在自己身上，下一次提交就顺手把 `CALC-INDEX-BY-v2` 带进仓库
+        # （本仓库实测：跑一遍单测 `git status` 就多一处改动，而没人会想到是测试干的）。
+        # 故跑前记下字节、跑完还原——用例要验的是"这一轮用了哪一份算索引"，不是留下它。
+        real_script = os.path.join(os.path.dirname(HERE), "script", "fetch-specs.py")
+        with open(real_script, "rb") as fh:
+            original_script = fh.read()
+        self.addCleanup(_restore_file_bytes, real_script, original_script)
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):                                # noqa: N802 - http.server 约定
@@ -21906,8 +22011,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             def log_message(self, *a):                       # 静音
                 pass
 
-        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with _serving(socketserver.TCPServer(("127.0.0.1", 0), Handler)) as httpd:
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
 
             rc, so, se = self._run_fetch(base, home=home)
@@ -21932,7 +22036,6 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
         self._skip_if_home_not_redirectable()
         import http.server
         import socketserver
-        import threading
 
         entry = b"= test\n\nspecs/core/execution.adoc\n"
         served = {"AGENTS_COMMON.adoc": entry, "specs/core/execution.adoc": b"e1\n",
@@ -21956,8 +22059,7 @@ class TestCheckSpecFetchGuard(CheckSpecsTestCase):
             def log_message(self, *a):
                 pass
 
-        with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with _serving(socketserver.TCPServer(("127.0.0.1", 0), Handler)) as httpd:
             base = f"http://127.0.0.1:{httpd.server_address[1]}"
             rc, so, se = self._run_fetch(base, ("--list",), home=home)
             self.assertEqual(0, rc, se + so)
@@ -23469,14 +23571,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
 
     def test_landing_is_read_only_and_still_updatable(self):
         self._skip_if_home_not_redirectable()
-        import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="readonly-home-")
         try:
-            with self._serve(served) as httpd:
+            with _serving(self._serve(served)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
                 # 落点只有这一处、且按仓库原结构平铺（不再套一层来源目录）
                 landing = os.path.join(home, ".cache", "agent-specs")
@@ -23544,14 +23644,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         if os.name != "posix":
             self.skipTest("Windows 上无 POSIX 执行位语义（os.chmod 只切只读属性），"
                           "故未实测『--no-scripts 下入口执行位恢复』（跳过不等于通过）")
-        import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="readonly-execc-")
         try:
-            with self._serve(served) as httpd:
+            with _serving(self._serve(served)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
                 root = os.path.join(home, ".cache", "agent-specs")
                 proc = self._run_fetch(base, home=home)
@@ -23592,14 +23690,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         if nobody is None:
             self.skipTest("本机没有可用的非特权用户，故未实测『非特权调用方改不动落点』"
                           "（跳过不等于通过）")
-        import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="readonly-home-")
         try:
-            with self._serve(served) as httpd:
+            with _serving(self._serve(served)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
@@ -23631,14 +23727,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         最需要它的一路（有人 `chmod -R u+w` 改过副本、又按安装流程加了 `--keep`）恰恰漏掉。
         """
         self._skip_if_home_not_redirectable()
-        import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="readonly-keep-home-")
         try:
-            with self._serve(served) as httpd:
+            with _serving(self._serve(served)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
                 proc = self._run_fetch(base, home=home)
                 self.assertEqual(0, proc.returncode, proc.stdout + proc.stderr)
@@ -23684,14 +23778,12 @@ class TestFetchSpecsReadOnlyLanding(CheckSpecsTestCase):
         if nobody is None:
             self.skipTest("本机没有可 `su -c` 的非特权用户，故未实测"
                           "『收紧失败会被如实警告』（跳过不等于通过）")
-        import threading
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
         home = tempfile.mkdtemp(prefix="readonly-unhardened-home-")
         try:
-            with self._serve(served) as httpd:
+            with _serving(self._serve(served)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 os.chmod(home, 0o755)
                 root = os.path.join(home, ".cache", "agent-specs")
                 os.makedirs(root)
@@ -23840,7 +23932,6 @@ class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
                           "（跳过不等于通过）")
         import http.server
         import socketserver
-        import threading
 
         served = {"AGENTS_COMMON.adoc": self.ENTRY, "README.adoc": b"r1\n",
                   "specs/core/execution.adoc": self.SPEC, **self._install_scripts_served()}
@@ -23875,9 +23966,8 @@ class TestFetchSpecsTruncatedResponse(CheckSpecsTestCase):
 
         home = tempfile.mkdtemp(prefix="truncated-home-")
         try:
-            with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+            with _serving(socketserver.TCPServer(("127.0.0.1", 0), Handler)) as httpd:
                 port = httpd.server_address[1]
-                threading.Thread(target=httpd.serve_forever, daemon=True).start()
                 base = f"http://127.0.0.1:{port}"
                 root = os.path.join(home, ".cache", "agent-specs")
 
