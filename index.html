@@ -139,6 +139,8 @@
     (function () {
       var REPO_ROOT = './';
       var DEFAULT_DOC = 'README.adoc';
+      var includeCache = {};        // 仓库根相对路径 → 片段原文（**只在同一轮渲染内**复用，每轮清空）
+      var renderSeq = 0;            // 渲染请求序号：预装配要多轮 fetch，只认最后一次的结果
       var COPY_ICON_RE = /[⬆⮐↑]/;   // 从站点复制 AsciiDoc 时可能被带上的"回到顶部"图标字符
 
       var output = document.getElementById('output');
@@ -223,6 +225,127 @@
         return t.slice(base.length);
       }
 
+      // ---- include 预装配 --------------------------------------------------
+      // 仓库内的 `.adoc` 用 `include::_common.txt[tag=…]` 引用公共片段，但 `include::` 只在
+      // AsciiDoc 处理器解析时才展开：站点直出的原始文件不带展开结果，浏览器端 Asciidoctor
+      // 又取不到同目录的片段（fetch 只拿到被请求的那一份），于是「复制代码块给 AI」拿到的是
+      // 未装配的残缺文本。故渲染前先把片段取回、在内存里展开，再交给 Asciidoctor——
+      // 页面正文区因此是**真正装配过**的形态，与 PROMPTS.adoc「取值路径与装配状态」一致。
+      var INCLUDE_RE = /^[ \t]*include::([^\[\r\n]+)\[([^\]\r\n]*)\][ \t]*$/gm;
+      var TAG_START_RE = /^\/\/\s*tag::([^\[\]]+)\[\][ \t]*$/;
+      var TAG_END_RE = /^\/\/\s*end::([^\[\]]+)\[\][ \t]*$/;
+
+      // 取出被 `// tag::<name>[]` … `// end::<name>[]` 包裹的那一段（不含标记行）
+      function sliceTag(text, tag) {
+        var lines = text.split(/\r?\n/);
+        var out = [];
+        var depth = 0;
+        for (var i = 0; i < lines.length; i++) {
+          var start = TAG_START_RE.exec(lines[i]);
+          var end = TAG_END_RE.exec(lines[i]);
+          if (start && start[1] === tag) { depth++; continue; }
+          if (end && end[1] === tag) {
+            if (depth === 0) continue;                // 段外的孤立 end::：不是本段的结尾
+            depth--;
+            if (depth === 0) return out.join('\n');
+            continue;
+          }
+          if (depth > 0) out.push(lines[i]);
+        }
+        return null;                                  // 没有对应 tag：交给调用方保留原指令
+      }
+
+      function includeAttrs(attrText) {
+        var attrs = {};
+        (attrText || '').split(',').forEach(function (item) {
+          var kv = item.indexOf('=');
+          if (kv < 0) return;
+          attrs[item.slice(0, kv).trim()] = item.slice(kv + 1).trim();
+        });
+        return attrs;
+      }
+
+      // 展开一份文档里的 include（相对路径按该文档所在目录解析）；取不到片段时保留原指令，
+      // 让读者看见"未装配"，不静默吞掉。
+      function expandIncludes(text, dir, depth) {
+        if (depth >= 8) return text;
+        return text.replace(INCLUDE_RE, function (whole, rawPath, attrText) {
+          var path = normalize(dir + rawPath.trim());
+          if (!path) return whole;
+          var body = includeCache[path];
+          if (typeof body !== 'string') return whole;
+          var attrs = includeAttrs(attrText);
+          // 只认 `tag=`：`lines=` / `tags=` 这一层没有对应实现，整文展开会静默给出**错误内容**，
+          // 比把原指令留在页面上更难发现。
+          if (attrs.lines || attrs.tags) return whole;
+          var content = attrs.tag ? sliceTag(body, attrs.tag) : body;
+          if (content === null) return whole;
+          return expandIncludes(content, path.slice(0, path.lastIndexOf('/') + 1), depth + 1);
+        });
+      }
+
+      // 片段里的 `{主侧重}` 是**占位符**：取值只在各提示词自己的「主侧重（方向性前提，先读）」
+      // 段（一处），由这里补进去——与 `script/fetch-specs.py` 的 `fill_primary()` 同一口径
+      // （同一条正则、同一个取值来源）。不补的话页面上留着 `{主侧重}`，复制出去的人不知道该
+      // 按哪个方向干，而 `PROMPTS.adoc` 里承诺的是"可直接原样复制"。
+      function fillPrimary(text) {
+        var m = /\*\*主侧重[^*]*\*\*\s*[:：]\s*\*\*([^*\n]+?)\*\*/.exec(text);
+        if (!m) return text;                          // 取不到声明：原样留着，不替它猜一个方向
+        var value = m[1].trim();
+        return text.split('{主侧重}').join(value);
+      }
+
+      // 先把待渲染文档及其 include 到的片段都取回来，再一次解析。
+      // 缓存只覆盖**片段**、且**只在同一轮渲染内**有效：每轮开头清空，故换 snapshot 之后
+      // 片段也跟着重取（跨轮留着旧片段、主文档却是新的，页面上就是新旧混拼）。
+      // 被渲染的那一份**不进缓存**：`cache: 'no-cache'` 是本站一直以来的口径，否则按 hash
+      // 切回同一份文档时看到的是上一次的字节。
+      function loadWithIncludes(path) {
+        var seen = {};
+        // 上一轮的片段不跨轮复用：主文档每次都是新的、片段还是旧的，页面上就是新旧混拼
+        Object.keys(includeCache).forEach(function (k) { delete includeCache[k]; });
+        // 取不到时**把原因往上抛**（片段侧由调用方软处理）：主文档的失败要分得清
+        // 「HTTP 404」与「网络/超时」——一律折成 null 会让"网断了"显示成"文件不在仓库"。
+        function fetchText(p, fresh) {
+          if (!fresh && typeof includeCache[p] === 'string') {
+            return Promise.resolve(includeCache[p]);
+          }
+          if (seen[p]) return Promise.resolve(null);
+          seen[p] = true;
+          return fetch(toUrl(p), { cache: 'no-cache' })
+            .then(function (resp) {
+              if (!resp.ok) throw new Error('HTTP ' + resp.status);
+              return resp.text();
+            })
+            .then(function (t) {
+              if (!fresh) includeCache[p] = t;         // 片段：同一轮内复用；主文档不进缓存
+              return t;
+            });
+        }
+        function scan(p, text, round) {
+          var dir = p.slice(0, p.lastIndexOf('/') + 1);
+          var targets = [];
+          // 先重置 lastIndex：INCLUDE_RE 带 `g`，共用同一个正则会把上一轮的匹配位置带过来
+          INCLUDE_RE.lastIndex = 0;
+          var m;
+          while ((m = INCLUDE_RE.exec(text)) !== null) {
+            var rp = normalize(dir + m[1].trim());
+            if (rp && typeof includeCache[rp] !== 'string') targets.push(rp);
+          }
+          if (!targets.length || round > 8) return Promise.resolve();
+          return Promise.all(targets.map(function (t) {
+            // 片段取不到**不是失败**：展开时保留原指令，让读者看见"未装配"（不静默吞掉）
+            return fetchText(t).catch(function () { return null; }).then(function (body) {
+              return (typeof body === 'string') ? scan(t, body, round + 1) : null;
+            });
+          }));
+        }
+        // 主文档取不到时**直接抛**（原因在 `fetchText` 里就分好了 404 与网络失败）
+        return fetchText(path, true).then(function (text) {
+          return scan(path, text, 0).then(function () { return text; });
+        });
+      }
+
       // 仓库根相对路径 → 站内可用的相对 URL（本页在站点根）
       function toUrl(path) {
         return REPO_ROOT + encodeURI(path);
@@ -282,13 +405,14 @@
         }
         showLoading(normalized);
         var url = toUrl(normalized);
-        fetch(url, { cache: 'no-cache' })
-          .then(function (resp) {
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            return resp.text();
-          })
+        var seq = ++renderSeq;
+        loadWithIncludes(normalized)
           .then(function (content) {
-            var html = asciidoctor.convert(content, {
+            if (seq !== renderSeq) return null;      // 已经切到别的文档：丢弃这次的结果
+            // 取回片段只是第一步：不展开就交给处理器，页面照样是 `include::` 原指令
+            // （处理器在这边取不到同目录的片段，只会把「Unresolved directive」写进正文区）。
+            var html = asciidoctor.convert(
+              fillPrimary(expandIncludes(content, normalized.slice(0, normalized.lastIndexOf('/') + 1), 0)), {
               standalone: false,
               safe: 'safe',
               attributes: { 'showtitle': '', 'icons': 'font' }
@@ -298,6 +422,7 @@
             if (REPO_ROOT === '/') {
               html = html.replace(/href="\/([^"#]+)\.adoc"/g, 'href="#./$1.adoc"');
             }
+            if (seq !== renderSeq) return;
             currentDoc = normalized;
             docDir = normalized.indexOf('/') >= 0 ? normalized.slice(0, normalized.lastIndexOf('/') + 1) : '';
             output.innerHTML = '<div class="doc-body">' + html + '</div>';
@@ -307,6 +432,7 @@
             applyFragment(fragment);
           })
           .catch(function (err) {
+            if (seq !== renderSeq) return;           // 迟到的失败：当前显示的是别的文档，不覆盖
             console.error('解析 ' + normalized + ' 失败:', err);
             var hint = (/HTTP 404/.test(err.message))
               ? '。该文件可能不在本仓库。'

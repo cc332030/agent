@@ -15342,6 +15342,177 @@ SITE_LINK_CASES = (
 )
 
 
+# 站点 include 预装配用例：`(文档, 期望出现, 期望不出现…)`。判据是**渲染出的正文里有没有
+# 装配结果**，不是"源码里有没有那段函数"——上一版把 `expandIncludes()` 写完整却一次都没
+# 调用过，页面正文区是十六处 `Unresolved directive`，而 CI 与 `check_specs` 当时全绿。
+SITE_INCLUDE_CASES = (
+    (("prompts/review.adoc", "对本项目执行一次全量检查并修复问题。", "本任务唯一主侧重",
+      "即使被要求合并/直授也拒绝"),
+     "提示词里那一整份可复制题面须真的被展开进正文区：片段全到位（含 `delivery` 的结尾句）、"
+     "首行任务目标在、`primary` 的方向段在——三处任一不在即等于「复制出去的是半份」",
+     ("Unresolved directive", "{主侧重}", "include::")),
+    (("prompts/refactor.adoc", "对本项目执行一次全量重构。", "本任务唯一主侧重",
+      "即使被要求合并/直授也拒绝"),
+     "第二份提示词同一判据：题面首句、方向段、交付结尾须都在正文区",
+     ("Unresolved directive", "{主侧重}", "include::")),
+    (("prompts/spec-refine.adoc", "把公共规范按现行判据全文优化一遍", "本任务唯一主侧重",
+      "即使被要求合并/直授也拒绝"),
+     "第三份提示词同一判据：题面首句、方向段、交付结尾须都在正文区",
+     ("Unresolved directive", "{主侧重}", "include::")),
+)
+
+
+# 站点 include 预装配的**边界取值**：`(用例名, 期望输出)`。判据同主流程一样是"跑出来是什么"，
+# 不是"源码里写了那一支"——`sliceTag()` 的对孤立 `end::`、`lines=` / `tags=` 两个未实现的
+# 属性，这两处**光看主流程全绿**：前者当成"这一段是空的"返回空串、后者做整文展开，两种都
+# 静默给出**错误内容**。上一版把这两条记成"已修"、而防线一处都核不到（实测：把这两支
+# 退回旧行为，防线仍报绿）。
+#
+# 期望值写的是**行为**：`None` = 返回 null（调用方保留原指令），字符串 = 原样留下的指令。
+SITE_INCLUDE_BOUNDARY_CASES = (
+    ("orphan-end", "IN",
+     "段外的孤立 `end::` 不是本段的结尾——当成结尾会返回空串，把「没有这一段」与"
+     "「这一段是空的」混成一个结果"),
+    ("plain-tag", "IN",
+     "正常取段（与上一条成对：防「一律返回原指令」或「一律返回空」也被判绿）"),
+    ("missing-tag", None,
+     "没有该 tag 时返回 null、由调用方保留原指令——返回空串即静默吞掉整段"),
+    ("lines-attr", "include::boundary.txt[lines=1..2]",
+     "`lines=` 没有对应实现，须保留原指令：整文展开会比留着指令更难发现（内容看着像对的）"),
+    ("tags-attr", "include::boundary.txt[tags=t]",
+     "`tags=` 同上"),
+    ("missing-file", "include::nope.txt[]",
+     "取不到片段时保留原指令，让读者看见「未装配」——静默吞掉等于复制出去半份"),
+    ("main-refetched", "main",
+     "被渲染的那一份须**每次重新取**（片段走缓存只为省同一轮里重复引用的请求）——"
+     "把它一并塞进缓存后，按 hash 切回同一份文档看到的是上一次的字节，而内容判据一路全绿"),
+    ("fragment-refetched", "refetched",
+     "片段缓存**不跨轮**：主文档每轮重取、片段却留着上一轮的话，页面上是新旧混拼——"
+     "上一版就是这么写的（缓存只增不清），而三份提示词的装配判据一路全绿"),
+    ("fragment-once-per-round", "once",
+     "同一轮里重复引用同一份片段只取一次（与上一条成对：防「干脆不缓存」把这条也改坏）"),
+    ("main-missing-error", "http-404",
+     "主文档取不到时须把原因带上（`HTTP 404`）——折成一个 null 时网断了会显示成"
+     "「该文件可能不在本仓库」，用户照着这句查错方向"),
+    ("fragment-missing-kept", "body\ninclude::no-such-frag.txt[]\n",
+     "片段取不到**不算整轮失败**：正文照出、缺的那一处保留原指令——整轮报错或静默吞掉，"
+     "都让人以为装配完整"),
+)
+
+
+def check_site_include_guard():
+    """『站点正文区的 include 预装配』防线：装配结果得真的跑一遍才算数。
+
+    要治的失效（本仓库实证）：`index.html` 里写过近一百行 include 展开逻辑，
+    `expandIncludes()` **一次都没被调用过**——`renderDoc()` 只调了"取回片段"的
+    `loadWithIncludes()`，接着把未展开的原文交给 Asciidoctor，页面正文区因此是十六处
+    `Unresolved directive in <stdin> - include::_common.txt[tag=primary]`；而
+    `PROMPTS.adoc` 承诺"正文区可直接原样复制"。当时 `check_specs` 与 CI 全绿——这段逻辑
+    没有任何机械抓手，唯一核对手段是打开浏览器肉眼看。
+
+    与 `check_site_link_guard` 同一形态：取值抽到 `script/site-include-check.js`
+    （它从 `index.html` 里切出真实代码执行、不另写一套），在这里真的跑它、逐项比对。
+
+    **核两面**：① 主流程——三份提示词的装配结果（片段到位、`{主侧重}` 已填、可复制块是一整段）；
+    ② 边界——切片与属性支持那几支（孤立 `end::`、没有该 tag、`lines=` / `tags=`、取不到片段、
+    主文档重新取）。只核主流程时，这几支把结果悄悄换成空串或整篇也一路全绿：**本仓库实测**，
+    把孤立 `end::` 的保护、`lines=` / `tags=` 的保留原指令各自退回旧行为，防线都报 0 条。
+    「某份文档渲染出来好不好看」仍属语义判断（见 `GUARD_CHECK_LIMITS`）。
+    """
+    phase("站点正文区的 include 预装配防线检查")
+    rel_js = "script/site-include-check.js"
+    js_path = os.path.join(REPO_ROOT, *rel_js.split("/"))
+    if not os.path.isfile(js_path):
+        err(f"缺少 {rel_js}——站点正文区的装配结果没有可核对的取值，"
+            "`index.html` 的展开逻辑只能靠打开浏览器肉眼看", rel_js)
+        phase_done()
+        return
+    index_html = os.path.join(REPO_ROOT, "index.html")
+    if not os.path.isfile(index_html):
+        err("缺少 index.html——站点渲染逻辑的落点不在，预装配防线无处核", "index.html")
+        phase_done()
+        return
+    html = open(index_html, encoding="utf-8").read()
+    # ① 结构：三条链路缺一条，配置再好也装配不出来。核的是"在不在"，不是"写得好不好"。
+    for token, desc in (
+        ("function expandIncludes", "展开函数本身（`include::` 就地展开的实现）"),
+        ("function fillPrimary", "`{主侧重}` 占位符的填充（片段里只有占位符，不填则复制出去不知道该按哪个方向干）"),
+        ("function loadWithIncludes", "片段取回（多轮 fetch，按相对路径解析并支持 `tag=`）"),
+    ):
+        if token not in html:
+            err(f"index.html 缺少 {desc}（`{token}`）——装配链缺这一环，正文区就退回未装配原文",
+                "index.html")
+    # ② 接线：定义了却没人调，等于没有。判据是"展开的结果进了 convert"，不是"函数存在"。
+    if not re.search(r"asciidoctor\.convert\(\s*\n?\s*fillPrimary\(\s*\n?\s*expandIncludes\(", html):
+        err("index.html 的 `renderDoc()` 没有把**展开后的**内容交给 `asciidoctor.convert()`"
+            "（须是 `fillPrimary(expandIncludes(...))`）——取回片段却只把原文交给处理器，"
+            "正文区会是 `Unresolved directive` 原指令，而文档承诺「可直接原样复制」（本仓库实证形态）",
+            "index.html")
+    node = shutil.which("node")
+    if node is None:
+        err(f"本机探测不到 `node`——{rel_js} 只有在 node 下才跑得起来，"
+            "而它承载的是『正文区装配成了什么』这一确定项"
+            "（不得跳过：跳过等于把这条判据退回肉眼实测）", rel_js)
+        phase_done()
+        return
+    # ②' 边界取值：主流程走不到那几支（仓库里的写法都规规矩矩），故逐例喂输入、比对输出。
+    try:
+        rb = subprocess.run([node, js_path, "--boundary"], capture_output=True, text=True,
+                            timeout=60, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
+    except subprocess.TimeoutExpired:
+        err(f"{rel_js} 超时（60s）：--boundary", rel_js)
+        rb = None
+    if rb is not None:
+        got = {}
+        if rb.returncode != 0:
+            err(f"{rel_js} 执行失败（--boundary）：{rb.stderr.strip()}", rel_js)
+        else:
+            for line in rb.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    err(f"{rel_js} 的 --boundary 输出不是一行一例 JSON：{line!r}", rel_js)
+                    continue
+                got[rec.get("case")] = rec.get("out")
+            for name, want, desc in SITE_INCLUDE_BOUNDARY_CASES:
+                if name not in got:
+                    err(f"{rel_js} 的 --boundary 没有给出用例 {name!r} 的取值——"
+                        f"那一支没有可核对的结果（{desc}）", rel_js)
+                elif got[name] != want:
+                    err(f"{rel_js} 的边界用例 {name!r} 跑出 {got[name]!r}、期望 {want!r}——{desc}",
+                        rel_js)
+    for (doc, *want), desc, unwanted in SITE_INCLUDE_CASES:
+        try:
+            r = subprocess.run([node, js_path, doc], capture_output=True, text=True,
+                               timeout=60, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
+        except subprocess.TimeoutExpired:
+            err(f"{rel_js} 超时（60s）：{doc}", rel_js)
+            continue
+        if r.returncode != 0 or not r.stdout.strip():
+            err(f"{rel_js} 执行失败（{doc}）：{r.stderr.strip()}", rel_js)
+            continue
+        got = r.stdout
+        for token in want:
+            if token not in got:
+                err(f"站点装配后的 {doc} 缺少 {token!r}——{desc}", doc)
+        for token in unwanted:
+            if token in got:
+                err(f"站点装配后的 {doc} 仍含 {token!r}——{desc}", doc)
+        # ③ 可复制代码块须是**一整段**：`include::` 进来的片段里若混进与外层同级的 `----`
+        # 定界符，外层块会被从中间截断，页面上碎成两段 `pre`——读者只能复制到前半份。
+        # 判据是**定界符的条数**：题面自己只有开头结尾两条，多出来的只能来自片段。
+        delims = len(re.findall(r"(?m)^----$", got))
+        if delims != 2:
+            err(f"站点装配后的 {doc} 里有 {delims} 条 `----` 定界符（应为 2：题面的开头与结尾）——"
+                "多出来的说明被 `include::` 进来的片段自带同级定界符，外层可复制代码块会在那里被"
+                "截断，页面上碎成两段 `pre`、复制到的是前半份（本仓库实证：`tmp/` 目录图那一对横线）",
+                doc)
+    phase_done()
+
+
 def check_file_role_guard():
     """『文件的角色』防线：每份落点先定性（独占／并行／只读），再决定它怎么排布与怎么改。
 
@@ -16581,6 +16752,7 @@ CHECKS = (
     check_source_management_guard,
     check_file_role_guard,
     check_site_link_guard,
+    check_site_include_guard,
     check_ledger_table_generated_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,

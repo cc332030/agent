@@ -227,6 +227,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_source_management_guard` | `script/specs-rules/check_source_management_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_file_role_guard` | `script/specs-rules/check_file_role_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_site_link_guard` | `script/specs-rules/check_site_link_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_site_include_guard` | `script/specs-rules/check_site_include_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ledger_table_generated_guard` | `script/specs-rules/check_ledger_table_generated_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_git_attributes_merge_guard` | `script/specs-rules/check_git_attributes_merge_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_spec_driven_guard` | `script/specs-rules/spec/guards/check_spec_driven_guard.adoc`
