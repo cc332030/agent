@@ -9971,6 +9971,22 @@ def check_runtime_env_guard():
     phase_done()
 
 
+
+def check_cleanup_guard():
+    """『临时/中间产物与缓存的清理』防线：本地占用按归责与可重建性清，不按目录名/时间扫删。
+
+    用户口径：临时文件、构建中间产物、增量产物、回收站占用了几百 GB，需要一套可靠的清理规则。
+    此前规范只有 `tmp/` 几句与"破坏性操作先确认"，未覆盖构建/依赖缓存与回收站——按目录名清会
+    误删本机共享缓存或用户回收站。本道钉住通用层 `specs/general/ci-cd.adoc`
+    「临时/中间产物与缓存的清理（本地占用）」的适用面与八组判据仍在（适用面与边界、三类归责、
+    可重建性须有声明、先定位走原生命令禁通配扫删、本地动作不代为执行、清理时机按锚点分两类、
+    临时产物按保留价值判、可重建不等于该清）；"这次到底清得对不对"属运行时事实与语义
+    判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("临时/中间产物与缓存清理防线检查（按归责与可重建性、不扫删）")
+    run_rule_guard("check_cleanup_guard")
+    phase_done()
+
 def check_dependency_direct_add_guard():
     """『能用现有依赖满足时不新增直接依赖』防线（**用户提出**）。
 
@@ -16695,6 +16711,7 @@ CHECKS = (
     check_rename_split_guard,
     check_criteria_not_axis_guard,
     check_runtime_env_guard,
+    check_cleanup_guard,
     check_wiring_guard,
     check_guard_order_guard,
     check_dispatcher_no_details_guard,
