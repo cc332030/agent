@@ -5860,6 +5860,80 @@ class TestCheckJavaTestNamingHintGuard(CheckSpecsTestCase):
         self.assertIn("specs/stack/java-testing.adoc", self.error_texts())
 
 
+class TestCheckJavaMockBeanInjectionGuard(CheckSpecsTestCase):
+    """钉住『构造器注入的被测对象由框架注入、不在测试里手动 new』（用户口径 Issue：
+    junit mock service 时不手动 new 对象，bean 加依赖/调构造参数顺序就报错，用 `@InjectMocks`）。
+
+    失效形态：① 整条判据被删；② 核心取值（`@InjectMocks`/不得手动 new/逐个传 mock）被抽；
+    ③ 边界（非容器 bean 不适用）被删；④ 依据行被删；⑤ README 登记被删。
+    """
+
+    JAVA_TEST = "specs/stack/java-testing.adoc"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_valid(self):
+        self.write_real_file(self.JAVA_TEST)
+        self.write_real_file(self.README)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        text = self.read_real(rel)
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_java_mock_bean_injection_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_whole_bullet_dropped_reports(self):
+        self._mutate(self.JAVA_TEST,
+                     '* **构造器注入的被测对象由框架注入、不在测试里手动 `new`（L1）**',
+                     '* **（该条已被删除）**')
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("构造器注入的被测对象由框架注入", self.error_texts())
+
+    def test_injectmocks_value_dropped_reports(self):
+        # `@InjectMocks` 在该 bullet 里多处出现，改掉一处时其余仍会兜住——
+        # 故把该 bullet 内所有出现一次性去掉，验证这个取值本身被钉住。
+        self._write_valid()
+        text = self.read_real(self.JAVA_TEST)
+        head, sep, tail = text.partition('* **构造器注入的被测对象由框架注入')
+        self.assertTrue(sep)
+        bullet, sep2, rest = tail.partition('\n* **')
+        self.assertTrue(sep2)
+        bullet = bullet.replace('`@InjectMocks`', '')
+        self.write(self.JAVA_TEST, head + sep + bullet + sep2 + rest)
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("`@InjectMocks`", self.error_texts())
+
+    def test_no_manual_new_dropped_reports(self):
+        self._mutate(self.JAVA_TEST, '手动 `new` 被测类', '按需构造被测类')
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("手动 `new` 被测类", self.error_texts())
+
+    def test_boundary_dropped_reports(self):
+        self._mutate(self.JAVA_TEST, '普通 POJO、值对象、工具类', '其他类型')
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("普通 POJO、值对象、工具类", self.error_texts())
+
+    def test_source_line_dropped_reports(self):
+        self._mutate(self.JAVA_TEST, 'Mockito 官方文档', '官方文档')
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("Mockito 官方文档", self.error_texts())
+
+    def test_readme_registration_dropped_reports(self):
+        self._mutate(self.README, '**构造器注入的被测对象由框架注入**', '**被测对象构造**')
+        cm.check_java_mock_bean_injection_guard()
+        self.assertIn("README", self.error_texts())
+
+
 class TestCheckJavaTestPlaygroundGuard(CheckSpecsTestCase):
     """钉住『Java 永不自动执行的实验代码后缀 `SandboxTests`』（用户口径：`src/test/java`
     下有手动执行的代码、任何情况下都不能自动执行；取名**不叫“手动”**，

@@ -1,0 +1,46 @@
+# 『构造器注入的被测对象由框架注入、不在测试里手动 new』防线（**用户提出**，规则本体在 Java 测试栈）
+# 用户口径（Issue）：junit mock service 时不手动 new 对象——bean 构造器注入时，少一个类、
+# 类顺序调整了就报错；最好用自动注入像 spring 一样生成类，即 InjectMocks。
+# 本文件里放三组：① 规则本体（`specs/stack/java-testing.adoc`「用例编写」那一条 bullet 的要点）；
+# ② 该 bullet 的锚点条数（防锚点清单自己被删）；③ README 目录说明的登记。
+# 不在调度器另加识别特征：规则本体所在的 `java-testing.adoc` 已由调度器「测试类命名与拆分」
+# 这一识别特征加载（写 JUnit 测试类即触发），新增独立特征只会挤占常驻层硬上限而无新加载面。
+# 按条目自己的正文核（bullet_tokens），不按整节——「用例编写」相邻条目含大量
+# `new`/构造器字样，按整节核会把从本条抽走的要点兜住。
+
+[[guards.check_java_mock_bean_injection_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "bullet_tokens"
+bullet = "构造器注入的被测对象由框架注入"
+section = "用例编写"
+message = "Java 被测对象自动注入防线被破坏：{file} 的「构造器注入的被测对象由框架注入」条缺失 {missing}——缺则又会退回在测试里手动 new 构造器注入的 bean，bean 加依赖/调构造参数顺序即全线报错且与被测行为无关"
+min = 12
+tokens = [
+    "构造器注入的被测对象由框架注入、不在测试里手动 `new`（L1）",
+    "`@InjectMocks`",
+    "`MockitoExtension`",
+    "手动 `new` 被测类",
+    "逐个传 mock",
+    "判定标准（任一命中即违规）",
+    "理由",
+    "边界",
+    "普通 POJO、值对象、工具类",
+    "等效的注入机制",
+    "依据（标准名/编号）",
+    "Mockito 官方文档",
+    "本集合的判据化取舍",
+]
+
+[[guards.check_java_mock_bean_injection_guard]]
+file = "specs/stack/java-testing.adoc"
+kind = "anchor_count"
+bullet = "构造器注入的被测对象由框架注入"
+section = "用例编写"
+min = 13
+
+# README 目录说明须登记该规则（读者按 README 学习时才知道有这一条）。
+[[guards.check_java_mock_bean_injection_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+message = "Java 被测对象自动注入防线被破坏：{file} 缺失要点 {missing}——README 的目录说明须登记构造器注入的被测对象由框架注入（`@InjectMocks`、不手动 new），否则读者按 README 学习时无从知道有这一条"
+tokens = ["**构造器注入的被测对象由框架注入**", "`@InjectMocks`", "不在测试里手动 `new`"]
