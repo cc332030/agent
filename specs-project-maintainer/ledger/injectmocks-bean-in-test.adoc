@@ -1,0 +1,10 @@
+= 逐轮记账：构造器注入的被测对象由框架注入（`@InjectMocks`）
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（构造器注入的被测对象由框架注入） | `check_java_mock_bean_injection_guard`（新增 #132） | 209 → **210** | 用户口径（Issue）：junit mock service 时不手动 new 对象，因为 bean 构造器注入时，少了类、类顺序调整了就会报错，最好使用自动注入（像 spring 一样生成类），即 `@InjectMocks`。**要治的失效**：测试里手动 `new X(mock1, mock2, ...)` 把构造器签名顺序/个数复制进测试，bean 加依赖或调构造参数顺序即全线报错，且与被测行为无关。**改动**：① `specs/stack/java-testing.adoc`「用例编写」新增一条（被测类用框架注入机制构造——`@InjectMocks` + `MockitoExtension`、不得手动 new / 逐个传 mock / `@Spy(new X(...))`，三条判定标准、理由、三条边界、依据行与取舍声明）；② 新防线规则数据 `script/specs-rules/java/guards/check_java_mock_bean_injection_guard.toml`（一条 bullet_tokens + 一条 anchor_count + README 登记），旁边零字节 `.adoc` 标记；③ README 目录说明补「构造器注入的被测对象由框架注入」——**不在调度器另加识别特征**：规则本体所在 `java-testing.adoc` 已由「测试类命名与拆分」特征加载（写 JUnit 测试即触发），新增独立特征只会挤占常驻层硬上限（本次实测基线恰好顶格 67500）；④ 依据两侧：`library/sources.adoc` 补 Mockito `@InjectMocks` 官方 javadoc 逐字摘（构造器/属性/字段依次注入、构造器注入选最大构造器并按测试中声明的 mock 解析参数，官方只给机制、未规定测试该不该手动构造），`library/adoption.adoc` 登记「由框架注入、不手动 new」是本集合判据化取舍。**只钉「判据是否仍在」**——「某个类算不算构造器注入的 bean」「某次依赖变化是不是真的让测试跟着改构造器」属语义判断与运行时事实，交人/子 agent 复核。
+|===

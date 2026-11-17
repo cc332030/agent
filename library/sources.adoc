@@ -198,6 +198,14 @@
 * **`junit.jupiter.conditions.deactivate` 逐字摘**（JUnit 用户指南 Conditional Test Execution 页已取回）："Sometimes it can be useful to run a test suite without certain conditions being active. For example, you may wish to run tests even if they are annotated with @Disabled in order to see if they are still broken. To do this, provide a pattern for the `junit.jupiter.conditions.deactivate` configuration parameter to specify which conditions should be deactivated (i.e., not evaluated) for the current test run."、示例为 `-Djunit.jupiter.conditions.deactivate=org.junit.*DisabledCondition`。**同义性差异**：官方只给"停用条件"这一机制，**未**规定"哪一类测试该在手工执行时停用它"。
 * 用途：`specs/stack/java-testing.adoc`「测试类命名」「测试分类与执行边界」——五类后缀**一律以 `Tests` 结尾**，因此**全部命中** surefire 默认 includes（亦即 JUnit 平台默认类名过滤），执行边界只能由 `@Tag` + `excludedGroups`/`includes` + `@Disabled` 承担：`PerfTests`/`IntegrationTests`/`SandboxTests` 由 `excludedGroups` 排除（`IntegrationTests` 再由 failsafe 的 `includes` 显式列入），`SandboxTests` 另加类级 `@Disabled` 兜住"配置被改坏"这一形态。**须注意的语义差异（同义性）**：官方材料只给**机制**（哪一组名字会被默认收走、标记与参数怎么用），**均未规定**"测试类必须用哪个后缀""某类测试必须排除出哪个阶段"——「五类后缀 + 三重落点」是本集合据此做的判据化取舍（取向登记见 `library/adoption.adoc`）。`SandboxTests` 的**手工取数用途**（一个用途一个 `@Test` 方法、`-Dtest=<类名>#<方法>` 单选、排除项取可被命令行置空的属性 + 停用 `@Disabled` 条件）同样叠加在本段依据之上，见该文件「取数/调试用例」。
 
+
+== Mockito `@InjectMocks` 的注入机制（Mockito 官方 javadoc）
+
+* **材料**：Mockito 官方 javadoc 的 `InjectMocks` 注解页（经 javadoc.io 镜像 `mockito-core` 取回，官方页面已取回、逐字摘，`https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/InjectMocks.html`）。
+* **总述逐字摘**："Mockito will try to inject mocks only either by constructor injection, property injection or setter injection in order and as described below. If any of the following strategy fail, then Mockito won't report failure ; i.e. you will have to provide dependencies yourself."
+* **构造器注入逐字摘**："Constructor injection ; the biggest constructor is chosen, then arguments are resolved with mocks declared in the test only. If the object is successfully created with the constructor, then Mockito won't try the other strategies . Mockito has decided to no corrupt an object if it has a parametered constructor. Note: If arguments can not be found, then null is passed. If non-mockable types are wanted, then constructor injection won't happen. In these cases, you will have to satisfy dependencies yourself."
+* **它支撑什么**：**机制**——`@InjectMocks` 按构造器/属性/字段的次序尝试注入，构造器注入取"最大的那个构造器"、参数只从测试中声明的 mock 解析、找不到就传 null、注入失败也不报错。**它没有规定什么**：官方只描述这个注入机制本身，**未**说"测试该不该手动构造被测对象"、**未**说"被测 bean 的依赖变化不该让测试跟着改构造器"——**"构造器注入的被测对象一律由框架注入、不得在测试里手动 new"是本集合的判据化取舍**：手动 `new` 把构造器签名复制进测试，bean 加依赖/调顺序就全线报错且与被测行为无关，故把官方给的注入机制提为判据。用途与取向登记见 `specs/stack/java-testing.adoc`「用例编写」与 `library/adoption.adoc`。
+
 == 运行时获取与"没有解释器"的处置（Microsoft Learn / Python 官方文档 / POSIX）
 
 * 材料：Microsoft Learn 的命令参考（`.bat`/`.cmd` 的解析与执行边界，见下节）、Python 官方文档（Windows 安装器与 `py` 启动器）、POSIX（shebang 与执行位）。

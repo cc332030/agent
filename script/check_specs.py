@@ -651,6 +651,19 @@
      `check_report_delivery_guard` 钉住；「这次到底发没发那条评论、发的内容算不算汇报」属运行时事实与
      语义判断，交人/子 agent 复核。
 
+ 132. 构造器注入的被测对象由框架注入防线（**用户提出**）：用户口径（Issue）为"junit mock service
+     时不手动 new 对象，因为 bean 构造器注入时，少了类、类顺序调整了就会报错，最好使用自动注入的
+     方式像 spring 一样去生成类，好像是使用 InjectMocks"。判据本体落技术栈层
+     `specs/stack/java-testing.adoc`「用例编写」——被测类是构造器注入的容器 bean 时，由测试框架的
+     注入机制（Mockito 的 `@InjectMocks` + `MockitoExtension`）构造、由框架按类型装配 mock 依赖；
+     **不得**手动 `new` 被测类、逐个传构造参数或以 `@Spy(new X(...))` 手写实例（那把构造器签名复制进
+     测试，加依赖/调顺序即报错且与被测行为无关）；含判定标准三条、边界（非容器 bean 不适用、非 Mockito
+     项目用等效机制、`@InjectMocks` 注入细则按官方口径不重复）与依据行，另核 README 目录说明的登记。
+     规则本体所在的 `java-testing.adoc` 已由调度器「测试类命名与拆分」识别特征加载，不另加独立特征。规则数据在
+     `script/specs-rules/java/guards/check_java_mock_bean_injection_guard.toml`。由
+     `check_java_mock_bean_injection_guard` 钉住；「某个类算不算构造器注入的 bean」「这次依赖变化是不是
+     真的让测试跟着改构造器」属语义判断与运行时事实，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -7954,6 +7967,25 @@ def check_java_test_playground_guard():
         err("缺少 specs/stack/java-testing.adoc——『永不自动执行后缀』的落点丢失"
             "（名字匹配与执行边界无处承载）", "specs/stack/java-testing.adoc")
     run_rule_guard("check_java_test_playground_guard")
+    phase_done()
+
+
+def check_java_mock_bean_injection_guard():
+    """『构造器注入的被测对象由框架注入、不在测试里手动 new』防线。
+
+    用户口径（Issue）：junit mock service 时不手动 new 对象——bean 构造器注入时少一个类、
+    类顺序调整就报错；用自动注入（像 spring 一样生成类），即 Mockito 的 `@InjectMocks`。
+
+    失效形态是**把构造器签名复制进测试**：测试里 `new X(mock1, mock2, ...)`，bean 加依赖或
+    调参数顺序就全线编译/构造报错，而这与被测行为无关。规则本体在
+    `specs/stack/java-testing.adoc`「用例编写」，核的是该条要点 + README 登记（调度器沿用
+    「测试类命名与拆分」识别特征，不另加独立特征）。
+    """
+    phase("Java 被测对象自动注入检查")
+    if not os.path.isfile(JAVA_TEST_FILE):
+        err("缺少 specs/stack/java-testing.adoc——『被测对象由框架注入』的落点丢失",
+            "specs/stack/java-testing.adoc")
+    run_rule_guard("check_java_mock_bean_injection_guard")
     phase_done()
 
 
@@ -16731,6 +16763,7 @@ CHECKS = (
     check_repeat_call_passthrough_guard,
     check_fetch_self_update_guard,
     check_java_test_playground_guard,
+    check_java_mock_bean_injection_guard,
     check_sql_annotation_binding_guard,
     check_bundle_size_guard,
     check_ui_style_guard,

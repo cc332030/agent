@@ -206,6 +206,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_repeat_call_passthrough_guard` | `script/specs-rules/coding/guards/check_repeat_call_passthrough_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_fetch_self_update_guard` | `script/specs-rules/check_fetch_self_update_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_java_test_playground_guard` | `script/specs-rules/java/guards/check_java_test_playground_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_java_mock_bean_injection_guard` | `script/specs-rules/java/guards/check_java_mock_bean_injection_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_sql_annotation_binding_guard` | `script/specs-rules/coding/guards/check_sql_annotation_binding_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_bundle_size_guard` | `script/specs-rules/check_bundle_size_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_ui_style_guard` | `script/specs-rules/ui/guards/check_ui_style_guard.adoc`
