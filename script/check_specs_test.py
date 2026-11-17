@@ -33961,7 +33961,7 @@ class TestCheckCleanupGuard(CheckSpecsTestCase):
     夹具用真文件副本 + 一处定点改动，不手抄判据。
     """
 
-    CI = "specs/general/ci-cd.adoc"
+    CI = "specs/general/cleanup.adoc"
 
     def setUp(self) -> None:
         super().setUp()
@@ -33990,7 +33990,7 @@ class TestCheckCleanupGuard(CheckSpecsTestCase):
 
     def test_section_removed_reports(self):
         # 反例①：整节被删 → 清理退回零散规则，构建/依赖缓存与回收站无判据
-        self.write(self.CI, "= CI 规范\n\n== 核心原则\n* 略。\n")
+        self.write(self.CI, "= 清理规范\n\n== 清理判据\n* 略。\n")
         self._run_guard()
         self.assertIn("清理", self.error_texts())
 
