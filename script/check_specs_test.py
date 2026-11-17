@@ -33953,5 +33953,113 @@ class TestCheckReportDeliveryGuard(CheckSpecsTestCase):
         self.assertIn("这条评论发出去没有", self.error_texts())
 
 
+class TestCheckCleanupGuard(CheckSpecsTestCase):
+    """钉住『临时/中间产物与缓存的清理』防线（用户提出：几百 GB 占用要有可靠清理规则）。
+
+    反例都取"看起来还在讲清理、实际判据被抽走"的形态：三类归责少了全局缓存/回收站边界、
+    可重建性丢了锁文件判据与回指、动作少了"先定位+原生命令+禁通配"、边界丢了"不代为执行"。
+    夹具用真文件副本 + 一处定点改动，不手抄判据。
+    """
+
+    CI = "specs/general/ci-cd.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in (self.CI,)}
+        self.write_rules_fixture()
+        for rel, text in self.base.items():
+            self.write(rel, text)
+
+    def _run_guard(self) -> None:
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_cleanup_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_without(self, old: str) -> None:
+        self.assertIn(old, self.base[self.CI], f"夹具失效：找不到要点 `{old}`")
+        self.write(self.CI, self.base[self.CI].replace(old, "", 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        # 反例①：整节被删 → 清理退回零散规则，构建/依赖缓存与回收站无判据
+        self.write(self.CI, "= CI 规范\n\n== 核心原则\n* 略。\n")
+        self._run_guard()
+        self.assertIn("清理", self.error_texts())
+
+    def test_three_kinds_removed_reports(self):
+        # 反例②：三类归责被抽 → 全局缓存被当项目临时文件清，回收站被自动清
+        self._run_without("依赖与工具缓存")
+        self.assertIn("归责", self.error_texts())
+
+    def test_recycle_bin_boundary_removed_reports(self):
+        # 反例③：回收站属用户数据那一类被抽 → 用户回收站被纳入自动清理
+        self._run_without("回收站/回收目录属用户数据")
+        self.assertIn("回收站", self.error_texts())
+
+    def test_rebuildability_removed_reports(self):
+        # 反例④：可重建性判据（有锁文件才可清）被抽 → 无锁文件也凭感觉清
+        self._run_without("缺锁文件/版本声明的缓存按不可重建处理")
+        self.assertIn("可重建", self.error_texts())
+
+    def test_dependency_backref_removed_reports(self):
+        # 反例⑤：回指 dependency.adoc 被抽 → 本集合长出第二套可重建性判据，必然漂移
+        self._run_without("`specs/general/dependency.adoc`「锁文件须提交并保持一致」")
+        self.assertIn("dependency.adoc", self.error_texts())
+
+    def test_native_command_removed_reports(self):
+        # 反例⑥：原生命令与禁通配扫删被抽 → 上来就 rm -rf 整目录，破坏性操作失控
+        self._run_without("生态自带的清理/修剪命令")
+        self.assertIn("清理/修剪命令", self.error_texts())
+
+    def test_no_auto_execute_removed_reports(self):
+        # 反例⑦：不代为执行那条被抽 → 执行者以"优化"为由擅自在本机删目录
+        self._run_without("不得**在用户未明确要求时自行删除本机目录")
+        self.assertIn("破坏性操作", self.error_texts())
+
+    def test_timing_anchor_removed_reports(self):
+        # 反例⑧：清理时机判据被抽 → "何时清"重新悬空，回收站被写进定时脚本
+        self._run_without("**清理时机按有无生命周期锚点分两类定（L1）**")
+        self.assertIn("清理时机", self.error_texts())
+
+    def test_anchor_not_auto_clear_removed_reports(self):
+        # 反例⑨：锚点到来只是进入判定那句被抽 → 退回"到期必清"，tmp/ 到任务结束一刀切
+        self._run_without("**锚点到来＝进入清理判定，不是到期必清**")
+        self.assertIn("清理", self.error_texts())
+
+    def test_keep_value_rule_removed_reports(self):
+        # 反例⑩：保留价值规则整条被抽 → tmp/ 里的文档/数据/脚本按"临时"就被清
+        self._run_without("**临时产物按保留价值判、不以所在目录或文件形态定去留（L1）**")
+        self.assertIn("保留价值", self.error_texts())
+
+    def test_keep_value_any_form_removed_reports(self):
+        # 反例⑪："任何形态"被抽 → 又退化成只保文档、数据/脚本/副本照清
+        self._run_without("**任何形态**")
+        self.assertIn("形态", self.error_texts())
+
+    def test_rebuildable_not_enough_rule_removed_reports(self):
+        # 反例⑫："可重建不等于该清"整条被抽 → 增量/构建产物因"能重建"被一刀切清
+        self._run_without("**可重建不等于该清，清前一律先判\"后续是否还有用\"（L1）**")
+        self.assertIn("重建", self.error_texts())
+
+    def test_rebuild_cost_counts_as_keep_value_removed_reports(self):
+        # 反例⑬："重建代价计为保留价值"被抽 → "清了影响编译速度"这条核心诉求失去判据
+        self._run_without("重建代价与被后续依赖**计为一种保留价值")
+        self.assertIn("重建", self.error_texts())
+
+    def test_slow_rebuild_anchor_removed_reports(self):
+        # 反例⑭："清掉会拖慢后续构建"被抽 → 编译速度这一具体形态不再被明确覆盖
+        self._run_without("**清掉会显著拖慢后续构建（编译速度等）")
+        self.assertIn("构建", self.error_texts())
+
+
+
 if __name__ == "__main__":
     unittest.main()
