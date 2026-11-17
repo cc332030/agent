@@ -138,7 +138,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_rename_split_guard` | `script/specs-rules/git/guards/check_rename_split_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_criteria_not_axis_guard` | `script/specs-rules/priority/guards/check_criteria_not_axis_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_runtime_env_guard` | `script/specs-rules/ci-cd/guards/check_runtime_env_guard.adoc`
-| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cleanup_guard` | `script/specs-rules/ci-cd/guards/check_cleanup_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cleanup_guard` | `script/specs-rules/cleanup/check_cleanup_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_wiring_guard` | `script/specs-rules/check_wiring_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_guard_order_guard` | `script/specs-rules/check_guard_order_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_dispatcher_no_details_guard` | `script/specs-rules/dispatcher/guards/check_dispatcher_no_details_guard.adoc`

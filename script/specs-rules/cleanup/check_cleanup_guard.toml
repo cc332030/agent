@@ -1,15 +1,15 @@
-# 『临时/中间产物与缓存的清理』防线（`specs/general/ci-cd.adoc`「临时/中间产物与缓存的清理（本地占用）」）。
+# 『临时/中间产物与缓存的清理』防线（`specs/general/cleanup.adoc`「清理判据」）。
 #
 # 用户口径：临时文件的清理规则、构建中间产物、增量中间产物、回收站占用了几百 GB，
 # 需要一套可靠的清理规则（本地项目开发）。此前规范只有 `tmp/` 那几句与"破坏性操作先确认"，
 # 没有覆盖构建/依赖缓存与回收站，故补本条并机械钉住。
 #
-# 判据本体在通用层 `specs/general/ci-cd.adoc` 那一节；本节**只核要点仍在**——
+# 判据本体就在 `specs/general/cleanup.adoc`（本文件只核要点仍在，不重述判据）——
 # "某次到底该不该清、某目录属哪一类、某份临时文件还有没有保留价值"属运行时事实与语义判断，交人/子 agent 复核。
 
 [[guards.check_cleanup_guard]]
-file = "specs/general/ci-cd.adoc"
-section = "临时/中间产物与缓存的清理（本地占用）"
+file = "specs/general/cleanup.adoc"
+section = "清理判据"
 kind = "section_groups"
 groups = [
     [
@@ -102,4 +102,4 @@ groups = [
         "缺则构建/增量中间产物因『能重建』或『锚点到期』被一刀切清——用户点名的『清了影响编译速度、核心是判断后面还有没有用』无判据，缓存重建代价不被计为保留价值",
     ],
 ]
-message = "『临时/中间产物与缓存的清理』防线被破坏：{file}「临时/中间产物与缓存的清理（本地占用）」节缺失要点 {missing}——{desc}"
+message = "『临时/中间产物与缓存的清理』防线被破坏：{file}「清理判据」节缺失要点 {missing}——{desc}"
