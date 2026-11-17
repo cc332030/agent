@@ -7840,7 +7840,16 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "验证范围**只覆盖本次改动的直接相关面**、一次执行内拿到结果（\u201c延后验证、一次到位\u201d）、"
                    "**先信已验过的、不重复验**（前面已验过且**其后无改动**的部分直接采信已有结果、**不重复验**；"
                    "重验只限**该部分自身之后又被改动**、上次验的**不是这份内容**、上次结论本就不成立三类，"
-                   "**单纯又提交了一个 commit 不构成重验理由**）。\n"
+                   "**单纯又提交了一个 commit 不构成重验理由**）。"
+                   "**哪个有问题就先跑哪个、都没问题再全部执行复验**（用户点名）、"
+                   "**完整基线不是频繁跑测试的理由**：反复跑没有问题的用例按「先信已验过的、不重复验」处理。"
+                   "**收尾统一验不等于每步都不验**。"
+                   "**分阶段交付 ≠ 分阶段验证**：**分阶段任务本身不构成逐步验证的理由**——"
+                   "只有**用户明确要求**每阶段验到可提交成功时才逐步验，否则收在收尾一次做。\n"
+                   "* **能合就合**：多个待验证项**合并为一次执行**。"
+                   "**编译与用例同口径、不重复付账**：其后无改动的已编译产物**直接复用、不再重编**；"
+                   "**完整基线也不是频繁重跑编译的理由**；重编译只限三类，"
+                   "**单纯又提交了一个 commit 不构成重编译理由**。\n"
                    "* **汇报须与可核对的事实一致，不得狡辩（L1）**：汇报里的每一项结论都须与**实际取值**一致。"
                    "**判定标准（任一命中即不合规）**：① 汇报里的**数字与清单**（提交数、文件数、用例统计等）"
                    "与**实际统计**不一致——数字类结论须与实际取值同源，**写进汇报前须重取一次**；"
@@ -7926,6 +7935,42 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         open(v, "w", encoding="utf-8").write(head + rest)
         cm.check_dev_flow_guard()
         self.assertIn("先信已验过的、不重复验", self.error_texts())
+
+    def test_stage_delivery_not_equal_stage_verify_removed_reports(self):
+        # 反例：「分阶段交付 ≠ 分阶段验证」被抽（分阶段任务/每阶段提交被当成逐步验证的借口，
+        # 用户并未要求每阶段验到可提交成功，却每阶段验一遍——与「收在收尾统一验」冲突）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read()
+        assert "分阶段交付 ≠ 分阶段验证" in text
+        text = text.replace("**分阶段交付 ≠ 分阶段验证**", "**分阶段交付**")
+        open(v, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("分阶段交付", self.error_texts())
+
+    def test_full_baseline_not_reason_to_rerun_tests_removed_reports(self):
+        # 反例：「完整基线不是频繁跑测试的理由」（用例语境）被抽——「这是完整基线」重新变成
+        # 频繁重跑全量测试、反复跑没问题的用例的挡箭牌（用户口径：基线测试也不是频繁执行的原因）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read()
+        assert "完整基线不是频繁跑测试的理由" in text
+        text = text.replace("**完整基线不是频繁跑测试的理由**", "**完整基线**")
+        open(v, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("完整基线不是频繁跑测试的理由", self.error_texts())
+
+    def test_compile_same_scope_as_test_removed_reports(self):
+        # 反例：「编译与用例同口径、不重复付账」被抽（编译被当成分阶段可随时全量重跑的另一套，
+        # 未过期产物不再复用——用户口径：编译也占很多时间、开发需求改没多久测试浪费 90%+）
+        self._write_valid()
+        v = os.path.join(self.root, "specs", "general", "verify.adoc")
+        text = open(v, encoding="utf-8").read()
+        assert "编译与用例同口径、不重复付账" in text
+        text = text.replace("**编译与用例同口径、不重复付账**", "**编译口径**")
+        open(v, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("编译与用例同口径", self.error_texts())
 
     def test_baseline_scope_boundary_removed_reports(self):
         # 反例：真源侧的适用边界取值被删（基线重新变成所有改动的前置，代码类改动白付全量校验）
@@ -30556,7 +30601,7 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     未知项目复制执行）。
 
     **两处口子是本轮补的**（只写『已有 PR 不得另开』时都漏得掉）：① **承载位置不随任务内容
-    变化**——「这次任务不一样，另开一处」；② **找不到承载它的 PR 时停下问**——「没有就先自己
+    变化**——「这次任务不一样，另开一处」；② **找不到承载它的 PR 时按环境取值**——CI 直接新建、「没有就先自己
     建一个」（用户从没允许过，且会把该 issue 的交付拆成多处）。故两侧各钉一条反例。
 
     **夹具形态**：仓库里那两份**真文件的逐字副本** + 规则数据 `script/specs-rules/cnb.toml`
@@ -30633,10 +30678,11 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
         self._run_guard_with(self.CNB, "**承载位置不随任务内容变化**", "**尽量放一起**")
         self.assertIn("承载位置不随任务内容变化", self.error_texts())
 
-    def test_missing_carrier_ask_removed_reports(self):
-        # 反例⑫：『找不到承载它的 PR 时停下问』被抽——「没有就先自己建一个」就没有拦阻
-        self._run_guard_with(self.CNB, "**不得自行新建分支或合并请求代替这次询问**", "")
-        self.assertIn("不得自行新建分支或合并请求代替这次询问", self.error_texts())
+    def test_missing_carrier_env_value_removed_reports(self):
+        # 反例⑫：『找不到承载它的 PR 按执行环境取值、CI 直接建 PR』被抽——退回「找不到就问用户」，
+        # CI 里没有 PR 就等于没有交付
+        self._run_guard_with(self.CNB, "**自动化场景（CI/CD、平台唤起的一次性工作空间）——直接新建承载该 issue 的一个源分支与一个合并请求**", "")
+        self.assertIn("直接新建承载该 issue 的一个源分支与一个合并请求", self.error_texts())
 
     def test_criteria_removed_reports(self):
         # 反例④：判定标准被抽成口号
@@ -30679,11 +30725,11 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
         self._run_guard_with(self.COMMON, "开新 PR/新分支属**派发者**的动作", "开新 PR 要慎重")
         self.assertIn("派发者", self.error_texts())
 
-    def test_prompt_missing_carrier_ask_removed_reports(self):
-        # 反例⑬：提示词侧的『找不到承载它的 PR 就停下问』被抽——复制出去的拷贝没有平台层可依，
-        # 这一句是那份拷贝唯一的口子
-        self._run_guard_with(self.COMMON, "**不得自行新建分支或 PR 代替这次询问**", "")
-        self.assertIn("不得自行新建分支或 PR 代替这次询问", self.error_texts())
+    def test_prompt_missing_carrier_env_value_removed_reports(self):
+        # 反例⑬：提示词侧的『找不到承载它的 PR 时 CI 直接建 PR、不停下问』被抽——复制出去的
+        # 拷贝没有平台层可依，这一句是那份拷贝唯一的口子
+        self._run_guard_with(self.COMMON, '**不停下问"要不要新建"、也不得把这件事交回用户裁决**', "")
+        self.assertIn("不停下问", self.error_texts())
 
     def test_prompt_carryover_removed_reports(self):
         # 反例⑨：提示词侧的承继边界被抽
