@@ -1221,6 +1221,11 @@ MECHANISMS = [
      "「本仓库的规范条目取哪一档规格」：规范条目默认 first、不长期带一份 anchored 规格）；"
      "「这一次到底该取哪一档」「这份规格里那条要求算不算可判定」「这段该不该并进设计文档」"
      "属语义判断，交人/子 agent 复核"),
+    ("桌面壳的持久存储（Tauri / Electron；禁用浏览器 Web Storage，一律落宿主可写目录）",
+     "specs/stack/web.adoc", "script/check_specs.py",
+     "check_desktop_storage_guard",
+     "check_desktop_storage_guard 钉住 `specs/stack/web.adoc`「桌面壳的持久存储」六组锚点（适用面与唯一真源、禁用 Web Storage 一律落宿主可写目录、一处入口与键规则在宿主侧、应用数据与产物分家、敏感取值不走明文缓存、存量边界与依据行）、调度器识别特征、公开面 README 与台账登记；缓存判据本体仍由 check_cache_guard 钉在通用层，本道不复述；『某次是否真写到磁盘、某目录算不算宿主可写目录』属运行时事实与语义判断"),
+
 ]
 
 

@@ -1,0 +1,50 @@
+# 『桌面壳的持久存储（Tauri / Electron；禁用 Web Storage）』防线（**用户提出**）。
+#
+# 用户口径：『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储
+# 数据的地方，一律存储到本地磁盘』。
+#
+# 判据本体落技术栈层 `specs/stack/web.adoc`「桌面壳的持久存储（Tauri / Electron；浏览器
+# Web Storage 禁用）」：桌面壳内禁用 `localStorage`/`sessionStorage`/`indexedDB`/Cookie/
+# Cache Storage 一类浏览器持久载体，需留存的数据一律经宿主磁盘 API 写到宿主可写目录，
+# 读写收在一处入口，应用数据与只读产物分家，敏感取值不走明文缓存，存量随用随迁。
+# 通用层 `specs/general/coding-runtime.adoc`「缓存」是缓存判据的唯一真源，本条不复述。
+# 只核文本与落点；某次是否真的写进磁盘、某目录算不算宿主可写目录属运行时事实与语义判断。
+
+[[guards.check_desktop_storage_guard]]
+file = "specs/stack/web.adoc"
+section = "桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）"
+kind = "section_groups"
+token_list = "DESKTOP_STORAGE_ANCHORS"
+message = "桌面壳持久存储防线：{file}「桌面壳的持久存储」缺失要点 {missing}——{desc}"
+
+[[guards.check_desktop_storage_guard]]
+file = "script/specs-rules/desktop-storage/tokens.toml"
+kind = "anchor_count"
+token_list = "DESKTOP_STORAGE_ANCHORS"
+min = 6
+
+[[guards.check_desktop_storage_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "桌面壳持久化",
+    "的桌面壳持久存储一节",
+]
+message = "桌面壳持久存储防线：调度器未登记识别特征 {missing}——写桌面壳存储代码时不会加载该节"
+
+[[guards.check_desktop_storage_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "Tauri/Electron 桌面壳禁用浏览器存储",
+    "宿主可写目录",
+]
+message = "桌面壳持久存储防线：公开面 README 缺 {missing}——引用方从目录说明看不到该判据"
+
+[[guards.check_desktop_storage_guard]]
+file = "script/check_effective.py"
+kind = "file_tokens"
+tokens = [
+    "check_desktop_storage_guard",
+]
+message = "桌面壳持久存储防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"

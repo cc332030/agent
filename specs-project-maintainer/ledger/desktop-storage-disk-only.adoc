@@ -1,0 +1,8 @@
+= 本轮记账：桌面壳持久存储禁用浏览器存储、一律落本地磁盘
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（Tauri/Electron 禁用 localStorage/sessionStorage 一类浏览器存储） | `check_desktop_storage_guard` | 211 → **212** | 用户口径：『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储数据的地方，一律存储到本地磁盘』。判据本体落技术栈层 `specs/stack/web.adoc`「桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）」：桌面壳内禁用 `localStorage`/`sessionStorage`/`indexedDB`/Cookie/Cache Storage 一类浏览器持久载体，需跨启动留存的数据一律经宿主磁盘 API 写到宿主可写目录；读写收在项目自己的一处入口（键与清理规则同处），应用数据与只读产物分家，敏感取值不走明文缓存，存量随用随迁；Web 版仍按 `specs/stack/web.adoc`「缓存（载体）」、判据真源仍在 `specs/general/coding-runtime.adoc`「缓存」，不另立第二真源。调度器「任何代码活动」与 README 目录说明同步登记识别特征；规则数据 `script/specs-rules/desktop-storage/check_desktop_storage_guard.toml` + 锚点 `desktop-storage/tokens.toml` + 零字节行正文标记、台账 `check_effective.py`、清单表重算与反例用例 `TestCheckDesktopStorageGuard` 一并补齐。只钉文本与落点是否仍在；运行时事实与语义判断交复核。
+|===

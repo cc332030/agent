@@ -664,6 +664,8 @@
      `check_java_mock_bean_injection_guard` 钉住；「某个类算不算构造器注入的 bean」「这次依赖变化是不是
      真的让测试跟着改构造器」属语义判断与运行时事实，交人/子 agent 复核。
 
+ 133. 桌面壳持久存储防线（**用户提出**）：用户口径『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储数据的地方，一律存储到本地磁盘』。判据本体落技术栈层 `specs/stack/web.adoc`「桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）」：桌面壳内禁用 `localStorage`/`sessionStorage`/`indexedDB`/Cookie/Cache Storage 一类浏览器持久载体，需跨启动留存的数据一律经宿主磁盘 API 写到宿主可写目录；读写收在项目自己的一处入口（含键与清理规则），应用数据与只读产物分家，敏感取值不走明文缓存，存量随用随迁；Web 版仍按 `specs/stack/web.adoc`「缓存（载体）」、缓存判据本体仍在通用层。由 `check_desktop_storage_guard` 钉住；「某次是否真写到磁盘、某目录算不算宿主可写目录」属运行时事实与语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -3722,6 +3724,29 @@ def check_cache_guard():
         phase_done()
         return
     run_rule_guard("check_cache_guard")
+    phase_done()
+
+
+def check_desktop_storage_guard():
+    """『桌面壳的持久存储（Tauri / Electron；禁用 Web Storage）』防线（**用户提出**）。
+
+    用户口径：『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储
+    数据的地方，一律存储到本地磁盘』。
+
+    要治的失效：桌面壳里照搬 Web 版的 `localStorage` / `sessionStorage` / `indexedDB` 一类
+    浏览器存储来留跨启动数据，它们不在项目可核对的磁盘落点里、清理与迁移没有判据；而
+    「浏览器也能跑」又常被拿来当保留第二份入口的理由。本道钉技术栈层判据本体六组要点、
+    加载门识别特征、公开面登记与台账登记；通用层缓存判据的唯一真源仍由 `check_cache_guard`
+    钉住，本道不复述。只核**文本与落点**；「某次到底写没写进磁盘、某目录算不算宿主可写目录」
+    属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("桌面壳持久存储防线检查（Tauri / Electron，禁用 Web Storage）")
+    if not _rules_topic_present("desktop-storage"):
+        err("缺少 script/specs-rules/desktop-storage——『桌面壳的持久存储』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_desktop_storage_guard")
     phase_done()
 
 
@@ -16798,6 +16823,7 @@ CHECKS = (
     check_changelog_timing_prompt_guard,
     check_guess_confirm_guard,
     check_cache_guard,
+    check_desktop_storage_guard,
     check_tmp_layout_guard,
     check_handoff_durability_guard,
     check_task_completion_guard,

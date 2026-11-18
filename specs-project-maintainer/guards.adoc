@@ -221,6 +221,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_changelog_timing_prompt_guard` | `script/specs-rules/check_changelog_timing_prompt_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_guess_confirm_guard` | `script/specs-rules/execution/guards/check_guess_confirm_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cache_guard` | `script/specs-rules/check_cache_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_desktop_storage_guard` | `script/specs-rules/desktop-storage/check_desktop_storage_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_tmp_layout_guard` | `script/specs-rules/execution/guards/check_tmp_layout_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_handoff_durability_guard` | `script/specs-rules/execution/guards/check_handoff_durability_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_task_completion_guard` | `script/specs-rules/execution/guards/check_task_completion_guard.adoc`

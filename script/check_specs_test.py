@@ -29516,6 +29516,7 @@ class TestCheckSqlAnnotationBindingGuard(CheckSpecsTestCase):
     def test_placeholder_value_removed_reports(self):
         # 反例⑥：取值绑定那条被抽（`#{...}` 预编译占位符）——模板可随意把取值拼进文本
         self._run_guard_with(self.SQL, "（MyBatis 的 `#{...}`）", "")
+        self.assertTrue(cm.errors)
         self.assertIn("#{", self.error_texts())
 
     def test_library_waiver_removed_reports(self):
@@ -29534,6 +29535,7 @@ class TestCheckSqlAnnotationBindingGuard(CheckSpecsTestCase):
     def test_dispatcher_feature_removed_reports(self):
         # 反例⑨：加载门缺『字符串模板』识别特征 -> 该场景永不触发加载
         self._run_guard_with(self.COMMON, "与字符串模板——识别特征", "——识别特征")
+        self.assertTrue(cm.errors)
         self.assertIn("字符串模板", self.error_texts())
 
     def test_readme_entry_removed_reports(self):
@@ -29631,6 +29633,7 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
     def test_waiver_clause_removed_reports(self):
         # 反例④：唯一可调的情形被抽 -> 只剩"永远不得调"，取值确实定错时执行者只能偷偷改
         self._run_guard_with(self.CODING, "**只有一种情形可以调**", "**一般不要调**")
+        self.assertTrue(cm.errors)
         self.assertIn("只有一种情形可以调", self.error_texts())
 
     def test_section_bullet_removed_reports(self):
@@ -29646,11 +29649,13 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
     def test_need_load_removed_reports(self):
         # 反例⑥：按需加载条被删（只剩"别调阈值"、没有"该怎么改"）
         self._run_guard_with(self.CODING, "**按需加载（L1）**", "**按需加载（建议）**")
+        self.assertTrue(cm.errors)
         self.assertIn("按需加载", self.error_texts())
 
     def test_form_over_number_removed_reports(self):
         # 反例⑦：判据从"取形态"退回"看体积数字"
         self._run_guard_with(self.CODING, "**判据取形态、不取体积**", "**判据取体积**")
+        self.assertTrue(cm.errors)
         self.assertIn("判据取形态、不取体积", self.error_texts())
 
     def test_basis_line_removed_reports(self):
@@ -29669,12 +29674,14 @@ class TestCheckBundleSizeGuard(CheckSpecsTestCase):
     def test_web_side_effect_removed_reports(self):
         # 反例⑩：副作用声明那一条被抽 -> 静态消除的载体消失
         self._run_guard_with(self.WEB, "**副作用声明（L1）**", "**副作用（可选）**")
+        self.assertTrue(cm.errors)
         self.assertIn("副作用声明", self.error_texts())
 
     def test_border_clause_removed_reports(self):
         # 反例⑪：边界句里的「不得整类关闭」被抽 -> 「例外」被读成「把规则整类关掉」。
         # 该句只在本条 bullet 内出现，整节核与条目核两处都须接得住。
         self._run_guard_with(self.CODING, "**不得**整类关闭", "**不得**在别处整类关闭")
+        self.assertTrue(cm.errors)
         self.assertIn("整类关掉", self.error_texts())
 
     def test_rule_anchor_removed_reports(self):
@@ -30011,6 +30018,7 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
     def test_readme_grouping_reverted_reports(self):
         # 反例（#303 补回）：README 目录说明回退 -> 按 README 学习的人不知有分组与页内检索
         self._run_guard_with(self.README, "**分组组织与页内检索的载体**", "")
+        self.assertTrue(cm.errors)
         self.assertIn("**分组组织与页内检索的载体**", self.error_texts())
 
     def test_dispatcher_style_priority_gate_removed_reports(self):
@@ -30041,6 +30049,104 @@ class TestCheckUiStyleGuard(CheckSpecsTestCase):
         # 只核文件名不够：须落成"清单条数"这一步自己的文案（正文缺项那一步在这里不该报）。
         self.assertIn("UI_STYLE_ANCHORS", self.error_texts())
         self.assertIn("锚点", self.error_texts())
+
+
+class TestCheckDesktopStorageGuard(CheckSpecsTestCase):
+    """钉住『桌面壳的持久存储（Tauri / Electron；禁用 Web Storage）』防线。
+
+    用户口径：tauri/electron 下禁用 localStorage/sessionStorage 一类浏览器存储，
+    数据一律存储到本地磁盘。夹具取真文件的逐字副本，按点改动后跑防线；
+    只钉文本与落点，不把运行时事实交给机械判据。
+    """
+
+    FILES = ("specs/stack/web.adoc", "AGENTS_COMMON.adoc", "README.adoc",
+             "script/check_effective.py")
+    WEB, COMMON, README, LEDGER = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_desktop_storage_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.WEB]
+        start = t.index("== 桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.WEB, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_browser_storage_ban_removed_reports(self):
+        self._run_guard_with(self.WEB,
+                             "**禁用浏览器存储、一律落宿主可写目录（L1）**",
+                             "**浏览器存储可用（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_host_api_anchor_removed_reports(self):
+        self._run_guard_with(self.WEB, "宿主提供的磁盘 API", "浏览器提供的存储 API")
+        self.assertTrue(cm.errors)
+
+    def test_single_entry_anchor_removed_reports(self):
+        self._run_guard_with(self.WEB,
+                             "**一处入口与键规则在宿主侧（L1）**",
+                             "**各页面各自管理（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_artifact_separation_removed_reports(self):
+        self._run_guard_with(self.WEB,
+                             "**应用数据与应用产物分家（L1）**",
+                             "**应用数据写回产物目录（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_sensitive_storage_removed_reports(self):
+        self._run_guard_with(self.WEB,
+                             "**敏感取值不落浏览器存储，也不落明文缓存（L1）**",
+                             "**敏感取值按普通缓存处理（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_migration_boundary_removed_reports(self):
+        self._run_guard_with(self.WEB, "随用随迁", "一次性全库强迁")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "**桌面壳持久化**",
+                             "桌面壳持久")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "Tauri/Electron 桌面壳禁用浏览器存储",
+                             "桌面壳存储")
+        self.assertTrue(cm.errors)
 
 
 class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
@@ -30178,17 +30284,20 @@ class TestCheckUiPerformanceGuard(CheckSpecsTestCase):
     def test_web_carrier_boundary_removed_reports(self):
         # 反例⑨：栈层的取数边界载体被抽 -> 判据在栈层没有落地位置
         self._run_guard_with(self.WEB, "虚拟滚动或分页", "任意展示方式")
+        self.assertTrue(cm.errors)
         self.assertIn("虚拟滚动或分页", self.error_texts())
 
     def test_dispatcher_gate_removed_reports(self):
         # 反例⑩：加载门被抽 -> 写界面时永不加载该节
         self._run_guard_with(self.COMMON, "会随数据长起来的界面", "界面样式约定")
+        self.assertTrue(cm.errors)
         self.assertIn("会随数据长起来的界面", self.error_texts())
 
     def test_dispatcher_resident_cost_gate_removed_reports(self):
         # 反例⑩之二：加载门只留"数据长起来""跟手动"两处特征 -> 常驻成本那一档在
         # 调度器上没有任何识别特征，写轮询/监听的人照样不会加载该节（判据在、走不到它）
         self._run_guard_with(self.COMMON, "切走后仍在轮询或监听", "界面样式约定")
+        self.assertTrue(cm.errors)
         self.assertIn("切走后仍在轮询或监听", self.error_texts())
 
     def test_readme_not_synced_reports(self):
@@ -30266,16 +30375,19 @@ class TestCheckUiPerformanceGuardDimensions(CheckSpecsTestCase):
     def test_repaint_scope_removed_reports(self):
         # 反例②：单块重绘被抽 -> 改一个单元格就整表重建这件事无处可判
         self._run_guard_with("一次变化只重画该重画的那一块", "重绘范围按需")
+        self.assertTrue(cm.errors)
         self.assertIn("一次变化只重画该重画的那一块", self.error_texts())
 
     def test_resident_cost_removed_reports(self):
         # 反例③：常驻成本被抽 -> 切走的页面照旧高频轮询，问题不在打开那一刻
         self._run_guard_with("不看不用的东西不花资源", "资源占用尽量低")
+        self.assertTrue(cm.errors)
         self.assertIn("不看不用的东西不花资源", self.error_texts())
 
     def test_startup_removed_reports(self):
         # 反例④：起步那一档被抽 -> 首屏又变成"画出来就算"，等最慢的那一处
         self._run_guard_with("首屏与进入可用的时间以「可操作」为准", "首屏要快")
+        self.assertTrue(cm.errors)
         self.assertIn("首屏与进入可用的时间以「可操作」为准", self.error_texts())
 
     def test_feedback_timeliness_removed_reports(self):
@@ -30287,11 +30399,13 @@ class TestCheckUiPerformanceGuardDimensions(CheckSpecsTestCase):
     def test_degradation_removed_reports(self):
         # 反例⑥：降级被抽 -> 一处失败整页不可用，也没人看得出是在跑还是卡了
         self._run_guard_with("慢或失败要有出路，且要能看出慢在哪", "出错要提示")
+        self.assertTrue(cm.errors)
         self.assertIn("慢或失败要有出路", self.error_texts())
 
     def test_dimension_not_scenario_removed_reports(self):
         # 反例⑦：按维度列的理由与回指被抽 -> 这一节又被读成"清单里那几个场景"
         self._run_guard_with("按**界面会慢的全部维度**分成六档", "列几处常见的慢")
+        self.assertTrue(cm.errors)
         self.assertIn("全部维度", self.error_texts())
 
     def test_example_disclaimer_removed_reports(self):
@@ -30664,6 +30778,7 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     def test_user_words_removed_reports(self):
         # 反例②：用户原话被抹——禁令还在、界却被读成「只是建议」
         self._run_guard_with(self.CNB, "不允许私自开立新分支和新pr", "不要私开")
+        self.assertTrue(cm.errors)
         self.assertIn("不允许私自开立新分支和新pr", self.error_texts())
 
     def test_permission_source_removed_reports(self):
@@ -30676,17 +30791,20 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     def test_carrier_not_follow_task_reports(self):
         # 反例⑪：『承载位置不随任务内容变化』被抽——「这次任务不一样，另开一处」就没有拦阻
         self._run_guard_with(self.CNB, "**承载位置不随任务内容变化**", "**尽量放一起**")
+        self.assertTrue(cm.errors)
         self.assertIn("承载位置不随任务内容变化", self.error_texts())
 
     def test_missing_carrier_env_value_removed_reports(self):
         # 反例⑫：『找不到承载它的 PR 按执行环境取值、CI 直接建 PR』被抽——退回「找不到就问用户」，
         # CI 里没有 PR 就等于没有交付
         self._run_guard_with(self.CNB, "**自动化场景（CI/CD、平台唤起的一次性工作空间）——直接新建承载该 issue 的一个源分支与一个合并请求**", "")
+        self.assertTrue(cm.errors)
         self.assertIn("直接新建承载该 issue 的一个源分支与一个合并请求", self.error_texts())
 
     def test_criteria_removed_reports(self):
         # 反例④：判定标准被抽成口号
         self._run_guard_with(self.CNB, "**新建了另一个合并请求或新分支**", "**新建了另一个**")
+        self.assertTrue(cm.errors)
         self.assertIn("判定标准", self.error_texts())
 
     def test_closed_pr_carryover_removed_reports(self):
@@ -30703,6 +30821,7 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     def test_branch_rule_dropped_reports(self):
         # 反例⑥：同节既有规则被顶掉（本节整段替换过、规则凭空消失而全绿，本仓库实测过）
         self._run_guard_with(self.CNB, "也共用这一个分支", "也应尽量统一")
+        self.assertTrue(cm.errors)
         self.assertIn("共用这一个分支", self.error_texts())
 
     def test_prompt_block_removed_reports(self):
@@ -30723,12 +30842,14 @@ class TestCheckPrScopeGuard(CheckSpecsTestCase):
     def test_prompt_permission_source_removed_reports(self):
         # 反例⑧：提示词侧的许可来源被抽
         self._run_guard_with(self.COMMON, "开新 PR/新分支属**派发者**的动作", "开新 PR 要慎重")
+        self.assertTrue(cm.errors)
         self.assertIn("派发者", self.error_texts())
 
     def test_prompt_missing_carrier_env_value_removed_reports(self):
         # 反例⑬：提示词侧的『找不到承载它的 PR 时 CI 直接建 PR、不停下问』被抽——复制出去的
         # 拷贝没有平台层可依，这一句是那份拷贝唯一的口子
         self._run_guard_with(self.COMMON, '**不停下问"要不要新建"、也不得把这件事交回用户裁决**', "")
+        self.assertTrue(cm.errors)
         self.assertIn("不停下问", self.error_texts())
 
     def test_prompt_carryover_removed_reports(self):
@@ -30812,6 +30933,7 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
     def test_default_no_action_removed_reports(self):
         # 反例②：默认动作被抽——"猜得准"重新变成授权
         self._run_guard_with(self.PLANNING, "默认动作是「不做」", "默认动作是看情况")
+        self.assertTrue(cm.errors)
         self.assertIn("默认动作是「不做」", self.error_texts())
 
     def test_exception_removed_reports(self):
@@ -30823,11 +30945,13 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
     def test_exception_uniqueness_removed_reports(self):
         # 反例④：例外的唯一修法判据被抽——"无争议"退化成"我觉得没问题"
         self._run_guard_with(self.PLANNING, "**只有一种正确修法**", "**看着没问题**")
+        self.assertTrue(cm.errors)
         self.assertIn("只有一种正确修法", self.error_texts())
 
     def test_exception_no_rejudge_removed_reports(self):
         # 反例⑤：例外的"不改判既有取值"被抽——允许借"修错误"为名改断言
         self._run_guard_with(self.PLANNING, "**不改判任何既有取值**", "**改判也行**")
+        self.assertTrue(cm.errors)
         self.assertIn("不改判任何既有取值", self.error_texts())
 
     def test_core_baseline_removed_reports(self):
@@ -30901,6 +31025,7 @@ class TestCheckGuessConfirmGuard(CheckSpecsTestCase):
     def test_git_downgrade_removed_reports(self):
         # 反例⑬：`git.adoc` 的「降级不成立」整条被摘——建不了 PR 又成了「只提交」的许可
         self._run_guard_with(self.GIT, "* **降级不成立（L1）**", "* **旧条（L1）**")
+        self.assertTrue(cm.errors)
         self.assertIn("降级不成立", self.error_texts())
 
     def test_common_env_judgement_removed_reports(self):
@@ -31060,11 +31185,13 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
     def test_single_response_removed_reports(self):
         # 反例：一家之言式的「一个响应就是一个结果」被抽 -> 接口又能先给旧的后给新的
         self._run_guard_with(self.CODING, "一个响应就是一个结果", "接口可分次给")
+        self.assertTrue(cm.errors)
         self.assertIn("一个响应就是一个结果", self.error_texts())
 
     def test_cache_first_scope_removed_reports(self):
         # 反例：界面侧的适用面判据被抽 -> 读者把「先缓存后在线」再糊回接口
         self._run_guard_with(self.CODING, "给程序用的取数", "别的取数")
+        self.assertTrue(cm.errors)
         self.assertIn("给程序用的取数", self.error_texts())
 
     def test_api_cache_carrier_removed_reports(self):
@@ -31076,11 +31203,13 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
     def test_dispatcher_gate_removed_reports(self):
         # 反例⑩：加载门被抽 -> 写缓存的人永不加载该节，判据存在而走不到它
         self._run_guard_with(self.COMMON, "要**用到缓存**", "要**留意缓存**")
+        self.assertTrue(cm.errors)
         self.assertIn("要**用到缓存**", self.error_texts())
 
     def test_readme_sync_removed_reports(self):
         # 反例⑪：README 目录说明未同步 -> 这一节加了也没人知道
         self._run_guard_with(self.README, "缓存（一处入口", "缓存")
+        self.assertTrue(cm.errors)
         self.assertIn("README.adoc", self.error_texts())
 
     def test_anchor_list_shrunk_reports(self):
@@ -31298,6 +31427,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         # 「通用件与参照」节的依据行也有——替换首处已不再落在 `UI_SPEC_EVIDENCE_ANCHORS`
         # 所核的那一行上，故这里锚到依据行独有的措辞）
         self._run_guard_with("specs/general/ui.adoc", "是本集合的判据化取舍**——通行设计规范", "是通行做法**——通行设计规范")
+        self.assertTrue(cm.errors)
         self.assertTrue(cm.errors, "依据行的取舍归属被抹须报红")
 
     def test_tokens_template_no_pointer_reports(self):
@@ -31309,11 +31439,13 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_tokens_contrast_values_removed_reports(self):
         # 反例⑫：模板里的对比度两档取值被抽走（判据在、取值没了）
         self._run_guard_with("specs/general/ui-tokens.adoc", "**7:1**", "足够高")
+        self.assertTrue(cm.errors)
         self.assertTrue(cm.errors, "对比度取值被抽走须报红")
 
     def test_targets_web_shell_removed_reports(self):
         # 反例⑬：混合应用的外壳能力被抽走（"网页套壳"不再有判据）
         self._run_guard_with("specs/general/ui-targets.adoc", "网页套壳", "网页外壳")
+        self.assertTrue(cm.errors)
         self.assertTrue(cm.errors, "外壳能力清单被抽走须报红")
 
     def test_targets_reference_tiers_removed_reports(self):
@@ -31391,6 +31523,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_voice_template_error_structure_removed_reports(self):
         # 反例㉒（后补）：模板里的错误三句话结构被抹（"操作失败"又成为可接受的写法）
         self._run_guard_with("specs/general/ui-voice.adoc", "**三句话结构**", "三句话")
+        self.assertTrue(cm.errors)
         self.assertTrue(cm.errors, "错误三句话结构被抹须报红")
 
     def test_anchor_list_shrunk_reports(self):
@@ -31490,6 +31623,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         start = text.index("== 界面状态的保留与恢复")
         end = text.index("== 新增或改界面时的核对清单")
         self._run_guard_with("specs/general/ui.adoc", text[start:end], "")
+        self.assertTrue(cm.errors)
         self.assertTrue(cm.errors, "状态恢复整节被抽走须报红")
 
     def test_compact_controls_rule_removed_reports(self):
