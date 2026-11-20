@@ -2763,7 +2763,13 @@ class TestCheckFeatureOverviewGuard(CheckSpecsTestCase):
         "* **行为变了就**同一提交内改全览**（L1）**：增删改功能**同一提交内**改全览；"
         "**移除功能须在全览里显式处置**。**全览过期比没有更坏**。\n"
         "* **落点与形态（L1）**：按 `specs/general/doc-module.adoc`"
-        "「全局文档与模块文档的分界」取值；**分份须按功能边界分**。\n"
+        "「全局文档与模块文档的分界」取值；入口固定为 `doc/features.adoc` / "
+        "`<module>/doc/features.adoc`；根入口对模块功能只给一行链接；"
+        "规模（体积、阅读吃力）只是提醒信号；**分份须按功能边界分**；"
+        "拆分后入口只做导航。\n"
+        "* **最小结构模板**：每项依次写——**功能名**、**现状**、**边界**、**入口**、"
+        "**实现落点**、**反证判据**、**细节入口**；"
+        "按功能成节，禁止按时间、Issue、改动批次成节。\n"
     )
 
     def setUp(self) -> None:
@@ -2846,6 +2852,22 @@ class TestCheckFeatureOverviewGuard(CheckSpecsTestCase):
         self.write("README.adoc", "** `specs/general/` — 通用层：文档生命周期（`doc-lifecycle.adoc`）\n")
         cm.check_feature_overview_guard()
         self.assertIn("README.adoc", self.error_texts())
+
+    def test_feature_file_name_removed_reports(self):
+        # 入口名被抽掉 → 全览能存在但没人一眼定位得到，新接手的人只能靠猜
+        self._write_valid(self.SECTION.replace(
+            "入口固定为 `doc/features.adoc` / `<module>/doc/features.adoc`；", ""))
+        cm.check_feature_overview_guard()
+        self.assertIn("doc/features.adoc", self.error_texts())
+
+    def test_structure_template_removed_reports(self):
+        # 结构模板被删 → 全览落成按时间/Issue 排的流水账无人拦
+        self._write_valid(self.SECTION.replace(
+            "* **最小结构模板**：每项依次写——**功能名**、**现状**、**边界**、**入口**、"
+            "**实现落点**、**反证判据**、**细节入口**；"
+            "按功能成节，禁止按时间、Issue、改动批次成节。\n", ""))
+        cm.check_feature_overview_guard()
+        self.assertIn("最小结构模板", self.error_texts())
 
 
 class TestCheckIndexPageGuard(CheckSpecsTestCase):
