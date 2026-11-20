@@ -14596,6 +14596,26 @@ def check_prompts_primary():
             if "不可降级" not in block:
                 err("公共片段 `priority-rules` 缺失『不可降级』要求——"
                     "L1 须不可协商、不得被降级", rel_common)
+
+    # 6) `refactor` 的目标已由提示词给定，不得让执行者把「重构哪一块」做成问卷/选项交回用户。
+    #    本仓库实证：题面只写“重构是目标”但缺显式禁问答，执行者仍会反问要重构哪一块。
+    rel_refactor = os.path.relpath(os.path.join(PROMPTS_DIR, "refactor.adoc"),
+                                   REPO_ROOT).replace("\\", "/")
+    refactor_path = os.path.join(REPO_ROOT, *rel_refactor.split("/"))
+    if os.path.isfile(refactor_path):
+        with open(refactor_path, encoding="utf-8") as fh:
+            refactor = fh.read()
+        required = (
+            ("不得把「重构哪一块」做成问卷/选项交回用户",
+             "主侧重段须明令禁止把重构目标做成问卷/选项"),
+            ("本步只产出重构清单、不向用户提问选哪一块（L1）",
+             "现状检查步须把「不自问选哪块」标成 L1"),
+            ("不得在动手前先问「要重构哪一块」",
+             "无可重构点的确认口子须限定在逐模块判定之后"),
+        )
+        for token, desc in required:
+            if token not in refactor:
+                err(f"{rel_refactor} 缺少「{token}」——{desc}", rel_refactor)
     phase_done()
 
 
@@ -15587,6 +15607,19 @@ def check_site_include_guard():
                 "多出来的说明被 `include::` 进来的片段自带同级定界符，外层可复制代码块会在那里被"
                 "截断，页面上碎成两段 `pre`、复制到的是前半份（本仓库实证：`tmp/` 目录图那一对横线）",
                 doc)
+        # ④ `{主侧重}` 填充值须与登记表逐字一致：两侧排版用的引号/星号会一起被填进
+        # `primary` 片段，于是方向段读成 `片段中的 "重构" 取本提示词的值『重构』`——
+        # 同一个方向出现两种写法，切入的 AI 把带引号的那份当成方向本身（口令装配与站点装配实测）。
+        # 判据只看装配后的实际取值，不猜「引号该不该算排版」。
+        m = re.search(r"片段中的 `([^`]+)` 取本提示词的值『([^』]+)』", got)
+        if not m:
+            err(f"站点装配后的 {doc} 没找到 `primary` 片段的方向填充行——"
+                "没法核对 `{主侧重}` 是否被填成了提示词自己的方向", doc)
+        elif m.group(1) != m.group(2):
+            err(f"站点装配后的 {doc} 把 `{m.group(1)}` 填进了方向说明、而该提示词声明的是"
+                f"『{m.group(2)}』——同一侧重两种写法来自声明处的排版引号"
+                "（见该提示词的『主侧重（方向性前提，先读）』段），"
+                "填充值须与登记表/声明逐字一致（口令装配与站点装配实测）", doc)
     phase_done()
 
 
