@@ -7661,7 +7661,10 @@ class TestCheckPromptsPrimary(CheckSpecsTestCase):
                    "include::_common.txt[tag=primary]\n"
                    "include::_common.txt[tag=priority-rules]\n")
         self.write("prompts/refactor.adoc",
-                   "**主侧重（方向性前提）**：**\"重构\"**——方向错了后面全做错。\n"
+                   "**主侧重（方向性前提）**：**\"重构\"**"
+                   "——不得把「重构哪一块」做成问卷/选项交回用户；方向错了后面全做错。\n"
+                   "2. 现状检查与重构方案（本步只产出重构清单、不向用户提问选哪一块（L1））：逐模块查。\n"
+                   "3. 实施重构：若确无可改，逐模块判定后确认；不得在动手前先问「要重构哪一块」。\n"
                    "include::_common.txt[tag=primary]\n"
                    "include::_common.txt[tag=priority-rules]\n")
 
@@ -7762,6 +7765,97 @@ class TestCheckPromptsPrimary(CheckSpecsTestCase):
         self._write_valid()
         cm.check_prompts_primary()
         self.assertEqual(cm.errors, [])
+
+
+class TestPromptRefactorNoQuestionnaire(CheckSpecsTestCase):
+    """钉住 `use-prompt refactor` 不得把重构目标做成问卷/选项交回用户（本仓库实证）。"""
+
+    REFACTOR = "prompts/refactor.adoc"
+    TOKENS = (
+        "不得把「重构哪一块」做成问卷/选项交回用户",
+        "本步只产出重构清单、不向用户提问选哪一块（L1）",
+        "不得在动手前先问「要重构哪一块」",
+    )
+
+    def setUp(self):
+        super().setUp()
+        import shutil
+        real = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        dst = os.path.join(self.root, *self.REFACTOR.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(os.path.join(real, *self.REFACTOR.split("/")), dst)
+
+    def test_real_refactor_prompt_has_no_questionnaire(self):
+        with open(os.path.join(self.root, self.REFACTOR), encoding="utf-8") as fh:
+            text = fh.read()
+        for token in self.TOKENS:
+            self.assertIn(token, text, f"真实提示词缺少禁问卷判据：{token}")
+
+    def test_dropped_no_questionnaire_clause_reports(self):
+        path = os.path.join(self.root, self.REFACTOR)
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        text = text.replace(self.TOKENS[1], "", 1)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        orig = (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE)
+        cm.PROMPTS_FILE = os.path.join(self.root, "PROMPTS.adoc")
+        cm.PROMPTS_DIR = os.path.join(self.root, "prompts")
+        cm.COMMON_PROMPT_FILE = os.path.join(self.root, "prompts", "_common.txt")
+        try:
+            self.write("PROMPTS.adoc", "")
+            self.write("prompts/_common.txt", "")
+            cm.check_prompts_primary()
+            self.assertIn(self.REFACTOR, self.error_texts())
+        finally:
+            (cm.PROMPTS_FILE, cm.PROMPTS_DIR, cm.COMMON_PROMPT_FILE) = orig
+
+
+class TestPromptPrimaryFillWording(CheckSpecsTestCase):
+    """钉住 `{主侧重}` 的填充值须与登记表逐字一致（口令装配与站点装配实测）。
+
+    失效形态：`prompts/review.adoc` / `refactor.adoc` 把主侧重声明写成
+    `**"重构"**`，站点装配后 `primary` 片段里读成「片段中的 `"重构"` 取本提示词的值
+    『重构』」——同一方向两种写法，切入的 AI 把带引号的那份当成方向本身。
+    """
+
+    PROMPTS = ("prompts/review.adoc", "prompts/refactor.adoc",
+               "prompts/spec-refine.adoc")
+
+    def setUp(self):
+        super().setUp()
+        # CheckSpecsTestCase.setUp 把 REPO_ROOT 指向临时目录；这组核的是仓库真文件，
+        # 故把三份提示词与装配脚本从真实仓库复制到临时目录，测试仍只动临时副本。
+        import shutil
+        real = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for rel in self.PROMPTS + ("prompts/_common.txt", "script/site-include-check.js", "index.html"):
+            dst = os.path.join(self.root, *rel.split("/"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(os.path.join(real, *rel.split("/")), dst)
+
+    def _decl(self, rel):
+        with open(os.path.join(self.root, rel), encoding="utf-8") as fh:
+            body = fh.read()
+        m = re.search(r"\*\*主侧重[^\n]*?\*\*：\*\*([^*]+?)\*\*", body)
+        self.assertIsNotNone(m, f"{rel} 找不到主侧重声明")
+        return m.group(1).strip()
+
+    def test_declaration_has_no_decorative_quotes(self):
+        for rel in self.PROMPTS:
+            value = self._decl(rel)
+            self.assertNotIn('"', value, f"{rel} 的主侧重带了排版引号：{value}")
+            self.assertNotIn('“', value, f"{rel} 的主侧重带了排版引号：{value}")
+            self.assertNotIn('”', value, f"{rel} 的主侧重带了排版引号：{value}")
+
+    def test_assembled_primary_value_matches_declaration(self):
+        import subprocess
+        for rel in self.PROMPTS:
+            decl = self._decl(rel)
+            out = subprocess.run(["node", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "script", "site-include-check.js"), rel],
+                                 cwd=self.root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(0, out.returncode, out.stderr)
+            self.assertIn(f"片段中的 `{decl}` 取本提示词的值『{decl}』", out.stdout,
+                          f"{rel} 装配后的主侧重填充值与声明不一致")
 
 
 class TestCheckDevFlowGuard(CheckSpecsTestCase):
