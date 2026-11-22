@@ -1225,6 +1225,10 @@ MECHANISMS = [
      "specs/stack/web.adoc", "script/check_specs.py",
      "check_desktop_storage_guard",
      "check_desktop_storage_guard 钉住 `specs/stack/web.adoc`「桌面壳的持久存储」六组锚点（适用面与唯一真源、禁用 Web Storage 一律落宿主可写目录、一处入口与键规则在宿主侧、应用数据与产物分家、敏感取值不走明文缓存、存量边界与依据行）、调度器识别特征、公开面 README 与台账登记；缓存判据本体仍由 check_cache_guard 钉在通用层，本道不复述；『某次是否真写到磁盘、某目录算不算宿主可写目录』属运行时事实与语义判断"),
+    ("易变的取值不得写死（看门狗/脚本/容器/代码等一切产出物）",
+     "specs/general/coding-runtime.adoc", "script/check_specs.py",
+     "check_volatile_value_guard",
+     "易变取值不得写死防线钉住 `specs/general/coding-runtime.adoc`「易变的取值不得写死」七组锚点（节名与覆盖一切产出物、按形态判不按名单判、一律不写死取值只在配置/环境、与取值的唯一来源的边界含首次落点、换环境要不要改产出物的判定问句、三类例外与存量边界、依据与取舍声明）、调度器加载门、公开面 README 与台账登记；『某处取值是否真随环境变、是否真构成写死』属运行时事实与语义判断"),
 
 ]
 

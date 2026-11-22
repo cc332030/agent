@@ -125,6 +125,7 @@
  97. 依赖直接新增防线（能用现有依赖满足时不新增直接依赖）
  98. 记录只落项目文档防线（不进项目之外的"记忆"类载体）
  99. 汇报须送到发起人手里防线（写了汇报 ≠ 发出去了）
+ 100. 易变取值不得写死防线（看门狗/脚本/容器/代码等一切产出物，按形态判不按名单判）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -665,6 +666,8 @@
      真的让测试跟着改构造器」属语义判断与运行时事实，交人/子 agent 复核。
 
  133. 桌面壳持久存储防线（**用户提出**）：用户口径『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储数据的地方，一律存储到本地磁盘』。判据本体落技术栈层 `specs/stack/web.adoc`「桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）」：桌面壳内禁用 `localStorage`/`sessionStorage`/`indexedDB`/Cookie/Cache Storage 一类浏览器持久载体，需跨启动留存的数据一律经宿主磁盘 API 写到宿主可写目录；读写收在项目自己的一处入口（含键与清理规则），应用数据与只读产物分家，敏感取值不走明文缓存，存量随用随迁；Web 版仍按 `specs/stack/web.adoc`「缓存（载体）」、缓存判据本体仍在通用层。由 `check_desktop_storage_guard` 钉住；「某次是否真写到磁盘、某目录算不算宿主可写目录」属运行时事实与语义判断，交人/子 agent 复核。
+
+ 134. 易变取值不得写死防线（**用户提出**）：用户口径『写看门狗、自动化脚本、docker podman、甚至包括代码等东西，不能写死 ip、网段、设备名、网卡名等（不限定这几个，需要再扩）容易变化的东西，不然一变就试下了』。判据本体落通用层 `specs/general/coding-runtime.adoc`「易变的取值不得写死（代码、脚本、配置、容器定义等一切产出物）」：按形态判不按名单判、覆盖一切产出物、首次落点也不许写死、换环境要不要改产出物作判定问句、三类例外（协议固定常量/本机回环开发占位/用户主动声明）、存量随动迁移；与「取值的唯一来源」边界各立、互不豁免。由 `check_volatile_value_guard` 钉住；某处取值是否真随环境变、是否真构成写死属运行时事实与语义判断，交人/子 agent 复核。
 
 """
 
@@ -3747,6 +3750,30 @@ def check_desktop_storage_guard():
         phase_done()
         return
     run_rule_guard("check_desktop_storage_guard")
+    phase_done()
+
+
+
+def check_volatile_value_guard():
+    """『易变取值不得写死』防线（**用户提出**）。
+
+    用户口径：『写看门狗、自动化脚本、docker podman、甚至包括代码等东西，不能写死 ip、
+    网段、设备名、网卡名等（不限定这几个，需要再扩）容易变化的东西，不然一变就试下了』。
+
+    要治的失效：看门狗、自动化脚本、容器定义、代码里把 IP/网段/设备名一类会随环境变的
+    取值写成硬编码字面量，环境一变就得逐处改、漏一处就挂；而「取值的唯一来源」只管
+    "两处用到时收敛"、security 只管"不硬编码密钥"，首次落点写死一个易变取值此前无判据。
+    本道钉通用层判据本体七组要点、调度器/公开面/台账三处登记；只核**文本与落点**；
+    「某处取值是否真随环境变、是否真构成写死」属运行时事实与语义判断
+    （见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("易变取值不得写死防线检查")
+    if not _rules_topic_present("volatile-value"):
+        err("缺少 script/specs-rules/volatile-value——『易变取值不得写死』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_volatile_value_guard")
     phase_done()
 
 
@@ -16857,6 +16884,7 @@ CHECKS = (
     check_guess_confirm_guard,
     check_cache_guard,
     check_desktop_storage_guard,
+    check_volatile_value_guard,
     check_tmp_layout_guard,
     check_handoff_durability_guard,
     check_task_completion_guard,
