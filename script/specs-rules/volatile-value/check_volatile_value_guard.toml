@@ -1,0 +1,47 @@
+# 『易变的取值不得写死』防线（**用户提出**）。
+#
+# 用户口径：『写看门狗、自动化脚本、docker podman、甚至包括代码等东西，不能写死 ip、
+# 网段、设备名、网卡名等（不限定这几个，需要再扩）容易变化的东西，不然一变就试下了』。
+#
+# 判据本体唯一落通用层 `specs/general/coding-runtime.adoc`「易变的取值不得写死」一节：
+# 按形态判不按名单判、覆盖一切产出物、首次落点也不许写死、换环境要不要改产出物作判定
+# 问句、三类例外、存量随动迁移；与「取值的唯一来源」边界各立、互不豁免。
+# 本道只钉判据本体与三处登记（调度器、公开面、台账）是否仍在；某处取值是否真随环境变、
+# 是否真构成写死属运行时事实与语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核。
+
+[[guards.check_volatile_value_guard]]
+file = "specs/general/coding-runtime.adoc"
+section = "易变的取值不得写死（代码、脚本、配置、容器定义等一切产出物）"
+kind = "section_groups"
+token_list = "VOLATILE_VALUE_SECTION_ANCHORS"
+message = "易变取值不得写死防线：{file}「易变的取值不得写死」缺失要点 {missing}——{desc}"
+
+[[guards.check_volatile_value_guard]]
+file = "script/specs-rules/volatile-value/tokens.toml"
+kind = "anchor_count"
+token_list = "VOLATILE_VALUE_SECTION_ANCHORS"
+min = 7
+
+[[guards.check_volatile_value_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "看门狗、自动化脚本或容器/编排定义",
+    "易变的取值不得写死",
+]
+message = "易变取值不得写死防线：调度器 {file} 未登记识别特征 {missing}——写看门狗/脚本/容器时不会加载该节"
+
+[[guards.check_volatile_value_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "易变取值不得写死（代码/脚本/容器定义里 IP、网段、设备名一类随环境变的取值一律取自配置/环境，不按名单判）",
+    "coding-runtime.adoc",
+]
+message = "易变取值不得写死防线：公开面 {file} 缺 {missing}——引用方从目录说明看不到该判据"
+
+[[guards.check_volatile_value_guard]]
+file = "script/check_effective.py"
+kind = "file_tokens"
+tokens = ["易变取值不得写死防线钉住 `specs/general/coding-runtime.adoc`"]
+message = "易变取值不得写死防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"

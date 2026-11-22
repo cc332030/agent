@@ -1,0 +1,8 @@
+= 本轮记账：易变取值不得写死（看门狗/脚本/容器/代码等一切产出物）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（易变取值不得写死） | `check_volatile_value_guard` | 212 → **213** | 用户口径：『写看门狗、自动化脚本、docker podman、甚至包括代码等东西，不能写死 ip、网段、设备名、网卡名等（不限定这几个，需要再扩）容易变化的东西，不然一变就试下了』。判据本体落通用层 `specs/general/coding-runtime.adoc`「易变的取值不得写死（代码、脚本、配置、容器定义等一切产出物）」：按形态判不按名单判、一切产出物覆盖、首次落点也不许写死、换环境要不要改产出物作判定问句、三类例外（协议固定常量/本机回环开发占位/用户主动声明）、存量随动迁移；与「取值的唯一来源」边界各立、互不豁免。调度器「任何代码活动」识别特征与 README 公开面同步登记识别特征；规则数据 `script/specs-rules/volatile-value/check_volatile_value_guard.toml` + 锚点 `volatile-value/tokens.toml` + 零字节行正文标记、台账 `check_effective.py`、清单表重算与反例用例 `TestCheckVolatileValueGuard` 一并补齐；依据落 `library/adoption.adoc`。只钉文本与落点是否仍在；某处取值是否真随环境变、是否真构成写死属运行时事实与语义判断，交人/子 agent 复核。
+|===

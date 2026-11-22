@@ -222,6 +222,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_guess_confirm_guard` | `script/specs-rules/execution/guards/check_guess_confirm_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_cache_guard` | `script/specs-rules/check_cache_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_desktop_storage_guard` | `script/specs-rules/desktop-storage/check_desktop_storage_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_volatile_value_guard` | `script/specs-rules/volatile-value/check_volatile_value_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_tmp_layout_guard` | `script/specs-rules/execution/guards/check_tmp_layout_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_handoff_durability_guard` | `script/specs-rules/execution/guards/check_handoff_durability_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_task_completion_guard` | `script/specs-rules/execution/guards/check_task_completion_guard.adoc`
@@ -366,6 +367,7 @@
 | 97 | 依赖直接新增防线（能用现有依赖满足时不新增直接依赖）
 | 98 | 记录只落项目文档防线（不进项目之外的"记忆"类载体）
 | 99 | 汇报须送到发起人手里防线（写了汇报 ≠ 发出去了）
+| 100 | 易变取值不得写死防线（看门狗/脚本/容器/代码等一切产出物，按形态判不按名单判）
 |===
 
 == 维护约定

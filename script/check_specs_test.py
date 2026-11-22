@@ -34311,5 +34311,119 @@ class TestCheckCleanupGuard(CheckSpecsTestCase):
 
 
 
+class TestCheckVolatileValueGuard(CheckSpecsTestCase):
+    """钉住『易变取值不得写死』防线（用户提出）。
+
+    用户口径：看门狗、自动化脚本、Docker/Podman、代码等不许写死 IP、网段、设备名、网卡名
+    等易变取值（不限这几个）。夹具取真文件逐字副本，按点改动后跑防线；只钉文本与落点，
+    不把"某处取值是否真随环境变"这类运行时事实交给机械判据。
+    """
+
+    FILES = ("specs/general/coding-runtime.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc", "script/check_effective.py")
+    RUNTIME, COMMON, README, LEDGER = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_volatile_value_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.RUNTIME]
+        start = t.index("== 易变的取值不得写死（代码、脚本、配置、容器定义等一切产出物）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.RUNTIME, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_no_hardcode_rule_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**易变取值一律不写死（L1）**",
+                             "**易变取值建议不写死（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_shape_not_name_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**按形态判、不按名单判**",
+                             "**按名单判**")
+        self.assertTrue(cm.errors)
+
+    def test_example_not_boundary_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**\"例子没列到\"不构成写死的理由**",
+                             "**\"例子没列到\"就合规**")
+        self.assertTrue(cm.errors)
+
+    def test_first_landing_boundary_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "含首次落点、哪怕只有一处",
+                             "仅限出现两处以上的取值")
+        self.assertTrue(cm.errors)
+
+    def test_environment_question_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**判定标准落到\"换了环境要不要改产出物\"**",
+                             "**判定标准落到\"当前值对不对\"**")
+        self.assertTrue(cm.errors)
+
+    def test_exceptions_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**协议或标准固定的常量**",
+                             "**所有固定取值**")
+        self.assertTrue(cm.errors)
+
+    def test_migration_boundary_removed_reports(self):
+        self._run_guard_with(self.RUNTIME,
+                             "**存量边界（L1）**：本节**只管新增与本次改到的部分**",
+                             "**存量边界（L1）**：本节**管全库所有取值**")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "看门狗、自动化脚本或容器/编排定义",
+                             "看门狗或自动化脚本")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "易变取值不得写死（代码/脚本/容器定义里 IP、网段、设备名一类随环境变的取值一律取自配置/环境，不按名单判）",
+                             "易变取值不得写死")
+        self.assertTrue(cm.errors)
+
+    def test_ledger_registration_removed_reports(self):
+        self._run_guard_with(self.LEDGER,
+                             "易变取值不得写死防线钉住 `specs/general/coding-runtime.adoc`",
+                             "该防线钉住 `specs/general/coding-runtime.adoc`")
+        self.assertTrue(cm.errors)
+
+
 if __name__ == "__main__":
     unittest.main()
