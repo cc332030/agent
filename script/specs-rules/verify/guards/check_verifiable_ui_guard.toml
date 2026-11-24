@@ -1,0 +1,47 @@
+# 『可判据的界面检查』防线的规则数据：判据本体在 `specs/general/verify.adoc`
+# 「可判据的界面检查」，锚点清单只写在 `script/specs-rules/_tokens.toml` 的
+# `VERIFIABLE_UI_TOKENS` 一处。
+[[guards.check_verifiable_ui_guard]]
+file = "specs/general/verify.adoc"
+section = "编译/运行验证"
+token_list = "VERIFIABLE_UI_TOKENS"
+kind = "section_groups"
+
+[[guards.check_verifiable_ui_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 23
+token_list = "VERIFIABLE_UI_TOKENS"
+
+# 加载门：调度器须登记"界面/CSS 看着对不对"的识别特征，否则该条永不被加载。
+[[guards.check_verifiable_ui_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "界面/CSS 改完了想知道",
+    "组合起来坏了",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「可判据的界面检查」的识别特征 {missing}——缺则改界面时读不到该条，组合态缺陷照旧漏到运行期"
+
+# 提示词侧（会被未知项目复制执行）：收在 final-verify 片段内逐条核。
+[[guards.check_verifiable_ui_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "界面/CSS 的\"看着对不对\"要落成会失败的判据（L1）",
+    "组合态（组件凑到同一屏后、连续操作后）",
+    "差异即失败",
+    "不得为让测试变绿直接覆盖基线",
+]
+kind = "text_block_groups"
+message = "提示词片段缺失「可判据的界面检查」要点 {missing}——缺则复制出去的执行侧仍按『截图看着没问题』下结论"
+
+# 公开面 README（读者从这里知道有这条）
+[[guards.check_verifiable_ui_guard]]
+file = "README.adoc"
+tokens = [
+    "界面/CSS 的\"看着对不对\"要落成会失败的判据",
+    "specs/general/verify.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「可判据的界面检查」{missing}——读者只看得见『看效果就截图』，该判据对读者不存在"

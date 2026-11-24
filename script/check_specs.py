@@ -126,6 +126,7 @@
  98. 记录只落项目文档防线（不进项目之外的"记忆"类载体）
  99. 汇报须送到发起人手里防线（写了汇报 ≠ 发出去了）
  100. 易变取值不得写死防线（看门狗/脚本/容器/代码等一切产出物，按形态判不按名单判）
+101. 可判据的界面检查防线（界面/CSS 的"看着对不对"落成会失败的断言或可 diff 快照，组合态为必查维度）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -8909,6 +8910,20 @@ def check_no_desktop_takeover_guard():
     phase_done()
 
 
+def check_verifiable_ui_guard():
+    """『可判据的界面检查』防线：把界面/CSS 的"看着对不对"落成会失败的判据。
+
+    用户提出：界面/CSS 单个组件没问题、组合起来才坏，后端测试走不出来，截图也不靠谱。
+    故须在开发期把外观与组合态落成 DOM/计算样式断言或可 diff 的渲染快照，
+    并单列组合态为必查维度。规则数据在 `script/specs-rules/verify/`，
+    锚点清单在 `_tokens.toml` 的 `VERIFIABLE_UI_TOKENS`；
+    "某条断言本机成不成立"属运行时事实，交人/子 agent 复核。
+    """
+    phase("可判据的界面检查防线检查（组合态为必查维度）")
+    run_rule_guard("check_verifiable_ui_guard")
+    phase_done()
+
+
 def check_windows_window_guard():
     """『Windows 下不为跑界面而把窗口开到用户眼前』防线：隐藏或后台，能达到目的就行。
 
@@ -16721,6 +16736,7 @@ CHECKS = (
     check_lifecycle_guard,
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
+    check_verifiable_ui_guard,
     check_windows_window_guard,
     check_run_artifact_guard,
     check_reusable_scenario_guard,

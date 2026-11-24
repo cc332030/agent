@@ -43,5 +43,5 @@ message = "易变取值不得写死防线：公开面 {file} 缺 {missing}——
 [[guards.check_volatile_value_guard]]
 file = "script/check_effective.py"
 kind = "file_tokens"
-tokens = ["易变取值不得写死防线钉住 `specs/general/coding-runtime.adoc`"]
+tokens = ["check_volatile_value_guard 钉住 `specs/general/coding-runtime.adoc`"]
 message = "易变取值不得写死防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"
