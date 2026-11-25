@@ -34521,5 +34521,122 @@ class TestCheckVolatileValueGuard(CheckSpecsTestCase):
         self.assertTrue(cm.errors)
 
 
+class TestCheckGlobalErrorGuard(CheckSpecsTestCase):
+    """钉住『未捕获错误必须有全局兜底』防线（用户提出）。
+
+    用户口径：调整公共规范，网页需要全局异常处理，不然白屏零提示、不知啥原因。
+    夹具取真文件逐字副本，按点改动后跑防线；只钉文本与落点，不把"某界面是否真白屏、
+    某错误是否真被接住"这类运行时事实交给机械判据。
+    """
+
+    FILES = ("specs/general/feedback.adoc", "specs/stack/web.adoc",
+             "AGENTS_COMMON.adoc", "README.adoc", "script/check_effective.py")
+    FEEDBACK, WEB, COMMON, README, LEDGER = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_global_error_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.FEEDBACK]
+        start = t.index("== 未捕获错误必须有全局兜底（任何端）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.FEEDBACK, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_shape_not_name_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**按形态判、不按框架名单判**",
+                             "**按框架名单判**")
+        self.assertTrue(cm.errors)
+
+    def test_unique_handler_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**唯一一处全局兜底**",
+                             "**各自写一处兜底**")
+        self.assertTrue(cm.errors)
+
+    def test_three_kinds_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**三类失败都须接入，不挑最好捕获的那一种（L1）**",
+                             "**只接最好捕获的一类（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_register_timing_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**注册须早于**它要保护的代码开始执行",
+                             "**注册可晚于**它要保护的代码执行")
+        self.assertTrue(cm.errors)
+
+    def test_no_recursion_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**失败时只记诊断、不递归**",
+                             "**失败时递归重试**")
+        self.assertTrue(cm.errors)
+
+    def test_first_error_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**只呈现首因**",
+                             "**呈现最后一个错误**")
+        self.assertTrue(cm.errors)
+
+    def test_web_carrier_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.WEB]
+        start = t.index("== 全局错误兜底的载体（前端）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.WEB, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "（含全局兜底）",
+                             "（含反馈）")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "未捕获错误必须有全局兜底（脚本错误/资源加载失败/未处理 Promise rejection 统一在一处接管，给人可读原因与出路，不白屏零提示；前端载体在 `web.adoc`）",
+                             "未捕获错误必须有全局兜底")
+        self.assertTrue(cm.errors)
+
+    def test_ledger_registration_removed_reports(self):
+        self._run_guard_with(self.LEDGER,
+                             "check_global_error_guard 钉住 `specs/general/feedback.adoc`",
+                             "该防线钉住 `specs/general/feedback.adoc`")
+        self.assertTrue(cm.errors)
+
+
 if __name__ == "__main__":
     unittest.main()

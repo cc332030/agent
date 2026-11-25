@@ -9,6 +9,94 @@
        注意：勿用 @asciidoctor/core 高版本——3.0.4 起 browser 构建不再暴露全局
        Asciidoctor（ReferenceError），且勿用 @latest 浮动版本（可能解析到无
        dist/browser 产物的 ESM 版而 404）。 -->
+  <script>
+    // 全局异常处理：捕获同步错误 / 资源加载失败 / 未处理的 Promise rejection，
+    // 统一落到 #fatal-panel 显示原因，避免"白屏且没有任何提示"。
+    // 监听在 <head> 尽早注册（晚注册的监听器接不到它之前抛出的错误）；面板节点在
+    // <body> 里，注册时还取不到——故事件触发时才取节点；若此时节点仍未进入 DOM
+    // （head 里的 CDN 加载失败就是这样），先暂存首因，DOM 就绪后补显示，不丢首因。
+    // 面板自身的失败只写 console，不再次走全局处理器（避免错误循环）。
+    (function () {
+      var claimed = false;                           // 首因只认领一次，后续错误不覆盖
+      var pending = null;                            // DOM 未就绪时的首因：节点进来后补显示
+      var GLOBAL_HANDLER = /showFatalError|renderFatal|onFatalEvent|onDomReady|global-error-handler/;
+
+      function fatalText(kind, reason) {
+        var text = String(reason || '未知错误');
+        var m = /^(?:Uncaught\s+)?(?:Error:\s*)?(.+)$/.exec(text);
+        return kind + '：' + (m ? m[1] : text);
+      }
+
+      function renderFatal(kind, reason) {
+        var panel = document.getElementById('fatal-panel');
+        var detail = document.getElementById('fatal-detail');
+        if (!panel || !detail) return false;         // 节点尚未进入 DOM（如 head 里 CDN 加载失败）
+        detail.textContent = fatalText(kind, reason);
+        panel.hidden = false;
+        return true;
+      }
+
+      function showFatalError(kind, reason) {
+        if (claimed) return;                         // 已认领首因：后续错误不覆盖
+        claimed = true;
+        try {
+          if (!renderFatal(kind, reason)) {
+            // 面板节点还没解析进来：暂存首因，DOM 就绪后补显示，不能就此丢掉
+            pending = { kind: kind, reason: reason };
+          }
+        } catch (e) {
+          console.error('显示全局异常面板失败:', e);  // 面板自身出错：只记日志，不递归
+        }
+      }
+
+      function onFatalEvent(event) {
+        if (event && event.defaultPrevented) return;
+        var err = event && (event.error || event.reason);
+        // 由本处理器自身（或其重试动作）触发的错误：只记日志，避免死循环
+        if (err && err.stack && GLOBAL_HANDLER.test(err.stack)) {
+          console.error('忽略处理器自身的二次错误:', err);
+          return;
+        }
+        if (event && event.type === 'error' && event.target && event.target !== window) {
+          // 资源加载失败（如 Asciidoctor CDN）：target 是出错的 <script>/<link> 节点
+          showFatalError('资源加载失败', (event.target.src || event.target.href || '未知资源'));
+          return;
+        }
+        showFatalError(event && event.type === 'unhandledrejection' ? '异步操作失败' : '脚本运行出错',
+          err || (event && event.message) || '未知错误');
+      }
+
+      window.addEventListener('error', onFatalEvent, true);   // capture：连资源加载失败也接住
+      window.addEventListener('unhandledrejection', onFatalEvent);
+
+      // 面板与重试按钮都在 <body> 里，注册时还不在 DOM 中——等 DOMContentLoaded。
+      // DOMContentLoaded 通常在脚本之后触发；若脚本因故在它之后才执行，直接绑。
+      function bindRetry() {
+        var retry = document.getElementById('fatal-retry');
+        if (!retry) return;
+        retry.addEventListener('click', function () {
+          try { window.location.reload(); }
+          catch (e) { console.error('重新加载失败:', e); }
+        });
+      }
+
+      function onDomReady() {
+        bindRetry();
+        if (pending) {                               // 首因发生在节点进入 DOM 之前：补显示
+          var p = pending;
+          pending = null;
+          try { renderFatal(p.kind, p.reason); }
+          catch (e) { console.error('显示全局异常面板失败:', e); }
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', onDomReady);
+      } else {
+        onDomReady();
+      }
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@asciidoctor/core@2.2.1/dist/browser/asciidoctor.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@asciidoctor/core@2.2.1/dist/css/asciidoctor.css">
   <style>
@@ -106,9 +194,65 @@
     footer a { color: var(--accent); }
     /* 源文件地址为空（加载中/出错）时不显示分隔符 */
     footer .doc-source:not(:empty)::after { content: " · "; margin: 0 2px; }
+    /* 全局异常面板：任何未捕获错误都落到它，不再白屏。用固定层 + 高 z-index，
+       即使正文被清空或脚本停在半途也能显示；配色沿用站点令牌，语义色单独给。 */
+    .fatal-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      overflow: auto;
+      background: var(--bg);
+      padding: 32px 20px 96px;
+    }
+    .fatal-panel[hidden] { display: none; }
+    .fatal-card {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 5px solid #cf222e;
+      border-radius: 8px;
+      padding: 24px 28px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    .fatal-card h2 { margin: 0 0 8px; font-size: 20px; color: #cf222e; }
+    .fatal-card p { margin: 6px 0; }
+    .fatal-card pre {
+      background: #f6f8fa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 13px;
+    }
+    .fatal-actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .fatal-actions button {
+      font: inherit;
+      padding: 7px 16px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+    }
+    .fatal-actions button:hover { filter: brightness(0.94); }
   </style>
 </head>
 <body>
+  <!-- 全局异常面板：默认隐藏，出现未捕获错误时由下面的全局处理器显示。
+       放在最前、样式内联在 <head>，即使后续脚本/样式加载失败仍能显示。 -->
+  <div id="fatal-panel" class="fatal-panel" role="alert" hidden>
+    <div class="fatal-card">
+      <h2>页面出错了</h2>
+      <p>抱歉，页面没能正常显示。下面是错误原因，便于排查或反馈。</p>
+      <pre id="fatal-detail"></pre>
+      <div class="fatal-actions">
+        <button type="button" id="fatal-retry">重新加载</button>
+      </div>
+    </div>
+  </div>
   <div class="topbar">
     <div class="topbar-inner">
       <h1>agent 执行规范</h1>

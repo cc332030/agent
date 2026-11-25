@@ -1239,6 +1239,11 @@ MECHANISMS = [
      "check_volatile_value_guard",
      "check_volatile_value_guard 钉住 `specs/general/coding-runtime.adoc`「易变的取值不得写死」七组锚点（节名与覆盖一切产出物、按形态判不按名单判、一律不写死取值只在配置/环境、与取值的唯一来源的边界含首次落点、换环境要不要改产出物的判定问句、三类例外与存量边界、依据与取舍声明）、调度器加载门、公开面 README 与台账登记；『某处取值是否真随环境变、是否真构成写死』属运行时事实与语义判断"),
 
+    ("未捕获错误必须有全局兜底（任何端，脚本错误/资源加载失败/未处理异步拒绝统一接管）",
+     "specs/general/feedback.adoc", "script/check_specs.py",
+     "check_global_error_guard",
+     "check_global_error_guard 钉住 `specs/general/feedback.adoc`「未捕获错误必须有全局兜底」五组锚点（按形态判不按框架名单判、唯一一处接管给人可读原因与出路、三类失败都接入、注册早于被保护代码且自身不递归只显示首因、诊断留痕但不给人看内部细节与存量边界）与前端载体 `specs/stack/web.adoc`「全局错误兜底的载体」，另核调度器加载门、公开面 README 与台账登记；只钉文本与落点，『某界面是否真白屏、某错误是否真被接住』属运行时事实与语义判断"),
+
 ]
 
 

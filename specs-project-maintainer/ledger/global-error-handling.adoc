@@ -1,0 +1,11 @@
+= 本轮记账：站点全局异常处理的接线与抓手
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（站点白屏零提示） | 新增 `check_site_error_guard` | 214 → **215**（本轮新增 `check_site_error_guard` 已计入现值 215） | 用户口径：『网页需要全局异常处理，不然白屏也不知道啥原因，没有任何提示』。承接的失效形态是——站点此前**没有任何全局兜底**：Asciidoctor CDN 加载失败、渲染脚本里的一个同步异常、一次未处理的 Promise rejection，都让页面停在加载中或白屏、零提示。改法：`index.html` 在 CDN 脚本**之前**注册全局错误处理器——`error` 监听开 capture（连资源加载失败也接住）、`unhandledrejection` 接未处理的拒绝、统一落到 `#fatal-panel` 显示"出了什么问题 + 错误详情 + 重新加载"；面板自身的失败只记日志、不递归；只显示首因、不被后续错误覆盖。**抓手**：`script/site-error-check.js` 从 `index.html` 切出**真实注册的处理器**在 node 最小 DOM 桩上执行（不另写一套），`check_specs.py` 真的跑它、逐例比对——同步错误 / 资源加载失败 / Promise rejection / 首因保留 / 面板自身出错不递归 / 重试按钮重加载六例；另核三处静态接线（监听先于 CDN、error 开 capture、unhandledrejection 在）。「提示文案是否足够用户理解」属语义判断，交人/子 agent 复核
+
+|===

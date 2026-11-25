@@ -127,6 +127,7 @@
  99. 汇报须送到发起人手里防线（写了汇报 ≠ 发出去了）
  100. 易变取值不得写死防线（看门狗/脚本/容器/代码等一切产出物，按形态判不按名单判）
 101. 可判据的界面检查防线（界面/CSS 的"看着对不对"落成会失败的断言或可 diff 快照，组合态为必查维度）
+102. 未捕获错误全局兜底防线（脚本错误/资源加载失败/未处理异步拒绝统一在一处接管，不白屏零提示）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -669,6 +670,8 @@
  133. 桌面壳持久存储防线（**用户提出**）：用户口径『tauri 和 electron 下，禁止 localStorage 和 sessionStorage 这一类浏览器存储数据的地方，一律存储到本地磁盘』。判据本体落技术栈层 `specs/stack/web.adoc`「桌面壳的持久存储（Tauri / Electron；浏览器 Web Storage 禁用）」：桌面壳内禁用 `localStorage`/`sessionStorage`/`indexedDB`/Cookie/Cache Storage 一类浏览器持久载体，需跨启动留存的数据一律经宿主磁盘 API 写到宿主可写目录；读写收在项目自己的一处入口（含键与清理规则），应用数据与只读产物分家，敏感取值不走明文缓存，存量随用随迁；Web 版仍按 `specs/stack/web.adoc`「缓存（载体）」、缓存判据本体仍在通用层。由 `check_desktop_storage_guard` 钉住；「某次是否真写到磁盘、某目录算不算宿主可写目录」属运行时事实与语义判断，交人/子 agent 复核。
 
  134. 易变取值不得写死防线（**用户提出**）：用户口径『写看门狗、自动化脚本、docker podman、甚至包括代码等东西，不能写死 ip、网段、设备名、网卡名等（不限定这几个，需要再扩）容易变化的东西，不然一变就试下了』。判据本体落通用层 `specs/general/coding-runtime.adoc`「易变的取值不得写死（代码、脚本、配置、容器定义等一切产出物）」：按形态判不按名单判、覆盖一切产出物、首次落点也不许写死、换环境要不要改产出物作判定问句、三类例外（协议固定常量/本机回环开发占位/用户主动声明）、存量随动迁移；与「取值的唯一来源」边界各立、互不豁免。由 `check_volatile_value_guard` 钉住；某处取值是否真随环境变、是否真构成写死属运行时事实与语义判断，交人/子 agent 复核。
+
+ 135. 未捕获错误全局兜底防线（**用户提出**）：用户口径『调整公共规范，网页需要全局异常处理，不然白屏也不知道啥原因，没有任何提示』。判据本体落通用层 `specs/general/feedback.adoc`「未捕获错误必须有全局兜底（任何端）」：按形态判不按框架名单判；未捕获错误统一在一处接管、给人可读原因与出路；同步异常、资源加载失败、未处理异步拒绝三类都接入；兜底注册早于被保护代码、自身失败只记诊断不递归、多错误只显示首因；诊断留痕但不给人看内部细节；存量随动迁移。前端载体落 `specs/stack/web.adoc`「全局错误兜底的载体（前端）」；调度器识别特征与公开面 README 同步登记。由 `check_global_error_guard` 钉住；只钉文本与落点，某界面是否真白屏、某错误是否真被接住属运行时事实与语义判断，交人/子 agent 复核。
 
 """
 
@@ -15711,6 +15714,134 @@ def check_source_management_guard():
     phase_done()
 
 
+# 站点全局异常处理的**边界取值**：`(用例名, 期望输出)`。判据是"喂一个未捕获错误，
+# 面板显示什么、是否可见"，不是"源码里有没有 addEventListener"——只核后者时，
+# 监听器挂错事件（如漏掉 capture 的资源加载失败）、面板首因被后续错误覆盖、面板自身
+# 出错递归触发全局处理器这几种都一路全绿。
+SITE_ERROR_BOUNDARY_CASES = (
+    ("sync-error", {"text": "脚本运行出错：boom", "visible": True},
+     "同步异常（最常见的白屏成因）须显示脚本运行出错 + 原始消息，面板可见"),
+    ("resource-error", {"text": "资源加载失败：https://cdn/x.js", "visible": True},
+     "资源加载失败（如 Asciidoctor CDN 挂掉）须点明是哪个资源，不能当成普通错误丢掉线索"),
+    ("promise-rejection", {"text": "异步操作失败：rejected!", "visible": True},
+     "未处理的 Promise rejection 须被 unhandledrejection 接住并显示原因"),
+    ("error-before-dom-ready", {"text": "资源加载失败：https://cdn/x.js", "visible": True,
+                                 "visibleBefore": False},
+     "head 里 CDN 加载失败时面板节点尚未进入 DOM，首因须暂存、DOM 就绪后补显示；"
+     "节点进入 DOM 前面板不可见、之后须显示首因（否则白屏场景恰恰丢掉首因）"),
+    ("first-error-kept", "脚本运行出错：first",
+     "多个错误接连到来时面板保留首因，不被后来的错误覆盖（否则真正的成因丢了）"),
+    ("no-recursion", {"logged": True, "visible": False},
+     "面板自身写入失败时只记日志、不递归调全局处理器（否则错误循环，面板永远显示不出来）"),
+    ("retry-reloads", True,
+     "重试按钮须真的重新加载页面，而不是把面板藏起来假装恢复"),
+)
+
+
+def check_global_error_guard():
+    """『未捕获错误必须有全局兜底』防线（**用户提出**）。
+
+    用户口径：『调整公共规范，网页需要全局异常处理，不然白屏也不知道啥原因，
+    没有任何提示』。要治的失效：错误根本没被捕获（白屏/加载中/零提示）此前没有任何
+    公共判据——coding.adoc「显式处理失败」只管代码分支里的 catch，feedback.adoc
+    「错误与失败」只管人可见反馈的形态。本道钉通用层判据本体五组要点、前端载体节、
+    调度器/公开面/台账三处登记；只核**文本与落点**；「某界面是否真白屏、某错误是否
+    真被接住」属运行时事实与语义判断（见 `GUARD_CHECK_LIMITS`），交人/子 agent 复核。
+    """
+    phase("未捕获错误全局兜底防线检查")
+    if not _rules_topic_present("global-error-fallback"):
+        err("缺少 script/specs-rules/global-error-fallback——『未捕获错误必须有全局兜底』"
+            "的锚点（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_global_error_guard")
+    phase_done()
+
+
+def check_site_error_guard():
+    """『站点全局异常处理』防线：未捕获错误有没有真的落到错误面板上。
+
+    要治的失效：站点此前没有任何全局兜底——Asciidoctor CDN 加载失败、渲染脚本里的
+    一个同步异常、一次未处理的 Promise rejection，都让页面停在加载中或白屏、零提示。
+    这类代码"看着在"没有意义，故与 `check_site_link_guard` 同一形态：取值抽到
+    `script/site-error-check.js`（它从 `index.html` 切出**真实注册的全局处理器**执行），
+    在这里真的跑它、逐例比对面板显示文本与可见性。
+
+    除边界取值外还核三处静态接线：① 处理器须在 CDN 脚本**之前**注册（晚注册的监听器
+    接不到它之前抛出的错误）；② `error` 监听须带 capture（否则接不住资源加载失败）；
+    ③ `unhandledrejection` 监听须在（否则 Promise rejection 无人管）。
+    「提示文案好不好看、错误原因是否足够用户理解」属语义判断（见 `GUARD_CHECK_LIMITS`），
+    交人/子 agent 复核。
+    """
+    phase("站点全局异常处理防线检查")
+    rel_js = "script/site-error-check.js"
+    js_path = os.path.join(REPO_ROOT, *rel_js.split("/"))
+    if not os.path.isfile(js_path):
+        err(f"缺少 {rel_js}——站点全局异常处理没有可核对的取值，白屏问题只能靠肉眼看", rel_js)
+        phase_done()
+        return
+    index_html = os.path.join(REPO_ROOT, "index.html")
+    if not os.path.isfile(index_html):
+        err("缺少 index.html——站点全局异常处理的落点不在，防线无处核", "index.html")
+        phase_done()
+        return
+    html = open(index_html, encoding="utf-8").read()
+    # ① 静态接线：监听时机、事件种类、capture
+    i_handler = html.find("window.addEventListener('error'")
+    i_cdn = html.find('asciidoctor.min.js')
+    if i_handler < 0:
+        err("index.html 没有注册 `window.addEventListener('error', …)`——同步错误与资源加载"
+            "失败都无人接管，页面白屏零提示", "index.html")
+    if i_cdn < 0:
+        err("index.html 找不到 Asciidoctor CDN 脚本标记——无法核对全局处理器是否先于它注册",
+            "index.html")
+    if i_handler >= 0 and i_cdn >= 0 and i_handler > i_cdn:
+        err("index.html 的全局错误监听注册在 Asciidoctor CDN 脚本**之后**——"
+            "CDN 加载失败时监听器还没挂上，白屏仍然零提示", "index.html")
+    if "window.addEventListener('error'" in html and ", true)" not in html[i_handler:i_handler + 80]:
+        err("index.html 的 `error` 监听没有开 capture（第三个参数 true）——"
+            "资源加载失败（如 CDN 脚本 404）走不到监听器，页面仍白屏", "index.html")
+    if "window.addEventListener('unhandledrejection'" not in html:
+        err("index.html 没有注册 `unhandledrejection` 监听——未处理的 Promise rejection "
+            "无人接管，页面会静默失败", "index.html")
+    node = shutil.which("node")
+    if node is None:
+        err(f"本机探测不到 `node`——{rel_js} 只有在 node 下才跑得起来，"
+            "而它承载的是『未捕获错误会不会显示出来』这一确定项（不得跳过）", rel_js)
+        phase_done()
+        return
+    # ② 边界取值：真的跑处理器、喂五种错误/恢复事件，逐例比对面板显示。
+    try:
+        r = subprocess.run([node, js_path, "--boundary"], capture_output=True, text=True,
+                           timeout=60, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
+    except subprocess.TimeoutExpired:
+        err(f"{rel_js} 超时（60s）：--boundary", rel_js)
+        phase_done()
+        return
+    if r.returncode != 0:
+        err(f"{rel_js} 执行失败（--boundary）：{r.stderr.strip()}", rel_js)
+        phase_done()
+        return
+    got = {}
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            err(f"{rel_js} 的 --boundary 输出不是一行一例 JSON：{line!r}", rel_js)
+            continue
+        got[rec.get("case")] = rec.get("out")
+    for name, want, desc in SITE_ERROR_BOUNDARY_CASES:
+        if name not in got:
+            err(f"{rel_js} 的 --boundary 没有给出用例 {name!r} 的取值——"
+                f"那一支没有可核对的结果（{desc}）", rel_js)
+        elif got[name] != want:
+            err(f"{rel_js} 的边界用例 {name!r} 跑出 {got[name]!r}、期望 {want!r}——{desc}", rel_js)
+    phase_done()
+
+
 def check_site_link_guard():
     """『站点正文区的站内链接』防线：点下去落在哪个 hash，得真的跑一遍才算数。
 
@@ -16910,6 +17041,8 @@ CHECKS = (
     check_file_role_guard,
     check_site_link_guard,
     check_site_include_guard,
+    check_site_error_guard,
+    check_global_error_guard,
     check_ledger_table_generated_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,
