@@ -31755,6 +31755,57 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                                     f"锚点清单 {name} 只剩 {have} 项（下限 {step['min']}）")
 
 
+    # 数值的单位（用户提出：展示与输入对不同值取适当单位）——核判据本体被抽走、
+    # 模板取值口径被抽走、加载门识别特征被抽走三种形态；「某处单位算不算适当」
+    # 属语义判断、不交给机械判据。
+    def test_unit_section_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "== 数值的单位（界面上展示的数、输入框里的数）",
+                             "== 数值展示")
+        self.assertTrue(cm.errors, "单位节整节被抽走须报红")
+
+    def test_unit_display_rule_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**展示按值取适当单位、单位与数值同一处给出（L1）**",
+                             "展示数值时取合适单位")
+        self.assertTrue(cm.errors, "展示取适当单位那条被降级须报红")
+
+    def test_unit_input_rule_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**输入按字段语义定单位、并让它在界面上可见（L1）**",
+                             "输入数值时标明单位")
+        self.assertTrue(cm.errors, "输入定单位那条被降级须报红")
+
+    def test_unit_conversion_single_source_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**换算规则只有一处、交于界面而非用户（L1）**",
+                             "换算规则可以各处自己定")
+        self.assertTrue(cm.errors, "换算一处定义那条被抽走须报红")
+
+    def test_unit_shape_not_name_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**典型只是说明面的枚举、不是边界**",
+                             "典型即为边界")
+        self.assertTrue(cm.errors, "按形态判不按名单判被抹须报红")
+
+    def test_unit_template_removed_reports(self):
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**数值按字段语义定单位、单位写在控件处**",
+                             "数值输入按普通控件处理")
+        self.assertTrue(cm.errors, "模板里的单位取值口径被抽走须报红")
+
+    def test_unit_dispatcher_entry_removed_reports(self):
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "要**展示或录入带单位的值**",
+                             "")
+        self.assertTrue(cm.errors, "加载门里单位的识别特征被抽走须报红")
+
+    def test_unit_evidence_tradeoff_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**「展示与输入按字段语义取适当单位、单位与数值同一处给出、换算规则只有一处且交于界面而非用户」是本集合的判据化取舍**",
+                             "**展示与输入按字段语义取适当单位是通行做法**")
+        self.assertTrue(cm.errors, "单位条的取舍归属被抹须报红")
+
     def test_feedback_kinds_removed_reports(self):
         # 反例㉔（后补）：五类反馈成套这条判据被降级（只做成功一种又成为合规）
         self._run_guard_with("specs/general/feedback.adoc",
