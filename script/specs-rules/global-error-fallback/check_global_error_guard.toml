@@ -1,0 +1,55 @@
+# 『未捕获错误必须有全局兜底』防线（**用户提出**）。
+#
+# 用户口径：『调整公共规范，网页需要全局异常处理，不然白屏也不知道啥原因，没有任何提示』。
+#
+# 判据本体唯一落 specs/general/feedback.adoc「未捕获错误必须有全局兜底（任何端）」一节：
+# 按形态判不按框架名单判、唯一一处接管给人可读原因与出路、三类失败都接入、注册早于被保护
+# 代码且自身不递归、只显示首因、诊断留痕但不给人看内部细节、存量随动迁移。前端载体在
+# specs/stack/web.adoc「全局错误兜底的载体（前端）」。本道只钉判据本体、载体与三处登记
+# （调度器、公开面、台账）是否仍在；某界面是否真白屏、某错误是否真被接住属运行时事实与
+# 语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核。
+
+[[guards.check_global_error_guard]]
+file = "specs/general/feedback.adoc"
+section = "未捕获错误必须有全局兜底（任何端）"
+kind = "section_groups"
+token_list = "GLOBAL_ERROR_FALLBACK_SECTION_ANCHORS"
+message = "全局错误兜底防线：{file}「未捕获错误必须有全局兜底」缺失要点 {missing}——{desc}"
+
+[[guards.check_global_error_guard]]
+file = "script/specs-rules/global-error-fallback/tokens.toml"
+kind = "anchor_count"
+token_list = "GLOBAL_ERROR_FALLBACK_SECTION_ANCHORS"
+min = 5
+
+[[guards.check_global_error_guard]]
+file = "specs/stack/web.adoc"
+section = "全局错误兜底的载体（前端）"
+kind = "section_groups"
+groups = [
+    ["前端落点在入口一处", ["判据本体在 `specs/general/feedback.adoc`", "本文件不复述判据、也不另立判据", "接管的载体（L2）", "注册时机的载体（L2）", "显示与诊断的载体（L2）"], "缺则前端落点消失或变成第二真源"],
+]
+
+[[guards.check_global_error_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "file_tokens"
+tokens = [
+    "（含全局兜底）",
+    "specs/general/feedback.adoc",
+]
+message = "全局错误兜底防线：调度器 {file} 未登记识别特征 {missing}——写界面错误兜底时不会加载该节"
+
+[[guards.check_global_error_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "未捕获错误必须有全局兜底（脚本错误/资源加载失败/未处理 Promise rejection 统一在一处接管，给人可读原因与出路，不白屏零提示；前端载体在 `web.adoc`）",
+    "feedback.adoc",
+]
+message = "全局错误兜底防线：公开面 {file} 缺 {missing}——引用方从目录说明看不到该判据"
+
+[[guards.check_global_error_guard]]
+file = "script/check_effective.py"
+kind = "file_tokens"
+tokens = ["check_global_error_guard 钉住 `specs/general/feedback.adoc`"]
+message = "全局错误兜底防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"
