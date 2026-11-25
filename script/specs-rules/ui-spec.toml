@@ -663,6 +663,50 @@ tokens = [
 ]
 message = "调度器「任何代码活动」条目未登记「选容器或排表」的识别特征（或其模板）——点详情开弹窗还是侧栏、表单怎么排、列宽上限多少时读不到判据，规则实际失效"
 
+# 数值的单位（用户提出：界面展示与输入对不同值取适当单位）：判据本体与「输入控件按值域取」
+# 同在 `specs/general/ui.adoc`、但判据面不同——那条管控件类型与格式限制落在哪，这条管值的单位、
+# 进制与换算口径；与「取值的唯一来源」也分工——那条管同一取值一处定义，这条管单位口径一处定义。
+# 本组只钉判据本体与依据行仍在；模板侧取值口径与加载门一组核。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "section_groups"
+section = "数值的单位（界面上展示的数、输入框里的数）"
+token_list = "UI_SPEC_UNIT_ANCHORS"
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui.adoc"
+kind = "anchor_count"
+token_list = "UI_SPEC_UNIT_ANCHORS"
+min = 25
+
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-patterns.adoc"
+kind = "section_groups"
+section = "二、表单：排布与分组"
+groups = [
+    [
+        "数值按字段语义定单位、单位写在控件处、换算一处、用户选单位优先",
+        [
+            "**数值按字段语义定单位、单位写在控件处**",
+            "换算基准与进制口径在项目里的**一处**定下",
+            "**用户显式选了单位就按选的来**",
+            "**不得**让用户看着秒、提交按毫秒",
+        ],
+        "缺则模板没有单位的取值口径：输入框不标单位、标注与提交口径各写一份、换算散在页面里",
+    ],
+]
+
+# 加载门：调度器「任何代码活动」条目须带单位识别特征——展示/录入带单位的值时读得到判据本体。
+[[guards.check_ui_spec_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "要**展示或录入带单位的值**",
+    "`specs/general/ui.adoc`",
+]
+message = "调度器「任何代码活动」条目未登记数值单位的识别特征——展示/录入带单位的值时读不到单位判据，裸数字与单位错配又无人报红"
+
 # ⑨ 反馈与提示（后补判据本体 + 模板）：**逐节核**——这一层整段被抽走时，界面判据仍会
 # 「五类成套」「文案唯一落点」，但"错误码与文案不同表、批量失败弹 N 次、关掉推送等于
 # 事件没发生"这三种最常见、也最没人管的形态无人报红。
