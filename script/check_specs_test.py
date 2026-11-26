@@ -31904,6 +31904,45 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                              "**展示与输入按字段语义取适当单位是通行做法**")
         self.assertTrue(cm.errors, "单位条的取舍归属被抹须报红")
 
+    # UI 的可量化描述载体（用户问有没有类 mermaid 的 UI 语言、原型工具适不适合）——核判据本体被抽走、工具定位被抹、
+    # 模板取值口径被抽走、加载门识别特征被抽走、取舍声明被抹五种形态；
+    # 「某处设计工具产出是否该进代码、六面是否真可指」属语义判断、不交给机械判据。
+    def test_quant_section_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "== UI 的可量化描述载体（值写在哪、谁是真源、设计工具处于什么位置）",
+                             "== UI 标准")
+        self.assertTrue(cm.errors, "可量化载体节整节被抽走须报红")
+
+    def test_quant_tool_not_source_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**设计 / 原型工具是上游参照与输入，不是唯一真源（L1）**",
+                             "设计工具可作为唯一标准")
+        self.assertTrue(cm.errors, "工具不是唯一真源那条被抹须报红")
+
+    def test_quant_six_surfaces_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**六个面的落点须逐一可指（L1）**",
+                             "量化颜色即可")
+        self.assertTrue(cm.errors, "六面逐一可指那条被抹须报红")
+
+    def test_quant_template_removed_reports(self):
+        self._run_guard_with("specs/general/ui-tokens.adoc",
+                             "**不另造本仓库专属的 DSL，也不强制某个工具的文件格式**",
+                             "采用本仓库专属 DSL")
+        self.assertTrue(cm.errors, "模板里的载体取值口径被抽走须报红")
+
+    def test_quant_dispatcher_entry_removed_reports(self):
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "**把 UI 落成可量化、可进代码的标准**",
+                             "")
+        self.assertTrue(cm.errors, "加载门里可量化载体的识别特征被抽走须报红")
+
+    def test_quant_evidence_tradeoff_removed_reports(self):
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**「UI 的可量化须落成项目内可 diff、可按名消费的文本真源，六个面逐一可指，设计 / 原型工具只作上游参照与输入而非唯一真源」是本集合的判据化取舍**",
+                             "**UI 可量化是通行做法**")
+        self.assertTrue(cm.errors, "可量化载体条的取舍归属被抹须报红")
+
     def test_feedback_kinds_removed_reports(self):
         # 反例㉔（后补）：五类反馈成套这条判据被降级（只做成功一种又成为合规）
         self._run_guard_with("specs/general/feedback.adoc",

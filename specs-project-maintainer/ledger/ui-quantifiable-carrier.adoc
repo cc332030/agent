@@ -1,0 +1,8 @@
+= 本轮记账：UI 的可量化描述载体（公共规范）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（UI 的可量化描述载体） | 无（沿用 `check_ui_spec_guard` 扩面，不另建第二真源） | 214 → **214** | 用户口径：『通过 memarid 可以画流程图、UML 图，把 UML 变成了可量化的标准，UI 有没有这样的语言？Figma 和 Axure 适合放代码里吗？帮我调研哪些适合，引入到公共规范，让 UI 有可以量化的标准』。判据本体落公共层 `specs/general/ui.adoc` 新节「UI 的可量化描述载体」：按五条件判可量化（具名、一处定义、文本可 diff、可按名消费、六面覆盖）、设计 / 原型工具只作上游参照与输入而非唯一真源、形态取现成可交换格式而不另造 DSL、六面落点逐一可指、随界面改动同步与存量边界、与既有令牌/风格判据分工及依据行取舍归属。模板 `specs/general/ui-tokens.adoc` 补「零、载体形态」取值口径并回指本体；调度器「任何代码活动」与公开面 README 同步登记识别特征。机械侧扩既有 `check_ui_spec_guard`：规则数据 `script/specs-rules/ui-spec.toml` 与锚点 `script/specs-rules/_tokens.toml` 的 `UI_SPEC_QUANT_ANCHORS` 补四组，`TestCheckUiSpecGuard` 补六条反例；台账 `check_effective.py` 那条同步补可量化载体覆盖说明。只钉文本与落点；「某处设计工具产出是否该进代码、六面是否真可指」属语义判断，交人/子 agent 复核。调研七条路：DTCG《Design Tokens Format Module 2025.10》（社区组报告、非标准）、WAI-ARIA APG、style-dictionary / Tokens Studio / Radix Primitives、Storybook CSF / PlantUML Salt / Mermaid stateDiagram、设计稿与代码两份真源的失效形态、NN/g 与 Tokens Studio 一手文档、本项目 `ui.adoc`/`coding-runtime.adoc`/`terminology.adoc` 先例。
+|===
