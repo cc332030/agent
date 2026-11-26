@@ -31784,6 +31784,27 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                              "**风格必须落成令牌、并且可判（L1）**", "风格应尽量落成令牌")
         self.assertTrue(cm.errors, "必写项落成令牌这条被抽走须报红")
 
+    def test_project_must_define_style_removed_reports(self):
+        # 反例（本轮）：「每个带界面的项目先定风格、没定按判据补一个」被抽走——
+        # 项目可在没定风格的状态下先铺页面、各页自行取风格，这条最常发生的失效无人报红
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**每个带界面的项目都要定下自己的界面风格，没定就按判据补一个（L1）**",
+                             "界面风格宜尽早确定")
+        self.assertTrue(cm.errors, "「项目必须先定风格、没定补一个」被抽走须报红")
+
+    def test_styles_template_howto_removed_reports(self):
+        # 反例（本轮）：模板里「还没定风格时怎么补」的可复制动作节被整段抽走——
+        # 判据说了要补，模板却没有落点，执行者不知道怎么补
+        self._write_all_valid()
+        text = self.base["specs/general/ui-styles.adoc"]
+        marker = "== 三之二、还没定风格时，从候选清单补一族（可复制动作）"
+        self.assertIn(marker, text, "夹具失效：模板里找不到补法节")
+        idx = text.index(marker)
+        end = text.index("\n== ", idx + 1)
+        self.write("specs/general/ui-styles.adoc", text[:idx] + text[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors, "模板补法节被抽走须报红")
+
     def test_voice_action_name_removed_reports(self):
         # 反例⑲（后补）：动作名的判据被抽走（按钮一律叫「确定」变成合规）
         self._run_guard_with("specs/general/ui.adoc",
