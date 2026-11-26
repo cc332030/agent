@@ -15212,6 +15212,17 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         "（换了个弃用者不算替代）。\n"
         "* **例外（L2，须写清理由）**：替代者在本项目声明的依赖面内不存在时，可写明理由"
         "保持原状。\n"
+        "* **弃用须同时写明替代者（L1，任何语言）**：标记弃用（`@Deprecated`、`deprecated`、"
+        "文档标注废弃等）时，类、方法、字段的弃用处须同时给出被谁替代，其他语言用其"
+        "文档注释的等价标签（JSDoc `@deprecated` + `@see`、docstring 的 `.. deprecated::` "
+        "+ `.. seealso::` 一类）；**只标弃用而不指替代者即未完成**。"
+        "**判定标准（任一命中即违规）**：① 弃用处的文档注释只有「已弃用」而无替代者指向；"
+        "② `@Deprecated` 未配 `@see`；③ 替代者指向不存在、不可解析。"
+        "**无替代者的出口**：替代者在依赖面内取不到时，在弃用处的文档注释里"
+        "写明「无替代者 + 原因」即算给出去向，不强制 `@see` 指向。"
+        "**边界**：本条管弃用声明本身写没写清去向。"
+        "**存量边界**：只管新增的弃用声明与本次改到的弃用处，不为补 `@see` "
+        "对存量做全库扫描。\n"
         "* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者**不得**顺带改依赖清单"
         "或依赖版本。\n"
         "* **内部弃用 API 的调用不迁移、不修复（L2，存量边界）**：既有调用点保持原样。"
@@ -15231,6 +15242,23 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         "依赖清单或版本变化，而其理由只是「替代者需要新版本」却未走本节升级流程。\n"
     )
 
+    JAVA = (
+        "= Java 规范\n\n"
+        "== javadoc\n"
+        "* **`@Deprecated` 须与 `@see` 成对出现（L1，用户点名）**：类、方法、字段标 "
+        "`@Deprecated` 时，同一条 javadoc 里**须有 `@see` 指明替代者**，写被 xx 替代；"
+        "**只标 `@Deprecated` 不写 `@see`、或 `@see` 指向弃用者自身/另一个弃用者，即未完成**"
+        "（判据本体见 `specs/general/coding-runtime.adoc`「警告与弃用」）。"
+        "**无替代者**时在**同一条 javadoc 的正文**写明「无替代者 + 原因」即算给出去向，"
+        "**不要求虚构一个 `@see` 指向**；"
+        "@see 须指向可解析的替代类/成员，免触发 doclint `reference not found`。"
+        "**判定标准（任一命中即违规）**：① 弃用成员的 javadoc 标了 `@Deprecated`，"
+        "既无 `@see` 也无「无替代者 + 原因」的正文说明；"
+        "② `@see` 指不到替代者；③ 以 `@since` 顶替。"
+        "**边界**：弃用 `@see` 指替代者，弃用 `@see` 不随之移除。"
+        "**存量边界**：本条只落在新写与本次改到的弃用声明上。\n"
+    )
+
     def setUp(self) -> None:
         super().setUp()
         self._orig_coding = cm.CODING_FILE
@@ -15244,7 +15272,9 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
 
     def _write_valid(self) -> None:
         self.write("specs/general/coding.adoc", self.CODING)
+        self.write("specs/general/coding-runtime.adoc", self.CODING)
         self.write("specs/general/dependency.adoc", self.DEPENDENCY)
+        self.write("specs/stack/java.adoc", self.JAVA)
 
     def test_valid_deprecated_api_guard_passes(self):
         self._write_valid()
@@ -15255,6 +15285,7 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         # 反例：整节被删 → 弃用者与替代者重新并存
         self._write_valid()
         self.write("specs/general/coding.adoc", "= 通用编码规范\n\n== 表达式与调用写法\n* 略。\n")
+        self.write("specs/general/coding-runtime.adoc", "= 通用编码规范\n\n== 其他\n* 略。\n")
         cm.check_deprecated_api_guard()
         self.assertIn("警告与弃用", self.error_texts())
 
@@ -15262,6 +15293,9 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         # 反例：禁止面被降级成建议 → "偶尔用一下弃用者"重新成立
         self._write_valid()
         self.write("specs/general/coding.adoc",
+                   self.CODING.replace("不得使用被弃用的类/API，改用替代者（L1）",
+                                       "不得使用被弃用的类/API，改用替代者（L2，建议）"))
+        self.write("specs/general/coding-runtime.adoc",
                    self.CODING.replace("不得使用被弃用的类/API，改用替代者（L1）",
                                        "不得使用被弃用的类/API，改用替代者（L2，建议）"))
         cm.check_deprecated_api_guard()
@@ -15272,6 +15306,8 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         self._write_valid()
         self.write("specs/general/coding.adoc",
                    self.CODING.replace("优先取升级后的新类、或同名新类", "随取一个可用者"))
+        self.write("specs/general/coding-runtime.adoc",
+                   self.CODING.replace("优先取升级后的新类、或同名新类", "随取一个可用者"))
         cm.check_deprecated_api_guard()
         self.assertIn("优先取升级后的新类、或同名新类", self.error_texts())
 
@@ -15279,6 +15315,9 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         # 反例：默认不动依赖面被删 → "换掉弃用类"被读成许可顺手升级依赖
         self._write_valid()
         self.write("specs/general/coding.adoc",
+                   self.CODING.replace("* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者"
+                                       "**不得**顺带改依赖清单或依赖版本。\n", ""))
+        self.write("specs/general/coding-runtime.adoc",
                    self.CODING.replace("* **默认不为此调整依赖、也不动依赖版本（L1）**：改用替代者"
                                        "**不得**顺带改依赖清单或依赖版本。\n", ""))
         cm.check_deprecated_api_guard()
@@ -15290,8 +15329,46 @@ class TestCheckDeprecatedApiGuard(CheckSpecsTestCase):
         self.write("specs/general/coding.adoc",
                    self.CODING.replace("**本条**只管既有调用点——**不构成**对新代码的豁免。",
                                        "新代码也照存量写。"))
+        self.write("specs/general/coding-runtime.adoc",
+                   self.CODING.replace("**本条**只管既有调用点——**不构成**对新代码的豁免。",
+                                       "新代码也照存量写。"))
         cm.check_deprecated_api_guard()
         self.assertIn("豁免", self.error_texts())
+
+    def test_deprecated_replacement_clause_deleted_reports(self):
+        # 反例：通用层「弃用须写明替代者」整条被删 → 弃用去向又回到裁量
+        self._write_valid()
+        self.write("specs/general/coding-runtime.adoc",
+                   self.CODING.replace(
+                       "* **弃用须同时写明替代者（L1，任何语言）**：",
+                       "* **弃用可写明替代者（L2，建议）**："))
+        cm.check_deprecated_api_guard()
+        self.assertIn("弃用须同时写明替代者（L1，任何语言）", self.error_texts())
+
+    def test_deprecated_no_replacement_exit_removed_reports(self):
+        # 反例：Java 侧无替代者出口句被删 → guard 必须报（出口是该条的合法落法）
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace(
+                       "**无替代者**时在**同一条 javadoc 的正文**写明「无替代者 + 原因」即算给出去向，",
+                       "**无替代者**时不写 @see，"))
+        cm.check_deprecated_api_guard()
+        self.assertIn("无替代者", self.error_texts())
+
+    def test_deprecated_no_fabricated_see_sentence_removed_reports(self):
+        # 反例：Java 侧「不要求虚构 @see 指向」句被删 → 与正文出口冲突的旧读法复活
+        self._write_valid()
+        self.write("specs/stack/java.adoc",
+                   self.JAVA.replace("**不要求虚构一个 `@see` 指向**；", ""))
+        cm.check_deprecated_api_guard()
+        self.assertIn("不要求虚构", self.error_texts())
+
+    def test_deprecated_see_pair_in_java_removed_reports(self):
+        # 反例：Java 侧「@Deprecated 配 @see」落点被删 → 用户点名的形态在代码注释里失去抓手
+        self._write_valid()
+        self.write("specs/stack/java.adoc", "= Java 规范\n\n== javadoc\n* 略。\n")
+        cm.check_deprecated_api_guard()
+        self.assertIn("`@Deprecated` 须与 `@see` 成对出现", self.error_texts())
 
     def test_dependency_side_not_synced_reports(self):
         # 反例：依赖侧落点缺失 → 代码条与依赖条脱节，"不动依赖面"无落点
