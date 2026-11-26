@@ -6825,6 +6825,94 @@ class TestCheckVerifiableUiGuard(CheckSpecsTestCase):
         super().tearDown()
 
 
+class TestCheckRealPageGuard(CheckSpecsTestCase):
+    """钉住『界面/网页功能须在真实页面验证』（用户口径：界面、网页功能验证一定要真实打开
+    页面验证——失效形态是拿接口返回/后端测试/源码推断替代界面判据）。反例覆盖：正文条目/
+    取值/判定标准/例外/依据被抽、调度器/提示词/README 未同步、锚点清单被削空。
+    """
+
+    VERIFY = "specs/general/verify.adoc"
+    COMMON = "AGENTS_COMMON.adoc"
+    PROMPT = "prompts/_common.txt"
+    README = "README.adoc"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _write_valid(self):
+        for rel in (self.VERIFY, self.COMMON, self.PROMPT, self.README):
+            self.write_real_file(rel)
+        self.write_rules_fixture()
+
+    def _mutate(self, rel, removed, replacement=""):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn(removed, text)
+        self._write_valid()
+        self.write(rel, text.replace(removed, replacement, 1))
+
+    def test_valid_passes(self):
+        self._write_valid()
+        cm.check_real_page_guard()
+        self.assertEqual("", self.error_texts())
+
+    def test_body_dropped_reports(self):
+        self._mutate(self.VERIFY, "* **界面/网页功能须在真实页面验证（L1）", "* **界面另议**")
+        cm.check_real_page_guard()
+        self.assertIn("条文与判据对象", self.error_texts())
+
+    def test_no_cross_layer_dropped_reports(self):
+        self._mutate(self.VERIFY, "判据是界面行为时不适用", "接口也行")
+        cm.check_real_page_guard()
+        self.assertIn("取值三条", self.error_texts())
+
+    def test_criteria_dropped_reports(self):
+        self._mutate(self.VERIFY, "推断界面呈现或交互结果", "允许推断")
+        cm.check_real_page_guard()
+        self.assertIn("判定标准三条", self.error_texts())
+
+    def test_exception_dropped_reports(self):
+        self._mutate(self.VERIFY, "不强制打开页面", "一律打开页面")
+        cm.check_real_page_guard()
+        self.assertIn("例外与边界", self.error_texts())
+
+    def test_dispatch_trigger_dropped_reports(self):
+        self._mutate(self.COMMON, "没在真实页面取过它的行为", "界面相关")
+        cm.check_real_page_guard()
+        self.assertIn("没在真实页面取过它的行为", self.error_texts())
+
+    def test_prompt_clip_dropped_reports(self):
+        self._mutate(self.PROMPT, "界面/网页功能须在真实页面验证（L1）", "看接口即可")
+        cm.check_real_page_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_readme_entry_dropped_reports(self):
+        self._mutate(self.README, "界面/网页功能要在真实页面验证", "接口验证说明")
+        cm.check_real_page_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
+    def test_anchor_list_shrunk_reports(self):
+        self._write_valid()
+        rel = _find_rule_file('token_list = "REAL_PAGE_TOKENS"')
+        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn('min = 16\ntoken_list = "REAL_PAGE_TOKENS"', text)
+        self.write(rel, text.replace('min = 16\ntoken_list = "REAL_PAGE_TOKENS"',
+                                     'min = 999\ntoken_list = "REAL_PAGE_TOKENS"', 1))
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.check_real_page_guard()
+        self.assertIn("REAL_PAGE_TOKENS", self.error_texts())
+
+    def tearDown(self) -> None:
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+        super().tearDown()
+
+
 class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
     """钉住『Windows 下不为跑界面而把窗口开到用户眼前』（用户口径：windows 下如果要打开窗口
     测试界面、验证布局，**不要在前台打开**——隐藏窗口或后台都行、**能达到目的就可以**，

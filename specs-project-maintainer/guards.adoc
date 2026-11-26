@@ -60,6 +60,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_lightest_path_guard` | `script/specs-rules/verify/guards/check_lightest_path_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_no_desktop_takeover_guard` | `script/specs-rules/verify/guards/check_no_desktop_takeover_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_verifiable_ui_guard` | `script/specs-rules/verify/guards/check_verifiable_ui_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_real_page_guard` | `script/specs-rules/verify/guards/check_real_page_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_windows_window_guard` | `script/specs-rules/verify/guards/check_windows_window_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_run_artifact_guard` | `script/specs-rules/verify/guards/check_run_artifact_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_reusable_scenario_guard` | `script/specs-rules/verify/guards/check_reusable_scenario_guard.adoc`
