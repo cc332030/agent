@@ -1,19 +1,34 @@
 # 『界面显示缺陷必查』防线（用户提出：review / 重构时处理多余空白等显示问题，以实际显示效果为准）。
-# 判据本体落 specs/general/review.adoc「review 的默认检查面」的『界面显示缺陷属代码问题、必查』与『事件流触发渲染的缺陷属代码问题、必查』两条。
+# 判据本体落 specs/general/ui.adoc「界面显示缺陷的六个维度」；review 检查面落
+# specs/general/review.adoc「review 的默认检查面」的『界面显示缺陷属代码问题、必查』与
+# 『事件流触发渲染的缺陷属代码问题、必查』两条（回指本体、不复述）。
 # 只钉判据本体与四处登记是否仍在；「某处显示缺陷实际有没有」属运行时事实，交人/子 agent 复核。
+
+[[guards.check_ui_display_defects_guard]]
+file = "specs/general/ui.adoc"
+section = "界面显示缺陷的六个维度"
+kind = "section_groups"
+token_list = "UI_DISPLAY_DEFECTS_SECTION_ANCHORS"
+message = "界面显示缺陷防线：{file}「界面显示缺陷的六个维度」缺失要点 {missing}——{desc}"
 
 [[guards.check_ui_display_defects_guard]]
 file = "specs/general/review.adoc"
 section = "review 的默认检查面（只查问题，不动存量）"
 kind = "section_groups"
-token_list = "UI_DISPLAY_DEFECTS_SECTION_ANCHORS"
-message = "界面显示缺陷防线：{file}「review 的默认检查面」缺失要点 {missing}——{desc}"
+token_list = "UI_DISPLAY_DEFECTS_REVIEW_ANCHORS"
+message = "界面显示缺陷防线：{file}「review 的默认检查面」缺检查面/回指 {missing}——review 不加载显示缺陷，或在 review 里另写一套六档判据"
 
 [[guards.check_ui_display_defects_guard]]
 file = "script/specs-rules/ui-display-defects/tokens.toml"
 kind = "anchor_count"
 token_list = "UI_DISPLAY_DEFECTS_SECTION_ANCHORS"
-min = 5
+min = 16
+
+[[guards.check_ui_display_defects_guard]]
+file = "script/specs-rules/ui-display-defects/tokens.toml"
+kind = "anchor_count"
+token_list = "UI_DISPLAY_DEFECTS_REVIEW_ANCHORS"
+min = 4
 
 [[guards.check_ui_display_defects_guard]]
 file = "AGENTS_COMMON.adoc"
@@ -27,18 +42,19 @@ message = "界面显示缺陷防线：调度器 {file}「code review」未登记
 [[guards.check_ui_display_defects_guard]]
 file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
-anchor = ["**选容器或排表**"]
+anchor = ["**查界面显示缺陷的标准"]
 tokens = [
-    "review/重构按渲染核显示缺陷",
+    "`specs/general/ui.adoc`「界面显示缺陷的六个维度」",
     "`specs/general/review.adoc`",
 ]
-message = "界面显示缺陷防线：调度器 {file}「任何代码活动」未登记识别特征 {missing}——重构时不加载判据"
+message = "界面显示缺陷防线：调度器 {file}「任何代码活动」未登记识别特征 {missing}——查显示缺陷标准时读不到 ui.adoc 的判据本体"
 
 [[guards.check_ui_display_defects_guard]]
 file = "README.adoc"
 kind = "file_tokens"
 tokens = [
     "界面显示缺陷属代码问题、必查",
+    "界面显示缺陷的判据本体在 `specs/general/ui.adoc`",
     "review.adoc",
 ]
 message = "界面显示缺陷防线：公开面 {file} 缺 {missing}——引用方从目录说明看不到该判据"
@@ -62,7 +78,7 @@ tokens = [
 message = "界面显示缺陷防线：{file} 现状检查缺 {missing}——重构时不会把显示缺陷纳入重构清单"
 
 [[guards.check_ui_display_defects_guard]]
-file = "specs/general/coding.adoc"
+file = "specs/general/coding-ui.adoc"
 kind = "file_tokens"
 tokens = [
     "形态十一（事件流→渲染）",
@@ -85,5 +101,5 @@ message = "事件流渲染防线：{file} review 默认检查面缺 {missing}—
 [[guards.check_ui_display_defects_guard]]
 file = "script/check_effective.py"
 kind = "file_tokens"
-tokens = ["check_ui_display_defects_guard 钉住 `specs/general/review.adoc`"]
+tokens = ["check_ui_display_defects_guard 钉住 `specs/general/ui.adoc`"]
 message = "界面显示缺陷防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"

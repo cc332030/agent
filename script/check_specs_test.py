@@ -18853,7 +18853,7 @@ class TestCheckCrossModuleFeatureGuard(CheckSpecsTestCase):
     """
 
     SECTION = (
-        "== review 的默认检查面（只查问题，不动存量）\n\n"
+        "== 功能不跨模块（同一功能的实现只有一处落点）\n\n"
         "review **默认只查问题**。\n\n"
         "* **存量不动、随动迁移（L1）**：存量不合取向性规范不构成问题；"
         "review 不得据此提出问题。\n"
@@ -18869,14 +18869,17 @@ class TestCheckCrossModuleFeatureGuard(CheckSpecsTestCase):
         "**不得只记为\"已发现\"就收尾**。\n")
 
     def _write(self, review=None, prompt_review=None, prompt_refactor=None,
-               generic=None) -> None:
+               generic=None, module=None) -> None:
         self.write("specs/general/review.adoc",
                    review if review is not None else
-                   "[[term-cross-module-feature]]\n" + self.SECTION)
+                   "[[term-cross-module-feature]]\n**一个功能的实现跨模块**：见 "
+                   "`specs/general/module.adoc`「功能不跨模块」。\n")
+        self.write("specs/general/module.adoc",
+                   module if module is not None else self.SECTION)
         self.write("prompts/review.adoc",
                    prompt_review if prompt_review is not None else
                    "1. 检查\n2. 检查面另含『一个功能的实现跨模块』（L1）：见 "
-                   "`specs/general/review.adoc`。\n")
+                   "`specs/general/module.adoc`。\n")
         self.write("prompts/refactor.adoc",
                    prompt_refactor if prompt_refactor is not None else
                    "2. 先按『一个功能的实现跨模块』查一遍；命中处**必须进重构清单并落地**。\n")
@@ -18891,41 +18894,41 @@ class TestCheckCrossModuleFeatureGuard(CheckSpecsTestCase):
 
     def test_section_removed_reports(self):
         # 反例①：整条判据被删 → 跨模块退回成"写法偏好"，一条也报不出来
-        self._write(review="== 问题记录\n\n* 记一笔。\n")
+        self._write(module="== 功能不跨模块（同一功能的实现只有一处落点）\n\n无本体。\n")
         cm.check_cross_module_feature_guard()
-        self.assertIn("review 的默认检查面", self.error_texts())
+        self.assertIn("功能不跨模块", self.error_texts())
 
     def test_splice_criteria_removed_reports(self):
         # 反例②：四条判定标准被抽 → 接缝处（谁调谁、第二份定义、依赖内部细节）判不出来
-        self._write(review=self.SECTION.replace(
+        self._write(module=self.SECTION.replace(
             "① **调用方要按顺序各调一遍**；", ""))
         cm.check_cross_module_feature_guard()
         self.assertIn("四条判定标准", self.error_texts())
 
     def test_stock_boundary_removed_reports(self):
         # 反例③：存量边界被抽 → 按上一条「存量不动」把存量里的跨模块整批放过
-        self._write(review=self.SECTION.replace(
+        self._write(module=self.SECTION.replace(
             "**存量里已经跨模块的功能同样要报**，", ""))
         cm.check_cross_module_feature_guard()
         self.assertIn("存量", self.error_texts())
 
     def test_scope_boundary_removed_reports(self):
         # 反例④：范围边界被抽 → 以"必须查出来"为由发动全库重排
-        self._write(review=self.SECTION.replace(
+        self._write(module=self.SECTION.replace(
             "**报出不等于在本轮把它全量重排**，", ""))
         cm.check_cross_module_feature_guard()
         self.assertIn("范围", self.error_texts())
 
     def test_refactor_must_land_removed_reports(self):
         # 反例⑤：重构须处理被抽 → 命中处只被记成"已发现"、结构一字未动
-        self._write(review=self.SECTION.replace(
+        self._write(module=self.SECTION.replace(
             "**必须进重构清单并落地**，", "可记入清单留待以后。"))
         cm.check_cross_module_feature_guard()
         self.assertIn("重构", self.error_texts())
 
     def test_dictionary_term_removed_reports(self):
-        # 反例⑥：名称检索键被删 → 别处只能整份文件找它
-        self._write(review=self.SECTION)
+        # 反例⑥：名称检索键或落点回指被删 → 别处只能整份文件找它
+        self._write(review="== 本文件的字典\n\n无登记。\n")
         cm.check_cross_module_feature_guard()
         self.assertIn("字典", self.error_texts())
 
@@ -31787,7 +31790,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件；review/重构按渲染核显示缺陷→`specs/general/review.adoc`）→ `specs/general/ui-patterns.adoc`；",
+                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件）→ `specs/general/ui-patterns.adoc`；**查界面显示缺陷的标准** → `specs/general/ui.adoc`「界面显示缺陷的六个维度」（review 检查面见 `specs/general/review.adoc`）；",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -32073,8 +32076,8 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         # 反例㊴：调度器不再把「定控件宽高、要不要滚动条」列为识别特征——定表单宽度的人
         # 读不到排布模板，判据存在而走不到它。
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "、这一格用什么控件；review/重构按渲染核显示缺陷→`specs/general/review.adoc`）",
-                             "）")
+                             "、这一格用什么控件）→ `specs/general/ui-patterns.adoc`；",
+                             "）→ `specs/general/ui-patterns.adoc`；")
         self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
 
     def test_patterns_value_width_removed_reports(self):
@@ -35134,8 +35137,9 @@ class TestCheckUiDisplayDefectsGuard(CheckSpecsTestCase):
 
     FILES = ("specs/general/review.adoc", "AGENTS_COMMON.adoc",
              "README.adoc", "prompts/review.adoc", "prompts/refactor.adoc",
-             "script/check_effective.py", "specs/general/coding.adoc")
-    REVIEW, COMMON, README, PROMPT_REVIEW, PROMPT_REFACTOR, LEDGER, CODING = FILES
+             "script/check_effective.py", "specs/general/coding-ui.adoc",
+             "specs/general/ui.adoc")
+    REVIEW, COMMON, README, PROMPT_REVIEW, PROMPT_REFACTOR, LEDGER, CODING, UI = FILES
 
     def setUp(self) -> None:
         super().setUp()
@@ -35169,27 +35173,42 @@ class TestCheckUiDisplayDefectsGuard(CheckSpecsTestCase):
         self.assertEqual([], cm.errors)
 
     def test_dimension_anchor_removed_reports(self):
+        # 判据本体已归到 ui.adoc；抽掉其中一档即报红。
+        self._run_guard_with(self.UI,
+                             "**滚动条（L1）**",
+                             "**按钮颜色（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_body_moved_back_to_review_reports(self):
+        # 反例：把六档判据正文写回 review 检查面（同一件事两处真源）即报红。
         self._run_guard_with(self.REVIEW,
-                             "⑤ **滚动条**",
-                             "⑤ **按钮颜色**")
+                             "本处只引名称、**不另立第二套界面规范**",
+                             "按**维度**查：① **空白与容器** ② **对齐** ③ **遮挡与覆盖**")
+        self.assertTrue(cm.errors)
+
+    def test_review_body_section_removed_reports(self):
+        # 反例：ui.adoc 的判据本体整节被抽，UI 相关检索再也找不到显示缺陷标准。
+        self._run_guard_with(self.UI,
+                             "== 界面显示缺陷的六个维度",
+                             "== 界面显示缺陷（另见 review）")
         self.assertTrue(cm.errors)
 
     def test_look_not_a_criterion_removed_reports(self):
-        self._run_guard_with(self.REVIEW,
+        self._run_guard_with(self.UI,
                              "「看了一眼觉得没问题」或没有失败条件的截图",
                              "以人工走查结论为准")
         self.assertTrue(cm.errors)
 
     def test_no_second_ui_spec_removed_reports(self):
-        self._run_guard_with(self.REVIEW,
-                             "**不另立第二套界面规范**",
+        self._run_guard_with(self.UI,
+                             "不另立第二套界面规范",
                              "另立一套界面规范")
         self.assertTrue(cm.errors)
 
     def test_actual_display_boundary_removed_reports(self):
-        self._run_guard_with(self.REVIEW,
-                             "**「实际显示效果为准」的边界**",
-                             "**「代码写法为准」的边界**")
+        self._run_guard_with(self.UI,
+                             "**「实际显示效果为准」**",
+                             "**「代码写法为准」**")
         self.assertTrue(cm.errors)
 
     def test_dispatcher_review_registration_removed_reports(self):
@@ -35200,14 +35219,22 @@ class TestCheckUiDisplayDefectsGuard(CheckSpecsTestCase):
 
     def test_dispatcher_refactor_registration_removed_reports(self):
         self._run_guard_with(self.COMMON,
-                             "review/重构按渲染核显示缺陷",
-                             "按代码写法核对显示缺陷")
+                             "**查界面显示缺陷的标准",
+                             "查界面显示缺陷的标准另议")
         self.assertTrue(cm.errors)
 
     def test_readme_registration_removed_reports(self):
         self._run_guard_with(self.README,
                              "界面显示缺陷属代码问题、必查",
                              "测试有效性")
+        self.assertTrue(cm.errors)
+
+    def test_readme_body_homing_removed_reports(self):
+        # 反例：公开面的「判据本体归位到 ui.adoc」登记被删——按 UI 主题检索的人
+        # 从 README 看不到本体落点，归位这一半失去公开面保护。
+        self._run_guard_with(self.README,
+                             "界面显示缺陷的判据本体在 `specs/general/ui.adoc`",
+                             "界面显示缺陷的判据本体另议")
         self.assertTrue(cm.errors)
 
     def test_review_prompt_registration_removed_reports(self):
@@ -35236,8 +35263,8 @@ class TestCheckUiDisplayDefectsGuard(CheckSpecsTestCase):
 
     def test_ledger_registration_removed_reports(self):
         self._run_guard_with(self.LEDGER,
-                             "check_ui_display_defects_guard 钉住 `specs/general/review.adoc`",
-                             "该防线钉住 `specs/general/review.adoc`")
+                             "check_ui_display_defects_guard 钉住 `specs/general/ui.adoc`",
+                             "该防线钉住 `specs/general/ui.adoc`")
         self.assertTrue(cm.errors)
 
 

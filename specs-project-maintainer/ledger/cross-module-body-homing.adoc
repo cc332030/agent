@@ -1,0 +1,8 @@
+= 本轮记账：跨模块判据本体归位到 module.adoc（公共规范）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（全库复查：跨模块判据本体从 review 移到 module.adoc） | 无（沿用 `check_cross_module_feature_guard`，不改接线数） | 219 → **219** | 用户口径：『全库检查，看下还有哪里像这样位置错了的』——承接上一轮「界面显示缺陷判据归到 `ui.adoc`」的同类形态：`check_cross_module_feature_guard` 钉的**判据本体**（同一件事的实现跨模块算代码问题、四条判定标准、与「存量不动」「范围控制」的边界、重构须处理）整段写在 `specs/general/review.adoc`「review 的默认检查面」里，而这件事的主题文件是 `specs/general/module.adoc`「功能不跨模块」——按模块主题检索的人读 `module.adoc` 只看到「一个功能只由一个模块实现」的正向条，找不到 review/重构检查面的判定标准。**归位**：整段判据本体移到 `module.adoc`「功能不跨模块」节（作为同一条的正向面与检查面），`review.adoc` 的字典与检查面只留「这是必查的代码问题 + 回指 module.adoc 本体」，不复述四条判定标准与边界；两处同源、不另立第二套判定。同步：`prompts/review.adoc` / `prompts/refactor.adoc` 的回指改指 `module.adoc`，README 公开面在模块边界一处登记判据本体、review 一处改为回指；`check_specs.py` 的 `CROSS_MODULE_FEATURE_ANCHORS` 核对落点从 `review.adoc` 改指 `module.adoc`、字典核验同时检查 term 与 module 回指；`check_cross_module_feature_guard.toml` 注释与 `check_effective.py` 台账的落点同步；`TestCheckCrossModuleFeatureGuard` 的夹具把本体写到 `module.adoc`、反例改为抽本体/抽字典即报红。只钉文本与落点；「某处实现算不算同一功能跨模块、收敛到哪一层合适」属语义判断，交人 / 子 agent 复核。
+|===

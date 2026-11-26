@@ -678,7 +678,7 @@
  137. 一次给多个任务逐条登记进 tmp/ 并实时更新进度防线（**用户提出**）：用户口径『调整公共规范，一次给多个任务时，需要记录到临时文档，实时更新进度』。判据本体落通用层 `specs/general/execution-detail.adoc`「指令的完整性」：一次收到多个任务时动手前在 `tmp/` 临时文档逐条登记（每条一行：任务 / 状态 / 下一步）、执行中每有进展即更新对应那条，不攒到收尾补、不把多条合写成一句整体进度；与 `specs/general/entry-doc.adoc`「`tmp/` 索引的形态与并行取值」分工（本节管执行中的逐条登记与实时更新，那节管接替时怎么读、并行怎么分行）；结论进持久落点。必加载层留底线与回指、提示词公共片段留同口径一句。由 `check_tmp_layout_guard` 钉住（归并进既有防线、不新开）；「这次有没有真逐条登记、有没有实时更新」属运行时事实与语义判断，交人/子 agent 复核。
 
  138. 业务流程须由集成测试走通防线（**用户提出**）：用户口径『很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，需要根据业务流程去补集成测试用例，走通整个流程』。判据本体落通用层 `specs/general/testing.adoc`「业务流程须由集成测试走通（补了方法用例不等于流程通）」：按流程判不按方法数判（方法用例全绿不构成流程通的证据）；有业务流程时须有从真实入口跑到可观察产出的集成用例、断言落在流程产出；集成层缺口不得由更细用例顶替；能自起外部依赖的仍须补齐、不因需外部依赖而跳过。与技术栈层 `java-testing.adoc` 的五类后缀与执行边界分工（本节只定"流程级用例不可缺、断言落在产出"，不复制命名与执行边界）。调度器「跑测试/补测试」识别特征与 README 公开面同步登记。由 `check_integration_flow_guard` 钉住；「某流程实际走没走通、某断言是否落在产出」属运行时事实与语义判断，交人/子 agent 复核。
- 139. 界面显示缺陷必查防线（**用户提出**）：用户口径『界面review、重构时，需要处理多余空白，比如太长的输入组件，弹窗下面大片空白，大片空白和滚动条出现在一个页面，组件未对齐，文字覆盖，文字被遮挡等界面问题，以实际显示效果为准，还有哪些可能的问题帮我调研后加进来』。按「举例不是面」把六个例子归成六档维度（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』条——这是 review 检查面的一类代码问题，不另立第二套界面规范：宽高与空白回指 `ui.adoc`/`ui-patterns.adoc`，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4/1.4.10/1.4.12 下限。调度器 review 与重构两处、README、两份提示词（`review.adoc`/`refactor.adoc`）同步登记。另按用户同向要求补入『事件流触发渲染的缺陷属代码问题、必查』：多事件流/次序错乱引发的莫名重绘、状态漂移、异步乱序覆盖、性能下降属 review 必查且须修复的代码问题，避免方向（派生值只算一次、Effect/watcher 不成链、异步按最新一次生效、写入收一处）落 `specs/general/coding-ui.adoc`「界面的性能」形态十一，review 本体回指它、验法回指 `verify.adoc`，本仓库不写实现代码或检测脚本。由 `check_ui_display_defects_guard` 钉住；「某处显示缺陷实际有没有、某处渲染是否真出错」属运行时事实与语义判断，交人/子 agent 复核。
+ 139. 界面显示缺陷必查防线（**用户提出**）：用户口径『界面review、重构时，需要处理多余空白，比如太长的输入组件，弹窗下面大片空白，大片空白和滚动条出现在一个页面，组件未对齐，文字覆盖，文字被遮挡等界面问题，以实际显示效果为准，还有哪些可能的问题帮我调研后加进来』。按「举例不是面」把六个例子归成六档维度（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/ui.adoc`「界面显示缺陷的六个维度」，`specs/general/review.adoc`「review 的默认检查面」只留「这是 review 必查的一类代码问题 + 回指本体」，不另立第二套界面规范：宽高与空白回指 `ui.adoc`/`ui-patterns.adoc`，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4/1.4.10/1.4.12 下限。调度器 review 与重构两处、README、两份提示词（`review.adoc`/`refactor.adoc`）同步登记。另按用户同向要求补入『事件流触发渲染的缺陷属代码问题、必查』：多事件流/次序错乱引发的莫名重绘、状态漂移、异步乱序覆盖、性能下降属 review 必查且须修复的代码问题，避免方向（派生值只算一次、Effect/watcher 不成链、异步按最新一次生效、写入收一处）落 `specs/general/coding-ui.adoc`「界面的性能」形态十一，review 本体回指它、验法回指 `verify.adoc`，本仓库不写实现代码或检测脚本。由 `check_ui_display_defects_guard` 钉住；「某处显示缺陷实际有没有、某处渲染是否真出错」属运行时事实与语义判断，交人/子 agent 复核。
 """
 
 import argparse
@@ -2268,6 +2268,7 @@ VERIFY_SPEC = "specs/general/verify.adoc"
 # 五件事」须指回这份的落点——两处各读各的时，执行者会按"五件都不能少"顶格做。
 VERIFY_TIER_SPEC = "specs/general/verify-tier.adoc"
 REVIEW_SPEC = "specs/general/review.adoc"
+MODULE_SPEC = "specs/general/module.adoc"
 QUALITY_LIBRARY = "library/quality.adoc"
 
 # 每条：要点名 → 须同时命中的锚点（规则 + 判定标准 + 依据 三件套；只查一处关键词会在
@@ -2327,8 +2328,8 @@ DEFAULT_REVIEW_SCOPE_SECTION = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_SECTION"]
 DEFAULT_REVIEW_SCOPE_ANCHORS = _RULES_TOKENS["DEFAULT_REVIEW_SCOPE_ANCHORS"]
 # 『一个功能的实现跨模块』（`check_cross_module_feature_guard`）：用户提出
 # 「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构需要处理这种情况」。
-# 判据本体在 `specs/general/review.adoc`「review 的默认检查面」的『一个功能的实现跨模块属
-# 代码问题（必查）』——它是**代码问题**（不是取向性写法），故存量同样要报；四条判定标准、
+# 判据本体在 `specs/general/module.adoc`「功能不跨模块（同一功能的实现只有一处落点）」的
+# 『一个功能的实现跨模块属代码问题（必查）』——它是**代码问题**（不是取向性写法），故存量同样要报；四条判定标准、
 # 与「存量不动」「范围控制」的两条边界、以及"重构须处理这一形态"都不许被抽走
 # （抽走任一条，本条就退回成一句口号：接缝处判不出、存量被放过、或重构只记不做）。
 CROSS_MODULE_FEATURE_ANCHORS = _RULES_TOKENS["CROSS_MODULE_FEATURE_ANCHORS"]
@@ -2336,7 +2337,7 @@ CROSS_MODULE_FEATURE_ANCHORS = _RULES_TOKENS["CROSS_MODULE_FEATURE_ANCHORS"]
 # 规范本体在那边不一定会被加载到 review 一节）。
 CROSS_MODULE_PROMPT_LANDINGS = (
     ("prompts/review.adoc",
-     ("一个功能的实现跨模块", "specs/general/review.adoc"),
+     ("一个功能的实现跨模块", "specs/general/module.adoc"),
      "检查修复提示词的检查面不再含『一个功能的实现跨模块』——它是用户点名的必查项，"
      "缺了它那边只按「三类问题」扫，跨模块的实现分散一条都报不出来"),
     ("prompts/refactor.adoc",
@@ -2854,7 +2855,7 @@ def check_cross_module_feature_guard():
     """『一个功能的实现跨模块』防线：算代码问题、须查出来；重构须处理。
 
     用户口径：「review 的时候，一个功能的实现跨模块的情况算问题，需要查出来，如果是重构
-    需要处理这种情况」。判据本体在 `specs/general/review.adoc`「review 的默认检查面」的
+    需要处理这种情况」。判据本体在 `specs/general/module.adoc`「功能不跨模块（同一功能的实现只有一处落点）」的
     『一个功能的实现跨模块属代码问题（必查）』一节——本函数钉**判据本体**（不是节名）：
     四条判定标准、与「存量不动」「范围控制」的两条边界、以及"重构须处理这一形态"；另钉
     三处落点：字典登记（名称是检索键）、两个提示词的动作面（review 的检查面、refactor 的
@@ -2869,11 +2870,11 @@ def check_cross_module_feature_guard():
     # 规则数据里登记了本防线的步骤与报错文案（`specs-rules/review/guards/`）：只开阶段、
     # 不接线时规则写了却没人执行（`rules_engine_test` 会报「规则文件里的防线没被脚本接线」）。
     run_rule_guard("check_cross_module_feature_guard")
-    _section_anchor_check(REVIEW_SPEC, DEFAULT_REVIEW_SCOPE_SECTION,
+    _section_anchor_check(MODULE_SPEC, "功能不跨模块（同一功能的实现只有一处落点）",
                           CROSS_MODULE_FEATURE_ANCHORS)
     text = _read_spec_text(REVIEW_SPEC)
-    if "term-cross-module-feature" not in text:
-        err(f"{REVIEW_SPEC}「本文件的字典」未登记『一个功能的实现跨模块』——"
+    if "term-cross-module-feature" not in text or MODULE_SPEC not in text:
+        err(f"{REVIEW_SPEC}「本文件的字典」未登记『一个功能的实现跨模块』或其落点 {MODULE_SPEC}——"
             "该名称失去检索键，别处只能整份文件找它", REVIEW_SPEC)
     for rel, tokens, why in CROSS_MODULE_PROMPT_LANDINGS:
         path = os.path.join(REPO_ROOT, *rel.split("/"))
@@ -10869,9 +10870,9 @@ def check_ui_display_defects_guard():
     用户口径：界面 review / 重构时须处理多余空白（过长输入组件、弹窗大片空白、空白与
     滚动条同屏、组件未对齐、文字覆盖、文字被遮挡），以实际显示效果为准，并调研后补入
     同类问题。按「举例不是面」把六例归成六档维度，判据本体落
-    `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』条。
-    钉两处：① 判据本体四组锚点（维度、判定标准、回指分工、实际显示效果与存量边界）；
-    ② 四处加载面（调度器 review 与重构两条、README、两份提示词）；
+    `specs/general/ui.adoc`「界面显示缺陷的六个维度」；`specs/general/review.adoc`「review 的默认检查面」
+    只留检查面与回指。钉两处：① 判据本体四组锚点（维度、判定标准、回指分工、实际显示效果与存量边界）
+    与 review 检查面回指；② 四处加载面（调度器 review 与重构两条、README、两份提示词）；
     另钉『事件流触发渲染的缺陷』review 本体与 coding-ui 形态十一的避免方向。
     只钉文本与落点——「某处缺陷实际有没有、某条界面判据本机可不可得」属运行时事实与
     语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核。
