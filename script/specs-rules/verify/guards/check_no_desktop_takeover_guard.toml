@@ -8,7 +8,7 @@ kind = "section_groups"
 [[guards.check_no_desktop_takeover_guard]]
 file = "script/specs-rules/_tokens.toml"
 kind = "anchor_count"
-min = 22
+min = 30
 token_list = "NO_DESKTOP_TAKEOVER_TOKENS"
 
 
@@ -25,17 +25,19 @@ tokens = [
     "不在最上层、被盖住",
     "实际试过",
     "DevTools 协议",
+    "有无容器都不另立一套显示标准",
 ]
 kind = "text_block_groups"
-message = "提示词公共片段缺失「看显示效果不接管桌面」的要点 {missing}——缺条文则执行侧仍按「切前台 + 整屏截图」取证；缺『不在最上层、被盖住』则执行者以为只能切到前台；缺『实际试过』则例外变成凭印象的挡箭牌；缺 DevTools 则调试工具排不到前面"
+message = "{file} 提示词公共片段缺失「看显示效果不接管桌面」的要点 {missing}——缺条文则执行侧仍按「切前台 + 整屏截图」取证；缺『不在最上层、被盖住』则执行者以为只能切到前台；缺『实际试过』则例外变成凭印象的挡箭牌；缺 DevTools 则调试工具排不到前面"
 [[guards.check_no_desktop_takeover_guard]]
 file = "README.adoc"
 tokens = [
     "需要看显示效果时不接管用户的桌面",
+    "有无容器都不另立一套显示标准",
     "specs/general/verify.adoc",
 ]
 kind = "file_tokens"
-message = "公开面 README 未登记「看显示效果不接管桌面」{missing}——公开面只看得见「看效果就截图」，这条判据对读者不存在"
+message = "{file} 公开面 README 未登记「看显示效果不接管桌面」或「运行形态统一」{missing}——公开面只看得见「看效果就截图」，这条判据对读者不存在"
 
 # 调度器须能被触发（否则「要看显示效果」时这一条永远不会被加载）。
 [[guards.check_no_desktop_takeover_guard]]
@@ -43,9 +45,10 @@ file = "AGENTS_COMMON.adoc"
 tokens = [
     "要看显示效果时",
     "截整屏",
+    "没 Docker 时想知道界面怎么验",
 ]
 kind = "file_tokens"
-message = "加载调度器缺少「看显示效果时不接管桌面」的识别特征 {missing}——缺则看效果照旧切前台 + 整屏截图"
+message = "加载调度器缺少「看显示效果时不接管桌面 / 运行形态统一」的识别特征 {missing}——缺则看效果照旧切前台 + 整屏截图，命令行/容器场景读不到判据"
 
 # 要复用的验证场景归入测试源码、不落成一次性脚本（用户提出）：判据本体在
 # `specs/general/verify.adoc`「编译/运行验证」——用户口径：不是「本次只验一次」的
