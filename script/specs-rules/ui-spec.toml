@@ -473,7 +473,7 @@ token_list = "UI_SPEC_STYLE_ANCHORS"
 file = "specs/general/ui.adoc"
 kind = "anchor_count"
 token_list = "UI_SPEC_STYLE_ANCHORS"
-min = 9
+min = 16
 
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui.adoc"
@@ -523,6 +523,42 @@ groups = [
             "**默认值不是禁令**——要用就得说明它是被场景要求的那一项",
         ],
         "缺则清单被读成禁令：被场景要求的那一项也不敢用；反过来，无理由照抄默认形态时又没有判据可引",
+    ],
+]
+
+# 候选清单是候选、不是配额（回应"只有八个吗、够不够、要不要扩展"）：清单多寡不构成立废判据。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-styles.adoc"
+kind = "section_groups"
+section = "一、这八项必写（每一族都要，缺一项等于没定风格）"
+groups = [
+    [
+        "清单是候选不是配额、多寡不构成够不够的判据",
+        [
+            "**清单是候选、不是配额**",
+            '**多寡不构成"够不够"的判据**',
+            "不必先扩清单才敢定风格",
+        ],
+        "缺则读者把清单当配额：追问'够不够、要不要扩族'时误以为要凑齐或封顶，而判据只在场景与必写项",
+    ],
+]
+
+# 还没定风格时的可复制补法（项目必须先定风格的模板侧落点）。
+[[guards.check_ui_spec_guard]]
+file = "specs/general/ui-styles.adoc"
+kind = "section_groups"
+section = "三之二、还没定风格时，从候选清单补一族（可复制动作）"
+groups = [
+    [
+        "先定再铺页面、按场景挑/自述一族、八项写全落令牌",
+        [
+            "**先定、再铺页面**",
+            "写场景问句",
+            "**自述一族**",
+            "**不必先扩清单**",
+            "**八项必写项逐项写上取值**",
+        ],
+        "缺则模板没有'没定风格怎么办'的落点：项目仍可在没定风格时先铺页面、各页自行取风格",
     ],
 ]
 
@@ -645,6 +681,7 @@ kind = "line_tokens"
 anchor = ["**任何代码活动**"]
 tokens = [
     "**定风格或写界面文字**",
+    "**带界面的项目尚未定风格、要从候选清单补一族**",
     "`specs/general/ui-styles.adoc`",
     "`specs/general/ui-voice.adoc`",
 ]
