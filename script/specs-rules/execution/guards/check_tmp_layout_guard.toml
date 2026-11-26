@@ -133,6 +133,51 @@ groups = [
 ]
 message = "『`tmp/` 索引的形态与并行取值』防线被破坏：{file} 的对应小节缺失要点 {missing}——{desc}"
 
+# 『一次给多个任务逐条登记进 tmp/ 并实时更新』——判据本体在通用层
+# `specs/general/execution-detail.adoc`「指令的完整性」，必加载层与提示词片段各留一行回指。
+# 为什么并进本道防线：它核的就是 tmp/ 里"怎么记、怎么更新"，与上面的布局/索引同族，
+# 故不新开防线；"这次有没有真逐条登记、有没有实时更新"属运行时事实，交人/子 agent 复核。
+[[guards.check_tmp_layout_guard]]
+kind = "section_groups"
+file = "specs/general/execution-detail.adoc"
+section = '指令的完整性（防"漏命令"）'
+groups = [
+    [
+        "一次多任务逐条登记进 tmp/ 并实时更新",
+        [
+            "**动手前在 `tmp/` 临时文档里逐条登记**——每条占一行、写清任务 / 状态 / 下一步；**执行中每有进展即更新对应那一条**",
+            "不攒到收尾一次补、不把多条合写成一句整体进度",
+            "只记在上下文、未落 `tmp/`",
+            "多条合写一条、分不出哪条做完",
+            "进度只在收尾汇报里出现",
+            "「`tmp/` 索引的形态与并行取值」",
+        ],
+        "缺则一次收到多任务时没有落盘判据：只记在上下文、多条合写或进度攒到收尾补，中断/压缩后分不清还剩哪几条",
+    ],
+]
+message = "『一次多任务逐条登记进 tmp/ 并实时更新』防线被破坏：{file} 的「指令的完整性」缺失要点 {missing}——{desc}"
+
+[[guards.check_tmp_layout_guard]]
+kind = "file_tokens"
+file = "specs/core/execution.adoc"
+tokens = [
+    "多任务逐条登记 `tmp/`、实时更新（L1）",
+    "`specs/general/execution-detail.adoc`「指令的完整性」",
+]
+message = "必加载层缺失『一次多任务逐条登记进 tmp/ 并实时更新』底线或其回指 {missing}——只停在通用层时每次会话的浓缩层不带这条，读者不知道要按名加载"
+
+[[guards.check_tmp_layout_guard]]
+kind = "file_tokens"
+file = "prompts/_common.txt"
+tokens = [
+    "一次给多个任务须逐条登记进 `tmp/`、逐条实时更新进度（L1）",
+    "每条一行：任务 / 状态 / 下一步",
+    "不攒到收尾一次补",
+    "不把多条合写成一句整体进度",
+    "「指令的完整性」",
+]
+message = "提示词公共片段缺失『一次多任务逐条登记进 tmp/ 并实时更新』同口径一句 {missing}——片段会被未知项目复制执行，漏了这层则执行者读不到"
+
 # 持久落点那一侧（判据本体在 `specs/general/entry-doc.adoc`「交接：什么必须扛过中断」）。
 # 与上一步**分工**：上一步核"索引怎么写"（`tmp/` 根一行一条、判据是不用打开文件），
 # 这一步核"索引易失之后靠什么接上"——两类内容必须分开，否则索引会被当成持久载体。

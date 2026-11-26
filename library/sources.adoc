@@ -328,7 +328,7 @@
 ** **一个会话开始时要读什么**：上述两家的次序都是"先读进度文件、再看提交历史、然后选一件尚未完成的事开始做"。
 ** **任务并行与否的判据**：Spec Kit 的任务模板用 `[P]` 标记"可并行"，定义为 "Can run in parallel (different files, no dependencies)"，并按用户故事分组以便各自独立实现与验证。
 ** **合并策略的作用边界**：git 官方文档对 `union` 驱动的表述是 "Run 3-way file level merge for text files, but take lines from both versions, instead of leaving conflict markers. This tends to leave the added lines in the resulting file in random order and the user should verify the result."（**逐字摘**）——即只合并**各自新增的整行**，且行序不保证。
-* 用途：`specs/general/entry-doc.adoc`「最小集」的「接替时的读取入口」与该文件「`tmp/` 索引的形态与并行取值」；`specs/core/execution.adoc`「tmp/ 的布局与命名」。
+* 用途：`specs/general/entry-doc.adoc`「最小集」的「接替时的读取入口」与该文件「`tmp/` 索引的形态与并行取值」；`specs/core/execution.adoc`「tmp/ 的布局与命名」；`specs/general/execution-detail.adoc`「指令的完整性」的「一次给多个任务须逐条登记进 `tmp/` 并逐条实时更新」（进度文件"updates most frequently"与"what's left"的形态落到一次多任务的逐条登记上）。
 * **须注意的同义性差异**：上述材料给的是**做法与机制**（进度文件、分层文档、`[P]` 并行标记、合并驱动语义），**未**规定"索引一行一任务""并行时各改自己那一行""索引不提交故不配合并策略""两者不一致时以任务单评论为准"——这四条例**是本集合的判据化取舍**（理由见 `library/adoption.adoc`「`tmp/` 索引的并行取值」）。
 
 == The Twelve-Factor App

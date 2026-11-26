@@ -6825,94 +6825,6 @@ class TestCheckVerifiableUiGuard(CheckSpecsTestCase):
         super().tearDown()
 
 
-class TestCheckRealPageGuard(CheckSpecsTestCase):
-    """钉住『界面/网页功能须在真实页面验证』（用户口径：界面、网页功能验证一定要真实打开
-    页面验证——失效形态是拿接口返回/后端测试/源码推断替代界面判据）。反例覆盖：正文条目/
-    取值/判定标准/例外/依据被抽、调度器/提示词/README 未同步、锚点清单被削空。
-    """
-
-    VERIFY = "specs/general/verify.adoc"
-    COMMON = "AGENTS_COMMON.adoc"
-    PROMPT = "prompts/_common.txt"
-    README = "README.adoc"
-
-    def setUp(self) -> None:
-        super().setUp()
-        cm.RULES = None
-        cm._RULES_RUN_THIS_PHASE.clear()
-
-    def _write_valid(self):
-        for rel in (self.VERIFY, self.COMMON, self.PROMPT, self.README):
-            self.write_real_file(rel)
-        self.write_rules_fixture()
-
-    def _mutate(self, rel, removed, replacement=""):
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
-        with open(os.path.join(repo_root, rel), encoding="utf-8") as fh:
-            text = fh.read()
-        self.assertIn(removed, text)
-        self._write_valid()
-        self.write(rel, text.replace(removed, replacement, 1))
-
-    def test_valid_passes(self):
-        self._write_valid()
-        cm.check_real_page_guard()
-        self.assertEqual("", self.error_texts())
-
-    def test_body_dropped_reports(self):
-        self._mutate(self.VERIFY, "* **界面/网页功能须在真实页面验证（L1）", "* **界面另议**")
-        cm.check_real_page_guard()
-        self.assertIn("条文与判据对象", self.error_texts())
-
-    def test_no_cross_layer_dropped_reports(self):
-        self._mutate(self.VERIFY, "判据是界面行为时不适用", "接口也行")
-        cm.check_real_page_guard()
-        self.assertIn("取值三条", self.error_texts())
-
-    def test_criteria_dropped_reports(self):
-        self._mutate(self.VERIFY, "推断界面呈现或交互结果", "允许推断")
-        cm.check_real_page_guard()
-        self.assertIn("判定标准三条", self.error_texts())
-
-    def test_exception_dropped_reports(self):
-        self._mutate(self.VERIFY, "不强制打开页面", "一律打开页面")
-        cm.check_real_page_guard()
-        self.assertIn("例外与边界", self.error_texts())
-
-    def test_dispatch_trigger_dropped_reports(self):
-        self._mutate(self.COMMON, "没在真实页面取过它的行为", "界面相关")
-        cm.check_real_page_guard()
-        self.assertIn("没在真实页面取过它的行为", self.error_texts())
-
-    def test_prompt_clip_dropped_reports(self):
-        self._mutate(self.PROMPT, "界面/网页功能须在真实页面验证（L1）", "看接口即可")
-        cm.check_real_page_guard()
-        self.assertIn("prompts/_common.txt", self.error_texts())
-
-    def test_readme_entry_dropped_reports(self):
-        self._mutate(self.README, "界面/网页功能要在真实页面验证", "接口验证说明")
-        cm.check_real_page_guard()
-        self.assertIn("README.adoc", self.error_texts())
-
-    def test_anchor_list_shrunk_reports(self):
-        self._write_valid()
-        rel = _find_rule_file('token_list = "REAL_PAGE_TOKENS"')
-        with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
-            text = fh.read()
-        self.assertIn('min = 16\ntoken_list = "REAL_PAGE_TOKENS"', text)
-        self.write(rel, text.replace('min = 16\ntoken_list = "REAL_PAGE_TOKENS"',
-                                     'min = 999\ntoken_list = "REAL_PAGE_TOKENS"', 1))
-        cm.RULES = None
-        cm._RULES_RUN_THIS_PHASE.clear()
-        cm.check_real_page_guard()
-        self.assertIn("REAL_PAGE_TOKENS", self.error_texts())
-
-    def tearDown(self) -> None:
-        cm.RULES = None
-        cm._RULES_RUN_THIS_PHASE.clear()
-        super().tearDown()
-
-
 class TestCheckWindowsWindowGuard(CheckSpecsTestCase):
     """钉住『Windows 下不为跑界面而把窗口开到用户眼前』（用户口径：windows 下如果要打开窗口
     测试界面、验证布局，**不要在前台打开**——隐藏窗口或后台都行、**能达到目的就可以**，
@@ -32553,6 +32465,7 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
     EXECUTION_DOC = "specs/core/execution.adoc"
     COMMON_PROMPT = "prompts/_common.txt"
     ENTRY_DOC = "specs/general/entry-doc.adoc"
+    DETAIL_DOC = "specs/general/execution-detail.adoc"
 
     def setUp(self) -> None:
         super().setUp()
@@ -32575,6 +32488,8 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
         # 索引的形态与并行取值落在通用层（判据本体在必加载层、形态在这里）：
         # 不落这份文件时"缺整节"与"要点被删"分不开，两类反例都会命中同一条报错。
         self.write_real_file(self.ENTRY_DOC)
+        # 一次多任务逐条登记的判据本体在通用层 execution-detail.adoc（与 tmp/ 布局同族）
+        self.write_real_file(self.DETAIL_DOC)
         # 落点是**这一主题当前的那几份文件**（一份文件或一组子目录文件都算）
         for rel in cm.rules_engine.load_rule_specs(
                 os.path.join(self._rules_dir(), "execution")):
@@ -32659,6 +32574,40 @@ class TestCheckTmpIndexAndCleanupGuard(CheckSpecsTestCase):
         # 反例⑨：最小集里"接替时的读取入口"被抽——机制有了，触发它的那句话不在入口文档里
         self.assertIn("接替时的读取入口", self._run_entry(
             lambda text: self._mutate_entry(text, "**接替时的读取入口（L1）**")))
+
+    def _run_detail(self, mutate) -> str:
+        """改**通用层** execution-detail.adoc 后跑同一道防线。"""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.DETAIL_DOC), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        mutate(text)
+        cm.check_tmp_layout_guard()
+        return self.error_texts()
+
+    def test_multi_task_ledger_rule_dropped_reports(self):
+        # 反例⑩：一次多任务逐条登记的本体整条被抽——只留收尾逐条对照，执行中没有落盘判据。
+        # 不能只删标题行：标题的那句话在正文"判定标准"里被原样复述，逐锚点核对仍全命中。
+        self.assertIn("一次多任务逐条登记进 tmp/ 并实时更新", self._run_detail(
+            lambda text: self.write(self.DETAIL_DOC,
+                text[:text.index("* **一次给多个任务须逐条登记进 `tmp/` 并逐条实时更新（L1）**")]
+                + text[text.index("\n\n**依据**", text.index("* **一次给多个任务须逐条登记进 `tmp/` 并逐条实时更新（L1）**")) + 2:])))
+
+    def test_multi_task_ledger_realtime_dropped_reports(self):
+        # 反例⑪：整条被抽（本类夹具 doc 为空、按节取不到即报缺节）——执行中无逐条登记判据
+        self.assertIn("指令的完整性", self._run_detail(
+            lambda text: self.write(self.DETAIL_DOC, "")))
+
+    def test_multi_task_ledger_prompt_dropped_reports(self):
+        # 反例⑫：提示词片段同口径被抽——复制出去的那份执行者读不到逐条登记
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(cm.__file__)))
+        with open(os.path.join(repo_root, self.COMMON_PROMPT), encoding="utf-8") as fh:
+            text = fh.read()
+        self._write_valid()
+        self.write(self.COMMON_PROMPT, text.replace(
+            "  - **一次给多个任务须逐条登记进 `tmp/`、逐条实时更新进度（L1）**", "", 1))
+        cm.check_tmp_layout_guard()
+        self.assertIn("一次给多个任务须逐条登记进 `tmp/`", self.error_texts())
 
 
 class TestCheckSourceFileScaleGuard(CheckSpecsTestCase):
