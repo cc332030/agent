@@ -1,0 +1,45 @@
+# 『界面/网页功能须在真实页面验证』防线的规则数据：判据本体在 `specs/general/verify.adoc`
+# 「界面/网页功能须在真实页面验证」，锚点清单只写在 `script/specs-rules/_tokens.toml` 的
+# `REAL_PAGE_TOKENS` 一处。
+[[guards.check_real_page_guard]]
+file = "specs/general/verify.adoc"
+section = "编译/运行验证"
+token_list = "REAL_PAGE_TOKENS"
+kind = "section_groups"
+
+[[guards.check_real_page_guard]]
+file = "script/specs-rules/_tokens.toml"
+kind = "anchor_count"
+min = 16
+token_list = "REAL_PAGE_TOKENS"
+
+# 加载门：调度器须登记"界面/网页功能别拿接口返回代替"的识别特征，否则该条永不被加载。
+[[guards.check_real_page_guard]]
+file = "AGENTS_COMMON.adoc"
+tokens = [
+    "没在真实页面取过它的行为",
+]
+kind = "file_tokens"
+message = "加载调度器缺少「界面/网页功能须在真实页面验证」的识别特征 {missing}——缺则验界面时读不到该条，仍拿接口返回代替页面判据"
+
+# 提示词侧（会被未知项目复制执行）：收在 final-verify 片段内逐条核。
+[[guards.check_real_page_guard]]
+file = "prompts/_common.txt"
+anchor = "// tag::final-verify[]"
+tokens = [
+    "界面/网页功能须在真实页面验证（L1）",
+    "不构成\"该界面正常\"的判据",
+    "打开真实页面不等于手动点前台",
+]
+kind = "text_block_groups"
+message = "提示词片段缺失「界面/网页功能须在真实页面验证」要点 {missing}——缺则复制出去的执行侧仍按接口返回/源码推断下界面结论"
+
+# 公开面 README（读者从这里知道有这条）
+[[guards.check_real_page_guard]]
+file = "README.adoc"
+tokens = [
+    "界面/网页功能要在真实页面验证",
+    "specs/general/verify.adoc",
+]
+kind = "file_tokens"
+message = "公开面 README 未登记「界面/网页功能须在真实页面验证」{missing}——读者只看得见『查接口就行』，该判据对读者不存在"

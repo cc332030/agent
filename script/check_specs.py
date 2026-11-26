@@ -128,6 +128,7 @@
  100. 易变取值不得写死防线（看门狗/脚本/容器/代码等一切产出物，按形态判不按名单判）
 101. 可判据的界面检查防线（界面/CSS 的"看着对不对"落成会失败的断言或可 diff 快照，组合态为必查维度）
 102. 未捕获错误全局兜底防线（脚本错误/资源加载失败/未处理异步拒绝统一在一处接管，不白屏零提示）
+103. 界面/网页功能须在真实页面验证防线（界面行为的判据取自真实渲染页面，不以接口/后端测试/源码推断替代）
 
 **清单一到此为止**：下面「逐项说明」里的 ` NN. ` 是同一批编号的逐项展开，不是第二份索引
 （两处都按"编号清单"读会把它们读成重号与乱序）。
@@ -8929,6 +8930,23 @@ def check_verifiable_ui_guard():
     phase_done()
 
 
+
+def check_real_page_guard():
+    """『界面/网页功能须在真实页面验证』防线：界面行为的判据取自真实渲染页面。
+
+    用户提出：界面、网页功能验证一定要真实打开页面验证。失效形态是拿接口响应、
+    后端测试通过、源码推断或静态检查替代"这个页面实际是不是这样"——那些层全绿，
+    界面功能坏了仍无人知。与相邻几条分工：「最轻路径」管手法轻重、「可判据的界面检查」
+    管把画面变成什么判据、「不接管桌面」管怎么取画面，本条只管判据取自哪一层。
+    规则数据在 `script/specs-rules/verify/`，锚点清单在 `_tokens.toml` 的
+    `REAL_PAGE_TOKENS`；"某功能判据是否真落在页面层"属语义判断，交人/子 agent 复核。
+    """
+    phase("界面/网页功能须在真实页面验证防线检查（不以接口返回替代）")
+    run_rule_guard("check_real_page_guard")
+    phase_done()
+
+
+
 def check_windows_window_guard():
     """『Windows 下不为跑界面而把窗口开到用户眼前』防线：隐藏或后台，能达到目的就行。
 
@@ -16890,6 +16908,7 @@ CHECKS = (
     check_lightest_path_guard,
     check_no_desktop_takeover_guard,
     check_verifiable_ui_guard,
+    check_real_page_guard,
     check_windows_window_guard,
     check_run_artifact_guard,
     check_reusable_scenario_guard,
