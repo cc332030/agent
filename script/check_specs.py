@@ -675,8 +675,9 @@
 
  136. 无人值守的周期性后台任务成套规范防线（**用户提出**）：用户口径『一个管理后台的任务（定时签到、定时刷新等），开关、状态、日志、告警应该是一套，需要一起出现、一起起作用，调研下是否合理、是否会漏』，调研后要求"加到公共规范"。判据本体落通用层 `specs/general/feedback.adoc`「无人值守的周期性后台任务（开关、状态、日志、告警共用一条运行记录）」：四件套是一份运行记录的四个视角、须共用运行身份（run id / trace id）并成套出现；状态分任务定义态与单次运行态两层；失联检测不可缺（没有日志不等于在跑）；告警须闭环（含恢复通知与投递台账）；回执、配置变更审计、指标同源、敏感信息与执行约束各有落点；定时只是样本、面是无人在旁看的周期任务。与既有条目分工：日志写法在 `coding.adoc`、回执/通知台账在本文件前面各节、质量哨兵在 `coding-runtime.adoc`、硬超时在 `collab.adoc`，本节只定"任务级成套与共用运行身份"这一面。由 `check_unattended_task_guard` 钉住；「某任务是否真失联、某告警是否真闭环」属运行时事实与语义判断，交人/子 agent 复核。
 
-
  137. 一次给多个任务逐条登记进 tmp/ 并实时更新进度防线（**用户提出**）：用户口径『调整公共规范，一次给多个任务时，需要记录到临时文档，实时更新进度』。判据本体落通用层 `specs/general/execution-detail.adoc`「指令的完整性」：一次收到多个任务时动手前在 `tmp/` 临时文档逐条登记（每条一行：任务 / 状态 / 下一步）、执行中每有进展即更新对应那条，不攒到收尾补、不把多条合写成一句整体进度；与 `specs/general/entry-doc.adoc`「`tmp/` 索引的形态与并行取值」分工（本节管执行中的逐条登记与实时更新，那节管接替时怎么读、并行怎么分行）；结论进持久落点。必加载层留底线与回指、提示词公共片段留同口径一句。由 `check_tmp_layout_guard` 钉住（归并进既有防线、不新开）；「这次有没有真逐条登记、有没有实时更新」属运行时事实与语义判断，交人/子 agent 复核。
+
+ 138. 业务流程须由集成测试走通防线（**用户提出**）：用户口径『很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，需要根据业务流程去补集成测试用例，走通整个流程』。判据本体落通用层 `specs/general/testing.adoc`「业务流程须由集成测试走通（补了方法用例不等于流程通）」：按流程判不按方法数判（方法用例全绿不构成流程通的证据）；有业务流程时须有从真实入口跑到可观察产出的集成用例、断言落在流程产出；集成层缺口不得由更细用例顶替；能自起外部依赖的仍须补齐、不因需外部依赖而跳过。与技术栈层 `java-testing.adoc` 的五类后缀与执行边界分工（本节只定"流程级用例不可缺、断言落在产出"，不复制命名与执行边界）。调度器「跑测试/补测试」识别特征与 README 公开面同步登记。由 `check_integration_flow_guard` 钉住；「某流程实际走没走通、某断言是否落在产出」属运行时事实与语义判断，交人/子 agent 复核。
 """
 
 import argparse
@@ -15785,6 +15786,25 @@ def check_unattended_task_guard():
     phase_done()
 
 
+def check_integration_flow_guard():
+    """『业务流程须由集成测试走通』防线（**用户提出**）。
+
+    用户口径：补了方法/功能用例但流程走不通、没有自动补集成测试，须按业务流程
+    补集成用例、走通整个流程。要治的失效：单测全绿、跨模块接缝却断在真实流程里。
+    本道钉通用层判据本体七组要点、调度器/公开面/台账三处登记；只核**文本与落点**；
+    「某流程实际走没走通」属运行时事实与语义判断（见 GUARD_CHECK_LIMITS），
+    交人/子 agent 复核。
+    """
+    phase("业务流程须由集成测试走通防线检查")
+    if not _rules_topic_present("integration-flow"):
+        err("缺少 script/specs-rules/integration-flow——『业务流程须由集成测试走通』"
+            "的锚点（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_integration_flow_guard")
+    phase_done()
+
+
 def check_site_error_guard():
     """『站点全局异常处理』防线：未捕获错误有没有真的落到错误面板上。
 
@@ -17071,6 +17091,7 @@ CHECKS = (
     check_site_error_guard,
     check_global_error_guard,
     check_unattended_task_guard,
+    check_integration_flow_guard,
     check_ledger_table_generated_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,

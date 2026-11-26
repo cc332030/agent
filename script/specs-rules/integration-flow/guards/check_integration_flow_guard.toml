@@ -1,0 +1,48 @@
+# 『业务流程须由集成测试走通』防线（**用户提出**）。
+#
+# 用户口径：很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，
+# 需要根据业务流程去补集成测试用例、走通整个流程。
+#
+# 判据本体唯一落 specs/general/testing.adoc「业务流程须由集成测试走通（补了方法用例不等于流程通）」
+# 一节。本道只钉判据本体与两处登记（调度器、公开面）是否仍在；「某流程实际走没走通」
+# 属运行时事实与语义判断，交人/子 agent 复核。
+# 与 check_test_scope_guard / check_java_test_playground_guard 的分工（判据对象不同、不得合并）：
+# 前者钉测试跑多少，后者钉实验代码的执行边界，本道钉"流程级集成用例不可缺"。
+
+[[guards.check_integration_flow_guard]]
+file = "specs/general/testing.adoc"
+section = "业务流程须由集成测试走通（补了方法用例不等于流程通）"
+kind = "section_groups"
+token_list = "INTEGRATION_FLOW_SECTION_ANCHORS"
+message = "集成流程防线：{file}「业务流程须由集成测试走通」缺失要点 {missing}——{desc}"
+
+[[guards.check_integration_flow_guard]]
+file = "script/specs-rules/integration-flow/tokens.toml"
+kind = "anchor_count"
+token_list = "INTEGRATION_FLOW_SECTION_ANCHORS"
+min = 7
+
+[[guards.check_integration_flow_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**跑测试、补测试、做性能测试或性能优化**"]
+tokens = [
+    "补方法用例却没补集成测试致流程走不通",
+    "`specs/general/testing.adoc`",
+]
+message = "集成流程防线：调度器 {file}「跑测试/补测试」未登记识别特征 {missing}——补用例时读不到判据，规则实际失效"
+
+[[guards.check_integration_flow_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "业务流程须由集成测试走通",
+    "testing.adoc",
+]
+message = "集成流程防线：公开面 {file} 缺 {missing}——引用方从目录说明看不到该判据"
+
+[[guards.check_integration_flow_guard]]
+file = "script/check_effective.py"
+kind = "file_tokens"
+tokens = ["check_integration_flow_guard 钉住 `specs/general/testing.adoc`"]
+message = "集成流程防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"
