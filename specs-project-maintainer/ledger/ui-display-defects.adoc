@@ -1,0 +1,54 @@
+= 本轮记账：界面 review / 重构的显示缺陷核对面（公共规范）
+
+== 新增防线的记账（按轮次）
+
+[cols="2,2,1,5", options="header"]
+|===
+| 轮次 | 新增防线 | 接线数 | 承接了什么
+
+| 本轮（界面 review / 重构时只处理举出的空白问题、其余显示缺陷无人核对） | 新增 `check_ui_display_defects_guard` | 218 → **219**（本轮新增已计入现值 219） | 用户口径：界面 review、重构时须处理多余空白（过长输入组件、弹窗下方大片空白、大片空白与滚动条同屏、组件未对齐、文字覆盖、文字被遮挡），以实际显示效果为准，并调研后补入同类问题。承接的失效形态是——界面缺陷没被列成 review 的代码问题检查面，只有被举出的那几个场景会被临时想起，其余同类形态（截断、缩放后重叠、组合态）无人核对；而「看一眼觉得没问题」不构成判据。**按「举例不是面」归成六档维度**（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』条——这是 review 检查面的一类代码问题，**不另立第二套界面规范**：宽度与空白回指 `ui.adoc`「可用性与紧凑同为一等目标」与 `ui-patterns.adoc`「表单：排布与分组」，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4 / 1.4.10 / 1.4.12 下限（调研见 `tmp/457-public-ui-review-spec/plan.adoc`，该临时文档不随交付）。调度器 code review 与「任何代码活动」两处、README、两份提示词（`review.adoc` 第 2 步、`refactor.adoc` 第 2 步）同步登记。**抓手**：规则数据 `script/specs-rules/ui-display-defects/`（令牌 + 防线 toml + 零字节行正文），`check_specs.py` 新增 `check_ui_display_defects_guard` 钉判据本体四组锚点与四处加载门登记，接入 `CHECKS`、防线清单表由生成器重算；有效性台账 `check_effective.py` 补一条；反例类 `TestCheckUiDisplayDefectsGuard` 补 11 条（有效 1 + 抽锚点/抽登记 10）。只钉文本与落点是否仍在；某处显示缺陷实际有没有、某条界面判据本机可不可得属运行时事实与语义判断，交人/子 agent 复核
+| 本轮（纠正：公共规范项目误把引用方问题的检测脚本写进本仓库） | 沿用 `check_ui_display_defects_guard`，锚点四组→五组（补事件流触发渲染的 review 本体） | 不新开防线；删除误写入的 `script/ui-audit/` 与其 CI/依赖/夹具/依据登记 | 用户明确纠正：本仓库是**公共规范项目**，Vue/React 事件流触发渲染、界面显示缺陷这类问题属**其他项目**，只能以**指引/方向/约束/判据**帮引用方解决，**不得在本仓库写修复代码、检测脚本、依赖清单与 CI**，并要求"下次不要再犯"。按 `AGENTS.adoc`「本项目的产出边界：只产规范，不产实现代码与检测脚本」立为维护方 L1：逐条给出违规形态（运行时实现代码、给引用方场景写的脚本/夹具/CI、把跑本仓库脚本当引用方判据、依据里写本机实测脚本可用）与合规形态（只给方向+判据+约束+依据名，修复与检测留引用方）。据此**移除**前几轮误写入的 `script/ui-audit/`（审计脚本、视觉回归、夹具、`package.json`/lock、自检）、`.github/workflows/check-specs.yml` 的 `ui-audit` job、`.gitignore` 的 node_modules 例外、`library/ui-standards.adoc` 及其登记，并把相关规范文本（review 判据、调度器两处、README、两份提示词、防线锚点、有效性台账）**回退到纯规范形态**——引用方按其自身 DOM/DevTools/测试取证，方向回指 `specs/general/verify.adoc`「可判据的界面检查」，本仓库不落可执行落点。
+| 本轮（新增：多事件流触发渲染的缺陷，review 必查且须修复） | 沿用 `check_ui_display_defects_guard`，令牌锚点四组→五组 | 不新开防线；`check_ui_display_defects_guard.toml` 补三处核点 | 用户口径：Vue/React 下多个事件流都会触发渲染，单个还好、一多或次序错就出渲染与性能怪问题，AI 写的代码人工很难排查，review 时算问题须修复，可大改公共规范。调研取官方一手材料（React `You Might Not Need an Effect`：冗余状态、Effect 链、竞态、Effect 间传数据；`Synchronizing with Effects`：cleanup 忽略过期回包；Vue `Performance`：computed 稳定性、重复渲染、列表虚拟化）。按「举例不是面」按**成因**归成五档：派生值不另存镜像状态、Effect/watcher 不成互相改状态的链、异步回包按最新一次生效、连续事件按帧合并、共享状态写入收一处——判据本体落 `specs/general/coding-ui.adoc`「界面的性能」**形态十一**（写代码一侧"怎么避免"），review 本体落 `specs/general/review.adoc`「review 的默认检查面」的『事件流触发渲染的缺陷属代码问题、必查』（五档任一命中即报且须修复），验法回指 `verify.adoc`「取证要用真实场景里的工具、取它给出的事实」，**不另立第二套规范、不写任何实现代码或检测脚本**；查的方向取浏览器性能面板与 React/Vue DevTools 看谁触发了渲染、渲染几次、状态何时变。调度器「任何代码活动」、README 公开面登记，`check_specs.py`/`check_effective.py` 台账与 `TestCheckUiDisplayDefectsGuard` 补 2 条反例（抽 review 本体、抽 coding-ui 方向）。只钉文本与落点；某处渲染是否真出错属运行时事实与语义判断，交引用方项目复核。
+|===
+
+== 复核实录（三视角、一次读取分栏）
+
+档位：C 档（新增判据 + 加载面）。
+
+机械手段（全量）：`script/check_specs.py` 全绿、`script/check_specs_test.py` 2804 用例全通过（skipped 6）、`script/check_effective.py` 221 条 / 抓手缺失 0、`script/check_effective_test.py` 37 条全通过；防线清单表由生成器重算；常驻层 68499 / 68500 字节（在本轮内归位压缩登记行后未抬上限）。
+
+复核通道（C 档）：平台 `cnb ai ai-chat-completions --stream` 实测可用（非流式 400、流式正常返回）、模型 `hy4-flash`，一次性无工具、分钟级超时，对象＝本次新增条文 + 四处登记，作为同 Agent 干净上下文复核。首轮三视角一次读取分栏：①完整性 **通过**（六例由六档维度全数覆盖、无降级删除）、②有效性 **通过**（判定标准可核对、边界有依据非口号）、③接纳面 **通过**（范围限定本次产出/改到的界面、不引工具链、不另立第二套规范），无悬置项。
+
+[cols="1,4", options="header"]
+|===
+| 视角 | 结论
+
+| ① 完整性（改动前后等价） | **通过**。新增一节完整落地，未删除或降级既有条目；六档维度由用户六个举例归纳而来、未漏同类形态（缩放/截断/组合态来自 W3C 官方 Understanding 页）；L1 判定标准带任一命中即须报；回指 `ui.adoc`/`ui-patterns.adoc`/`verify.adoc` 均为真实存在的节名。
+| ② 有效性与认知质量 | **通过**。「看一眼不算判据」与「存量不动」边界明确；依据 W3C WCAG 2.2 SC 1.4.4/1.4.10/1.4.12 只取下限，六档维度与「这是 review 的代码问题检查面」为本集合取舍，已写明；调度器、README、两份提示词四处登记齐备且经防线核对。
+| ③ 接纳面（未知项目加载可控） | **通过**。只对「本次产出或改到界面」生效，存量不动；不引入工具链、不改引用方工作区、不代为提交；用户举出的六个问题全部落入六档且有可核对判据，其余同类形态按维度覆盖；成本为通用层一节 + 懒加载登记，在预算内。
+|===
+
+== 本轮补记（纠正 + 事件流新增，三视角一次读取分栏）
+
+档位：B 档（公共内容新增判据 + 移除误写入的工具与接线）。
+
+机械手段（全量）：`script/check_specs.py` 全绿（含 AsciiDoc 语法段，已装 Ruby 版 asciidoctor 2.0.18）；`script/check_specs_test.py` 2806 用例通过（skipped 6）；`script/check_effective.py` 221 条 / 抓手缺失 0；`script/check_effective_test.py` 37 条通过；`script/gen_derived.py` 生成物与真源一致。常驻层 68498 / 68500 字节、项目入口 `AGENTS.adoc` 25498 / 25500 字节（均先归位压缩、未抬上限）。
+
+复核通道：平台 `cnb ai ai-chat-completions --stream` 干净上下文、模型 `hy4-flash`、一次性无工具、分钟级超时，对象＝本次六份核心 diff，一次读取、三视角分栏。
+
+[cols="1,4", options="header"]
+|===
+| 视角 | 结论
+
+| ① 完整性 | **通过**。产出边界声明落 `AGENTS.adoc` + `specs-project-maintainer/spec-lifecycle.adoc`，事件流五档判据落 `coding-ui.adoc` 形态十一、review 本体落 `review.adoc`，误写入的脚本/CI/依赖/依据（含 `script/ui-audit/`、`ui-audit` job、`library/ui-standards.adoc`）已从仓库移除；既有六档显示缺陷判据未删未降级。
+
+| ② 有效性与认知质量 | **通过**。review 条只回指 coding-ui 形态十一、不复述取值（机械校验的「自称回指却复述」防线全绿）；coding-ui 只给方向与判据、不含实现代码或检测脚本；五档均可按代码/运行事实核对；依据列 React/Vue 官方文档主题名与站点路径。
+
+| ③ 接纳面 | **通过**。公共加载面已无私有脚本名/仓库结构/CI 接线，明确不改引用方工作区；净删约 2000 字节工具与接线、只增一条规范判据，常驻层与项目入口均在体积上限内（数值见上）。
+|===
+
+复核者提出的悬置处置：① guard 目标写族入口 `coding.adoc`（按族取文本，判据在 `coding-ui.adoc`）系本仓库既有约定，机械校验全绿已关闭；② `AGENTS_COMMON.adoc` 已回退纯规范基线、原 token 仍在，guard 全绿已关闭；③ 依据官方文档主题名与站点路径已写入正文，逐字原文未复制进本仓库（合「依据只到官方给没给」）；④ 形态十一已移到形态十之后、编号顺序已修正；⑤ 脚本/CI/依据的实际删除在 staged diff 中，文件级 `git status` 可核。
+
+剩余悬置项：某处渲染是否真出错、五档阈值在本机可不可得属运行时事实，本轮只保证判据可加载、可机械核对，交引用方项目复核。
+
+悬置项：无。剩余风险：「某处显示缺陷实际有没有、某条界面判据本机可不可得」属运行时事实，本轮只保证判据可加载、可机械核对，须在引用方项目运行时验证。
