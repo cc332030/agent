@@ -34911,5 +34911,125 @@ class TestCheckUnattendedTaskGuard(CheckSpecsTestCase):
         self.assertTrue(cm.errors)
 
 
+class TestCheckIntegrationFlowGuard(CheckSpecsTestCase):
+    """钉住『业务流程须由集成测试走通』防线（用户提出）。
+
+    用户口径：补了方法/功能用例但流程走不通、没有自动补集成测试，须按业务流程补集成
+    用例、走通整个流程。夹具取真文件逐字副本，按点改动后跑防线；只钉文本与落点，
+    "某流程实际走没走通"属运行时事实，交人/子 agent 复核。
+    """
+
+    FILES = ("specs/general/testing.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc", "script/check_effective.py")
+    TESTING, COMMON, README, LEDGER = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_integration_flow_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.TESTING]
+        start = t.index("== 业务流程须由集成测试走通（补了方法用例不等于流程通）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.TESTING, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_identification_by_flow_not_method_count_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**按流程判、不按方法数判**",
+                             "**按方法数判、不按流程判**")
+        self.assertTrue(cm.errors)
+
+    def test_flow_gap_is_test_gap_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**流程走不通即为测试缺口（L1）**",
+                             "**流程走通与否不算缺口（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_integration_from_entry_to_output_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**集成测试须按真实业务流程补、走通整个流程（L1）**",
+                             "**集成测试可只验中间方法（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_assert_on_flow_output_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "断言**流程产出**而不只是某个中间方法的返回值",
+                             "断言**中间方法**即可")
+        self.assertTrue(cm.errors)
+
+    def test_finer_cases_cannot_substitute_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**集成层的缺口不得由更细的用例顶替（L1）**",
+                             "**集成层的缺口可由单元用例顶替（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_test_double_boundary_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**测试侧的 fixture/stub/fake、通用可观测接口不在此列**",
+                             "**所有测试替身一律禁止**")
+        self.assertTrue(cm.errors)
+
+    def test_equivalent_evidence_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**已有等价的流程级证据可复用（L2）**",
+                             "**已有等价证据一律不认（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_dependency_does_not_downgrade_l1_removed_reports(self):
+        self._run_guard_with(self.TESTING,
+                             "**判定缺口按上面三条 L1 办，本条只管依赖形态与执行集合归类，不替代也不降低 L1 判定**",
+                             "**依赖不可自起时缺口按 L2 处理**")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "补方法用例却没补集成测试致流程走不通",
+                             "要跑或补测试、要判性能测试")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "业务流程须由集成测试走通",
+                             "测试有效性")
+        self.assertTrue(cm.errors)
+
+    def test_ledger_registration_removed_reports(self):
+        self._run_guard_with(self.LEDGER,
+                             "check_integration_flow_guard 钉住 `specs/general/testing.adoc`",
+                             "该防线钉住 `specs/general/testing.adoc`")
+        self.assertTrue(cm.errors)
+
+
 if __name__ == "__main__":
     unittest.main()

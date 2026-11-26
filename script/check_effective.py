@@ -1248,6 +1248,10 @@ MECHANISMS = [
      "specs/general/feedback.adoc", "script/check_specs.py",
      "check_unattended_task_guard",
      "check_unattended_task_guard 钉住 `specs/general/feedback.adoc`「无人值守的周期性后台任务」五组锚点（按面判不按样本判、四件套共用一条运行记录、状态分两层与失联检测、告警闭环与回执与配置变更审计、指标同源与敏感信息与执行约束与依据行），另核调度器加载门、公开面 README 与台账登记；只钉文本与落点，『某任务是否真失联、某告警是否真闭环』属运行时事实与语义判断"),
+    ("业务流程须由集成测试走通（补了方法用例不等于流程通）",
+     "specs/general/testing.adoc", "script/check_specs.py",
+     "check_integration_flow_guard",
+     "check_integration_flow_guard 钉住 `specs/general/testing.adoc`「业务流程须由集成测试走通」七组锚点（按流程判不按方法数判与 N/A 适用范围、流程入口产出按真实形态取、流程走不通即为缺口、集成用例按真实流程从入口跑到产出与测试替身边界、集成层缺口不得由更细用例顶替、已有等价流程级证据可复用、依赖形态不降低 L1 判定与依据行），另核调度器加载门、公开面 README 与台账登记；只钉文本与落点，『某流程实际走没走通、某断言是否落在产出』属运行时事实与语义判断"),
 
 ]
 
