@@ -6691,6 +6691,40 @@ class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
         cm.check_no_desktop_takeover_guard()
         self.assertIn("README.adoc", self.error_texts())
 
+    def test_runtime_form_section_dropped_reports(self):
+        # 反例：运行形态统一这一组整段被抽（用户问的「Linux 纯命令行怎么展示 / 有无 Docker 要不要区分 / 统一标准」无人答）
+        self._mutate(self.VERIFY,
+                     "* **界面显示的运行形态统一判据：无桌面、有无容器都不另立一套显示标准（L1）**",
+                     "* **界面显示另议**")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("界面显示的运行形态统一", self.error_texts())
+
+    def test_runtime_form_no_docker_neutral_dropped_reports(self):
+        # 反例：「有无容器不改变判据与取值次序」被抽（又变成「有 Docker 才能验界面」）
+        self._mutate(self.VERIFY,
+                     "有无容器不改变①②③的取值次序与判据",
+                     "有无容器决定是否要验界面")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("有无容器不改变", self.error_texts())
+
+    def test_runtime_form_dispatch_dropped_reports(self):
+        # 反例：调度器识别特征被抽（命令行/容器场景永不被加载）
+        self._mutate(self.COMMON, "没 Docker 时想知道界面怎么验", "验证相关")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("没 Docker 时想知道界面怎么验", self.error_texts())
+
+    def test_runtime_form_prompt_dropped_reports(self):
+        # 反例：提示词片段的运行形态统一被抽（复制出去的执行侧仍按「没 Docker 就跳过界面」）
+        self._mutate(self.PROMPT, "界面显示的运行形态统一判据：无桌面、有无容器都不另立一套显示标准（L1）", "看情况处理")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("prompts/_common.txt", self.error_texts())
+
+    def test_runtime_form_readme_dropped_reports(self):
+        # 反例：公开面 README 的登记被抽
+        self._mutate(self.README, "* **界面显示的运行形态统一判据：无桌面、有无容器都不另立一套显示标准**", "* **看情况处理**")
+        cm.check_no_desktop_takeover_guard()
+        self.assertIn("README.adoc", self.error_texts())
+
     def test_missing_file_reports(self):
         # 反例⑫：规范文件整体缺失
         cm.check_no_desktop_takeover_guard()
@@ -6715,8 +6749,8 @@ class TestCheckNoDesktopTakeoverGuard(CheckSpecsTestCase):
         rel = _find_rule_file('token_list = "NO_DESKTOP_TAKEOVER_TOKENS"')
         with open(os.path.join(self.root, *rel.split("/")), encoding="utf-8") as fh:
             rules = fh.read()
-        self.assertIn('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', rules)
-        self.write(rel, rules.replace('min = 22\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"',
+        self.assertIn('min = 30\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', rules)
+        self.write(rel, rules.replace('min = 30\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"',
                                       'min = 999\ntoken_list = "NO_DESKTOP_TAKEOVER_TOKENS"', 1))
         cm.RULES = None
         cm._RULES_RUN_THIS_PHASE.clear()
