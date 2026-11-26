@@ -673,6 +673,8 @@
 
  135. 未捕获错误全局兜底防线（**用户提出**）：用户口径『调整公共规范，网页需要全局异常处理，不然白屏也不知道啥原因，没有任何提示』。判据本体落通用层 `specs/general/feedback.adoc`「未捕获错误必须有全局兜底（任何端）」：按形态判不按框架名单判；未捕获错误统一在一处接管、给人可读原因与出路；同步异常、资源加载失败、未处理异步拒绝三类都接入；兜底注册早于被保护代码、自身失败只记诊断不递归、多错误只显示首因；诊断留痕但不给人看内部细节；存量随动迁移。前端载体落 `specs/stack/web.adoc`「全局错误兜底的载体（前端）」；调度器识别特征与公开面 README 同步登记。由 `check_global_error_guard` 钉住；只钉文本与落点，某界面是否真白屏、某错误是否真被接住属运行时事实与语义判断，交人/子 agent 复核。
 
+ 136. 无人值守的周期性后台任务成套规范防线（**用户提出**）：用户口径『一个管理后台的任务（定时签到、定时刷新等），开关、状态、日志、告警应该是一套，需要一起出现、一起起作用，调研下是否合理、是否会漏』，调研后要求"加到公共规范"。判据本体落通用层 `specs/general/feedback.adoc`「无人值守的周期性后台任务（开关、状态、日志、告警共用一条运行记录）」：四件套是一份运行记录的四个视角、须共用运行身份（run id / trace id）并成套出现；状态分任务定义态与单次运行态两层；失联检测不可缺（没有日志不等于在跑）；告警须闭环（含恢复通知与投递台账）；回执、配置变更审计、指标同源、敏感信息与执行约束各有落点；定时只是样本、面是无人在旁看的周期任务。与既有条目分工：日志写法在 `coding.adoc`、回执/通知台账在本文件前面各节、质量哨兵在 `coding-runtime.adoc`、硬超时在 `collab.adoc`，本节只定"任务级成套与共用运行身份"这一面。由 `check_unattended_task_guard` 钉住；「某任务是否真失联、某告警是否真闭环」属运行时事实与语义判断，交人/子 agent 复核。
+
 """
 
 import argparse
@@ -15758,6 +15760,26 @@ def check_global_error_guard():
     phase_done()
 
 
+def check_unattended_task_guard():
+    """『无人值守的周期性后台任务成套规范』防线（**用户提出**）。
+
+    用户口径：定时签到/刷新一类管理后台任务，开关、状态、日志、告警
+    应是一套，一起出现、一起起作用；调研后要求"加到公共规范"。要治的失效：四件各写
+    一套、开关关了告警还在响、状态成功但查不到记录、任务停摆却因"日志没报错"无人发现。
+    本道钉通用层判据本体五组要点、调度器与公开面两处登记；只核文本与落点；「某任务
+    是否真失联、某告警是否真闭环」属运行时事实与语义判断（见 GUARD_CHECK_LIMITS），
+    交人/子 agent 复核。
+    """
+    phase("无人值守任务成套规范防线检查")
+    if not _rules_topic_present("unattended-task"):
+        err("缺少 script/specs-rules/unattended-task——『无人值守的周期性后台任务』"
+            "的锚点（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_unattended_task_guard")
+    phase_done()
+
+
 def check_site_error_guard():
     """『站点全局异常处理』防线：未捕获错误有没有真的落到错误面板上。
 
@@ -17043,6 +17065,7 @@ CHECKS = (
     check_site_include_guard,
     check_site_error_guard,
     check_global_error_guard,
+    check_unattended_task_guard,
     check_ledger_table_generated_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,

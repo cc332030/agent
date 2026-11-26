@@ -34766,5 +34766,113 @@ class TestCheckGlobalErrorGuard(CheckSpecsTestCase):
         self.assertTrue(cm.errors)
 
 
+class TestCheckUnattendedTaskGuard(CheckSpecsTestCase):
+    """钉住『无人值守的周期性后台任务成套规范』防线（用户提出）。
+
+    用户口径：定时签到/刷新一类后台任务，开关、状态、日志、告警应是一套，一起出现、
+    一起起作用。夹具取真文件逐字副本，按点改动后跑防线；只钉文本与落点，"任务是否真
+    失联、告警是否真闭环"属运行时事实，交人/子 agent 复核。
+    """
+
+    FILES = ("specs/general/feedback.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc", "script/check_effective.py")
+    FEEDBACK, COMMON, README, LEDGER = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        cm.REPO_ROOT = self.root
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_unattended_task_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_section_removed_reports(self):
+        self._write_all_valid()
+        t = self.base[self.FEEDBACK]
+        start = t.index("== 无人值守的周期性后台任务（开关、状态、日志、告警共用一条运行记录）")
+        end = t.index("\n== ", start + 1)
+        self.write(self.FEEDBACK, t[:start] + t[end + 1:])
+        self._run_guard()
+        self.assertTrue(cm.errors)
+
+    def test_four_parts_share_run_id_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**四件套是一份运行记录的四个视角，须成套出现且共用运行身份（L1）**",
+                             "**四件套可各自分别实现**")
+        self.assertTrue(cm.errors)
+
+    def test_two_state_layers_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**状态分任务定义态与单次运行态两层，不得混成一份（L1）**",
+                             "**状态可合成一份（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_liveness_detection_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**失联检测不可缺：没有日志不等于在跑（L1）**",
+                             "**失联检测可选（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_alarm_closure_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**告警须闭环、不只发不收（L1）**",
+                             "**告警发出即可（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_audit_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**配置变更须可审计（L1）**",
+                             "**配置变更无需记录（L2）**")
+        self.assertTrue(cm.errors)
+
+    def test_same_source_metrics_removed_reports(self):
+        self._run_guard_with(self.FEEDBACK,
+                             "**指标与日志从同一批运行记录算、敏感信息按既有规范处理（L1）**",
+                             "**指标可另采一份（L1）**")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "无人值守周期任务的开关/状态/日志/告警",
+                             "周期任务的开关/状态/日志/告警")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "无人值守的周期性后台任务成套规范",
+                             "后台任务规范")
+        self.assertTrue(cm.errors)
+
+    def test_ledger_registration_removed_reports(self):
+        self._run_guard_with(self.LEDGER,
+                             "check_unattended_task_guard 钉住 `specs/general/feedback.adoc`",
+                             "该防线钉住 `specs/general/feedback.adoc`")
+        self.assertTrue(cm.errors)
+
+
 if __name__ == "__main__":
     unittest.main()

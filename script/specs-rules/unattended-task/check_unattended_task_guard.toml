@@ -1,0 +1,48 @@
+# 『无人值守的周期性后台任务成套规范』防线（**用户提出**）。
+#
+# 用户口径：一个管理后台的任务（定时签到、定时刷新等），开关、状态、日志、
+# 告警应该是一套，需要一起出现、一起起作用；调研后要求"加到公共规范"。
+#
+# 判据本体唯一落 specs/general/feedback.adoc「无人值守的周期性后台任务（开关、状态、日志、
+# 告警共用一条运行记录）」一节。本道只钉判据本体与两处登记（调度器、公开面）是否仍在；
+# 「某任务是否真失联、某告警是否真闭环」属运行时事实与语义判断，交人/子 agent 复核。
+# 与 check_global_error_guard / check_ui_spec_guard 的分工（判据对象不同、不得合并）：
+# 前者钉未捕获错误的全局兜底，后者钉界面形状与反馈面，本道钉无人值守任务成套与共用运行身份。
+
+[[guards.check_unattended_task_guard]]
+file = "specs/general/feedback.adoc"
+section = "无人值守的周期性后台任务（开关、状态、日志、告警共用一条运行记录）"
+kind = "section_groups"
+token_list = "UNATTENDED_TASK_SECTION_ANCHORS"
+message = "无人值守任务防线：{file}「无人值守的周期性后台任务」缺失要点 {missing}——{desc}"
+
+[[guards.check_unattended_task_guard]]
+file = "script/specs-rules/unattended-task/tokens.toml"
+kind = "anchor_count"
+token_list = "UNATTENDED_TASK_SECTION_ANCHORS"
+min = 5
+
+[[guards.check_unattended_task_guard]]
+file = "AGENTS_COMMON.adoc"
+kind = "line_tokens"
+anchor = ["**任何代码活动**"]
+tokens = [
+    "无人值守周期任务的开关/状态/日志/告警",
+    "`specs/general/feedback.adoc`",
+]
+message = "无人值守任务防线：调度器 {file}「任何代码活动」未登记识别特征 {missing}——写定时任务、开关、告警时读不到判据，规则实际失效"
+
+[[guards.check_unattended_task_guard]]
+file = "README.adoc"
+kind = "file_tokens"
+tokens = [
+    "无人值守的周期性后台任务成套规范",
+    "feedback.adoc",
+]
+message = "无人值守任务防线：公开面 {file} 缺 {missing}——引用方从目录说明看不到该判据"
+
+[[guards.check_unattended_task_guard]]
+file = "script/check_effective.py"
+kind = "file_tokens"
+tokens = ["check_unattended_task_guard 钉住 `specs/general/feedback.adoc`"]
+message = "无人值守任务防线未进台账：{file} 缺 {missing}——这条判据在「定义了但没人跑」的清单里看不见"
