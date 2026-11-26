@@ -289,9 +289,9 @@ MECHANISMS = [
      "该 sha 已不在分支历史里／换了承载位置，一律按没审过处理）、**记账落在对象上**（上次复核 sha + 结论；没留证按首次复核）与**不新增平台状态位**、"
      "与「改完即审」的分工（增量不是降档）、存量边界；② 平台层「对象钉定与可追溯」的落点（上次审到哪记在 PR 结论里、查不到按首次复核处理）。"
      "「这一轮到底有没有真的续接上」「上一轮的结论还成不成立」属运行时事实与语义判断，交人/子 agent 复核"),
-    ("一个功能的实现跨模块算代码问题、须查出来；重构须处理（不得只记为已发现）", "specs/general/review.adoc + prompts/review.adoc + prompts/refactor.adoc", "script/check_specs.py",
+    ("一个功能的实现跨模块算代码问题、须查出来；重构须处理（不得只记为已发现）", "specs/general/module.adoc + prompts/review.adoc + prompts/refactor.adoc", "script/check_specs.py",
      "check_cross_module_feature_guard",
-     "check_cross_module_feature_guard 钉**判据本体**（不是节名）：『一个功能的实现跨模块属代码问题（L1，必查）』这一定性、四条判定标准（调用方须跨模块各调一遍／"
+     "check_cross_module_feature_guard 钉**判据本体**（不是节名，落 `module.adoc`「功能不跨模块」）：『一个功能的实现跨模块属代码问题（L1，必查）』这一定性、四条判定标准（调用方须跨模块各调一遍／"
      "同一份契约两处各有一份完整定义／依赖另一个模块的内部细节／拆开的理由是体量而非职责）、**与「存量不动」的边界**（存量里已经跨模块的功能同样要报）、"
      "**与范围控制的边界**（报出与处置分开、不发动全库改造）、**重构须处理这一形态**（进重构清单并落地、不得只记为已发现）；另核三处落点：字典检索键、"
      "review 提示词的检查面、refactor 提示词的重构清单。"
@@ -1251,7 +1251,7 @@ MECHANISMS = [
     ("界面 review / 重构时按实际显示效果核对显示缺陷（空白、对齐、遮挡、溢出、滚动、组合态）",
      "specs/general/review.adoc", "script/check_specs.py",
      "check_ui_display_defects_guard",
-     "check_ui_display_defects_guard 钉住 `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』四组锚点（按维度查的六档、命中即报与看一眼不算判据与组合态必查、回指 ui/verify 不另立第二套规范、实际显示效果为准与存量不动边界）与『事件流触发渲染的缺陷属代码问题、必查』（review 报出且须修复、回指 coding-ui 形态十一），另核调度器 review 与重构两处、公开面 README 与两份提示词登记；只钉文本与落点，『某处显示缺陷实际有没有、某处渲染是否真出错』属运行时事实与语义判断"),
+     "check_ui_display_defects_guard 钉住 `specs/general/ui.adoc`「界面显示缺陷的六个维度」四组判据本体锚点（按维度查的六档、命中即报与看一眼不算判据与组合态必查、回指 review/verify 不另立第二套规范、实际显示效果为准与存量不动边界）与 `specs/general/review.adoc`「review 的默认检查面」的检查面回指（显示缺陷属代码问题、六档回指 ui.adoc、判定标准与存量不动、不复述正文）以及『事件流触发渲染的缺陷属代码问题、必查』（review 报出且须修复、回指 coding-ui 形态十一）；另核调度器 review 与重构两处、公开面 README 与两份提示词登记；只钉文本与落点，『某处显示缺陷实际有没有、某处渲染是否真出错』属运行时事实与语义判断"),
     ("业务流程须由集成测试走通（补了方法用例不等于流程通）",
      "specs/general/testing.adoc", "script/check_specs.py",
      "check_integration_flow_guard",
