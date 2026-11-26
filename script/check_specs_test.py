@@ -31753,7 +31753,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件） → `specs/general/ui-patterns.adoc`；",
+                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件；review/重构按渲染核显示缺陷→`specs/general/review.adoc`）→ `specs/general/ui-patterns.adoc`；",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -31979,7 +31979,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         # 反例㊴：调度器不再把「定控件宽高、要不要滚动条」列为识别特征——定表单宽度的人
         # 读不到排布模板，判据存在而走不到它。
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "、这一格用什么控件）",
+                             "、这一格用什么控件；review/重构按渲染核显示缺陷→`specs/general/review.adoc`）",
                              "）")
         self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
 
@@ -35028,6 +35028,122 @@ class TestCheckIntegrationFlowGuard(CheckSpecsTestCase):
         self._run_guard_with(self.LEDGER,
                              "check_integration_flow_guard 钉住 `specs/general/testing.adoc`",
                              "该防线钉住 `specs/general/testing.adoc`")
+        self.assertTrue(cm.errors)
+
+
+class TestCheckUiDisplayDefectsGuard(CheckSpecsTestCase):
+    """钉住『界面显示缺陷必查』防线（用户提出）。
+
+    夹具取真文件逐字副本，按点改动后跑防线；只钉文本与落点，
+    「某处显示缺陷实际有没有」属运行时事实，交人/子 agent 复核。
+    """
+
+    FILES = ("specs/general/review.adoc", "AGENTS_COMMON.adoc",
+             "README.adoc", "prompts/review.adoc", "prompts/refactor.adoc",
+             "script/check_effective.py", "specs/general/coding.adoc")
+    REVIEW, COMMON, README, PROMPT_REVIEW, PROMPT_REFACTOR, LEDGER, CODING = FILES
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.base = {rel: self.read_real(rel) for rel in self.FILES}
+
+    def _write_all_valid(self) -> None:
+        for rel, text in self.base.items():
+            self.write(rel, text)
+        self.write_rules_fixture()
+
+    def _run_guard(self) -> None:
+        cm._RULE_TOKENS_STORAGE.clear()
+        cm._RULE_TOKENS_DELETED.clear()
+        cm.REPO_ROOT = self.root
+        cm.errors.clear()
+        cm._RULES_RUN_THIS_PHASE.clear()
+        cm.RULES = None
+        cm.check_ui_display_defects_guard()
+        cm.RULES = None
+        cm._RULES_RUN_THIS_PHASE.clear()
+
+    def _run_guard_with(self, rel: str, old: str, new: str) -> None:
+        self._write_all_valid()
+        self.assertIn(old, self.base[rel], f"夹具失效：{rel} 里找不到 {old}")
+        self.write(rel, self.base[rel].replace(old, new, 1))
+        self._run_guard()
+
+    def test_valid_passes(self):
+        self._write_all_valid()
+        self._run_guard()
+        self.assertEqual([], cm.errors)
+
+    def test_dimension_anchor_removed_reports(self):
+        self._run_guard_with(self.REVIEW,
+                             "⑤ **滚动条**",
+                             "⑤ **按钮颜色**")
+        self.assertTrue(cm.errors)
+
+    def test_look_not_a_criterion_removed_reports(self):
+        self._run_guard_with(self.REVIEW,
+                             "「看了一眼觉得没问题」或没有失败条件的截图",
+                             "以人工走查结论为准")
+        self.assertTrue(cm.errors)
+
+    def test_no_second_ui_spec_removed_reports(self):
+        self._run_guard_with(self.REVIEW,
+                             "**不另立第二套界面规范**",
+                             "另立一套界面规范")
+        self.assertTrue(cm.errors)
+
+    def test_actual_display_boundary_removed_reports(self):
+        self._run_guard_with(self.REVIEW,
+                             "**「实际显示效果为准」的边界**",
+                             "**「代码写法为准」的边界**")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_review_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "**显示缺陷以实际渲染为准**",
+                             "界面显示属样式偏好")
+        self.assertTrue(cm.errors)
+
+    def test_dispatcher_refactor_registration_removed_reports(self):
+        self._run_guard_with(self.COMMON,
+                             "review/重构按渲染核显示缺陷",
+                             "按代码写法核对显示缺陷")
+        self.assertTrue(cm.errors)
+
+    def test_readme_registration_removed_reports(self):
+        self._run_guard_with(self.README,
+                             "界面显示缺陷属代码问题、必查",
+                             "测试有效性")
+        self.assertTrue(cm.errors)
+
+    def test_review_prompt_registration_removed_reports(self):
+        self._run_guard_with(self.PROMPT_REVIEW,
+                             "检查面含『界面显示缺陷』",
+                             "检查面含『文档问题』")
+        self.assertTrue(cm.errors)
+
+    def test_refactor_prompt_registration_removed_reports(self):
+        self._run_guard_with(self.PROMPT_REFACTOR,
+                             "界面显示缺陷须进重构清单",
+                             "显示缺陷不在重构范围")
+        self.assertTrue(cm.errors)
+
+    def test_event_flow_review_clause_removed_reports(self):
+        self._run_guard_with(self.REVIEW,
+                             "事件流触发渲染的缺陷属代码问题、必查",
+                             "事件流的写法交给框架自行处理")
+        self.assertTrue(cm.errors)
+
+    def test_event_flow_coding_ui_direction_removed_reports(self):
+        self._run_guard_with(self.CODING,
+                             "形态十一（事件流→渲染）",
+                             "形态十一（字符串拼接）")
+        self.assertTrue(cm.errors)
+
+    def test_ledger_registration_removed_reports(self):
+        self._run_guard_with(self.LEDGER,
+                             "check_ui_display_defects_guard 钉住 `specs/general/review.adoc`",
+                             "该防线钉住 `specs/general/review.adoc`")
         self.assertTrue(cm.errors)
 
 

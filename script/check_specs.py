@@ -678,6 +678,7 @@
  137. 一次给多个任务逐条登记进 tmp/ 并实时更新进度防线（**用户提出**）：用户口径『调整公共规范，一次给多个任务时，需要记录到临时文档，实时更新进度』。判据本体落通用层 `specs/general/execution-detail.adoc`「指令的完整性」：一次收到多个任务时动手前在 `tmp/` 临时文档逐条登记（每条一行：任务 / 状态 / 下一步）、执行中每有进展即更新对应那条，不攒到收尾补、不把多条合写成一句整体进度；与 `specs/general/entry-doc.adoc`「`tmp/` 索引的形态与并行取值」分工（本节管执行中的逐条登记与实时更新，那节管接替时怎么读、并行怎么分行）；结论进持久落点。必加载层留底线与回指、提示词公共片段留同口径一句。由 `check_tmp_layout_guard` 钉住（归并进既有防线、不新开）；「这次有没有真逐条登记、有没有实时更新」属运行时事实与语义判断，交人/子 agent 复核。
 
  138. 业务流程须由集成测试走通防线（**用户提出**）：用户口径『很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，需要根据业务流程去补集成测试用例，走通整个流程』。判据本体落通用层 `specs/general/testing.adoc`「业务流程须由集成测试走通（补了方法用例不等于流程通）」：按流程判不按方法数判（方法用例全绿不构成流程通的证据）；有业务流程时须有从真实入口跑到可观察产出的集成用例、断言落在流程产出；集成层缺口不得由更细用例顶替；能自起外部依赖的仍须补齐、不因需外部依赖而跳过。与技术栈层 `java-testing.adoc` 的五类后缀与执行边界分工（本节只定"流程级用例不可缺、断言落在产出"，不复制命名与执行边界）。调度器「跑测试/补测试」识别特征与 README 公开面同步登记。由 `check_integration_flow_guard` 钉住；「某流程实际走没走通、某断言是否落在产出」属运行时事实与语义判断，交人/子 agent 复核。
+ 139. 界面显示缺陷必查防线（**用户提出**）：用户口径『界面review、重构时，需要处理多余空白，比如太长的输入组件，弹窗下面大片空白，大片空白和滚动条出现在一个页面，组件未对齐，文字覆盖，文字被遮挡等界面问题，以实际显示效果为准，还有哪些可能的问题帮我调研后加进来』。按「举例不是面」把六个例子归成六档维度（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』条——这是 review 检查面的一类代码问题，不另立第二套界面规范：宽高与空白回指 `ui.adoc`/`ui-patterns.adoc`，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4/1.4.10/1.4.12 下限。调度器 review 与重构两处、README、两份提示词（`review.adoc`/`refactor.adoc`）同步登记。另按用户同向要求补入『事件流触发渲染的缺陷属代码问题、必查』：多事件流/次序错乱引发的莫名重绘、状态漂移、异步乱序覆盖、性能下降属 review 必查且须修复的代码问题，避免方向（派生值只算一次、Effect/watcher 不成链、异步按最新一次生效、写入收一处）落 `specs/general/coding-ui.adoc`「界面的性能」形态十一，review 本体回指它、验法回指 `verify.adoc`，本仓库不写实现代码或检测脚本。由 `check_ui_display_defects_guard` 钉住；「某处显示缺陷实际有没有、某处渲染是否真出错」属运行时事实与语义判断，交人/子 agent 复核。
 """
 
 import argparse
@@ -10858,6 +10859,29 @@ def check_git_attributes_merge_guard():
     phase_done()
 
 
+def check_ui_display_defects_guard():
+    """『界面显示缺陷必查』防线（**用户提出**）。
+
+    用户口径：界面 review / 重构时须处理多余空白（过长输入组件、弹窗大片空白、空白与
+    滚动条同屏、组件未对齐、文字覆盖、文字被遮挡），以实际显示效果为准，并调研后补入
+    同类问题。按「举例不是面」把六例归成六档维度，判据本体落
+    `specs/general/review.adoc`「review 的默认检查面」的『界面显示缺陷属代码问题、必查』条。
+    钉两处：① 判据本体四组锚点（维度、判定标准、回指分工、实际显示效果与存量边界）；
+    ② 四处加载面（调度器 review 与重构两条、README、两份提示词）；
+    另钉『事件流触发渲染的缺陷』review 本体与 coding-ui 形态十一的避免方向。
+    只钉文本与落点——「某处缺陷实际有没有、某条界面判据本机可不可得」属运行时事实与
+    语义判断（见 GUARD_CHECK_LIMITS），交人/子 agent 复核。
+    """
+    phase("界面显示缺陷必查防线检查")
+    if not _rules_topic_present("ui-display-defects"):
+        err("缺少 script/specs-rules/ui-display-defects——『界面显示缺陷必查』的锚点"
+            "（判据措辞）失去唯一来源，该道防线整批空转", "script/specs-rules")
+        phase_done()
+        return
+    run_rule_guard("check_ui_display_defects_guard")
+    phase_done()
+
+
 def check_ledger_table_generated_guard():
     """『逐行登记表须是生成物』：同一批内容抄成第二份，就必然在两处各改一遍。
 
@@ -17093,6 +17117,7 @@ CHECKS = (
     check_unattended_task_guard,
     check_integration_flow_guard,
     check_ledger_table_generated_guard,
+    check_ui_display_defects_guard,
     check_git_attributes_merge_guard,
     check_spec_driven_guard,
     check_recurrence_escalation_guard,
