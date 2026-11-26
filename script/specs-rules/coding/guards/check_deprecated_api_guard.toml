@@ -96,3 +96,51 @@ groups = [
     ],
 ]
 message = "弃用类/API 防线被破坏：{file}缺失要点 {missing}——{desc}；该条对应用户口径（弃用迁移默认不动依赖与版本），不得删除"
+
+# 弃用须写出去向（用户提出：Java `@Deprecated` 要与 `@see` 一起出现、被 xx 替代，其他语言同理）。
+# 通用层：与上面同在「警告与弃用」节，核新 bullet 自身（按整节核时相邻条目的字样会兜住它）；
+# 锚点取本条独有措辞，缺任一项即该条被抽空/降级。
+[[guards.check_deprecated_api_guard]]
+file = "specs/general/coding-runtime.adoc"
+section = "警告与弃用"
+kind = "bullet_tokens"
+bullet = "弃用须同时写明替代者（L1，任何语言）"
+min = 12
+tokens = [
+    "弃用须同时写明替代者（L1，任何语言）",
+    "`@Deprecated`",
+    "`@see`",
+    "文档注释的等价标签",
+    "**判定标准（任一命中即违规）**",
+    "只有「已弃用」而无替代者指向",
+    "替代者指向不存在、不可解析",
+    "**无替代者的出口**",
+    "写明「无替代者 + 原因」",
+    "**边界**",
+    "**存量边界**",
+    "不为补 `@see` 对存量做全库扫描",
+]
+message = "弃用去向防线被破坏：{file} 的「弃用须同时写明替代者」条缺失要点 {missing}——该条对应用户口径（弃用处须写明被谁替代，Java @Deprecated 配 @see，其他语言同理），不得删除、不得降级为建议"
+
+# Java 栈落点：javadoc 里 @Deprecated 与 @see 成对的写法与判定标准（判据本体回指通用层）。
+[[guards.check_deprecated_api_guard]]
+file = "specs/stack/java.adoc"
+section = "javadoc"
+kind = "bullet_tokens"
+bullet = "`@Deprecated` 须与 `@see` 成对出现（L1，用户点名）"
+min = 12
+tokens = [
+    "`@Deprecated` 须与 `@see` 成对出现",
+    "同一条 javadoc 里**须有 `@see` 指明替代者**",
+    "**只标 `@Deprecated` 不写 `@see`",
+    "**判定标准（任一命中即违规）**",
+    "**无替代者**时在**同一条 javadoc 的正文**写明「无替代者 + 原因」",
+    "**不要求虚构一个 `@see` 指向**",
+    "reference not found",
+    "**边界**",
+    "弃用 `@see` 指替代者",
+    "弃用 `@see` 不随之移除",
+    "**存量边界**",
+    "coding-runtime.adoc",
+]
+message = "弃用去向防线被破坏：{file} 的「@Deprecated 须与 @see 成对出现」条缺失要点 {missing}——Java 侧弃用去向的落点被抽空时，用户点名的形态（被 xx 替代）在代码注释里没有了抓手"
