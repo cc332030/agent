@@ -679,6 +679,7 @@
 
  138. 业务流程须由集成测试走通防线（**用户提出**）：用户口径『很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，需要根据业务流程去补集成测试用例，走通整个流程』。判据本体落通用层 `specs/general/testing.adoc`「业务流程须由集成测试走通（补了方法用例不等于流程通）」：按流程判不按方法数判（方法用例全绿不构成流程通的证据）；有业务流程时须有从真实入口跑到可观察产出的集成用例、断言落在流程产出；集成层缺口不得由更细用例顶替；能自起外部依赖的仍须补齐、不因需外部依赖而跳过。与技术栈层 `java-testing.adoc` 的五类后缀与执行边界分工（本节只定"流程级用例不可缺、断言落在产出"，不复制命名与执行边界）。调度器「跑测试/补测试」识别特征与 README 公开面同步登记。由 `check_integration_flow_guard` 钉住；「某流程实际走没走通、某断言是否落在产出」属运行时事实与语义判断，交人/子 agent 复核。
  139. 界面显示缺陷必查防线（**用户提出**）：用户口径『界面review、重构时，需要处理多余空白，比如太长的输入组件，弹窗下面大片空白，大片空白和滚动条出现在一个页面，组件未对齐，文字覆盖，文字被遮挡等界面问题，以实际显示效果为准，还有哪些可能的问题帮我调研后加进来』。按「举例不是面」把六个例子归成六档维度（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/ui.adoc`「界面显示缺陷的六个维度」，`specs/general/review.adoc`「review 的默认检查面」只留「这是 review 必查的一类代码问题 + 回指本体」，不另立第二套界面规范：宽高与空白回指 `ui.adoc`/`ui-patterns.adoc`，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4/1.4.10/1.4.12 下限。调度器 review 与重构两处、README、两份提示词（`review.adoc`/`refactor.adoc`）同步登记。另按用户同向要求补入『事件流触发渲染的缺陷属代码问题、必查』：多事件流/次序错乱引发的莫名重绘、状态漂移、异步乱序覆盖、性能下降属 review 必查且须修复的代码问题，避免方向（派生值只算一次、Effect/watcher 不成链、异步按最新一次生效、写入收一处）落 `specs/general/coding-ui.adoc`「界面的性能」形态十一，review 本体回指它、验法回指 `verify.adoc`，本仓库不写实现代码或检测脚本。由 `check_ui_display_defects_guard` 钉住；「某处显示缺陷实际有没有、某处渲染是否真出错」属运行时事实与语义判断，交人/子 agent 复核。
+ 140. 测试用例性能全流程检测（**用户提出，归并进既有性能测试防线**）：用户口径『调整测试规范：测试用例全流程需要性能检测，保障效率和时间』。判据本体落通用层 `specs/general/testing.adoc`「测试用例性能（贯穿用例全流程的检测，保障效率与时间）」：用例自身的耗时与资源代价须在**设计 → 编写 → 执行 → 文档**每一阶段都有检测动作与落点（设计算代价、编写按可判定条件落地、执行从统计取实测、文档记口径与取舍），任一阶段缺检测即未达成；逐阶段检测表把四档动作与既有条目对应起来；与「性能测试」（被测对象的工程实验）分工明确、不互相替代。不新开独立防线——锚点（`TEST_CASE_PERF_ANCHORS`）并入 `check_performance_guard` 一并钉住，调度器识别特征、README 公开面、`check_effective` 机制登记与 `library/sources.adoc` 的依据指向同步更新；「某套用例是否真在执行期取到耗时统计、效率是否真可接受」属运行时事实与语义判断，交人/子 agent 复核。
 """
 
 import argparse
@@ -10336,6 +10337,10 @@ PERF_SECTION_ANCHORS = _RULES_TOKENS["PERF_SECTION_ANCHORS"]
 # 图书馆依据主题（library/performance.adoc）：依据不得只剩名称——外部材料与"本站取舍"的分界须写明
 PERF_LIBRARY_ANCHORS = _RULES_TOKENS["PERF_LIBRARY_ANCHORS"]
 
+# 用例性能全流程检测（与「性能测试」同节不同主题，判据本体在「测试用例性能」节）
+TEST_CASE_PERF_SECTION = _RULES_TOKENS["TEST_CASE_PERF_SECTION"]
+TEST_CASE_PERF_ANCHORS = _RULES_TOKENS["TEST_CASE_PERF_ANCHORS"]
+
 
 def check_performance_guard():
     """『性能测试防线』：测量与记录两半的要点。
@@ -10359,6 +10364,17 @@ def check_performance_guard():
         for token in anchors:
             if token not in section:
                 err(f"「性能测试」节缺少要点：{name}（应含 `{token}`）——{why}", PERF_SPEC)
+
+    # 用例性能全流程检测：判据本体在「测试用例性能」节，与上面「性能测试」是两件事。
+    tc_section = _section_text(text, TEST_CASE_PERF_SECTION)
+    if not tc_section:
+        err("公共测试规范缺少「测试用例性能」节——用例自身的效率检测退回「设计期想一下」"
+            "（执行期与文档期再无检测动作）", PERF_SPEC)
+    else:
+        for name, anchors, why in TEST_CASE_PERF_ANCHORS:
+            for token in anchors:
+                if token not in tc_section:
+                    err(f"「测试用例性能」节缺少要点：{name}（应含 `{token}`）——{why}", PERF_SPEC)
 
     # 调度器：本条的加载项与识别特征（缺则它永远不会被触发加载、规则实际失效）
     with open(os.path.join(REPO_ROOT, "AGENTS_COMMON.adoc"), encoding="utf-8") as fh:

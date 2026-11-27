@@ -18399,9 +18399,27 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         "== 同义性差异与覆盖点（本集合自己承认的）\n"
         "ISO/IEC/IEEE 25010 / ISO/IEC/IEEE 29119-4；本集合自己的判据化取舍。\n")
 
-    def _write_all(self, section=None, java=None, common=None, library=None):
-        self.write("specs/general/testing.adoc",
-                   section if section is not None else self.SECTION)
+    TEST_CASE_PERF_SECTION = (
+        "\n== 测试用例性能（贯穿用例全流程的检测，保障效率与时间）\n"
+        "**用例的性能代价须贯穿用例全流程检测**（设计 → 编写 → 执行 → 文档，L1）："
+        "任一阶段缺对应的检测动作即未达成。\n"
+        "本节检的是**用例自身**的执行代价，两者不互相替代。\n"
+        "|===\n"
+        "| 设计 | 逐条估代价 | 说不清即未自查\n"
+        "| 编写 | 等待换可判定条件 | 独立集合\n"
+        "| 执行 | 取耗时统计 | 最慢用例\n"
+        "| 文档 | 记阈值与取舍 | 不落临时产物\n"
+        "|===\n"
+        "* 耗时有可核对的取值来源（L1）：从已有统计取总耗时与最慢用例。\n"
+        "* 阈值与结论的落点（L2）：写进测试文档或文档注释，不落进临时产物。\n")
+
+    def _write_all(self, section=None, java=None, common=None, library=None,
+                   tc_section=None):
+        spec = section if section is not None else self.SECTION
+        if section is None:
+            spec = spec + (tc_section if tc_section is not None
+                           else self.TEST_CASE_PERF_SECTION)
+        self.write("specs/general/testing.adoc", spec)
         self.write("specs/stack/java-testing.adoc",
                    java if java is not None else self.JAVA)
         self.write("library/performance.adoc",
@@ -18520,6 +18538,34 @@ class TestCheckPerformanceGuard(CheckSpecsTestCase):
         self._write_all(library="= 性能测试判据的依据\n\n* JMH 见官方文档\n")
         cm.check_performance_guard()
         self.assertIn("同义性差异与覆盖点（本集合自己承认的）", self.error_texts())
+
+    def test_test_case_perf_section_deleted_reports(self):
+        # 「测试用例性能」节整节被删：用例效率退回「设计期想一下」
+        self._write_all(tc_section="")
+        cm.check_performance_guard()
+        self.assertIn("测试用例性能", self.error_texts())
+
+    def test_full_flow_anchor_removed_reports(self):
+        # 「任一阶段缺检测即未达成」被换成口号 → 全流程判据退化
+        self._write_all(tc_section=self.TEST_CASE_PERF_SECTION.replace(
+            "任一阶段缺对应的检测动作即未达成", "注意用例效率即可"))
+        cm.check_performance_guard()
+        self.assertIn("任一阶段缺对应的检测动作即未达成", self.error_texts())
+
+    def test_exec_evidence_removed_reports(self):
+        # 执行期取值来源被删：没有可核对的耗时取值支撑「效率可接受」
+        self._write_all(tc_section=self.TEST_CASE_PERF_SECTION.replace(
+            "* 耗时有可核对的取值来源（L1）：从已有统计取总耗时与最慢用例。\n", ""))
+        cm.check_performance_guard()
+        self.assertIn("耗时有可核对的取值来源（L1）", self.error_texts())
+
+    def test_perf_split_removed_reports(self):
+        # 与性能测试的分工被删：用例效率自检与被测对象性能测试被混为一谈
+        self._write_all(tc_section=self.TEST_CASE_PERF_SECTION.replace(
+            "本节检的是**用例自身**的执行代价，两者不互相替代。",
+            "本节和性能测试是一回事。"))
+        cm.check_performance_guard()
+        self.assertIn("本节检的是**用例自身**的执行代价", self.error_texts())
 
 
 class TestCheckQualityGuard(CheckSpecsTestCase):
