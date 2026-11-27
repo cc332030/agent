@@ -31836,7 +31836,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表**（含定控件宽高、要不要滚动条、这一格用什么控件）→ `specs/general/ui-patterns.adoc`；**查界面显示缺陷的标准** → `specs/general/ui.adoc`「界面显示缺陷的六个维度」（review 检查面见 `specs/general/review.adoc`）；",
+                             "**选容器或排表**（含定控件宽高、表格要不要滚动条、这一格用什么控件）",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -32125,6 +32125,62 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                              "、这一格用什么控件）→ `specs/general/ui-patterns.adoc`；",
                              "）→ `specs/general/ui-patterns.adoc`；")
         self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
+
+    def test_table_no_scroll_rule_removed_reports(self):
+        # 反例：表格无滚动条整条被抽——表格一上来就带横纵滚动、短样例渲染全绿无人报红。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**表格优先不出现滚动条：先用真实数据证伪，再逐档处置（L1）**",
+                             "表格滚动条另议")
+        self.assertTrue(cm.errors, "表格无滚动条本体条被抽走须报红")
+
+    def test_table_no_scroll_real_data_removed_reports(self):
+        # 反例：「用真实数据、不用样例」被抽——拿三五条短样例就宣布无滚动重新合规。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "用真实数据、不用样例",
+                             "用样例判定即可")
+        self.assertTrue(cm.errors, "真实数据验法被抹须报红")
+
+    def test_table_no_scroll_tooltip_removed_reports(self):
+        # 反例：悬浮全文与限宽被抽——省略号没有全文入口、提示铺满屏幕无人报红。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**悬浮提示显示完整值且提示自身限宽**",
+                             "悬浮提示随意")
+        self.assertTrue(cm.errors, "悬浮全文与限宽被抹须报红")
+
+    def test_table_few_cols_fill_removed_reports(self):
+        # 反例：本体里「列少时按数据宽度比例铺满」被抽——少列表格又退回只占半宽、或等分/撑宽。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**偏好不是硬判据**",
+                             "表格宽度随它去")
+        self.assertTrue(cm.errors, "本体里列少铺满这条偏好被抹须报红")
+
+    def test_table_few_cols_fill_patterns_removed_reports(self):
+        # 反例：模板处置阶梯里「列少优先铺满、是偏好不是必须」被抽——取值口径丢掉铺满这一档。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**列少时优先铺满整宽**",
+                             "列少时按内容定宽即可")
+        self.assertTrue(cm.errors, "模板里列少铺满的取值口径被抹须报红")
+
+    def test_table_no_scroll_patterns_ladder_removed_reports(self):
+        # 反例：模板里的五档处置阶梯被抽——只剩列宽算法、长值无处置链。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**无滚动条处置阶梯（公共表格组件的默认行为",
+                             "无滚动条处置阶梯")
+        self.assertTrue(cm.errors, "模板的处置阶梯被抽走须报红")
+
+    def test_table_no_scroll_web_carrier_removed_reports(self):
+        # 反例：栈层载体被抽——前端表格容器预设滚动、长值没有落点也无人判。
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**表格无滚动条的落点（载体）**",
+                             "表格的落点")
+        self.assertTrue(cm.errors, "栈层表格落点被抽走须报红")
+
+    def test_table_no_scroll_dispatch_gate_removed_reports(self):
+        # 反例：加载门里「表格要不要滚动条」被抽——排表的人读不到判据。
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "表格要不要滚动条",
+                             "要不要滚动条")
+        self.assertTrue(cm.errors, "表格滚动条的加载门被抽走须报红")
 
     def test_patterns_value_width_removed_reports(self):
         # 反例㊵：模板里的「每格按值域定宽」被抹——排布只剩「几列」，每格宽度又回到
