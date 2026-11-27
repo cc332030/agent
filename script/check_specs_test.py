@@ -32182,6 +32182,41 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                              "要不要滚动条")
         self.assertTrue(cm.errors, "表格滚动条的加载门被抽走须报红")
 
+    def test_table_dialog_sizing_removed_reports(self):
+        # 反例：本体里「以表格为主的弹窗按表格定尺寸」被抽——少列纯表格弹窗又套固定宽档留白。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**以表格为主的弹窗，尺寸随表格内容定（L1）**",
+                             "表格弹窗尺寸随它去")
+        self.assertTrue(cm.errors, "表格弹窗按表格定尺寸被抹须报红")
+
+    def test_table_dialog_sizing_patterns_removed_reports(self):
+        # 反例：模板里「以表格为主的弹窗按表格真实宽度收」被抽——取值口径退化成固定宽档。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "| 以表格为主、列少的弹窗 |",
+                             "| 表格弹窗 |")
+        self.assertTrue(cm.errors, "模板里表格弹窗按内容收敛的取值口径被抹须报红")
+
+    def test_input_real_render_removed_reports(self):
+        # 反例：本体里「输入组件按真实数据渲染定宽」被抽——拿空表单估宽、过长或留白无人报。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "** 输入组件按真实数据渲染定宽、空白或过长即调布局（L1）**",
+                             "输入组件宽度随它去")
+        self.assertTrue(cm.errors, "输入组件按真实数据定宽被抹须报红")
+
+    def test_input_real_render_patterns_removed_reports(self):
+        # 反例：模板里「用真实数据渲染定宽」被抽——排布口径只剩按值域定宽一句。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**用真实数据渲染定宽、空白或过长就调布局**",
+                             "按值域定宽即可")
+        self.assertTrue(cm.errors, "模板里真实数据定宽的口径被抹须报红")
+
+    def test_input_table_dialog_web_carrier_removed_reports(self):
+        # 反例：栈层两个新落点被抽——前端没有按真实数据取宽、表格弹窗按内容定尺寸的落点。
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**输入组件按真实数据取宽、空白或过长就调布局（载体）**",
+                             "输入组件宽度")
+        self.assertTrue(cm.errors, "栈层真实数据取宽落点被抽走须报红")
+
     def test_patterns_value_width_removed_reports(self):
         # 反例㊵：模板里的「每格按值域定宽」被抹——排布只剩「几列」，每格宽度又回到
         # 「容器多宽就多宽」。
@@ -32235,6 +32270,50 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         self._run_guard_with("specs/general/ui-voice.adoc",
                              "校验什么时候说（时机与形状，四种都定下来）", "校验")
         self.assertTrue(cm.errors, "校验时机被抽走须报红")
+
+    def test_shared_component_removed_reports(self):
+        # 反例：本体里「同形只许一套项目内公共组件、三方再包一层」被抽——表格／折线图各写
+        # 一套配置、三方组件自定义设置散在页面都无人报红。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**同一种形态只许一套项目内公共组件，三方的要再包一层（L1）**",
+                             "同形形态随它去")
+        self.assertTrue(cm.errors, "数据展示公共组件判据被抹须报红")
+
+    def test_dialog_component_removed_reports(self):
+        # 反例：本体里「弹窗共用公共组件：尺寸自适应、点遮罩层不关闭」被抽——尺寸与关闭
+        # 语义散在各页、点遮罩层关闭弹窗都无人报红。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**弹窗共用一套项目内公共组件：尺寸随内容自适应、点遮罩层不关闭（L1）**",
+                             "弹窗形态随它去")
+        self.assertTrue(cm.errors, "弹窗公共组件判据被抹须报红")
+
+    def test_shared_component_patterns_removed_reports(self):
+        # 反例：模板里「三方有自定义设置的须再包一层」被抽——页面直接引三方原始 API 无人报。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**三方的组件有自定义设置的须再包一层**",
+                             "三方组件可直接使用")
+        self.assertTrue(cm.errors, "模板里三方再包一层的口径被抹须报红")
+
+    def test_dialog_component_patterns_removed_reports(self):
+        # 反例：模板里「点遮盖层不关闭」被抽——遮罩又成了关闭入口。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**点遮盖层不关闭**",
+                             "点遮罩可关闭")
+        self.assertTrue(cm.errors, "模板里遮罩不关闭的口径被抹须报红")
+
+    def test_shared_component_web_carrier_removed_reports(self):
+        # 反例：栈层「数据展示公共组件的落点」被抽——前端没有公共组件与三方再包一层的落点。
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**数据展示公共组件的落点（载体）**",
+                             "数据展示组件")
+        self.assertTrue(cm.errors, "栈层数据展示公共组件落点被抽走须报红")
+
+    def test_dialog_component_web_carrier_removed_reports(self):
+        # 反例：栈层「弹窗公共组件与关闭语义的落点」被抽——弹窗尺寸与关闭语义散在页面无人报。
+        self._run_guard_with("specs/stack/web.adoc",
+                             "**弹窗公共组件与关闭语义的落点（载体）**",
+                             "弹窗组件")
+        self.assertTrue(cm.errors, "栈层弹窗公共组件落点被抽走须报红")
 
 
 class TestCheckTaskCompletionGuard(CheckSpecsTestCase):
