@@ -1,0 +1,6 @@
+#!/bin/sh
+# 提交前换行符门禁：把错误换行拦在进仓库之前（取值标准见 specs/general/encoding.adoc）。
+# 安装方式：python3 script/guard/install_git_hooks.py（设置 core.hooksPath=.githooks）。
+# 本钩子只是本地第一道；CI 里另有同名门禁，挡住 --no-verify 绕过者。
+repo_root=$(git rev-parse --show-toplevel) || exit 2
+exec python3 "$repo_root/script/guard/check_line_ending.py" --repo "$repo_root"

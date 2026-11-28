@@ -680,6 +680,7 @@
  138. 业务流程须由集成测试走通防线（**用户提出**）：用户口径『很多时候方法、功能是补了测试用例，但是流程走不通，没有自动补集成测试，需要根据业务流程去补集成测试用例，走通整个流程』。判据本体落通用层 `specs/general/testing.adoc`「业务流程须由集成测试走通（补了方法用例不等于流程通）」：按流程判不按方法数判（方法用例全绿不构成流程通的证据）；有业务流程时须有从真实入口跑到可观察产出的集成用例、断言落在流程产出；集成层缺口不得由更细用例顶替；能自起外部依赖的仍须补齐、不因需外部依赖而跳过。与技术栈层 `java-testing.adoc` 的五类后缀与执行边界分工（本节只定"流程级用例不可缺、断言落在产出"，不复制命名与执行边界）。调度器「跑测试/补测试」识别特征与 README 公开面同步登记。由 `check_integration_flow_guard` 钉住；「某流程实际走没走通、某断言是否落在产出」属运行时事实与语义判断，交人/子 agent 复核。
  139. 界面显示缺陷必查防线（**用户提出**）：用户口径『界面review、重构时，需要处理多余空白，比如太长的输入组件，弹窗下面大片空白，大片空白和滚动条出现在一个页面，组件未对齐，文字覆盖，文字被遮挡等界面问题，以实际显示效果为准，还有哪些可能的问题帮我调研后加进来』。按「举例不是面」把六个例子归成六档维度（空白与容器／对齐／遮挡与覆盖／溢出与截断／滚动条／状态与组合态），判据本体落通用层 `specs/general/ui.adoc`「界面显示缺陷的六个维度」，`specs/general/review.adoc`「review 的默认检查面」只留「这是 review 必查的一类代码问题 + 回指本体」，不另立第二套界面规范：宽高与空白回指 `ui.adoc`/`ui-patterns.adoc`，验法回指 `verify.adoc`「可判据的界面检查」，覆盖 W3C WCAG 2.2 的 SC 1.4.4/1.4.10/1.4.12 下限。调度器 review 与重构两处、README、两份提示词（`review.adoc`/`refactor.adoc`）同步登记。另按用户同向要求补入『事件流触发渲染的缺陷属代码问题、必查』：多事件流/次序错乱引发的莫名重绘、状态漂移、异步乱序覆盖、性能下降属 review 必查且须修复的代码问题，避免方向（派生值只算一次、Effect/watcher 不成链、异步按最新一次生效、写入收一处）落 `specs/general/coding-ui.adoc`「界面的性能」形态十一，review 本体回指它、验法回指 `verify.adoc`，本仓库不写实现代码或检测脚本。由 `check_ui_display_defects_guard` 钉住；「某处显示缺陷实际有没有、某处渲染是否真出错」属运行时事实与语义判断，交人/子 agent 复核。
  140. 测试用例性能全流程检测（**用户提出，归并进既有性能测试防线**）：用户口径『调整测试规范：测试用例全流程需要性能检测，保障效率和时间』。判据本体落通用层 `specs/general/testing.adoc`「测试用例性能（贯穿用例全流程的检测，保障效率与时间）」：用例自身的耗时与资源代价须在**设计 → 编写 → 执行 → 文档**每一阶段都有检测动作与落点（设计算代价、编写按可判定条件落地、执行从统计取实测、文档记口径与取舍），任一阶段缺检测即未达成；逐阶段检测表把四档动作与既有条目对应起来；与「性能测试」（被测对象的工程实验）分工明确、不互相替代。不新开独立防线——锚点（`TEST_CASE_PERF_ANCHORS`）并入 `check_performance_guard` 一并钉住，调度器识别特征、README 公开面、`check_effective` 机制登记与 `library/sources.adoc` 的依据指向同步更新；「某套用例是否真在执行期取到耗时统计、效率是否真可接受」属运行时事实与语义判断，交人/子 agent 复核。
+ 141. 换行符门禁随规范分发、引用方可一键安装防线（**用户提出：规范是给其他项目用的**）：用户口径『本项目加了倒没事，但是主要是给其他项目加』——规范把「提交前与 CI 两道门禁缺一不可」定为 L1，而本地那道若只落在维护仓库自己的 `.githooks/`，引用方按入口取到的只有 `specs/` 与安装脚本，拿不到钩子，契约落空。故钉三件：① 钩子安装器与实扫脚本在 `[scripts].all` 分发名单里（随规范取到落点）；② 取规范脚本有一键开关把钩子写进目标项目、设 `core.hooksPath`，且为纯本地动作（不联网、不写落点、不换自身，不被取清单卡住）；③ 公共规范正文写明引用方一键安装与两道缺一不可的口径。由 `check_line_ending_hook_distribution_guard` 钉住；『某项目是否真装了、CI 是否真接了门禁』属引用方侧运行时事实、本仓库看不到，按规范由引用方自查。
 """
 
 import argparse
@@ -5510,6 +5511,62 @@ def check_spec_fetch_guard():
     phase_done()
 
 
+def check_line_ending_hook_distribution_guard():
+    """『换行符门禁随规范分发、引用方可一键安装』防线（用户提出：规范是给其他项目用的）。
+
+    原形态只在本仓库 `.githooks/` 加了提交前钩子：本仓库当然过，但引用方项目按入口取到的
+    只有 `specs/` 与安装脚本，拿不到本仓库的钩子——规范把「提交前与 CI 两道门禁缺一不可」
+    定为 L1，引用方却装不上本地那道，契约落空。故钉三件、缺一即报：
+      ① 钩子安装器与实扫脚本在 `[scripts].all` 分发名单里（随规范取到落点）；
+      ② 取规范脚本有 `--install-git-hooks` 一键开关（把钩子写进目标项目、设 core.hooksPath，
+         且不联网/不写落点——纯本地动作不该被取清单卡住）；
+      ③ 公共规范正文写明引用方一键安装与「两道缺一不可」的口径（不写私有落点字面值）。
+    『某项目是否真的装了、CI 是否真的接了那道门禁』属引用方侧运行时事实、本仓库看不到，
+    按规范由引用方自查；这里只钉**抓手在不在、可不可发现**。
+    """
+    phase("换行符门禁随规范分发与一键安装检查")
+    cfg_path = os.path.join(REPO_ROOT, "script", "specs-config.toml")
+    cfg = None
+    try:
+        cfg = pathconfig.load(REPO_ROOT)
+    except pathconfig.ConfigError:
+        pass
+    installed = set()
+    if cfg is not None:
+        installed = {os.path.basename(p) for p in cfg.install_scripts}
+    for base, desc in (
+            ("install-line-ending-hook.py", "钩子安装器（把钩子装进引用方项目）"),
+            ("check_line_ending.py", "换行符实扫（钩子调用的执行体）")):
+        if base not in installed:
+            err(f"分发名单 `[scripts].all` 未含 {base}——{desc}不会随规范取到落点，"
+                "引用方只有 CI 一道门禁、装不上本地那道（两道缺一不可的 L1 落空）",
+                "script/specs-config.toml")
+        if not os.path.isfile(os.path.join(REPO_ROOT, "script", "guard", base))                 and not os.path.isfile(os.path.join(REPO_ROOT, "script", base)):
+            err(f"缺少 {base}（安装件本体）——分发名单点名了却无文件可分发", "script")
+
+    fetch_path = os.path.join(REPO_ROOT, "script", "fetch-specs.py")
+    if os.path.isfile(fetch_path):
+        body = open(fetch_path, encoding="utf-8").read()
+        for key, desc in (
+                ("--install-git-hooks", "取规范脚本的一键安装开关（引用方据此装本地门禁）"),
+                ("--repo", "一键安装可指向目标项目（默认当前目录）"),
+                ("install-line-ending-hook.py", "一键安装调用的钩子安装器"),
+                ("core.hooksPath", "安装后须把目标项目的钩子路径指到 .githooks")):
+            if key not in body:
+                err(f"script/fetch-specs.py 缺失『{key}』——{desc}", "script/fetch-specs.py")
+
+    if os.path.isfile(ENCODING_FILE):
+        with open(ENCODING_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        for key, desc in (
+                ("一键", "公共规范须写明引用方一键装本地门禁（否则只有维护方自己装了）"),
+                ("提交前与 CI", "两道门禁缺一不可的口径"),
+                ("core.hooksPath", "本地门禁的生效落点可核对")):
+            if key not in text:
+                err(f"规范正文缺失『{key}』——{desc}", _rel_label(ENCODING_FILE))
+    phase_done()
+
+
 def check_fetch_progress_guard():
     """『取规范看得见进度、跑完不关窗口』防线（**用户提出**）。
 
@@ -7817,7 +7874,11 @@ def check_line_ending_guard():
                 ("CRLF", "Windows 批处理的行尾要求"),
                 ("core.autocrlf", "检出归一化依据（不靠人工手动调整）"),
                 (".gitattributes", "行尾策略的权威落盘口"),
-                (".editorconfig", "编辑器侧行尾/编码的落盘口")):
+                (".editorconfig", "编辑器侧行尾/编码的落盘口"),
+                ("须接成阻断式校验", "把换行标准接成会阻断的门禁，不只是写在文档里"),
+                ("提交前与 CI", "提交前与 CI 两道门禁缺一不可"),
+                ("阻断", "发现错换行即阻断提交/合并，而非只提示"),
+                ("提交前与 CI 的换行符门禁", "门禁的执行动作落点节")):
             if key not in text:
                 err(f"换行符防线被破坏：{rel} 缺失『{key}』（{desc}）——"
                     "跨平台行尾规则不得被删或弱化", rel)
@@ -16935,6 +16996,7 @@ CHECKS = (
     check_historical_notes,
     check_install_codeblock,
     check_spec_fetch_guard,
+    check_line_ending_hook_distribution_guard,
     check_fetch_progress_guard,
     check_shared_cache_guard,
     check_readonly_landing_guard,

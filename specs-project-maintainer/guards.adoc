@@ -35,6 +35,7 @@
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_historical_notes` | `script/specs-rules/check_historical_notes.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_install_codeblock` | `script/specs-rules/check_install_codeblock.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_spec_fetch_guard` | `script/specs-rules/check_spec_fetch_guard.adoc`
+| 按 `CHECKS` 序列：这一行的位置就是次序 | `check_line_ending_hook_distribution_guard` | `script/specs-rules/check_line_ending_hook_distribution_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_fetch_progress_guard` | `script/specs-rules/check_fetch_progress_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_shared_cache_guard` | `script/specs-rules/check_shared_cache_guard.adoc`
 | 按 `CHECKS` 序列：这一行的位置就是次序 | `check_readonly_landing_guard` | `script/specs-rules/check_readonly_landing_guard.adoc`

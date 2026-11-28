@@ -31,6 +31,9 @@ fetch-specs.py - 把本规范集合（AGENTS_COMMON.adoc + specs/ + 任务提示
   fetch-specs --force                  # 同默认（保留写法，与 --keep 相反）
   fetch-specs --list                   # 只打印将要取的文件清单，不下载
   fetch-specs --print-prompt <名>      # 装配好落点里那一份提示词并整段输出（口令入口用它；不联网、不写盘）
+  fetch-specs --install-git-hooks [--repo 目标项目]  # 一键把提交前换行符门禁装进目标项目
+                                       （写 .githooks/pre-commit + script/guard/，设 core.hooksPath；
+                                        不联网、不换自身；CI 门禁仍由目标项目流水线自接）
 
 取回与更新口径（**本节是「怎么取、怎么更新」的真源**——公共入口 `AGENTS_COMMON.adoc`
 「取规范到本地副本」只写落点那一处，其余回指本节；**同一句话不在两处各写一遍**）：
@@ -581,6 +584,12 @@ def parse_args(argv=None):
     parser.add_argument("--list", action="store_true",
                         help="只打印将要取的文件清单，不下载（入口拿它判「这个解释器跑不跑得"
                              "起来」，不走自更新：探一遍不该换脚本、也不该重启）")
+    parser.add_argument("--install-git-hooks", action="store_true",
+                        help="一键安装提交前换行符门禁到目标项目：写 .githooks/pre-commit 与 "
+                             "script/guard/check_line_ending.py、设 core.hooksPath；"
+                             "不联网、不换自身、不写落点（CI 门禁仍由项目流水线自接）")
+    parser.add_argument("--repo", default=".",
+                        help="--install-git-hooks 的目标项目根（默认当前目录）")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                         help="并发请求数（默认 4）")
     # 内部开关（不是给调用方用的参数）：自更新"换上了、自己重启"后由**本脚本自己**挂在
@@ -2240,6 +2249,32 @@ def main(argv=None):
     # 顺手把落点改一遍，也不该在断网时罢工）。
     if args.print_prompt:
         return print_prompt(args.print_prompt, args.landing)
+
+    # 一键安装提交前门禁（用户口径：规范是给其他项目用的，得让引用方一键装上本地那道）。
+    # 与 `--print-prompt` 同属"不联网、不写落点、不换自身"的本地动作，故排在自更新之前：
+    # 装机时网络不通是常态，拿"取清单"当前置会把"装本地钩子"这件纯本地事卡死在网络上。
+    # 安装器随规范一起取到落点根下（见 `[scripts].all`），这里按**本脚本旁边**找它；
+    # 它把钩子写进 `args.repo`（目标项目）而非落点——落点只读、且同机多项目共用。
+    if args.install_git_hooks:
+        installer = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "install-line-ending-hook.py")
+        if not os.path.isfile(installer):
+            print(f"错误: 本地副本里没有安装器 {installer}——先重跑取规范脚本补齐安装脚本",
+                  file=sys.stderr)
+            return EXIT_USAGE
+        sys.path.insert(0, os.path.dirname(installer))
+        try:
+            import install_line_ending_hook as hook_installer
+        except ImportError as exc:
+            print(f"错误: 装不起提交前门禁：加载安装器失败：{exc}", file=sys.stderr)
+            return EXIT_USAGE
+        try:
+            summary = hook_installer.install(args.repo, install_scripts_dir())
+        except (RuntimeError, OSError) as exc:
+            print(f"错误: 安装提交前门禁失败：{exc}", file=sys.stderr)
+            return EXIT_USAGE
+        print(f"提交前门禁已安装：{summary}；CI 门禁仍须由项目流水线自行接入。")
+        return EXIT_OK
 
     # 上一轮留下的新版本：先换上它、再照它的清单口径干活（见 `hand_off_self`）
     hand_off_self()

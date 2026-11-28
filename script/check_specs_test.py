@@ -7650,6 +7650,73 @@ class TestTestDataDesensitizeGuard(CheckSpecsTestCase):
         super().tearDown()
 
 
+class TestCheckLineEndingHookDistributionGuard(CheckSpecsTestCase):
+    """钉住『换行符门禁随规范分发、引用方可一键安装』守卫真的读到了规范正文。
+
+    回归用例：守卫若把 `specs/general/encoding.adoc` 的路径拼错（丢了 `specs`），
+    正文核对整段会被 `isfile` 静默跳过——删掉正文里的安装要点也全绿，防线形同虚设。
+    """
+
+    CONFIG = (
+        "[landing]\n"
+        'home_dir = ".cache"\n'
+        'app_dir = "agent-specs"\n\n'
+        "[source]\n"
+        'base_url = "https://example.invalid"\n\n'
+        "[manifest]\n"
+        'entry = "AGENTS_COMMON.adoc"\n'
+        'optional = ["README.adoc"]\n\n'
+        "[scripts]\n"
+        'all = ["script/fetch-specs.py", "install-line-ending-hook.py",\n'
+        '       "script/guard/check_line_ending.py"]\n'
+        'entry = ["script/fetch-specs.sh"]\n'
+        'config = "script/specs-config.toml"\n\n'
+        "[network]\n"
+        "timeout_seconds = 30\n"
+        "workers = 4\n\n"
+        "[temporary]\n"
+        'dir = "tmp"\n'
+        'self_update_suffix = ".update"\n'
+        'self_handoff_suffix = ".handoff"\n\n'
+        "[source-management]\n"
+        'mode = "conventional"\n\n'
+        "[prompts]\n"
+        'name = "use-prompt"\n'
+        'usage = "{name} <提示词名>"\n'
+        'agent_command_dirs = ["{home}/.claude/commands"]\n'
+    )
+    ENC = ("= 编码\n\n== 提交前与 CI 的换行符门禁\n"
+           "引用方一键装本地门禁：core.hooksPath 指向 .githooks；提交前与 CI 两道缺一不可。\n")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._orig_enc = cm.ENCODING_FILE
+        cm.ENCODING_FILE = os.path.join(self.root, "specs", "general", "encoding.adoc")
+        self.write("script/specs-config.toml", self.CONFIG)
+        self.write("script/fetch-specs.py",
+                   "--install-git-hooks --repo install-line-ending-hook.py core.hooksPath\n")
+        self.write("script/install-line-ending-hook.py", "pass\n")
+        self.write("script/guard/check_line_ending.py", "pass\n")
+
+    def tearDown(self) -> None:
+        cm.ENCODING_FILE = self._orig_enc
+        super().tearDown()
+
+    def _check(self):
+        cm.errors.clear()
+        cm.check_line_ending_hook_distribution_guard()
+        return self.error_texts()
+
+    def test_valid_distribution_passes(self):
+        self.write("specs/general/encoding.adoc", self.ENC)
+        self.assertEqual(self._check(), "")
+
+    def test_encoding_body_missing_install_anchor_reports(self):
+        # 反例：规范正文删掉一键安装要点，守卫必须报——这条此前因路径拼错而静默放行。
+        self.write("specs/general/encoding.adoc", "= 编码\n\n无门禁要点\n")
+        self.assertIn("规范正文缺失", self._check())
+
+
 class TestCheckLineEndingGuard(CheckSpecsTestCase):
     """钉住跨平台换行符规则（LF 基准 + Windows 批处理 CRLF）。
 
@@ -7677,7 +7744,8 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
                    "== 换行符（行尾）\n"
                    "内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF；`.ps1` 用 CRLF；"
                    "由 `.gitattributes`（行尾）与 `.editorconfig` 固定，"
-                   "`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+                   "`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n"
+                   "须接成阻断式校验：提交前与 CI 的换行符门禁，违规即阻断。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{f}",
                        "行尾：按本栈要求（LF 或 CRLF）；BOM 是唯一允许出现在首行之前的东西\n")
@@ -7701,7 +7769,8 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
         # 反例：删掉 `.bat` 必须 CRLF（这正是"BAT 用 Linux 换行符"的失效源头）
         self.write("specs/general/encoding.adoc",
                    "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.ps1` 用 CRLF；"
-                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n")
+                   "由 `.gitattributes` 固定，`core.autocrlf` 交给仓库配置、不靠人工手动调整。\n"
+                   "须接成阻断式校验：提交前与 CI 的换行符门禁，违规即阻断。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{f}",
                        "行尾：LF；BOM 是唯一允许出现在首行之前的东西\n")
@@ -7714,7 +7783,8 @@ class TestCheckLineEndingGuard(CheckSpecsTestCase):
     def test_dropped_checkout_normalization_reports(self):
         # 反例：删掉"不靠人工手动调整"的检出归一依据（core.autocrlf/.gitattributes）
         self.write("specs/general/encoding.adoc",
-                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF。\n")
+                   "= t\n\n== 换行符（行尾）\n内容以 LF 为基准；`.bat`/`.cmd` 必须 CRLF。\n"
+                   "须接成阻断式校验：提交前与 CI 的换行符门禁，违规即阻断。\n")
         for f in ("bash.adoc", "python.adoc", "powershell.adoc"):
             self.write(f"specs/stack/{f}",
                        "行尾：LF；BOM 是唯一允许出现在首行之前的东西\n")
