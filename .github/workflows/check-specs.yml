@@ -31,6 +31,8 @@ jobs:
   #    私有约定误导入、历史来源声明、入口模板、要点防线，以及优先级/
   #    准入/自检/来源/换行符/Java 测试类命名/提示词/常驻层体积上限/从属者与能力自评
   #    /规范验证/任务生命周期（节点 + 验证边界 + 拆分判据）/接纳面（含公共内容私有引用与"公共内容不得声明机械防线"）/图书馆（存在 + 入口登记 + 逐字引文 + 引用可解析）/公共内容覆盖面（入口清单与实际一致）/本仓库自身侧 git mv 自查/清单逐项与文档-脚本一致性（准入项数、七节点、`check_*` 名字、硬超时与三态留证）/跨语言执行脚本的落点（脚本放资源文件夹、扩展名取被调语言）/校验工具链齐备 各防线 + AsciiDoc 语法；
+  #    另有一道换行符门禁（script/guard/check_line_ending.py）：逐文件实扫索引/工作区行尾，
+  #    把公共规范定义的 LF 基准与 .bat/.cmd/.ps1 的 CRLF 例外接成会阻断的校验；
   #    完整检查项清单见 script/check_specs.py 文件头 docstring）
   #    **AsciiDoc 处理器必须装齐：不装时 `check_specs.py` 的语法编译段直接报错、
   #    action 失败（用户口径：没有环境就要安装环境，不得省略）。**装的是 Ruby 版
@@ -74,6 +76,8 @@ jobs:
       # 测试按**文件**分片并行：整份跑下来是分钟量级、占流水线大半，而它一直是绿的、
       # 只是慢（慢是绿着发生的，没人会发现）。分片单位取测试文件：同一进程内的用例共享
       # 模块全局，按用例切片会让夹具互相污染；按文件切则每一片本就是独立运行的那一份。
+      # 分片覆盖 `script/` 与 `script/guard/` 两层的 `*_test.py`：本仓库的机械守卫（含
+      # 换行符门禁）在 guard 层，也要跟着进分片、不能只因目录不同就"定义了没跑"。
       # 每一片自带 wall-clock 时限，任一片失败（含被时限掐断）即整步失败——不等到外围
       # 超时才发红，也不让"某一片根本没跑"混进绿色里。
       # 单片时限**必须短于 job 级 `timeout-minutes`**：外层时限按「最近生效」盖住内层，
@@ -83,8 +87,8 @@ jobs:
       # 时限一律经 `script/guard/run_with_timeout.py` 施加（与上一步同一件事、同一个工具）。
       - name: Run spec-check unit tests
         run: |
-          mapfile -t files < <(ls script/*_test.py)
-          if [ "${#files[@]}" -eq 0 ]; then echo "没有找到任何 script/*_test.py"; exit 1; fi
+          mapfile -t files < <(ls script/*_test.py script/guard/*_test.py)
+          if [ "${#files[@]}" -eq 0 ]; then echo "没有找到任何 *_test.py"; exit 1; fi
           status=0
           for f in "${files[@]}"; do
             (
@@ -107,6 +111,17 @@ jobs:
       # 守卫自己也核本文件：缺时限时本步骤失败（不是"跳过"）。
       - name: Check every pipeline step has a decidable timeout
         run: python3 script/guard/check_pipeline_timeout.py --repo .
+      # 换行符门禁：把「LF 基准 / .bat/.cmd/.ps1 用 CRLF」从文档定义接成会阻断的机械
+      # 校验——逐文件实扫 git 索引侧（禁 CRLF/mixed）与工作区侧（须与 .gitattributes
+      # 声明一致、无混用），违规即失败（用户口径：避免提交错误的换行符）。本件只在本仓库
+      # 侧运行、不在默认引用面内；引用方工作区的门禁由引用方按规范自查。
+      - name: Check line endings (no wrong EOL committed)
+        run: python3 script/guard/check_line_ending.py --repo .
+      # 提交前那道门禁同样要可核对：本仓库把钩子放在受版本控制的 .githooks/，
+      # 由 install_git_hooks.py 接进 core.hooksPath；守卫确认钩子存在、可执行且调用
+      # 上面的实扫脚本，防「规范写了两道门禁、实际上只有 CI 一道」。
+      - name: Check pre-commit line-ending guard is installed
+        run: python3 script/guard/check_precommit_guard.py --repo .
       # 用例的请求落点须被断言限制在本机（`specs/general/testing.adoc`「环境与兼容」）：
       # 断言件 `script/guard/local_service_assert.py` 的现场自检在这里真跑一次——
       # 断言件在那儿却没人跑它，与"声明了校验手段却从未执行"同形。

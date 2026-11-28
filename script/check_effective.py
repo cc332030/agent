@@ -749,7 +749,7 @@ MECHANISMS = [
     ("skill 里的引用须就地落盘（指到兄弟文件的引用在目标项目里落空）", "specs/general/source.adoc", "script/check_specs.py",
      "check_skill_ref_coord_guard", "check_skill_ref_coord_guard 钉住 skill 文档里指到 `references/`、`scripts/` 这类**兄弟文件**的引用（安装后真正落到落点的只有 `SKILL.md`）；配套文件怎么就地落盘"),
     ("换行符按解释器分流（LF 基准、.bat/.cmd 必须 CRLF、.gitattributes/.editorconfig 固定；仓库根缺这两个落盘口即补齐）", "specs/general/encoding.adoc", "script/check_specs.py",
-     "check_line_ending_guard", "check_line_ending_guard 钉住编码规范的分流判据（LF 基准、`.bat`/`.cmd` CRLF、`core.autocrlf`/`.gitattributes`/`.editorconfig` 落盘口）与 bash/python/powershell 栈文件的行尾要求；某文件实际是否为 CRLF、仓库根是否已有 `.gitattributes`/`.editorconfig` 属引用方工作区状态，本仓库不可见，靠引用方 `git ls-files --eol` 自检"),
+     "check_line_ending_guard", "check_line_ending_guard 钉住编码规范的分流判据（LF 基准、`.bat`/`.cmd` CRLF、`core.autocrlf`/`.gitattributes`/`.editorconfig` 落盘口）、bash/python/powershell 栈文件的行尾要求，以及「须接成提交前/CI 阻断门禁」的执行落点；本仓库工作区的逐字节实扫由本地-only 的 `script/check_line_ending.py` 承担；两道门禁落点分别是 CI 步骤与受版本控制的 `.githooks/pre-commit`（经 `script/guard/install_git_hooks.py` 接进 core.hooksPath，由 `check_precommit_guard` 核齐备），均不在默认引用面内；引用方那道由随规范分发的 `install-line-ending-hook.py` 经取规范脚本 `--install-git-hooks` 一键装进目标项目（`check_line_ending_hook_distribution_guard` 钉住分发与开关），引用方工作区的门禁本体属引用方侧、本仓库看不到，按规范由引用方自查"),
     ("代码安全底线（输入校验/输出编码/凭据不硬编码）", "specs/general/security.adoc", None,
      "无机械抓手",
      "无机械抓手：具体实现属语义判断（输入校验/输出编码做得够不够）"),

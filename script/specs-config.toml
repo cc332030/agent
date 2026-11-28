@@ -70,7 +70,8 @@ optional = ["README.adoc"]
 # `pathconfig.py` 也在名单里：执行侧（以及被分发出去的判据侧）要先 import 它才能读本文件，
 # 只取执行脚本+壳时落点里没有读取层，`fetch-specs.py` 一启动就 `ModuleNotFoundError`。
 all = ["script/fetch-specs.py", "script/fetch-specs.sh", "script/fetch-specs.bat",
-       "script/pathconfig.py"]
+       "script/pathconfig.py", "script/guard/check_line_ending.py",
+       "script/install-line-ending-hook.py"]
 entry = ["script/fetch-specs.sh", "script/fetch-specs.bat"]
 # 本文件的仓库内路径（**由本文件自己声明**：读取层据此认出"配置是哪一份"，
 # 判据侧据此核对"文档引的那一句指向的还是它"）。
