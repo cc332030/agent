@@ -133,38 +133,38 @@ kind = "anchor_count"
 token_list = "UI_SPEC_STATE_ANCHORS"
 min = 7
 
-# 表头与 tab 栏的粘连归属：四处各一段短锚点（本体 / 模板 / 载体 / 加载门），
+# 表头、tab 栏与分页控件的粘连归属：四处各一段短锚点（本体 / 模板 / 载体 / 加载门），
 # 任一处被抽即报红。
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui.adoc"
 kind = "file_tokens"
-tokens = ["**表头与分页控件跟着承载它的滚动容器走（L1）**"]
-message = "表头与 tab 栏的粘连归属判据本体被抽——滚动时列名/页签脱节而无人判得"
+tokens = ["**表头与分页控件不由滚动条控制，跟着承载它的滚动容器走（L1）**"]
+message = "表头、tab 栏与分页控件的粘连归属判据本体被抽——滚动时列名/页签/当前页脱节而无人判得"
 
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui-patterns.adoc"
 kind = "file_tokens"
-tokens = ["**tab 栏与表头的粘连（取值口径）**"]
-message = "模板里表头与 tab 栏的粘连取值口径被抽——三处落点只剩判据本体、无人照着落地"
+tokens = ["**tab 栏、表头与分页控件的粘连（取值口径）**"]
+message = "模板里表头、tab 栏与分页控件的粘连取值口径被抽——三处落点只剩判据本体、无人照着落地"
 
 [[guards.check_ui_spec_guard]]
 file = "specs/stack/web.adoc"
 kind = "file_tokens"
-tokens = ["**tab 栏与表头的粘连落点（载体）**"]
-message = "前端载体里表头与 tab 栏的粘连落点被抽——滚动归属在前端没有可核对的抓手"
+tokens = ["**表头与分页控件跟承载它的滚动容器走（载体）**"]
+message = "前端载体里表头与分页控件的粘连落点被抽——滚动归属在前端没有可核对的抓手"
 
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui.adoc"
 kind = "file_tokens"
-tokens = ["`specs/stack/web.adoc`「tab 栏与表头的粘连落点（载体）」"]
-message = "本体条的前端落点指回旧条「滚动只留一层」——按指针走的人拿不到 tab/表头的粘连落点"
+tokens = ["`specs/stack/web.adoc`「表头与分页控件跟承载它的滚动容器走（载体）」"]
+message = "本体条的前端落点指回旧载体名——按指针走的人拿不到 tab/表头/分页控件的粘连落点"
 
 [[guards.check_ui_spec_guard]]
 file = "AGENTS_COMMON.adoc"
 kind = "line_tokens"
 anchor = ["**任何代码活动**"]
-tokens = ["tab/表头滚动归属"]
-message = "调度器未把 tab/表头滚动归属列为选容器排表的识别特征——排表的人读不到粘连判据"
+tokens = ["tab/表头/分页滚动归属"]
+message = "调度器未把 tab/表头/分页滚动归属列为选容器排表的识别特征——排表的人读不到粘连判据"
 
 [[guards.check_ui_spec_guard]]
 file = "specs/general/ui.adoc"
