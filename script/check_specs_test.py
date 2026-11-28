@@ -8084,7 +8084,9 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         self.write("specs/core/execution.adoc",
                    "= 执行原则\n\n== 先规划后执行\n\n"
                    "* **动手前先摸清现状与最佳方案（L1）**：先搞清现状，再**先调研最佳实践、再定方案**；"
-                   "**调整内容一类需求**（新增与调整同属一类）还须**先找现成可参照的既有标准与更优设计**。\n"
+                   "**调整内容一类需求**（新增与调整同属一类）还须**先找现成可参照的既有标准与更优设计**——"
+                   "检索面为**常设七条**，**用户提出「调研」即按这七路自己逐路找全、不回问范围**"
+                   "（逐路清单见通用层）。\n"
                    "* **动手改文件前先读要改的那一处（L1）**：核对对象**只到要改的那一处现状**，"
                    "**不得按记忆中的内容写入**（该处可能已被改过、按记忆写入会把本地内容覆盖掉），"
                    "**详细判据与失效形态见** `specs/general/planning.adoc`「要改的那一处是否已实际读过（改动面按处读）」。\n"
@@ -8116,7 +8118,10 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "**有现成实现或同类产品可查却一条都没查** / **只抄素材的结论、不核它的前提与代价** / "
                    "**拿流量与转述当权威**；"
                    "**收的是哪一条**同样须在规划里写明、**不得只留结论、不留取舍**。"
-                   "** **依据**：ISO 10007。\n\n"
+                   "** **依据**：ISO 10007。\n"
+                   "** **『调研』的触发（L1）**：用户提出**「调研」**即命中本条——"
+                   "**自己按上述七条逐路找全**，**不得**把范围**回问用户**、**不得**以任何理由**裁剪**；"
+                   "判定标准：只查现成的两条、**回问用户**、说不出七路各查了什么。\n\n"
                    "=== 要改的那一处是否已实际读过（改动面按处读）\n\n"
                    "* **改动面按处读（L1）**：**动手改文件时，先读该文件里要改的那一处**——核对对象是"
                    "**要改的那一处现状**（与本次改动无关的部分**不必读**）。**判定标准（任一命中即不合规）**："
@@ -8185,7 +8190,11 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
                    "例外与判不准的取严规则见项目规范 `specs/general/verify.adoc`「验证的适用边界」）。"
                    "\n  - **大动之前先确认**\n"
                    "  - **不得绕开既有实现另写一套**\n"
-                   "  - **调整内容一类需求还须先找现成可参照的既有标准与更优设计**\n"
+                   "  - **调整内容一类需求还须先找现成可参照的既有标准与更优设计**"
+                   "——现成口径①业界标准/权威约定②业界规范与权威风格指南③高星开源仓库的既有实现"
+                   "④对比竞品/同类产品怎么做⑤反例与失效形态⑥领域专家的公开实践与工程博客"
+                   "⑦本项目既有条目与先例**七条都要查**（常设检索面），"
+                   "**用户提出「调研」即按这七路自己逐路找全、不回问范围、不裁剪**。\n"
                    "  - **基线清单还要核\"够不够用\"（L2）**：**review 既有用例**、"
                    "**无关的存量缺口**如实记录。\n"
                    "  - **没有校验手段、环境跑不起来，都不是不动手的理由**\n"
@@ -8478,6 +8487,40 @@ class TestCheckDevFlowGuard(CheckSpecsTestCase):
         open(pl, "w", encoding="utf-8").write(head + "** " + rest.split("\n** ", 1)[1])
         cm.check_dev_flow_guard()
         self.assertIn("取舍次序与冲突", self.error_texts())
+
+    def test_survey_trigger_removed_from_execution_reports(self):
+        # 反例：必加载层里「调研即七路找全」的触发句被抽走——
+        # 必加载层每次会话都读，漏了这层则用户提「调研」时执行者读不到「自己找全」
+        self._write_valid()
+        ex = os.path.join(self.root, "specs", "core", "execution.adoc")
+        text = open(ex, encoding="utf-8").read().replace(
+            "**用户提出「调研」即按这七路自己逐路找全、不回问范围**", "")
+        open(ex, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("execution.adoc", self.error_texts())
+
+    def test_survey_trigger_removed_from_body_reports(self):
+        # 反例：本体里「用户提出调研即自己按七路找全、不回问范围」被抽走——
+        # 用户提「调研」时执行者又把范围回给用户、或只查现成的两条
+        self._write_valid()
+        pl = os.path.join(self.root, "specs", "general", "planning.adoc")
+        text = open(pl, encoding="utf-8").read()
+        start = text.index("** **『调研』的触发")
+        end = text.index("\n\n", start)
+        open(pl, "w", encoding="utf-8").write(text[:start] + text[end+2:])
+        cm.check_dev_flow_guard()
+        self.assertIn("『调研』的触发", self.error_texts())
+
+    def test_survey_trigger_removed_from_prompt_fragment_reports(self):
+        # 反例：公共片段里「调研即逐路找全」被抽走（提示词会被未知项目复制执行，
+        # 复制出去的那份又回到六个还是七个的困惑里）
+        self._write_valid()
+        cf = os.path.join(self.root, "prompts", "_common.txt")
+        text = open(cf, encoding="utf-8").read().replace(
+            "**用户提出「调研」即按这七路自己逐路找全、不回问范围、不裁剪**", "")
+        open(cf, "w", encoding="utf-8").write(text)
+        cm.check_dev_flow_guard()
+        self.assertIn("_common.txt", self.error_texts())
 
     def test_old_cases_may_be_rewritten_clause_removed_reports(self):
         # 反例：「既有用例不得为迁就重构而改判」被删（改老用例变绿重成默认做法）
