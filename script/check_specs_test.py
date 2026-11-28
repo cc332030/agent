@@ -31962,7 +31962,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表**（含定控件宽高、表格要不要滚动条、这一格用什么控件、列对齐、tab/表头滚动归属）",
+                             "**选容器或排表**（含定控件宽高、表格要不要滚动条、这一格用什么控件、列对齐、tab/表头/分页滚动归属）",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -32248,35 +32248,35 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         # 反例㊴：调度器不再把「定控件宽高、要不要滚动条」列为识别特征——定表单宽度的人
         # 读不到排布模板，判据存在而走不到它。
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "、这一格用什么控件、列对齐、tab/表头滚动归属）→ `specs/general/ui-patterns.adoc`；",
+                             "、这一格用什么控件、列对齐、tab/表头/分页滚动归属）→ `specs/general/ui-patterns.adoc`；",
                              "）→ `specs/general/ui-patterns.adoc`；")
         self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
 
     def test_sticky_header_rule_removed_reports(self):
-        # 反例：表头/tab 粘连归属的判据本体被抽——滚动时列名与页签脱节无人判。
+        # 反例：表头/tab/分页控件的粘连归属判据本体被抽——滚动时列名、页签或当前页脱节无人判。
         self._run_guard_with("specs/general/ui.adoc",
-                             "**表头与分页控件跟着承载它的滚动容器走（L1）**",
+                             "**表头与分页控件不由滚动条控制，跟着承载它的滚动容器走（L1）**",
                              "表头随它去")
         self.assertTrue(cm.errors, "粘连归属判据本体被抹须报红")
 
     def test_sticky_header_patterns_removed_reports(self):
         # 反例：模板的粘连取值口径被抽——判据在、没人照着落。
         self._run_guard_with("specs/general/ui-patterns.adoc",
-                             "**tab 栏与表头的粘连（取值口径）**",
+                             "**tab 栏、表头与分页控件的粘连（取值口径）**",
                              "粘连不用管")
         self.assertTrue(cm.errors, "模板里粘连取值口径被抹须报红")
 
     def test_sticky_header_web_carrier_removed_reports(self):
         # 反例：前端载体被抽——前端没有可核对的落点。
         self._run_guard_with("specs/stack/web.adoc",
-                             "**tab 栏与表头的粘连落点（载体）**",
+                             "**表头与分页控件跟承载它的滚动容器走（载体）**",
                              "粘连落点")
         self.assertTrue(cm.errors, "前端粘连落点被抹须报红")
 
     def test_sticky_header_dispatch_gate_removed_reports(self):
-        # 反例：加载门里 tab/表头滚动归属被抽——排表的人读不到这条判据。
+        # 反例：加载门里 tab/表头/分页滚动归属被抽——排表的人读不到这条判据。
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "tab/表头滚动归属",
+                             "tab/表头/分页滚动归属",
                              "滚动归属")
         self.assertTrue(cm.errors, "粘连判据的加载门被抹须报红")
 
@@ -32309,9 +32309,9 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         self.assertTrue(cm.errors, "列对齐的加载门被抹须报红")
 
     def test_sticky_header_carrier_pointer_removed_reports(self):
-        # 反例：本体条的前端落点被指回旧条「滚动只留一层」——按指针走的人拿不到粘连落点。
+        # 反例：本体条的前端落点被指回旧载体名——按指针走的人拿不到粘连落点。
         self._run_guard_with("specs/general/ui.adoc",
-                             "`specs/stack/web.adoc`「tab 栏与表头的粘连落点（载体）」",
+                             "`specs/stack/web.adoc`「表头与分页控件跟承载它的滚动容器走（载体）」",
                              "`specs/stack/web.adoc`「滚动只留一层（载体）」")
         self.assertTrue(cm.errors, "本体条载体指针被改须报红")
 
