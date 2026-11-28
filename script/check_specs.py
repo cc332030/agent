@@ -470,7 +470,8 @@
      与存量边界、依据行。另核前端载体（`specs/stack/web.adoc`「缓存（载体）」，只给载体、回指
      唯一真源；并写明接口缓存的载体**不属界面**）与加载门（调度器「任何代码活动」须同时认得
      `localStorage` 与 `Cache-Control` 一类缓存头）、README 同步、锚点条数下限。规则数据在
-     `script/specs-rules/cache.toml` + `_tokens.toml` 的 `CACHE_ANCHORS`（8 组 29 枚，下限 29）。
+     `script/specs-rules/cache.toml` + `_tokens.toml` 的 `CACHE_ANCHORS`（9 组 34 枚，下限 34；本轮补「缓存有效期按时效口径分类取值」——相对 TTL /
+     绝对定点 / 滑动或到期前刷新，逐份声明、按口径判不按名单判；前端载体同步）。
      由 `check_cache_guard` 钉住；「这一处算不算同一份数据的第二份缓存」「这次刷新算不算有
      变动」「某个接口算不算给了确定的一份」属语义判断与运行时事实，交人/子 agent 复核。
  119. 变更日志默认不动须在**读入端**可见防线（**用户提出、实测失效过**）：用户口径『除非主动声明，
