@@ -31679,6 +31679,19 @@ class TestCheckCacheGuard(CheckSpecsTestCase):
         self.assertTrue(cm.errors)
         self.assertIn("给程序用的取数", self.error_texts())
 
+    def test_cache_ttl_rule_removed_reports(self):
+        # 反例：缓存有效期按时效口径分类取值被抽 -> 全项目一个时长套所有数据、
+        # 跨零点该复位的签到按相对时长写无人判（本轮补的判据本体）
+        self._run_guard_with(self.CODING, "**缓存有效期按数据的时效口径分类取值（L1）**",
+                             "**缓存有效期统一设定（L3）**")
+        self.assertIn("缓存有效期按数据的时效口径分类取值", self.error_texts())
+
+    def test_cache_ttl_carrier_removed_reports(self):
+        # 反例：前端「缓存有效期的载体」被抽 -> 每份界面缓存有效期在栈层没有落点
+        self._run_guard_with(self.WEB, "**缓存有效期的载体（L1）**",
+                             "**缓存有效期不限（L3）**")
+        self.assertIn("缓存有效期的载体", self.error_texts())
+
     def test_api_cache_carrier_removed_reports(self):
         # 反例：栈层「接口缓存不属界面缓存」被抽 -> 前端代服务端定返回哪一份
         self._run_guard_with(self.WEB, "**接口缓存的载体（不属界面）**",
