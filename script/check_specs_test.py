@@ -31949,7 +31949,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
     def test_patterns_dispatcher_entry_removed_reports(self):
         # 反例（后补）：容器与呈现的加载门被抽走——选容器、排表的人永远读不到模板
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "**选容器或排表**（含定控件宽高、表格要不要滚动条、这一格用什么控件、tab/表头滚动归属）",
+                             "**选容器或排表**（含定控件宽高、表格要不要滚动条、这一格用什么控件、列对齐、tab/表头滚动归属）",
                              "")
         self.assertTrue(cm.errors, "容器与呈现的加载门被抽走须报红")
 
@@ -32235,7 +32235,7 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
         # 反例㊴：调度器不再把「定控件宽高、要不要滚动条」列为识别特征——定表单宽度的人
         # 读不到排布模板，判据存在而走不到它。
         self._run_guard_with("AGENTS_COMMON.adoc",
-                             "、这一格用什么控件、tab/表头滚动归属）→ `specs/general/ui-patterns.adoc`；",
+                             "、这一格用什么控件、列对齐、tab/表头滚动归属）→ `specs/general/ui-patterns.adoc`；",
                              "）→ `specs/general/ui-patterns.adoc`；")
         self.assertTrue(cm.errors, "尺寸与滚动的加载门被抽走须报红")
 
@@ -32266,6 +32266,34 @@ class TestCheckUiSpecGuard(CheckSpecsTestCase):
                              "tab/表头滚动归属",
                              "滚动归属")
         self.assertTrue(cm.errors, "粘连判据的加载门被抹须报红")
+
+    def test_column_alignment_rule_removed_reports(self):
+        # 反例：表格列按字段语义对齐的判据本体被抽——数字不右对齐、备注里的数字被当数值列无人判。
+        self._run_guard_with("specs/general/ui.adoc",
+                             "**表格列的内容对齐按字段语义定，不按值的长相定（L1）**",
+                             "表格列对齐随意")
+        self.assertTrue(cm.errors, "列对齐判据本体被抹须报红")
+
+    def test_column_alignment_header_center_removed_reports(self):
+        # 反例：表头一律居中被抽——数值列的表头被右对齐、文本列的表头被左对齐，与用户口径冲突。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**表头一律居中**，与列值怎么分型无关",
+                             "表头随列值分型对齐")
+        self.assertTrue(cm.errors, "模板里表头居中口径被抹须报红")
+
+    def test_column_alignment_patterns_removed_reports(self):
+        # 反例：模板的分型表被抽——对齐口径只剩一句口号，没有左/右/居中的取值。
+        self._run_guard_with("specs/general/ui-patterns.adoc",
+                             "**列内容对齐：表头一律居中，值按字段语义分型、不按值的长相分（取值口径）**",
+                             "列对齐按感觉定")
+        self.assertTrue(cm.errors, "模板里列对齐分型表被抹须报红")
+
+    def test_column_alignment_dispatch_gate_removed_reports(self):
+        # 反例：加载门里「列对齐」被抽——排表的人读不到这条判据。
+        self._run_guard_with("AGENTS_COMMON.adoc",
+                             "列对齐",
+                             "对齐")
+        self.assertTrue(cm.errors, "列对齐的加载门被抹须报红")
 
     def test_sticky_header_carrier_pointer_removed_reports(self):
         # 反例：本体条的前端落点被指回旧条「滚动只留一层」——按指针走的人拿不到粘连落点。
