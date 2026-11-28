@@ -701,6 +701,13 @@ AWS Prescriptive Guidance *Best practices for using architectural decision recor
 * **它支撑什么**：**方向与个案**——格式受限的值该用能约束输入的控件（掩码、专用控件、`inputmode`）、不要让用户把它打进自由文本框；同时给足**例外**（数量用 `type=number` 会误改、日期有时该拆成三段文本、格式太自由的字段不适合掩码）。**须注意的语义差异（同义性）**：两家设计系统给的是**各控件的用法与坑**，**未**把"值的类型决定控件"写成一条可核对的判据，也**未**说"文本控件 + 提交后校验"不可接受——它们恰恰保留了"改用文本 + 输入掩码/`inputmode`"这条退路。规范正文那条（`specs/general/ui.adoc`「输入控件按值域取、格式由控件与属性限住」）取的是**后果侧**：格式限制写在控件上时**输不错**，写在提交后校验里只能**事后报错**；而"个别类型的坑"按**取哪个控件**处置、不按"退回文本框"处置——**加严部分是本集合自己的取舍**。
 * **取样状态**：四处页面均于本机 `curl -sL` 取回 HTML 后按正文比对（`https://html.spec.whatwg.org/multipage/input.html`、`https://www.w3.org/TR/WCAG22/`、`https://design-system.service.gov.uk/components/text-input/`、`https://designsystem.digital.gov/components/memorable-date/`、`https://designsystem.digital.gov/components/input-mask/`，均返回 200）；MDN 的 `<input type="date">` 页面同样取回（"The appearance of the date picker input UI varies based on the browser and operating system."），**只作机制说明、未据其立判据**（它讲的是实现差异，不是"该不该用控件"）。WCAG 2.2 的 SC 1.3.5 / 3.3.1 / 3.3.2 正文取自 `https://www.w3.org/TR/WCAG22/` 的规范文本（`Understanding` 系列页面本轮 **404**，故**未**逐字取回理解文档，只引标准正文）。
 
+== 横切能力集中化、取值唯一真源与"举例可识别"（本次新增的业界依据）
+
+* **Martin Fowler《Refactoring: Improving the Design of Existing Code》（重复代码坏味道 / "三次法则"）**（要点转述，非逐字摘录；取样状态与 `library/quality.adoc` 同源）——重复代码一节给出"**重复出现才收敛、不预先抽取**"与"**第三次出现相似代码时再抽象**（Rule of Three）"的取向：它支的是"**不要过早抽象**（一两个使用点就地写即可）"这一侧。**它没有规定**：集中化的**量化临界点**是多少、跨模块两处该不该提前收敛、"两处且有收敛信号"算不算触发——这些是 `specs/general/coding.adoc`「抽象与接入成本」「跨处复用的能力集中到一处、按临界点触发」的本集合自定取值（见 `library/adoption.adoc` 对应条）。
+* **单一事实来源（SSOT）**（软件工程通行原则，非某一份标准的明文条目）——同一事实只在一处定义、其余从它取；与 ISO 10007（配置项与变更须有单一、受控来源）、ISO/IEC/IEEE 29148（需求单一、无歧义、可验证）同向。**本集合据此收紧**：把"同一实体对外用哪个标识（账号/昵称/显示名/内部 id）"也纳入唯一真源——这类取值此前被当成"展示细节"散在界面/日志/报错/导出各处，而它们其实是**同一个事实的多处取用**。**没有任何材料把"同一实体的对外标识"单列为取值真源**，故 `specs/general/coding-runtime.adoc`「取值的唯一来源」「同一实体的对外取值只有一处定义、各处从它取」是本集合的判据化取舍。
+* **Wikipedia / 软件工程通识里的 "Rule of Three" 与 "Don't Repeat Yourself"（DRY）**（要点转述、非逐字摘录）——DRY 给的是"每一处知识在系统中只有一次权威表示"的方向，Rule of Three 给的是"第三次复用才值得抽取"的经验门槛。二者方向相反相成：DRY 要求收敛、Rule of Three 要求别过早收敛；**本集合据后者取"未达临界点不过度设计"、据前者取"达临界点必须集中到唯一真源"**，并把临界点写成可核对的三档（见上条）。
+* **它支撑什么 / 没有规定什么**：上述材料只给"复用该收敛"与"别过早抽"两个方向；**没有任何标准或权威材料**把这些落成"使用点 ≥ 3 / 跨模块两处 / 两处且有收敛信号"这三个可量化触发档，也**没有**规定"未达临界点保持就地"是规则的一部分——这正是 `library/adoption.adoc` 要登记的本集合取舍。
+
 == 关于标准版本年份（引用的取舍）
 
 * **本集合的规则**：规范正文引用标准时**只写标准名/编号、不附版本年份**——原因：标准会换版，写死年份会让依据失效；"引用现行有效版本"另由 `specs/general/source.adoc`「引用现行版本」约束。
